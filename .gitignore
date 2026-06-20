@@ -30,3 +30,6 @@ build/
 .env
 .env.*
 !.env.example
+
+# But keep the explanatory README in logs/
+!.tessera/logs/README.md

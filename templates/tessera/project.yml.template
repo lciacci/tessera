@@ -1,0 +1,14 @@
+# Tessera project configuration
+# This file declares the project's profile and active extensions.
+# Checked in by default for reproducibility, team coordination, and audit trail.
+# Generated/updated by `tess profile` commands; avoid editing by hand.
+
+profile: standard
+
+# Profile activation history (audited per-profile; standard profile changes are not logged)
+profile_history: []
+
+# Extension overrides (explicit add/remove vs profile defaults)
+# Leave empty unless deviating from the profile bundle.
+extensions_added: []
+extensions_removed: []
