@@ -7,7 +7,8 @@ Thumbs.db
 .idea/
 
 # Tessera runtime
-.tessera/logs/
+.tessera/logs/*
+!.tessera/logs/README.md
 .tessera/config.yml
 .mnemos/
 .icpg/
@@ -31,5 +32,3 @@ build/
 .env.*
 !.env.example
 
-# But keep the explanatory README in logs/
-!.tessera/logs/README.md
