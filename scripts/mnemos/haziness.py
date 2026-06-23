@@ -2,7 +2,8 @@
 
 Five dimensions, all in [0, 1]; higher = hazier:
 
-    correction_density  (0.30) - user corrections per eligible user turn
+    correction_density  (0.30) - user corrections per eligible user turn,
+                                 shrunk toward 0 at low turn count
     redo_ratio          (0.25) - Edit/Write re-edits after an error
     first_try_error_rate(0.20) - Edit/Write followed by errors in next 3 turns
     orphan_tool_use_rate(0.15) - tool_use without matching tool_result
@@ -25,6 +26,10 @@ WEIGHTS = {
 }
 
 _EDIT_TOOLS = {'Edit', 'Write', 'NotebookEdit'}
+
+# Additive pseudo-count for _correction_density low-N shrinkage. The eligible
+# user-turn count at which the raw match ratio is retained at half strength.
+_CORRECTION_PRIOR = 5
 
 # git revert / reset --hard / restore / checkout -- <path>. Narrow to avoid
 # matching `git checkout --orphan`, `git checkout --track`, etc.
@@ -105,13 +110,17 @@ def _correction_density(turns: list[dict]) -> float:
     ]
     if not eligible:
         return 0.0
-    # ponytail: raw match/eligible ratio over-weights one match at low turn
-    # count (1/3 spikes; dilutes as turns grow). Dashboard calibration flag
-    # (saturated dim + low composite) surfaces it and it self-corrects with
-    # volume, so no smoothing yet. Add a min-denominator / smoothing prior if
-    # low-N spikes prove misleading on real data. See tess-dashboard FINDINGS #1.
+    # Shrink the raw match ratio toward 0 with an additive pseudo-count on the
+    # denominator: matches / (eligible + K). At low eligible count one match no
+    # longer saturates the dim (finding #1's low-N over-weighting); as turns
+    # grow the term converges to the raw ratio. K is the eligible-turn count at
+    # which the raw signal is retained at half strength. < 1 by construction
+    # (matches <= eligible < eligible + K), so no clamp needed.
+    # ponytail: K is a flat prior; tune the constant if real data wants it, but
+    # don't reach for Wilson/Beta until a flat prior measurably misfits. See
+    # tess-dashboard FINDINGS #1.
     matches = sum(1 for t in eligible if t['correction_match'])
-    return min(1.0, matches / len(eligible))
+    return matches / (len(eligible) + _CORRECTION_PRIOR)
 
 
 def _redo_ratio(turns: list[dict]) -> float:
