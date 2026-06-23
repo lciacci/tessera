@@ -1,0 +1,43 @@
+"""Self-check for correction_match detection in claude_log._preview.
+
+Run from repo root: python3 -m scripts.mnemos.test_correction
+
+Guards the finding #1 regression: a user turn that *references* the word
+"Don't" as content (a CLAUDE.md section name) must NOT score as a
+correction-of-Claude. Real corrections front-load the objection.
+"""
+
+from .claude_log import _preview
+
+
+def _match(text: str) -> int:
+    # is_user=True, no redaction; we only care about the match flag.
+    return _preview(text, False, is_user=True)[1]
+
+
+def demo() -> None:
+    # --- must NOT match (false positives the fix kills) ---
+    assert _match("Change in the Don't Hardcode instructions") == 0, "finding #1 regression"
+    assert _match("the Don't Hardcode section needs an update") == 0
+    # 'instead' past the front window = fresh instruction, not a correction:
+    assert _match(
+        "Please add a config option for the timeout value here and wire it "
+        "through the loader instead of hardcoding it"
+    ) == 0
+
+    # --- must match (real corrections preserved) ---
+    assert _match("No, don't do that") == 1           # lead: no
+    assert _match("Don't push that") == 1             # lead: don't
+    assert _match("don't, revert it") == 1            # lead: don't
+    assert _match("wait, that's wrong") == 1          # lead: wait
+    assert _match("use the helper instead") == 1      # phrase early: instead
+    assert _match("not that one, the other") == 1     # phrase early: not that
+
+    # --- non-user turns never match ---
+    assert _preview("No, don't do that", False, is_user=False)[1] == 0
+
+    print("ok")
+
+
+if __name__ == "__main__":
+    demo()
