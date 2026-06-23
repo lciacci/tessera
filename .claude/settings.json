@@ -1,0 +1,127 @@
+{
+  "statusLine": {
+    "type": "command",
+    "command": ".claude/scripts/mnemos-statusline.sh",
+    "padding": 0
+  },
+  "permissions": {
+    "allow": [
+      "Bash(npm test *)",
+      "Bash(npm run lint *)",
+      "Bash(npm run typecheck *)",
+      "Bash(npx tsc *)",
+      "Bash(npx jest *)",
+      "Bash(npx vitest *)",
+      "Bash(pytest *)",
+      "Bash(ruff *)",
+      "Bash(mypy *)",
+      "Bash(eslint *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git branch *)",
+      "Bash(gh pr *)",
+      "Bash(gh issue *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(wc *)",
+      "Bash(icpg *)",
+      "Bash(python -m icpg *)",
+      "Bash(mnemos *)",
+      "Bash(python -m mnemos *)",
+      "Bash(polyphony *)",
+      "Bash(python -m polyphony *)",
+      "Bash(docker ps *)",
+      "Bash(docker logs *)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(git push --force *)",
+      "Bash(git reset --hard *)",
+      "Write(.env)",
+      "Write(.env.*)",
+      "Edit(.env)",
+      "Edit(.env.*)"
+    ]
+  },
+  "hooks": {
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \".claude/scripts/mnemos-pre-compact.sh\" ]; then exec \".claude/scripts/mnemos-pre-compact.sh\"; fi; exit 0",
+            "timeout": 8,
+            "statusMessage": "Writing emergency checkpoint + compaction priorities..."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \".claude/scripts/mnemos-post-compact-inject.sh\" ]; then exec \".claude/scripts/mnemos-post-compact-inject.sh\"; fi; exit 0",
+            "timeout": 2,
+            "statusMessage": "Checking for post-compaction restore..."
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \".claude/scripts/mnemos-pre-edit.sh\" ]; then exec \".claache/scripts/mnemos-pre-edit.sh\"; fi; exit 0",
+            "timeout": 5,
+            "statusMessage": "Checking fatigue + intent context..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \".claude/scripts/mnemos-post-tool.sh\" ]; then exec \".claude/scripts/mnemos-post-tool.sh\"; fi; exit 0",
+            "timeout": 1,
+            "statusMessage": "Logging tool outcome..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \".claude/scripts/mnemos-stop-checkpoint.sh\" ]; then exec \".claude/scripts/mnemos-stop-checkpoint.sh\"; fi; exit 0",
+            "timeout": 5,
+            "statusMessage": "Writing session checkpoint..."
+          },
+          {
+            "type": "command",
+            "command": "if [ -x \".claude/scripts/mnemos-stop-ingest.sh\" ]; then exec \".claude/scripts/mnemos-stop-ingest.sh\"; fi; exit 0",
+            "timeout": 10,
+            "statusMessage": "Ingesting Claude transcript + scoring haze..."
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \".claude/scripts/mnemos-session-start.sh\" ]; then exec \".claude/scripts/mnemos-session-start.sh\"; fi; exit 0",
+            "timeout": 5,
+            "statusMessage": "Loading session checkpoint + project context..."
+          }
+        ]
+      }
+    ]
+  }
+}

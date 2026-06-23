@@ -13,7 +13,6 @@ Thumbs.db
 .mnemos/
 .icpg/
 .claude/.tdd-iteration-count
-.claude/scripts/
 
 # Dependencies
 node_modules/
