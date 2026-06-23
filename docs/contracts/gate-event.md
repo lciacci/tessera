@@ -16,25 +16,43 @@ proposes, user disposes).
   "type": "suggestion_gate",        // discriminator; consumers filter on this
   "ts": "2026-06-23T18:25:00Z",     // ISO 8601
   "session_id": "uuid",
-  "source": "suggestion-gate-hook", // emitting hook
+  "source": "suggestion-gate-recorder", // the emitter (see Producers below)
   "data": {
     "fired": true,                  // boolean — did the gate surface the suggestion?
-    "suggestion_kind": "compact",   // category of the withheld/shown suggestion
-    "score": 0.82,                  // gate confidence at decision time, 0..1
-    "threshold": 0.70,              // gate threshold at decision time, 0..1
-    "should_fire": true             // GROUND TRUTH — see Open question below
+    "suggestion_kind": "refactor",  // category of the withheld/shown suggestion
+    "note": "make contract canonical", // optional free text — what was proposed
+    "score": 0.82,                  // OPTIONAL — gate confidence 0..1; absent if no scorer
+    "threshold": 0.70,              // OPTIONAL — gate threshold 0..1; absent if no scorer
+    "should_fire": true             // GROUND TRUTH — see Open question below; null until labeled
   }
 }
 ```
 
 ## Field semantics
 
-- `fired` / `should_fire` are **booleans** by contract. Consumers should parse strictly; the
-  fixture happens to be clean, real producers must not emit truthy-but-non-boolean values.
-- `score` / `threshold` are in `0..1`. The gate fires when `score >= threshold` (the
-  decision is recorded, not recomputed — store both so calibration can detect threshold drift).
-- `suggestion_kind` is an open string set today (`compact`, …); promote to an enum if/when the
-  kinds stabilize.
+- `fired` is a **boolean** by contract. Consumers should parse strictly; real producers must
+  not emit truthy-but-non-boolean values.
+- `suggestion_kind` is an open string set today (`refactor`, `compact`, …); promote to an enum
+  if/when the kinds stabilize.
+- `note` is **optional** free text: what the gate actually proposed at that moment. The
+  recorder logs it so the event stream reads as a reviewable journal, not a bare counter. Not
+  every producer need supply it.
+- `score` / `threshold` are **optional**, in `0..1`. When present, the gate fired iff
+  `score >= threshold` (decision recorded, not recomputed — both stored so calibration can
+  detect threshold drift). A model-emitted recorder with no scoring heuristic **omits both**
+  rather than inventing numbers; a future scored producer adds them.
+- `should_fire` is the ground-truth label and is **nullable** — `null` at emit time for a
+  model-emitted recorder (the outcome isn't known yet), filled post-hoc. See below.
+
+## Producers
+
+- **Model-emitted recorder** (current, the dogfood): Claude appends an event at each gate moment
+  via `scripts/gate/emit.py`. Captures the real *semantic* gate decision. `score`/`threshold`
+  absent (no scorer); `should_fire` null (labeled later in the dashboard). Reliability = the
+  CLAUDE.md convention itself — "Claude forgot to log a gate" is a dogfood finding, not a bug.
+- **Hook-detected / scored producer** (future, if wanted): a deterministic emitter that adds
+  `score`/`threshold`. Not built — would answer a production-measurement question the dogfood
+  doesn't yet pose.
 
 ## Open question — `should_fire` (ground truth)
 
