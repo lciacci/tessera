@@ -34,13 +34,19 @@ _INGESTED_TYPES = {
 }
 
 _CORRECTION_LEAD_RE = re.compile(
-    r"^\s*(no|wait|stop|actually|undo|revert|rollback|wrong)\b",
+    r"^\s*(no|wait|stop|actually|undo|revert|rollback|wrong|don'?t)\b",
     re.IGNORECASE,
 )
+# Mid-turn correction markers, checked ONLY in the first chars of the turn:
+# real corrections front-load the objection, content references ("the Don't
+# Hardcode section", "do X instead of Y" as a fresh instruction) sit
+# mid-sentence and must not match. 'don't' lives in LEAD only — too common as
+# plain content to match anywhere in the turn.
 _CORRECTION_PHRASE_RE = re.compile(
-    r"\b(don'?t|not that|instead)\b",
+    r"\b(not that|instead)\b",
     re.IGNORECASE,
 )
+_CORRECTION_PHRASE_WINDOW = 60
 
 _DISABLED_SENTINEL = 'claude-log.disabled'
 
@@ -400,8 +406,8 @@ def _preview(
     preview = cleaned[:200]
     match = 0
     if is_user and len(cleaned) < 500:
-        if _CORRECTION_LEAD_RE.match(cleaned) or (
-            len(cleaned) < 200 and _CORRECTION_PHRASE_RE.search(cleaned)
+        if _CORRECTION_LEAD_RE.match(cleaned) or _CORRECTION_PHRASE_RE.search(
+            cleaned[:_CORRECTION_PHRASE_WINDOW]
         ):
             match = 1
     return preview, match

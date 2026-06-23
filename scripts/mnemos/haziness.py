@@ -105,6 +105,11 @@ def _correction_density(turns: list[dict]) -> float:
     ]
     if not eligible:
         return 0.0
+    # ponytail: raw match/eligible ratio over-weights one match at low turn
+    # count (1/3 spikes; dilutes as turns grow). Dashboard calibration flag
+    # (saturated dim + low composite) surfaces it and it self-corrects with
+    # volume, so no smoothing yet. Add a min-denominator / smoothing prior if
+    # low-N spikes prove misleading on real data. See tess-dashboard FINDINGS #1.
     matches = sum(1 for t in eligible if t['correction_match'])
     return min(1.0, matches / len(eligible))
 
