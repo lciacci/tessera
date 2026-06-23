@@ -74,7 +74,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -x \".claude/scripts/mnemos-pre-edit.sh\" ]; then exec \".claache/scripts/mnemos-pre-edit.sh\"; fi; exit 0",
+            "command": "if [ -x \".claude/scripts/mnemos-pre-edit.sh\" ]; then exec \".claude/scripts/mnemos-pre-edit.sh\"; fi; exit 0",
             "timeout": 5,
             "statusMessage": "Checking fatigue + intent context..."
           }
