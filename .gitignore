@@ -6,6 +6,12 @@ Thumbs.db
 .vscode/settings.json
 .idea/
 
+# Dogfood wiring — machine-local symlinks into .claude/ for in-repo skill/command/agent
+# discovery. Canonical source is the top-level skills/, commands/, agents/ dirs.
+.claude/skills
+.claude/commands
+.claude/agents
+
 # Tessera runtime
 .tessera/logs/*
 !.tessera/logs/README.md
