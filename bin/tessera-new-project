@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Stand up a new downstream Tessera project with the harness layer.
+#
+#   tessera-new-project <target-dir> [project-name] [profile]
+#
+# Lays down: .claude/ (mnemos hooks + settings), scripts/gate (recorder),
+# .tessera/ (profile + logs), CLAUDE.md, .gitignore, and `git init`. Harness
+# scripts are copied from THIS tessera checkout's live source — single source of
+# truth, not a stale template copy. App/stack scaffold is NOT done here: generate
+# that with your platform's own tool (Android Studio, create-vite, etc.) and let
+# this harness coexist on top.
+set -euo pipefail
+
+TESSERA_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TPL="$TESSERA_ROOT/templates/tessera"
+
+TARGET="${1:?usage: tessera-new-project <target-dir> [project-name] [profile]}"
+NAME="${2:-$(basename "$TARGET")}"
+PROFILE="${3:-standard}"
+
+[ -e "$TARGET" ] && { echo "refuse: $TARGET already exists" >&2; exit 1; }
+for f in "$TPL/CLAUDE.md.template" "$TPL/settings.base.json" "$TPL/gitignore.base" \
+         "$TPL/project.yml.template" "$TPL/security-exceptions.yml.template"; do
+  [ -f "$f" ] || { echo "missing template: $f" >&2; exit 1; }
+done
+
+mkdir -p "$TARGET/.claude/scripts" "$TARGET/.tessera/logs" "$TARGET/.mnemos" "$TARGET/scripts/gate"
+
+# Harness scripts — from the live checkout, not a template copy (anti-drift).
+cp "$TESSERA_ROOT"/.claude/scripts/mnemos-*.sh "$TARGET/.claude/scripts/"
+cp "$TESSERA_ROOT"/scripts/gate/emit.py "$TESSERA_ROOT"/scripts/gate/test_gate_emit.py \
+   "$TARGET/scripts/gate/"
+chmod +x "$TARGET"/.claude/scripts/*.sh
+
+# Settings + gitignore (stack-agnostic bases — add your stack's commands after).
+cp "$TPL/settings.base.json" "$TARGET/.claude/settings.json"
+cp "$TPL/gitignore.base" "$TARGET/.gitignore"
+
+# .tessera/ config.
+sed "s|^profile: .*|profile: $PROFILE|" "$TPL/project.yml.template" > "$TARGET/.tessera/project.yml"
+cp "$TPL/security-exceptions.yml.template" "$TARGET/.tessera/security-exceptions.yml"
+printf '*\n' > "$TARGET/.mnemos/.gitignore"
+cat > "$TARGET/.tessera/logs/README.md" <<'EOF'
+# Tessera Event Logs
+
+Structured event logs from Tessera sessions live here as `<session-id>.jsonl`.
+The suggestion-gate recorder (`scripts/gate/emit.py`) appends `suggestion_gate`
+events here. This directory is gitignored — logs are session-local.
+EOF
+
+# CLAUDE.md — fill scalar placeholders; description/commands left for the owner.
+sed -e "s|{{PROJECT_NAME}}|$NAME|g" -e "s|{{PROFILE}}|$PROFILE|g" \
+    "$TPL/CLAUDE.md.template" > "$TARGET/CLAUDE.md"
+
+( cd "$TARGET" && git init -q && git symbolic-ref HEAD refs/heads/main )
+
+echo "scaffolded '$NAME' at $TARGET (profile: $PROFILE)"
+echo "next:"
+echo "  - fill {{PROJECT_DESCRIPTION}} and {{COMMANDS}} in CLAUDE.md"
+echo "  - add your stack's build/test commands to .claude/settings.json allow[] (remove _stack_allow_note)"
+echo "  - generate the app skeleton with your platform's tool, then commit"
