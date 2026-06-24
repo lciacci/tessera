@@ -147,6 +147,17 @@ When an Observatory entry is closed (via ADR or explicit rejection), update its 
 - **When to revisit:** The remaining question is no longer "does a producer exist" but "does it **earn its keep**." Watch the first real dogfood: (1) does Claude reliably call the recorder, or does forgetting dominate (→ a Stop-hook transcript-scan backstop)? (2) does reviewing the gate journal in the dashboard surface real friction, or is the convention alone the whole feature? (3) does the mechanical/scored producer (option B) ever get pulled for — i.e. does anyone want precision/recall on live data? Close when the dogfood answers these.
 - **Open question it feeds:** does a convention-only gate need a producer at all? Partly answered — built one for the dogfood's friction-finding purpose, not for production measurement. Whether it survives past the dogfood depends on the three watches above.
 
+### Downstream packaging mechanism (and: templates/ is NOT cruft)
+
+- **Source:** Howler dogfood #1 scaffold, June 2026. Surfaced while hand-scaffolding the first real downstream project.
+- **Anti-cruft note (read this before deleting anything in `templates/`):** the maggy-inherited `templates/` top-level and `commands/initialize-project.md` are **NOT cruft.** Per `design-principles.md` ("Skills — keep" / "What's Out"), Tessera intentionally keeps mnemos, icpg, polyphony, codex-review, etc.; the cut-list skills are already removed (`e4ae042`). `templates/*` is the **install payload** for kept subsystems; `initialize-project.md` is the inherited maggy **installer**. A 2026-06 scaffold-notes draft mislabeled these "cruft" — that was filename-based inference, corrected here so it doesn't become a recurring false drift point.
+- **The actual open question — how does Tessera stand up / distribute a downstream project?** Three observed realities, no shared mechanism:
+  - **tess-dashboard (#0)** and **Howler (#1)** were each **hand-rolled** into different shapes (numbered vs bulleted CLAUDE.md; `.tessera/` with vs without `project.yml`; gate recorder absent vs present). Divergence baseline.
+  - **`bin/tessera-new-project`** (built during Howler) — minimal, harness-only, copies from a sibling tessera checkout. Converges new projects but doesn't distribute the skill/command layer and assumes adjacency.
+  - **Maggy installer** (`initialize-project.md` + `templates/` + `~/.claude/.bootstrap-dir`) — fuller (installs skills/commands/hooks) but maggy-shaped and assumes a global bootstrap dir.
+- **Status:** Investigating
+- **When to revisit:** Next time downstream packaging is worked. Decide: adapt the maggy installer, keep the minimal scaffold, or layer both (scaffold for harness, adapted installer for the full skill/command bootstrap when distributing beyond this machine). Retrofitting tess-dashboard + Howler onto the chosen mechanism (or grandfathering them) is part of the call.
+
 ---
 
 ## Closing notes
