@@ -948,6 +948,14 @@ Two-project sequence to disentangle installation friction from framework evaluat
 - **Weeks 1-3:** Decibel meter as real dogfood.
 - **Week 4:** Defensible opinion on Tessera. Decisions on Mnemos / iCPG / pipeline keep-or-cut. Plan for next project (hosted models lab? next iteration of decibel meter into #11?).
 
+### Downstream project scaffold — DECIDED (2026-06-24)
+
+Tessera exists to do downstream projects, so standing one up is a first-class capability, not a chore. The default mechanism is **`bin/tessera-new-project <dir> [name] [profile]`** — it lays down the harness layer (mnemos hooks copied from this checkout's live source, the suggestion-gate recorder, `settings.base.json` + `gitignore.base`, `.tessera/` profile, and a `CLAUDE.md` from `templates/tessera/CLAUDE.md.template`) and `git init`s. It does **not** scaffold the app/stack — generate that with the platform's own tool and layer the harness on top.
+
+- **Why minimal-by-default (principle #15):** the first three downstream harnesses (tess-dashboard #0, Howler #1, and the scaffold output) were each hand-rolled into divergent shapes. The scaffold is the convergence point; it earns complexity through use, one project at a time, rather than an upfront design.
+- **Deferred — full packaging/distribution.** Distributing the *skill/command* layer off this machine (second machine, another person, skills diverging from the global install) is a separate, unsolved question with two candidates (the inherited maggy installer vs. extending this scaffold). Not built — no triggering need yet. Tracked in `observatory.md` ("Downstream packaging mechanism"); it graduates to an ADR when real distribution pressure appears.
+- **Existing projects:** tess-dashboard and Howler are grandfathered (Howler already matches the scaffold output; tess-dashboard's missing `.tessera/project.yml` was retrofit). No forced migration.
+
 ---
 
 ## Six review passes (in order)

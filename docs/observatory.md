@@ -155,8 +155,9 @@ When an Observatory entry is closed (via ADR or explicit rejection), update its 
   - **tess-dashboard (#0)** and **Howler (#1)** were each **hand-rolled** into different shapes (numbered vs bulleted CLAUDE.md; `.tessera/` with vs without `project.yml`; gate recorder absent vs present). Divergence baseline.
   - **`bin/tessera-new-project`** (built during Howler) — minimal, harness-only, copies from a sibling tessera checkout. Converges new projects but doesn't distribute the skill/command layer and assumes adjacency.
   - **Maggy installer** (`initialize-project.md` + `templates/` + `~/.claude/.bootstrap-dir`) — fuller (installs skills/commands/hooks) but maggy-shaped and assumes a global bootstrap dir.
-- **Status:** Investigating
-- **When to revisit:** Next time downstream packaging is worked. Decide: adapt the maggy installer, keep the minimal scaffold, or layer both (scaffold for harness, adapted installer for the full skill/command bootstrap when distributing beyond this machine). Retrofitting tess-dashboard + Howler onto the chosen mechanism (or grandfathering them) is part of the call.
+- **Scaffold half — DECIDED (2026-06-24).** `bin/tessera-new-project` is the default mechanism for standing up a new downstream project (harness layer). Recorded in `design-principles.md` → Dogfood Plan → "Downstream project scaffold." tess-dashboard + Howler grandfathered (tess-dashboard's `project.yml` retrofit). This entry now tracks only the packaging half below.
+- **Status:** Investigating (packaging half only)
+- **When to revisit:** When real distribution pressure appears — a second machine, another person, or skills diverging from the global install. Decide then: adapt the maggy installer, extend the scaffold to carry the skill/command layer, or layer both. Graduate to an ADR at that point.
 
 ---
 
