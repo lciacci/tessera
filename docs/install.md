@@ -7,7 +7,7 @@ This is what it takes to get Tessera running on a fresh machine. Follow in order
 You need:
 
 - macOS or Linux (the framework assumes Unix shell conventions)
-- Python 3.10+ on PATH (Homebrew Python 3.13 is what the original install used)
+- Python 3.10+ on PATH (Homebrew Python 3.13 is what the original install used). **On Apple Silicon, use the native arm64 Homebrew at `/opt/homebrew`.** If a stale Intel Homebrew also exists at `/usr/local` and sits earlier on `PATH`, its `pip` builds a `mnemos` whose shebang points into the Intel keg — which breaks the moment that keg is cleaned, silently disabling every Mnemos hook. Confirm before installing: `file "$(command -v python3.13)"` must report `arm64`.
 - Node.js 20.19+ or 22.12+ (for any downstream Tessera projects that scaffold from Vite)
 - Git
 - [Claude Code](https://docs.claude.com/claude-code) CLI installed and authenticated
@@ -39,16 +39,19 @@ cp /path/to/maggy-main/scripts/mnemos/pyproject.toml /tmp/mnemos-install/
 /opt/homebrew/bin/pip3.13 install --break-system-packages /tmp/mnemos-install
 ```
 
-Replace `/path/to/maggy-main` with the actual path. Replace `/opt/homebrew/bin/pip3.13` with whatever Python 3.10+ pip you have.
+Replace `/path/to/maggy-main` with the actual path. **On Apple Silicon keep `/opt/homebrew/bin/pip3.13` explicit — do not substitute "whatever pip is on PATH". A stale Intel `/usr/local` pip produces a `mnemos` shebang that later breaks (see Prerequisites).** On Linux or Intel Macs, use your Python 3.10+ pip.
 
 Verify:
 
 ```bash
 which mnemos
 mnemos --help
+# Critical on Apple Silicon — confirm the console-script shebang resolves:
+head -1 "$(command -v mnemos)"   # the path after #! must exist on disk
+mnemos --version                 # must run, NOT "bad interpreter: ... no such file"
 ```
 
-If `mnemos --help` prints the subcommand list (init, status, fatigue, checkpoint, resume, etc.), Mnemos is installed.
+If `mnemos --help` prints the subcommand list (init, status, fatigue, checkpoint, resume, etc.) **and `mnemos --version` runs without a `bad interpreter` error**, Mnemos is installed. A dead shebang is the silent-failure mode the hooks' graceful degradation otherwise masks — if `mnemos --version` fails, reinstall with the arm64 `/opt/homebrew/bin/pip3.13` and remove any stale `/usr/local/bin/mnemos`.
 
 ## Step 3 — Initialize Mnemos in Tessera
 
