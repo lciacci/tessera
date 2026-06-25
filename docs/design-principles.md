@@ -596,7 +596,8 @@ The `tdd-loop-check.sh` **25-iteration safety cap** is the smartest single bit. 
 
 Separate `hooks/` directory (vs `templates/`) contains *opt-in hooks not wired by default*:
 - `auto-review-hook` — Stop hook asking qwen3 whether multi-model review is warranted (interesting pattern: small model gates expensive review)
-- `route-task-hook` (12KB, biggest hook) — model routing logic
+- `route-task-hook` (12KB, biggest hook) — model routing logic; classifies each prompt into a tier (incl. `CLAUDE_HAIKU/SONNET/OPUS`) and caches it to `~/.claude/routing-cache.json`
+- `subagent-route-hook` — PreToolUse (`Task|Agent`) companion to `route-task-hook`: reads the cached Claude tier and rewrites a spawned subagent's `model` via `updatedInput`, so the tier becomes real dispatch (advisory→applied). Explicit model on the call always wins; non-Claude tiers are a no-op
 - `polyphony-auto-isolate` — Polyphony container isolation
 - `mid-task-escalation` — interesting; deserves a read at install
 - `post-commit-graph` — touches code-graph `.needs-update` marker

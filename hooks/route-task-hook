@@ -46,7 +46,9 @@ Tiers:
 - GROK: competitor intelligence, CKG building, deep reasoning, market analysis, truthful insights via xAI
 - GEMINI_PRO_SEARCH: deep research with Google Search grounding, competitor intelligence, market research, 2M context document analysis
 - CODEX: bulk boilerplate generation, mechanical changes across many files, large-scale test generation
-- CLAUDE: architecture, security-critical code, complex debugging, system design, multi-service refactors, customer-facing quality-critical code
+- CLAUDE_HAIKU: mechanical Claude-quality work with little reasoning — bulk renames, large simple formatting, repetitive boilerplate across many files
+- CLAUDE_SONNET: standard features, refactors, debugging, most day-to-day coding that needs Claude
+- CLAUDE_OPUS: architecture, security-critical code, complex debugging, system design, multi-service refactors, customer-facing quality-critical code
 
 Task: ${PROMPT}"
 
@@ -54,7 +56,7 @@ Task: ${PROMPT}"
 _classify_parse() {
   local raw="$1"
   [ -z "$raw" ] && return 1
-  TIER=$(echo "$raw" | grep -oE '^(QWEN|DEEPSEEK_FLASH|GEMINI_FLASH_LITE|DEEPSEEK_PRO|GEMINI_FLASH|GEMINI_CLI|KIMI|GROK|GEMINI_PRO_SEARCH|CODEX|CLAUDE)' || echo "")
+  TIER=$(echo "$raw" | grep -oE '^(QWEN|DEEPSEEK_FLASH|GEMINI_FLASH_LITE|DEEPSEEK_PRO|GEMINI_FLASH|GEMINI_CLI|KIMI|GROK|GEMINI_PRO_SEARCH|CODEX|CLAUDE_HAIKU|CLAUDE_SONNET|CLAUDE_OPUS|CLAUDE)' || echo "")
   [ -z "$TIER" ] && return 1
   REASON=$(echo "$raw" | sed 's/^[A-Z_]*:\s*//')
   return 0
@@ -146,8 +148,9 @@ if [ -f "$ESCALATION_FLAG" ]; then
     # Force premium tier — escalate from current tier
     case "$TIER" in
       QWEN|DEEPSEEK_FLASH|GEMINI_FLASH_LITE) TIER="DEEPSEEK_PRO" ;;
-      DEEPSEEK_PRO|GEMINI_FLASH) TIER="CLAUDE" ;;
-      KIMI) TIER="CLAUDE" ;;
+      DEEPSEEK_PRO|GEMINI_FLASH) TIER="CLAUDE_OPUS" ;;
+      KIMI) TIER="CLAUDE_OPUS" ;;
+      CLAUDE_HAIKU|CLAUDE_SONNET|CLAUDE) TIER="CLAUDE_OPUS" ;;
     esac
     REASON="escalation: mid-task struggle detected, forced premium"
     # Increment counter (max 3 escalations per session)
@@ -189,6 +192,10 @@ case "$TIER" in
     ;;
   CODEX)
     CTX="ROUTING DECISION: CODEX. Reason: ${REASON}. Suggest the user run codex for this task, or use codex exec. Do NOT do bulk generation yourself.${TOOLS_HINT}"
+    ;;
+  CLAUDE_OPUS|CLAUDE_SONNET|CLAUDE_HAIKU)
+    MODEL=$(echo "$TIER" | sed 's/CLAUDE_//' | tr '[:upper:]' '[:lower:]')
+    CTX="ROUTING DECISION: ${TIER} (Claude effort tier: ${MODEL}). Reason: ${REASON}. For subagent/workflow dispatch use model '${MODEL}'. For the MAIN thread this is ADVISORY — the hook cannot swap the main session model mid-turn; if '${MODEL}' differs from your current model, suggest the user run: /model ${MODEL}. Guide: opus = hard reasoning/security/architecture, sonnet = standard coding, haiku = mechanical bulk.${TOOLS_HINT}"
     ;;
   CLAUDE)
     CTX="ROUTING DECISION: CLAUDE (architecture/security-critical). Reason: ${REASON}. PLAN FIRST — write plan to ~/.claude/plans/<name>.md, then run ~/bin/validate-plan <plan-file>. If 2+ reviewers approve, execute immediately. Do NOT enter Claude Code plan mode — it requires manual approval. Write the plan as a file and validate autonomously.${TOOLS_HINT}"

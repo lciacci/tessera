@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [6.45.0] - 2026-06-25
+
+### Claude effort-tier routing for subagents (advisory → applied)
+
+#### Added
+- **`route-task-hook`** — the single `CLAUDE` tier is split into
+  `CLAUDE_HAIKU` / `CLAUDE_SONNET` / `CLAUDE_OPUS`. The qwen classifier now picks
+  a Claude *effort* tier per prompt (haiku = mechanical bulk, sonnet = standard
+  coding, opus = architecture/security/hard reasoning) and caches it to
+  `~/.claude/routing-cache.json`. Mid-task escalation forces `CLAUDE_OPUS`.
+- **`hooks/subagent-route-hook`** (new, opt-in) — PreToolUse companion matched on
+  `Task|Agent`. Reads the cached Claude tier and rewrites a spawned subagent's
+  `model` via `hookSpecificOutput.updatedInput`, turning the advisory tier into
+  real dispatch. Explicit `model` on the call always wins; non-Claude tiers, a
+  missing/stale cache, or empty input are all no-ops (fails safe). Normal
+  permission flow is preserved (`permissionDecision` omitted).
+
+#### Notes
+- The main-thread model cannot be hot-swapped mid-turn by a hook, so for the
+  main session the tier stays advisory (suggests `/model <tier>`); application is
+  real only at subagent/workflow dispatch.
+- Wiring is opt-in per the `hooks/` convention — add the `PreToolUse` matcher to
+  `.claude/settings.json`; depends on `route-task-hook` (UserPromptSubmit) writing
+  the cache.
+
 ## [6.44.0] - 2026-06-11
 
 ### Maggy: zero-config onboarding + architecture hardening
