@@ -1,0 +1,68 @@
+#!/bin/bash
+# UserPromptSubmit hook — cache-only Claude effort-tier classifier.
+#
+# Combo B: classifies each prompt into CLAUDE_HAIKU / CLAUDE_SONNET /
+# CLAUDE_OPUS via local qwen (Ollama) and caches the tier to
+# ~/.claude/routing-cache.json, which subagent-route-hook reads to set a
+# spawned subagent's model. Unlike route-task-hook this does NOT delegate to
+# other providers and runs no minimax pre-analysis — safe for framework-dev.
+#
+# Fails open: if Ollama is unreachable or returns junk, defaults to
+# CLAUDE_SONNET (the neutral middle) so nothing breaks.
+# No set -euo pipefail: hook scripts must be defensive, not strict.
+
+OLLAMA_MODEL="${OLLAMA_MODEL:-qwen2.5-coder:3b}"
+OLLAMA_BASE="${OLLAMA_BASE:-http://localhost:11434}"
+CACHE_FILE="$HOME/.claude/routing-cache.json"
+
+INPUT=$(cat 2>/dev/null || true)
+PROMPT=$(echo "$INPUT" | jq -r '.prompt // empty' 2>/dev/null || echo "")
+[ -z "$PROMPT" ] && exit 0
+
+# Token-only + few-shot + temp 0: a 3B model parrots the middle option with a
+# descriptive prompt, but discriminates reliably when asked for the bare token.
+CLASSIFY="Classify into ONE tier. Output ONLY the tier token, nothing else.
+HAIKU = grep/rename/format/list/read/boilerplate. SONNET = features/refactor/debug/tests/day-to-day. OPUS = architecture/security/multi-service/complex-debug/auth.
+
+Examples:
+'list all test files' -> HAIKU
+'add a login form' -> SONNET
+'redesign auth token rotation across services' -> OPUS
+
+Task: ${PROMPT}"
+
+# Classify via local qwen; default to the neutral middle tier on any failure.
+TIER="CLAUDE_SONNET"
+REASON="default (classifier unavailable)"
+CLASSIFIER="default"
+
+if curl -s --connect-timeout 2 "${OLLAMA_BASE}/api/tags" >/dev/null 2>&1; then
+  CONTENT=$(echo "$CLASSIFY" | jq -Rs .)
+  RAW=$(curl -s --max-time 10 "${OLLAMA_BASE}/api/chat" \
+    -d "{\"model\":\"${OLLAMA_MODEL}\",\"messages\":[{\"role\":\"user\",\"content\":${CONTENT}}],\"stream\":false,\"options\":{\"temperature\":0,\"num_predict\":10}}" \
+    2>/dev/null | jq -r '.message.content // ""' || true)
+  PARSED=$(echo "$RAW" | grep -oE 'HAIKU|SONNET|OPUS' | head -1 || echo "")
+  if [ -n "$PARSED" ]; then
+    TIER="CLAUDE_${PARSED}"
+    REASON="qwen classified ${PARSED}"
+    CLASSIFIER="qwen"
+  fi
+fi
+
+# Write the cache (schema matches route-task-hook so subagent-route-hook reads it).
+echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"tier\":\"$TIER\",\"classifier\":\"$CLASSIFIER\",\"reason\":$(echo "$REASON" | jq -Rs .)}" \
+  > "$CACHE_FILE"
+
+# One-line advisory for the main thread (subagents are handled by the PreToolUse hook).
+MODEL=$(echo "$TIER" | sed 's/CLAUDE_//' | tr '[:upper:]' '[:lower:]')
+CTX="MODEL TIER: ${TIER} (${MODEL}). Reason: ${REASON}. Subagents auto-route to '${MODEL}'. For the main thread this is advisory — consider /model ${MODEL} if it differs from current."
+
+cat <<EOF
+{
+  "hookSpecificOutput": {
+    "hookEventName": "UserPromptSubmit",
+    "additionalContext": $(echo "$CTX" | jq -Rs .)
+  }
+}
+EOF
+exit 0

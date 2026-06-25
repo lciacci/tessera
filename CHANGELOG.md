@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [6.46.0] - 2026-06-25
+
+### Live Claude-tier classification, dogfooded in Tessera (combo B)
+
+#### Added
+- **`hooks/tier-classify-hook`** (new) — UserPromptSubmit, cache-only classifier.
+  Maps each prompt to `CLAUDE_HAIKU/SONNET/OPUS` via local qwen
+  (`qwen2.5-coder:3b` on Ollama; few-shot + token-only + temperature 0 — a 3B
+  model parrots the middle tier with a descriptive prompt but discriminates
+  reliably when asked for the bare token) and writes `~/.claude/routing-cache.json`.
+  No cross-provider delegation, no minimax pre-analysis — so framework-dev
+  sessions get live tiers without being told to shell work out to other CLIs.
+  Fails open to `CLAUDE_SONNET`.
+- **Wired into Tessera's own `.claude/settings.json`** (dogfooding): the new
+  `UserPromptSubmit` classifier + the `PreToolUse` (`Task|Agent`)
+  `subagent-route-hook` from 6.45.0. Subagents now auto-route to the classified
+  Claude effort tier; the main thread gets a one-line advisory.
+
+#### Notes
+- Requires Ollama + `qwen2.5-coder:3b` locally. Without them the hook fails open
+  to `CLAUDE_SONNET` (no breakage, just no discrimination).
+- 3B haiku/sonnet boundary is fuzzy; OPUS (the escalation that matters) is
+  caught reliably. Upgrade path: `qwen2.5-coder:7b` if the boundary matters.
+- Hooks load at session start — wiring takes effect next session.
+
 ## [6.45.0] - 2026-06-25
 
 ### Claude effort-tier routing for subagents (advisory → applied)

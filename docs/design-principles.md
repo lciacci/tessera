@@ -598,6 +598,7 @@ Separate `hooks/` directory (vs `templates/`) contains *opt-in hooks not wired b
 - `auto-review-hook` — Stop hook asking qwen3 whether multi-model review is warranted (interesting pattern: small model gates expensive review)
 - `route-task-hook` (12KB, biggest hook) — model routing logic; classifies each prompt into a tier (incl. `CLAUDE_HAIKU/SONNET/OPUS`) and caches it to `~/.claude/routing-cache.json`
 - `subagent-route-hook` — PreToolUse (`Task|Agent`) companion to `route-task-hook`: reads the cached Claude tier and rewrites a spawned subagent's `model` via `updatedInput`, so the tier becomes real dispatch (advisory→applied). Explicit model on the call always wins; non-Claude tiers are a no-op
+- `tier-classify-hook` — UserPromptSubmit, cache-only Claude-tier classifier (combo B). Classifies each prompt into `CLAUDE_HAIKU/SONNET/OPUS` via local qwen (Ollama, `qwen2.5-coder:3b`, few-shot + token-only + temp 0) and writes `~/.claude/routing-cache.json` — **without** route-task-hook's cross-provider delegation or minimax pre-analysis, so framework-dev sessions get live tiers with no hijack. Wired into Tessera's own `.claude/settings.json` alongside `subagent-route-hook` (dogfooding). Fails open to `CLAUDE_SONNET`
 - `polyphony-auto-isolate` — Polyphony container isolation
 - `mid-task-escalation` — interesting; deserves a read at install
 - `post-commit-graph` — touches code-graph `.needs-update` marker
