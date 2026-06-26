@@ -287,6 +287,10 @@ def cmd_checkpoint(store: MnemosStore, args) -> int:
     # Persist the fatigue reading so the dashboard's fatigue history populates —
     # checkpoint is the natural cadence (cmd_fatigue is the only other writer and
     # no hook calls it). Skipped when no statusline data exists yet.
+    # ponytail: one sample per checkpoint (≈one per session via the Stop hook),
+    # not a continuous curve. Enough for the dashboard's "latest + count" view; if
+    # intra-session fatigue resolution is ever wanted, log on a PostToolUse cadence
+    # instead of only at checkpoint.
     if fatigue:
         store.log_fatigue(fatigue)
 

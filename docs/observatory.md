@@ -180,6 +180,15 @@ When an Observatory entry is closed (via ADR or explicit rejection), update its 
 - **Status:** Resolved (plumbing); trial clock reset
 - **When to revisit:** ≈2026-07-10 (two weeks out) — if the now-fed layer still never aids a real compaction/crash recovery, *that* is the genuine drop signal.
 
+### Mnemos/iCPG installed on homebrew system python — venv is the durable fix
+
+- **Source:** Same 2026-06-26 session (the interpreter-mismatch root cause above).
+- **What it is:** `mnemos`/`icpg`/`polyphony` are `pip install --break-system-packages` into homebrew's python (currently 3.13). When homebrew bumps the default `python3` (it moved to 3.14), bare `python3 -m mnemos` stops resolving the package — the break that silently emptied the Mnemos graph.
+- **Mitigation in place:** hooks now resolve the package's interpreter from the `mnemos` console-script shebang, so the pipeline is version-agnostic regardless of which `python3` is default. The symptom is handled.
+- **The deferred decision:** the *durable* fix is a dedicated venv (pins the interpreter, immune to homebrew bumps, no `--break-system-packages`). NOT doing it now — reinstalling for each new homebrew python is a treadmill, but a venv is a packaging/install change touching `install.sh` + the bin scaffold, larger than this session warranted. The console-script resolution holds until then.
+- **Status:** Mitigated; venv deferred
+- **When to revisit:** if `--break-system-packages` bites again (a homebrew bump the shebang-resolution doesn't absorb, or a second machine where the install layout differs), or when `install.sh` is next reworked — fold the venv in then.
+
 ---
 
 ## Closing notes

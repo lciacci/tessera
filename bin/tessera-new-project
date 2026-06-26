@@ -54,8 +54,17 @@ sed -e "s|{{PROJECT_NAME}}|$NAME|g" -e "s|{{PROFILE}}|$PROFILE|g" \
 
 ( cd "$TARGET" && git init -q && git symbolic-ref HEAD refs/heads/main )
 
+# iCPG: init the intent graph so SessionStart's bridge-icpg can feed Mnemos's
+# code-intent Goal/ConstraintNodes. Bootstrap is skipped here (fresh repo, no
+# history yet) — run `icpg bootstrap` after the first commits land. Guarded so a
+# missing icpg CLI doesn't abort the scaffold (set -e).
+if command -v icpg >/dev/null 2>&1; then
+  ( cd "$TARGET" && icpg init >/dev/null 2>&1 ) || true
+fi
+
 echo "scaffolded '$NAME' at $TARGET (profile: $PROFILE)"
 echo "next:"
 echo "  - fill {{PROJECT_DESCRIPTION}} and {{COMMANDS}} in CLAUDE.md"
 echo "  - add your stack's build/test commands to .claude/settings.json allow[] (remove _stack_allow_note)"
 echo "  - generate the app skeleton with your platform's tool, then commit"
+echo "  - after first commits: run 'icpg bootstrap' to seed code-intent goals (bridges into Mnemos on next session)"
