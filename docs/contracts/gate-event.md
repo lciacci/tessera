@@ -76,6 +76,8 @@ ADR. Until then it lives here, next to the shape it qualifies.
 
 ## Status of the producer
 
-Tessera does **not** emit `suggestion_gate` events yet. The dashboard reads a fixture and falls
-back to it (`src/server/gate.ts`). Flip to live `.tessera/logs/*.jsonl` when the gate hook
-emits — see `tess-dashboard/docs/DEFERRED.md` (blocked-on-external row).
+Tessera **emits** `suggestion_gate` events via the model-emitted recorder (`scripts/gate/emit.py`),
+written to `.tessera/logs/<session-id>.jsonl`. The dashboard reads them live (`source: logs`) and
+falls back to the fixture only when no real events exist. `score`/`threshold` are absent (no scorer)
+and `should_fire` is `null` (unlabeled) until ground truth is filled post-hoc — the dashboard's
+calibration matrix excludes null events rather than scoring them as misses.
