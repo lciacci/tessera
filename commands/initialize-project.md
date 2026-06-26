@@ -8,13 +8,23 @@ Full project setup with Claude coding guardrails. Works for both new and existin
 
 ## Phase 0: Validate Bootstrap Installation
 
-**FIRST**, verify Maggy is properly installed:
+**FIRST**, verify the install is present. `.bootstrap-dir` points at whatever
+ran `install.sh` — Tessera's own clone when self-hosted (ADR-0003), or a maggy
+checkout when embedded in maggy. Either way the source resolves the same.
 
 ```bash
-# Read bootstrap directory (saved during install)
+# Read bootstrap directory (written by install.sh)
 BOOTSTRAP_DIR=$(cat ~/.claude/.bootstrap-dir 2>/dev/null)
-# Run quick validation
-"$BOOTSTRAP_DIR/tests/validate-structure.sh" --quick
+# Optional structural validation — present only in the maggy superset, so
+# skip gracefully when self-hosted on Tessera alone.
+if [ -x "$BOOTSTRAP_DIR/tests/validate-structure.sh" ]; then
+  "$BOOTSTRAP_DIR/tests/validate-structure.sh" --quick
+else
+  # Self-hosted fallback: confirm the install landed.
+  [ -d ~/.claude/skills ] && [ -d ~/.claude/commands ] && [ -d ~/.claude/hooks ] \
+    && echo "Install OK (self-hosted: $BOOTSTRAP_DIR)" \
+    || echo "WARN: ~/.claude not fully populated — run ./install.sh in the Tessera repo"
+fi
 ```
 
 This checks:

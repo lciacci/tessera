@@ -28,6 +28,9 @@ Auto-generated below as ADRs are created. Update when adding a new ADR.
 | # | Date | Title | Status |
 |---|------|-------|--------|
 | _template | - | ADR template (do not assign a number) | Reference |
+| 0001 | 2026-06-22 | GSD evaluation | Accepted |
+| 0002 | 2026-06-26 | Model effort-tier routing via dispatch-time hooks | Accepted |
+| 0003 | 2026-06-26 | Tessera owns its distribution; maggy depends on Tessera | Accepted |
 
 ---
 
