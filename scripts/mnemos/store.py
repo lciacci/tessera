@@ -396,6 +396,24 @@ class MnemosStore:
         """
         stats = {'goals_imported': 0, 'constraints_imported': 0}
 
+        # Idempotency: bridge runs every session-start (backgrounded), so dedup
+        # on the stable content key — goals embed [iCPG:<id>], constraints embed
+        # the invariant text + source. Without this the never-evicted layer
+        # floods with duplicates unboundedly across sessions.
+        with self._conn() as conn:
+            seen = {
+                r['content'] for r in conn.execute(
+                    "SELECT content FROM mnemo_nodes WHERE origin='loaded'"
+                ).fetchall()
+            }
+
+        def _maybe_create(node: MnemoNode) -> bool:
+            if node.content in seen:
+                return False
+            self.create_node(node)
+            seen.add(node.content)
+            return True
+
         reasons = icpg_store.list_reasons()
         for reason in reasons:
             if reason.status in ('rejected', 'abandoned'):
@@ -410,8 +428,8 @@ class MnemosStore:
                 scope_tags=reason.scope,
                 confidence=1.0
             )
-            self.create_node(goal_node)
-            stats['goals_imported'] += 1
+            if _maybe_create(goal_node):
+                stats['goals_imported'] += 1
 
             # Invariants/Postconditions -> ConstraintNodes
             for inv in reason.invariants:
@@ -423,8 +441,8 @@ class MnemosStore:
                     scope_tags=reason.scope,
                     links=[goal_node.id]
                 )
-                self.create_node(cn)
-                stats['constraints_imported'] += 1
+                if _maybe_create(cn):
+                    stats['constraints_imported'] += 1
 
             for post in reason.postconditions:
                 cn = MnemoNode(
@@ -435,10 +453,49 @@ class MnemosStore:
                     scope_tags=reason.scope,
                     links=[goal_node.id]
                 )
-                self.create_node(cn)
-                stats['constraints_imported'] += 1
+                if _maybe_create(cn):
+                    stats['constraints_imported'] += 1
 
         return stats
+
+    # ponytail: internal tooling sessions (icpg bootstrap spawns LLM calls) open
+    # with this preamble — they aren't task goals. Prefix-skip is enough; widen
+    # the tuple if other tooling preambles show up.
+    _TOOLING_PREFIXES = (
+        'Given these git commit messages',  # icpg bootstrap LLM calls
+        '<local-command-caveat>',  # slash-command injection preamble, not a goal
+    )
+
+    def extract_session_goals(self) -> int:
+        """Create a GoalNode from each session's first user turn (its task
+        prompt). Idempotent — keyed on session_id; skips tooling sessions."""
+        with self._conn() as conn:
+            seen = {
+                r['task_id'] for r in conn.execute(
+                    "SELECT task_id FROM mnemo_nodes WHERE origin='session-goal'"
+                ).fetchall()
+            }
+            rows = conn.execute(
+                """SELECT session_id, text_preview FROM claude_turns t
+                   WHERE role='user' AND text_preview IS NOT NULL
+                     AND idx = (SELECT MIN(idx) FROM claude_turns
+                                WHERE session_id = t.session_id
+                                  AND role='user')"""
+            ).fetchall()
+
+        created = 0
+        for r in rows:
+            sid, preview = r['session_id'], (r['text_preview'] or '').strip()
+            if sid in seen or not preview:
+                continue
+            if preview.startswith(self._TOOLING_PREFIXES):
+                continue
+            self.create_node(MnemoNode(
+                type='goal', task_id=sid, origin='session-goal',
+                content=preview[:200], confidence=0.8,
+            ))
+            created += 1
+        return created
 
     # --- Row converters ---
 

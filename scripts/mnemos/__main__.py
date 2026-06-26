@@ -442,6 +442,7 @@ def cmd_ingest_claude(store: MnemosStore, args) -> int:
         if result.get('session_id'):
             haze = compute_haze(store, result['session_id'])
             _print_haze_line(haze)
+        store.extract_session_goals()
         return 0
 
     root = projects_root or Path.home() / '.claude' / 'projects'
@@ -469,6 +470,7 @@ def cmd_ingest_claude(store: MnemosStore, args) -> int:
         for sid in session_ids:
             compute_haze(store, sid)
             scored += 1
+        store.extract_session_goals()
         print(f'Ingested {stats["files"]} files '
               f'({stats["sessions"]} new sessions, '
               f'{stats["turns"]} turns, {stats["skipped"]} skipped, '
