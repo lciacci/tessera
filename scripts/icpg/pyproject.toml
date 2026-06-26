@@ -4,7 +4,6 @@ version = "0.1.0"
 description = "iCPG — Intent-Augmented Code Property Graph for agentic development"
 requires-python = ">=3.10"
 license = {text = "MIT"}
-readme = "README.md"
 
 dependencies = []
 
@@ -29,3 +28,12 @@ icpg = "icpg.__main__:main"
 [build-system]
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
+
+# Flat layout: the package files live beside this pyproject (not in an icpg/
+# subdir), so map the package name to "." explicitly. Without this, setuptools
+# auto-discovery fails with "Multiple top-level modules discovered".
+[tool.setuptools]
+packages = ["icpg"]
+
+[tool.setuptools.package-dir]
+icpg = "."
