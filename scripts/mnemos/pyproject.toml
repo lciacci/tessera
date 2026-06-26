@@ -11,3 +11,12 @@ mnemos = "mnemos.__main__:main"
 [build-system]
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
+
+# Flat layout: package files live beside this pyproject (not in a mnemos/
+# subdir), so map the package name to "." explicitly. Without this, newer
+# setuptools fails auto-discovery with "Multiple top-level modules discovered".
+[tool.setuptools]
+packages = ["mnemos"]
+
+[tool.setuptools.package-dir]
+mnemos = "."
