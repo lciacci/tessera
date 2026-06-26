@@ -17,8 +17,22 @@ fi
 # empty subgoal/narrative/files). The top-level command runs write_checkpoint(),
 # which captures active goal/constraint/result nodes + git branch + uncommitted.
 cd "$CWD" 2>/dev/null || true
-python3 -m mnemos checkpoint --force 2>/dev/null || \
-  python3 -c "
+
+# Resolve a mnemos-capable runner the same way the sibling hooks do. The console
+# script pins its own interpreter (mnemos installed for 3.13; bare `python3` may
+# be a newer homebrew python with no mnemos) — prefer it, then `python3 -m mnemos`,
+# then the inline sqlite fallback below (degraded: writes file only, no db row).
+if command -v mnemos >/dev/null 2>&1; then
+  MNEMOS_CMD="mnemos"
+elif python3 -m mnemos --version >/dev/null 2>&1; then
+  MNEMOS_CMD="python3 -m mnemos"
+fi
+
+if [ -n "$MNEMOS_CMD" ]; then
+  $MNEMOS_CMD checkpoint --force >/dev/null 2>&1 && exit 0
+fi
+
+python3 -c "
 import json, time, os, uuid
 
 db_path = '.mnemos/mnemo.db'
