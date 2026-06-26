@@ -90,6 +90,19 @@ that needed separating: distribution vs. the multi-provider routing harness.
 - **Cost:** `validate-structure.sh` (maggy-only) is not reimplemented; the
   self-hosted path does a shallower directory check. Acceptable until evidence
   says otherwise.
+- **Cost (routing is default-on downstream):** the scaffold ships the
+  `tier-classify-hook` (UserPromptSubmit) into every new project's
+  `settings.json` — deliberate, so projects get model-tier suggestions without
+  patching. The tradeoff is a **per-prompt latency tax**: ~2s when Ollama is
+  absent (curl `connect-timeout 2` → fails fast → Sonnet default) up to the
+  `timeout: 12` ceiling when the local classifier is slow. **Opt out** per
+  project by removing the `UserPromptSubmit` hook from `.claude/settings.json` —
+  but note `install_session_hooks.py` re-adds any missing group on the next
+  `/initialize-project` (idempotent top-up), so deletion is not durable. A
+  durable opt-out (disable marker à la `.mnemos/claude-log.disabled`, or
+  neutering the hook command) is **not yet built** — tracked as a follow-up.
+  Chosen over opt-in because the originating requirement was "downstream gets
+  suggestions without patching."
 
 ---
 
