@@ -590,7 +590,7 @@ The `tdd-loop-check.sh` **25-iteration safety cap** is the smartest single bit. 
 
 **No structured logging output.** Everything goes to stderr/stdout. **Tessera wires hooks into the structured event log** from the Logging & Auditability section. Each hook emits JSON Lines events to `.tessera/logs/<session-id>.jsonl` capturing: event type, source, structured data.
 
-**Override mechanism (pass 2) needs hook integration.** Annotation parsing for `// tessera:tdd-skip-reason=...` needs to be added to `tdd-loop-check.sh`. Audit-log entry on every override use.
+**Override mechanism (pass 2) needs hook integration.** Annotation parsing for `// tessera:tdd-skip-reason=...` needs to be added to `tdd-loop-check.sh`. Audit-log entry on every override use. — **DONE (2026-06-26).** `scripts/override/{scan,emit,report}.py` + `docs/contracts/override-event.md`; `tdd-loop-check.sh` calls the scanner on its green path. Semantics are **audit-only** (detect + log + review; the native skip does the skipping). Generic scanner covers all three rules (tdd / quality-gates / security). Deferred: the `tess overrides report` front-end (standalone `report.py` for now) and the healthcare compliance-review extension — tracked in the observatory.
 
 ### Pass 3.4 — The hidden hooks directory
 

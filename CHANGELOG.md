@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [6.47.0] - 2026-06-26
+
+### Override mechanism — honest, audited rule exceptions
+
+Implements the override hook integration designed in pass 2/3 (design-principles
+§593). Upstream rules have no override path, so exceptions get hidden in PR
+threads; Tessera makes them **stated in code and audit-logged**.
+
+#### Added
+- **`scripts/override/scan.py`** — scans changed files for `tessera:<rule>-skip-reason="..."`
+  and `tessera:<rule>-ignore-line` annotations (rules: `tdd` / `quality-gates` /
+  `security`) and emits one `override` event per occurrence. **Audit-only** — it
+  never changes pass/fail; the native skip (`pytest.mark.skip`, `eslint-disable`,
+  …) does the skipping. Non-blocking: a scan error never fails the host hook.
+- **`scripts/override/emit.py`** — override-event emitter, sibling to
+  `scripts/gate/emit.py`, same envelope → `.tessera/logs/<session>.jsonl`.
+- **`scripts/override/report.py`** — `--since <N>h|d|w` tabulates recent overrides
+  (the periodic review of §554). Stands in for the deferred `tess overrides report`.
+- **`docs/contracts/override-event.md`** — canonical `type:"override"` event shape.
+- **`scripts/override/test_override.py`** — 13 tests (scanner / emitter / report).
+- **`templates/tdd-loop-check.sh`** — calls the scanner on its green path.
+
+#### Deferred (tracked in observatory)
+- `tess` umbrella CLI (standalone `report.py` for now).
+- Actual gate-bypass semantics (v1 is audit-only by design).
+- Healthcare compliance-review extension (§54) — until the healthcare layer activates.
+
 ## [6.46.0] - 2026-06-25
 
 ### Live Claude-tier classification, dogfooded in Tessera (combo B)

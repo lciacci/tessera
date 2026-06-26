@@ -83,6 +83,12 @@ elif [ -f "pyproject.toml" ] || [ -f "setup.py" ]; then
     fi
 fi
 
+# Audit any stated rule overrides in changed files (non-blocking, audit-only).
+# Records tessera:*-skip-reason / *-ignore-line annotations; never fails the loop.
+if [ -f "scripts/override/scan.py" ]; then
+    python3 scripts/override/scan.py 2>/dev/null || true
+fi
+
 # All green - reset counter
 rm -f "$ITERATION_FILE"
 exit 0

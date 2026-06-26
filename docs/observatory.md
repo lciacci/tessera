@@ -160,6 +160,16 @@ When an Observatory entry is closed (via ADR or explicit rejection), update its 
 - **Status:** Investigating (packaging half only)
 - **When to revisit:** When real distribution pressure appears — a second machine, another person, or skills diverging from the global install. Decide then: adapt the maggy installer, extend the scaffold to carry the skill/command layer, or layer both. Graduate to an ADR at that point.
 
+### Override mechanism — deferred pieces
+
+- **Source:** Override-mechanism hook integration build (2026-06-26, design-principles §593). Core shipped: annotation scanner + audit emitter + `override-event` contract + `report.py` + `tdd-loop-check.sh` wiring.
+- **Deferred, tracked for follow-up:**
+  1. **`tess` umbrella CLI** — the design names `tess overrides report --since 1w`. Shipped as a standalone `scripts/override/report.py` instead; the `tess` front-end doesn't exist yet. Revisit when a second `tess <noun>` subcommand is wanted (don't build a CLI framework for one verb).
+  2. **Actual gate-bypass semantics** — v1 is **audit-only** (detect + log + review; native skip does the skipping). A mode where an annotation actively suppresses a specific failure was rejected (hard to scope from a whole-suite run; invites silent green). Revisit only if "log it" proves too weak in dogfood.
+  3. **Healthcare compliance-review extension** (§54) — required-review-on-override for the healthcare layer. Out of scope until the healthcare layer activates.
+- **Status:** Deferred (core built)
+- **When to revisit:** #1 when a second `tess` verb appears; #2 if audit-only proves insufficient in dogfood; #3 with the healthcare layer.
+
 ---
 
 ## Closing notes
