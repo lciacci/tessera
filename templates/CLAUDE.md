@@ -103,6 +103,15 @@ When you see "MNEMOS CHECKPOINT" in your context, it was injected by a hook:
    - Or run `mnemos resume` if the CLI is available
 4. **On any new session**: if `.mnemos/` exists, run `mnemos resume` to check for prior state
 
+## Model Tier Advisory
+The `tier-classify-hook` (UserPromptSubmit) classifies each prompt into a Claude
+effort tier (HAIKU/SONNET/OPUS) via local qwen and injects a `MODEL TIER:` line
+into context. Subagents auto-route to it; for the main thread it's advisory.
+**When the suggested tier differs from the model you're running, surface it in
+one line** (e.g. "Tier advisory: looks like OPUS work, you're on Sonnet —
+`/model opus` to switch"). Stay silent when it matches. Fails open to SONNET if
+Ollama is down. Requires Ollama + `qwen2.5-coder:3b` locally.
+
 ## Don't
 - Don't modify .env files
 - Don't add packages without checking if existing deps cover the need

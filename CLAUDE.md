@@ -55,6 +55,10 @@ The hooks in `.claude/settings.json` invoke scripts in `.claude/scripts/`:
 
 When you see `MNEMOS CHECKPOINT` in your context, it was injected by a hook. Announce it briefly, resume from the checkpoint, don't re-derive what the checkpoint states. If no checkpoint fires on session resume but `.mnemos/` exists, run `mnemos resume` to check for prior state.
 
+## Model tier advisory
+
+The `tier-classify-hook` (UserPromptSubmit) classifies each prompt into a Claude effort tier via local qwen and injects a `MODEL TIER: ...` line into your context. Subagents auto-route to it; for the main thread it is advisory. **When the suggested tier differs from the model you are currently running, surface it in one line** — e.g. "Tier advisory: this looks like OPUS work; you're on Sonnet — `/model opus` if you want to switch." Don't surface it when it matches the current model (no-op noise). Fails open to SONNET when Ollama is down.
+
 ## Don't
 
 - Don't modify `.env` files or anything matching `.env.*` (also enforced by settings.json deny list)

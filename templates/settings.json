@@ -46,6 +46,18 @@
     ]
   },
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \".claude/scripts/tier-classify-hook\" ]; then exec \".claude/scripts/tier-classify-hook\"; fi; if [ -x \"$HOME/.claude/templates/tier-classify-hook\" ]; then exec \"$HOME/.claude/templates/tier-classify-hook\"; fi; exit 0",
+            "timeout": 12,
+            "statusMessage": "Classifying Claude effort tier (qwen)..."
+          }
+        ]
+      }
+    ],
     "PreCompact": [
       {
         "hooks": [
@@ -77,6 +89,17 @@
             "command": "if [ -x \".claude/scripts/mnemos-pre-edit.sh\" ]; then exec \".claude/scripts/mnemos-pre-edit.sh\"; fi; if [ -x \"$HOME/.claude/templates/mnemos-pre-edit.sh\" ]; then exec \"$HOME/.claude/templates/mnemos-pre-edit.sh\"; fi; echo \"[maggy] hook script 'mnemos-pre-edit.sh' not installed \u2014 run <maggy>/install.sh (one-time) or touch .claude/scripts/mnemos-pre-edit.sh to silence\" >&2; exit 0",
             "timeout": 5,
             "statusMessage": "Checking fatigue + intent context..."
+          }
+        ]
+      },
+      {
+        "matcher": "Task|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \".claude/scripts/subagent-route-hook\" ]; then exec \".claude/scripts/subagent-route-hook\"; fi; if [ -x \"$HOME/.claude/templates/subagent-route-hook\" ]; then exec \"$HOME/.claude/templates/subagent-route-hook\"; fi; exit 0",
+            "timeout": 3,
+            "statusMessage": "Applying Claude effort tier to subagent..."
           }
         ]
       }

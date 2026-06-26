@@ -1,0 +1,47 @@
+#!/bin/bash
+# PreToolUse hook (matcher: Task|Agent) — applies the Claude effort tier
+# chosen by route-task-hook to spawned subagents.
+#
+# route-task-hook classifies each user prompt and caches the tier in
+# ~/.claude/routing-cache.json. When a subagent is spawned, this hook reads
+# that cache and, for CLAUDE_OPUS/SONNET/HAIKU tiers, rewrites the subagent's
+# model via hookSpecificOutput.updatedInput — turning the advisory tier into
+# real dispatch.
+#
+# Rules:
+#   - Explicit model on the call always wins (we never override it).
+#   - Only CLAUDE_* tiers map to a model; other tiers leave the default.
+#   - permissionDecision is omitted so normal permission flow is unchanged.
+#   - Fails open: any missing/stale/corrupt input => no override (exit 0).
+# No set -euo pipefail: hook scripts must be defensive, not strict.
+
+CACHE_FILE="$HOME/.claude/routing-cache.json"
+
+INPUT=$(cat 2>/dev/null || true)
+[ -z "$INPUT" ] && exit 0
+
+# Respect an explicit model — if the spawn already set one, do nothing.
+EXISTING=$(echo "$INPUT" | jq -r '.tool_input.model // empty' 2>/dev/null || echo "")
+[ -n "$EXISTING" ] && exit 0
+
+# Read the cached tier (written by route-task-hook on the last prompt).
+[ -f "$CACHE_FILE" ] || exit 0
+TIER=$(jq -r '.tier // empty' "$CACHE_FILE" 2>/dev/null || echo "")
+
+# Map CLAUDE_<TIER> -> opus|sonnet|haiku. Anything else: no override.
+case "$TIER" in
+  CLAUDE_OPUS)   MODEL="opus" ;;
+  CLAUDE_SONNET) MODEL="sonnet" ;;
+  CLAUDE_HAIKU)  MODEL="haiku" ;;
+  *) exit 0 ;;
+esac
+
+cat <<EOF
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "updatedInput": { "model": "${MODEL}" }
+  }
+}
+EOF
+exit 0
