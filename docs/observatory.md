@@ -170,6 +170,16 @@ When an Observatory entry is closed (via ADR or explicit rejection), update its 
 - **Status:** Deferred (core built)
 - **When to revisit:** #1 when a second `tess` verb appears; #2 if audit-only proves insufficient in dogfood; #3 with the healthcare layer.
 
+### Mnemos kill/keep test was confounded — empty ≠ unused
+
+- **Source:** Dashboard-validation session (2026-06-26). Verifying tess-dashboard captured metrics as intended.
+- **What it was:** The Mnemos trial (design-principles.md line 97) set a drop signal: "if two weeks pass with zero compaction issues and Mnemos never fires, drop." Two dogfood projects in, the typed-graph layer read **0 nodes** — which looked like that signal firing.
+- **Actual finding:** The graph was empty because **unfed and mis-plumbed, not unused.** Three independent breaks, all silent: (1) hooks invoked Mnemos via bare `python3` (homebrew 3.14) but the package was installed for 3.13 → `auto_nodes` import + checkpoint write no-op'd every call; (2) `fatigue_log` was only written by `mnemos fatigue`, which no hook calls; (3) the Goal/Constraint layer's two intended feeds were both dead — manual `mnemos add` (never happens) and `bridge-icpg` (no `.icpg/` to read). None of this is a usage signal. The kill/keep test silently assumed the plumbing worked; it didn't.
+- **Resolution:** Fixed all three (hooks resolve a mnemos-capable interpreter via the console-script shebang; `cmd_checkpoint` logs fatigue; iCPG bootstrapped + idempotent `bridge-icpg` + new `extract_session_goals` feed both goal flavors). Layer now auto-captures: 21 goals (10 code-intent + 11 session-task), 53 constraints, 9 results — all idempotent. Commits: tessera `fix(mnemos): pin interpreter…`, `feat(mnemos): feed never-evicted goal/constraint layer…`; tess-dashboard `fix(gate): exclude unlabeled events…`.
+- **Lesson for the framework:** A kill/keep test on *observed output* is only valid once the *input path is verified live*. "Feature never fired" must be disambiguated — unused vs unreachable — before it counts as evidence. The two-week clock should **restart from a fed baseline**, not from the broken one.
+- **Status:** Resolved (plumbing); trial clock reset
+- **When to revisit:** ≈2026-07-10 (two weeks out) — if the now-fed layer still never aids a real compaction/crash recovery, *that* is the genuine drop signal.
+
 ---
 
 ## Closing notes

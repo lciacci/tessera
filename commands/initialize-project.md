@@ -783,6 +783,33 @@ if [ -d ".git" ]; then
 fi
 ```
 
+### Step 4c: Bootstrap iCPG intent graph (feeds Mnemos goal/constraint layer)
+
+**This step runs for ALL projects in a git repo.** It seeds the never-evicted
+Goal/ConstraintNode layer with *code-intent* nodes. Without it, the SessionStart
+`bridge-icpg` hook silently no-ops (no `.icpg/` to read) and the goal layer only
+ever gets session-task goals — the code-purpose half stays empty.
+
+```bash
+if command -v icpg &>/dev/null && [ -d ".git" ]; then
+    icpg init                       # idempotent: creates .icpg/ if absent
+    icpg bootstrap --days 90        # infer ReasonNodes from git history
+    # SessionStart's bridge-icpg imports these as Goal/ConstraintNodes on next
+    # session (idempotent — deduped on content key). Re-run `icpg bootstrap`
+    # after major work to capture new intent.
+    echo "✓ iCPG bootstrapped — code-intent goals will bridge into Mnemos"
+else
+    echo "⊘ Skipped iCPG bootstrap (icpg CLI absent or not a git repo)"
+fi
+```
+
+Add `.icpg/` to `.gitignore` (local/machine-specific, like `.mnemos/` and
+`.code-graph/`):
+```gitignore
+# iCPG intent graph (auto-generated, machine-specific)
+.icpg/
+```
+
 ### Step 5: Create/update verification script
 Create or overwrite `scripts/verify-tooling.sh`:
 

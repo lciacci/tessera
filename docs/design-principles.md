@@ -94,7 +94,7 @@ Two distinct concerns that Maggy tangles together — separating them clarifies 
 - **Obsidian three-tier vault** (Arpan pattern) — richer persistent project knowledge. Lorenzo already runs this at `/Users/lciacci/Claude/obsidian`; Tessera should integrate, not replace.
 - **Instinct + confidence scoring** (ECC pattern, not the ECC install) — pattern extraction with confidence scores; a third axis if pursued later.
 
-**Revised trial question:** these aren't alternatives — they solve different problems. The trial is "do I need all of these, and which drop out?" *Mnemos handles the failure-mode recovery layer; Obsidian handles persistent project knowledge.* Specific test for Mnemos: does it catch real compaction/crash failures during dogfood and save your place? If yes, keep. If two weeks pass with zero compaction issues and Mnemos never fires, drop.
+**Revised trial question:** these aren't alternatives — they solve different problems. The trial is "do I need all of these, and which drop out?" *Mnemos handles the failure-mode recovery layer; Obsidian handles persistent project knowledge.* Specific test for Mnemos: does it catch real compaction/crash failures during dogfood and save your place? If yes, keep. If two weeks pass with zero compaction issues and Mnemos never fires, drop. **(2026-06-26 update:** the early "0 nodes" reading was a plumbing bug, not a usage signal — the graph was unfed/mis-plumbed, not unused. Fixed; trial clock reset to a fed baseline. See observatory → "Mnemos kill/keep test was confounded — empty ≠ unused.")
 
 **Code structural and intent knowledge** — three distinct invocation patterns, not parallel always-loaded layers:
 
