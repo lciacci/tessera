@@ -284,6 +284,12 @@ def cmd_checkpoint(store: MnemosStore, args) -> int:
         task_id=getattr(args, 'task_id', None)
     )
 
+    # Persist the fatigue reading so the dashboard's fatigue history populates —
+    # checkpoint is the natural cadence (cmd_fatigue is the only other writer and
+    # no hook calls it). Skipped when no statusline data exists yet.
+    if fatigue:
+        store.log_fatigue(fatigue)
+
     print(f'Checkpoint written: {cp.id[:8]}')
     print(f'  Goal: {cp.goal[:60]}')
     print(f'  Constraints: {len(cp.active_constraints)}')
