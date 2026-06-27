@@ -1,7 +1,7 @@
 {
   "statusLine": {
     "type": "command",
-    "command": "scripts/mnemos-statusline.sh",
+    "command": "if [ -x \".claude/scripts/mnemos-statusline.sh\" ]; then exec \".claude/scripts/mnemos-statusline.sh\"; fi; if [ -x \"$HOME/.claude/templates/mnemos-statusline.sh\" ]; then exec \"$HOME/.claude/templates/mnemos-statusline.sh\"; fi; exit 0",
     "padding": 0
   },
   "permissions": {
