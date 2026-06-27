@@ -191,6 +191,24 @@ When an Observatory entry is closed (via ADR or explicit rejection), update its 
 
 ---
 
+### Downstream script drift (F-003) — local copies vs. global single-source
+
+- **Source:** Tessera dogfood, 2026-06-27. A statusline patch (tier-advisory flag) landed in tessera but not in howler / tess-dashboard — three repos needed manual sync for one script change.
+- **What it is:** Every downstream project scaffolds its own copies of the mnemos hook scripts into `.claude/scripts/`. When Tessera patches a script, downstream copies don't update — no sync mechanism. The hooks already resolve `.claude/scripts/X` (local) **OR** `$HOME/.claude/templates/X` (global fallback); local always wins, so local copies shadow the global one and drift independently.
+- **State after 2026-06-27 session:** the global fallback is now **live** (`install.sh` run → `~/.claude/templates/` populated) and the statusline was given the same two-tier fallback its sibling hooks have (`eb21914`) — previously it was local-only, the literal root cause. So the *rail* for going global is laid; the *switch* is not flipped. Existing projects keep local copies (deliberate — Howler is shipping to Play Store and benefits from frozen, churn-immune hooks).
+- **The two coherent end-states:** (A) **status quo** — local copies, self-contained (clone + go), drift on every script change; (B) **full global** — no local copies, single source in `~/.claude/templates/`, zero drift, but machine-coupled (needs `install.sh` per machine, not version-controlled per project, all projects change together). The scaffold currently does (A); going (B) means `tessera-new-project` stops copying scripts locally.
+- **The hybrid the architecture enables:** decide per-project. A new project (KMP, imminent) can scaffold *without* local copies → rides global, zero drift from day one. Ship-critical projects (Howler) keep frozen local copies until safely live, then drop them.
+- **Status:** Watching
+- **When to revisit:** **KMP scaffold (next 1–2 days)** is the forcing decision — choose rides-global vs. local-copies for it, and that choice is the first real data on (B). Harder trigger: project count crossing ~4–5 makes N-way manual sync the dominant cost. Until then, manual sync of 3 repos is tolerated.
+
+### New-machine bootstrap is tribal knowledge, not a script
+
+- **Source:** Tessera dogfood, 2026-06-27. After a machine move, `install.sh` had never been run — the global layer (`~/.claude/{skills,commands,templates}`) was empty and nobody noticed because every project carried local copies.
+- **What it is:** Standing up Tessera on a fresh machine takes four steps that live only in scattered docs / past findings, not one bootstrap: (1) `install.sh` (populate global layer); (2) mnemos pip install **pinned to arm64** (`/opt/homebrew/bin/pip3.13`) with a shebang-resolves check (**F-001** — a dead shebang silently disables every Mnemos hook); (3) ollama + `qwen2.5-coder:3b` pull (else routing fails open to Sonnet — degraded, not broken); (4) Claude transcript slug rename if migrating `.mnemos`/history (**F-002** — slug derives from realpath with on-disk casing).
+- **Why it caught our attention:** the empty-global-layer state is a silent-success failure mode — everything works via local copies, so the missing `install.sh` is invisible until you rely on the global fallback. Same shape as the F-001 dead-shebang and the shell-alias/wrong-CWD bug: the framework appears installed while a layer is quietly absent.
+- **Status:** Investigating
+- **When to revisit:** before standing up machine N+1. Fold F-001/F-002 checks into `install.sh` as pre/post-verify (arm64 pip assertion, shebang-resolves assertion, global-layer-populated assertion) so one command leaves the machine known-good and **loudly** fails if not. `docs/install.md` exists but hasn't been audited against these four steps.
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.
