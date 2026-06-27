@@ -57,7 +57,7 @@ When you see `MNEMOS CHECKPOINT` in your context, it was injected by a hook. Ann
 
 ## Model tier advisory
 
-The `tier-classify-hook` (UserPromptSubmit) classifies each prompt into a Claude effort tier via local qwen and injects a `MODEL TIER: ...` line into your context. Subagents auto-route to it; for the main thread it is advisory. **When the suggested tier differs from the model you are currently running, surface it in one line** — e.g. "Tier advisory: this looks like OPUS work; you're on Sonnet — `/model opus` if you want to switch." Don't surface it when it matches the current model (no-op noise). Fails open to SONNET when Ollama is down.
+The `tier-classify-hook` (UserPromptSubmit) classifies each prompt into a Claude effort tier via local qwen. Subagents auto-route to it; the main thread sees tier mismatch in the statusline as `⚑tier:<model>` (e.g., `⚑tier:opus Ctx:45%`). No input needed — the statusline flag surfaces it automatically on mismatch, is quiet on match. Fails open to SONNET when Ollama is down.
 
 ## Don't
 
