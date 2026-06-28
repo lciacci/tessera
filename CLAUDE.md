@@ -59,6 +59,8 @@ When you see `MNEMOS CHECKPOINT` in your context, it was injected by a hook. Ann
 
 The `tier-classify-hook` (UserPromptSubmit) classifies each prompt into a Claude effort tier via local qwen. Subagents auto-route to it; the main thread sees tier mismatch in the statusline as `⚑tier:<model>` (e.g., `⚑tier:opus Ctx:45%`). No input needed — the statusline flag surfaces it automatically on mismatch, is quiet on match. Fails open to SONNET when Ollama is down.
 
+**Switching models mid-session isn't free — batch it.** Prompt caches are model-scoped: a `/model` switch invalidates the entire cached prefix (tools + system + messages), so the first turn on the new model reprocesses the whole conversation as fresh input at ~1× instead of the usual ~0.1× cache-read — roughly a 10× input-cost spike on that one turn, then back to normal. (Independent of the 5-min cache TTL.) So the flag is *advisory, not auto-switch*: obeying it every prompt and flip-flopping Opus↔Haiku turn-by-turn pays that reread tax on every switch, dwarfing any per-token savings. Right read: switch at natural breakpoints in batches — drop to the cheaper tier for a *run* of mechanical work, do it all, switch back. The flag tells you the task shape; you decide if the batch is big enough to be worth one reread.
+
 ## Don't
 
 - Don't modify `.env` files or anything matching `.env.*` (also enforced by settings.json deny list)
