@@ -223,6 +223,15 @@ When an Observatory entry is closed (via ADR or explicit rejection), update its 
 - **Status:** Watching → promote to a design principle if a 3rd instance appears
 - **When to revisit:** Next time a feature relies on the model surfacing something. If a third instance lands, this is no longer a pattern-on-the-radar but a rule — fold it into `design-principles.md` (channel-not-convention for user-facing signals) and audit existing CLAUDE.md "surface X" instructions against it.
 
+### Tier classifier under-rates discussion-heavy prompts
+
+- **Source:** Tessera dogfood, 2026-06-27 — observed across a long tessera-dev session.
+- **What it is:** The `tier-classify-hook` (qwen, ADR-0002) classified most of this session as **HAIKU**, including the go-global architecture decision, the install.sh-hardening design work, and the model-switch cache-cost reasoning — all clearly OPUS-tier work. The classifier judges *surface shape* (a short, conversational-looking prompt) rather than *intent* (the deep reasoning the prompt actually demands). Short prompts that open large reasoning tasks ("what do you reco on X?", "should we go global?") get under-rated.
+- **Why it caught our attention:** The advisory is only useful if its tier tracks the work. Systematic under-rating of discussion/decision prompts means the flag points the wrong way exactly when the stakes are highest — architectural and design turns. It nudges toward a cheaper model for the most intelligence-sensitive work.
+- **Mitigations (unbuilt):** (1) feed the classifier conversation context, not just the bare prompt — a decision prompt mid-architecture-thread reads differently than in isolation; (2) bias the classifier upward on decision/question framing; (3) accept it and lean on the human (the advisory is advisory — the cost is a wrong nudge, not a wrong action). Note the "Convention-surfacing drift" entry and the model-switch cost note (CLAUDE.md) both argue *against* acting on every flag anyway, which softens the impact.
+- **Status:** Investigating (feeds ADR-0002; ADR is immutable, so the open thread lives here)
+- **When to revisit:** When tier-misroute friction is felt for real — a subagent routed to HAIKU that visibly underperforms on OPUS-shaped work, or enough wrong-nudge annoyance to justify the context-aware classifier. Until then it's a known, low-cost inaccuracy.
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.
