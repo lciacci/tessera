@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tessera — A Claude Code framework built from real mistakes</title>
+<style>
+  :root {
+    --bg: #0b0d12;
+    --bg-alt: #11141b;
+    --tile: #161a23;
+    --tile-hover: #1c2230;
+    --border: #262c3a;
+    --text: #e6e9f0;
+    --text-dim: #8b93a7;
+    --accent: #5ec9a8;
+    --accent-2: #d9a64e;
+    --accent-3: #c97ed9;
+    --accent-4: #6b9fd9;
+    --danger: #e06b6b;
+    --radius: 10px;
+    font-size: 16px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    line-height: 1.6;
+    scroll-behavior: smooth;
+  }
+
+  /* ---------- mosaic background ---------- */
+  .mosaic-bg {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    overflow: hidden;
+    background: var(--bg);
+  }
+  .mosaic-bg svg { width: 100%; height: 100%; opacity: 0.5; }
+  .mosaic-bg .tile {
+    fill: var(--tile);
+    stroke: var(--border);
+    stroke-width: 1;
+    transition: fill 1.2s ease;
+  }
+
+  a { color: var(--accent-4); }
+
+  .wrap {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* ---------- nav ---------- */
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    backdrop-filter: blur(10px);
+    background: rgba(11,13,18,0.85);
+    border-bottom: 1px solid var(--border);
+  }
+  nav .wrap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    max-width: 980px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: 0.02em; }
+  .brand .mark { width: 22px; height: 22px; }
+  nav ul { list-style: none; display: flex; gap: 22px; margin: 0; padding: 0; }
+  nav a.navlink { color: var(--text-dim); text-decoration: none; font-size: 0.92rem; }
+  nav a.navlink:hover { color: var(--text); }
+
+  /* ---------- hero ---------- */
+  header.hero {
+    padding: 110px 0 80px;
+    text-align: center;
+  }
+  .kicker {
+    display: inline-block;
+    font-size: 0.78rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid rgba(94,201,168,0.35);
+    background: rgba(94,201,168,0.08);
+    border-radius: 999px;
+    padding: 5px 14px;
+    margin-bottom: 22px;
+  }
+  h1.title {
+    font-size: clamp(2.4rem, 5vw, 3.6rem);
+    margin: 0 0 18px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    background: linear-gradient(120deg, var(--text) 30%, var(--accent) 70%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .tagline {
+    font-size: 1.2rem;
+    color: var(--text-dim);
+    max-width: 640px;
+    margin: 0 auto 36px;
+  }
+  .tagline em { color: var(--text); font-style: normal; }
+
+  .cta-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-bottom: 18px; }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 22px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    text-decoration: none;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: transform 0.15s ease, background 0.15s ease;
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn-primary { background: var(--accent); color: #06140f; }
+  .btn-primary:hover { background: #74d6b8; }
+  .btn-ghost { background: transparent; border-color: var(--border); color: var(--text); }
+  .btn-ghost:hover { border-color: var(--text-dim); }
+
+  .clone-box {
+    max-width: 520px;
+    margin: 0 auto;
+    background: var(--tile);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .clone-box button {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    cursor: pointer;
+  }
+  .clone-box button:hover { color: var(--text); }
+
+  /* ---------- sections ---------- */
+  section { padding: 70px 0; border-top: 1px solid var(--border); }
+  section.no-border { border-top: none; }
+  h2.section-title {
+    font-size: 1.9rem;
+    margin: 0 0 8px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  p.section-sub {
+    color: var(--text-dim);
+    max-width: 680px;
+    margin: 0 0 38px;
+    font-size: 1.02rem;
+  }
+
+  /* ---------- grid cards ---------- */
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  @media (max-width: 760px) {
+    .grid-3, .grid-2 { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: var(--tile);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+  .card:hover { border-color: rgba(94,201,168,0.4); transform: translateY(-2px); }
+  .card h3 { margin: 0 0 8px; font-size: 1.05rem; }
+  .card p { margin: 0; color: var(--text-dim); font-size: 0.92rem; }
+  .card .badge {
+    display: inline-block;
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 2px 9px;
+    margin-bottom: 10px;
+  }
+
+  /* ---------- philosophy tabs ---------- */
+  .tabs { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+  .tab-btn {
+    background: var(--tile);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 9px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+  .tab-btn.active { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+  .tab-panel { display: none; background: var(--tile); border: 1px solid var(--border); border-radius: var(--radius); padding: 26px; }
+  .tab-panel.active { display: block; animation: fadein 0.25s ease; }
+  .tab-panel h4 { margin-top: 0; color: var(--accent); }
+  @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ---------- principles accordion ---------- */
+  .accordion-item {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    overflow: hidden;
+    background: var(--tile);
+  }
+  .accordion-head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 18px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .accordion-head:hover { background: var(--tile-hover); }
+  .accordion-num {
+    flex: 0 0 auto;
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    background: rgba(94,201,168,0.12);
+    color: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; font-weight: 700;
+  }
+  .accordion-title { flex: 1; font-weight: 600; font-size: 0.95rem; }
+  .accordion-chevron { color: var(--text-dim); transition: transform 0.2s ease; }
+  .accordion-item.open .accordion-chevron { transform: rotate(180deg); }
+  .accordion-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease, padding 0.25s ease;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    padding: 0 18px;
+  }
+  .accordion-item.open .accordion-body {
+    max-height: 240px;
+    padding: 0 18px 16px 60px;
+  }
+
+  .accordion-controls { margin-bottom: 14px; display: flex; gap: 10px; }
+  .accordion-controls button {
+    background: none; border: 1px solid var(--border); color: var(--text-dim);
+    border-radius: 6px; padding: 5px 12px; font-size: 0.8rem; cursor: pointer;
+  }
+  .accordion-controls button:hover { color: var(--text); }
+
+  /* ---------- ADR timeline ---------- */
+  .timeline { position: relative; padding-left: 28px; }
+  .timeline::before {
+    content: "";
+    position: absolute;
+    left: 8px; top: 4px; bottom: 4px;
+    width: 2px;
+    background: linear-gradient(var(--accent), var(--border));
+  }
+  .tl-item { position: relative; margin-bottom: 28px; }
+  .tl-dot {
+    position: absolute; left: -28px; top: 4px;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 4px rgba(94,201,168,0.15);
+  }
+  .tl-item.status-watching .tl-dot { background: var(--accent-2); box-shadow: 0 0 0 4px rgba(217,166,78,0.15); }
+  .tl-meta { font-size: 0.78rem; color: var(--text-dim); margin-bottom: 4px; }
+  .tl-status {
+    display: inline-block; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 1px 8px; border-radius: 999px; margin-left: 8px;
+    background: rgba(94,201,168,0.12); color: var(--accent);
+  }
+  .tl-title { font-weight: 700; margin: 0 0 6px; }
+  .tl-body { color: var(--text-dim); font-size: 0.92rem; margin: 0; }
+
+  /* ---------- findings ticker ---------- */
+  .findings-list { display: flex; flex-direction: column; gap: 10px; }
+  .finding {
+    display: flex; gap: 14px; align-items: flex-start;
+    background: var(--tile); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 18px;
+  }
+  .finding .icon { font-size: 1.1rem; flex: 0 0 auto; margin-top: 1px; }
+  .finding .body strong { color: var(--text); }
+  .finding .body { color: var(--text-dim); font-size: 0.9rem; }
+
+  /* ---------- toggle switch demo (profiles) ---------- */
+  .profile-demo {
+    background: var(--tile); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 26px;
+  }
+  .profile-toggle-row { display: flex; align-items: center; gap: 16px; margin-bottom: 22px; }
+  .switch {
+    position: relative; width: 52px; height: 28px; flex: 0 0 auto;
+    background: var(--bg-alt); border: 1px solid var(--border); border-radius: 999px; cursor: pointer;
+  }
+  .switch::after {
+    content: ""; position: absolute; top: 2px; left: 2px;
+    width: 22px; height: 22px; border-radius: 50%; background: var(--text-dim);
+    transition: transform 0.2s ease, background 0.2s ease;
+  }
+  .switch.on { background: rgba(217,166,78,0.18); border-color: var(--accent-2); }
+  .switch.on::after { transform: translateX(24px); background: var(--accent-2); }
+  .profile-label { font-weight: 700; font-size: 1rem; }
+  .profile-label .sub { display: block; font-weight: 400; color: var(--text-dim); font-size: 0.8rem; margin-top: 2px; }
+  .ext-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  @media (max-width: 600px) { .ext-list { grid-template-columns: 1fr; } }
+  .ext-item {
+    display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: 8px; font-size: 0.85rem; color: var(--text-dim);
+    opacity: 0.35; transition: opacity 0.2s ease, border-color 0.2s ease;
+  }
+  .ext-item.active { opacity: 1; border-color: rgba(217,166,78,0.4); color: var(--text); }
+  .ext-item .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-dim); margin-top: 6px; flex: 0 0 auto; }
+  .ext-item.active .dot { background: var(--accent-2); }
+
+  /* ---------- skills mosaic grid ---------- */
+  .skills-mosaic {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+  }
+  .skill-tile {
+    border: 1px solid var(--border);
+    background: var(--tile);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 0.82rem;
+    cursor: default;
+    transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  }
+  .skill-tile:hover { transform: scale(1.04); border-color: var(--accent); background: var(--tile-hover); z-index: 2; position: relative; }
+  .skill-tile .name { font-weight: 700; display: block; margin-bottom: 3px; }
+  .skill-tile .desc { color: var(--text-dim); font-size: 0.74rem; line-height: 1.4; }
+  .skill-tile.core { border-color: rgba(94,201,168,0.45); }
+  .skill-tile.core .name::after { content: " ●"; color: var(--accent); font-size: 0.6rem; vertical-align: middle; }
+
+  .legend { display: flex; gap: 18px; margin-top: 14px; font-size: 0.78rem; color: var(--text-dim); flex-wrap: wrap; }
+  .legend span.dot { color: var(--accent); }
+
+  /* ---------- footer ---------- */
+  footer { padding: 50px 0 70px; text-align: center; color: var(--text-dim); font-size: 0.85rem; }
+  footer .mark-row { margin-bottom: 14px; opacity: 0.6; }
+
+  .quote {
+    font-style: italic;
+    color: var(--text-dim);
+    border-left: 2px solid var(--accent);
+    padding-left: 16px;
+    margin: 0 0 38px;
+  }
+
+  code.inline {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.85em;
+    color: var(--accent);
+  }
+</style>
+</head>
+<body>
+
+<div class="mosaic-bg" id="mosaicBg"></div>
+
+<nav>
+  <div class="wrap">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 24 24"><rect x="1" y="1" width="9" height="9" rx="1.5" fill="#5ec9a8"/><rect x="13" y="1" width="9" height="9" rx="1.5" fill="#d9a64e" opacity="0.85"/><rect x="1" y="13" width="9" height="9" rx="1.5" fill="#6b9fd9" opacity="0.85"/><rect x="13" y="13" width="9" height="9" rx="1.5" fill="#c97ed9" opacity="0.85"/></svg>
+      Tessera
+    </div>
+    <ul>
+      <li><a class="navlink" href="#philosophy">Philosophy</a></li>
+      <li><a class="navlink" href="#principles">Principles</a></li>
+      <li><a class="navlink" href="#skills">Skills</a></li>
+      <li><a class="navlink" href="#profiles">Profiles</a></li>
+      <li><a class="navlink" href="#adr">Decisions</a></li>
+      <li><a class="navlink" href="#dogfood">Dogfood</a></li>
+    </ul>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="kicker">A Claude Code framework, not a product</span>
+    <h1 class="title">Each skill is a tessera.<br>The whole framework is the mosaic.</h1>
+    <p class="tagline">Tessera is a personal agentic coding framework for <em>Claude Code</em> — forked, pruned, and rebuilt around what survives real dogfooding instead of what looks good in a README. Verification gates, a YAGNI discipline, and an honest record of every decision, including the ones that turned out wrong.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#principles">See the 16 principles</a>
+      <a class="btn btn-ghost" href="#dogfood">Read the dogfood findings</a>
+    </div>
+    <div class="clone-box">
+      <span id="cloneText">git clone &lt;tessera-repo&gt; && ./install.sh</span>
+      <button onclick="copyClone()">Copy</button>
+    </div>
+  </div>
+</header>
+
+<section class="no-border" id="what">
+  <div class="wrap">
+    <h2 class="section-title">What it actually is</h2>
+    <p class="section-sub">Not a SaaS product, not a plugin marketplace. A working framework that governs how Claude Code behaves on real projects — skills, hooks, rules, and a written trail of every consequential decision.</p>
+    <div class="grid-3">
+      <div class="card">
+        <span class="badge">Origin</span>
+        <h3>Forked &amp; pruned</h3>
+        <p>Started from <code class="inline">maggy</code>, stripped to what's useful for solo dogfooding, then rebuilt around clean extension points — project profiles, an ADR system, an honest override mechanism.</p>
+      </div>
+      <div class="card">
+        <span class="badge">Mechanism</span>
+        <h3>Suggested, not silent</h3>
+        <p>Heavy machinery — loops, multi-agent pipelines, multi-engine review — is proposed by Claude and accepted, declined, or modified by the human. Auto-invocation is rejected as a default pattern.</p>
+      </div>
+      <div class="card">
+        <span class="badge">Discipline</span>
+        <h3>Verifiable over ceremonial</h3>
+        <p>A TDD Stop hook that actually runs tests beats a ten-stage agent pipeline nobody reads. Reviewers operate read-only. Decisions get written down, not just remembered.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="philosophy">
+  <div class="wrap">
+    <h2 class="section-title">Four influences, deliberately balanced</h2>
+    <p class="section-sub">Tessera doesn't pick one philosophy of agentic coding and run with it. It takes the part of each that survives contact with real work.</p>
+
+    <div class="tabs" id="philoTabs">
+      <button class="tab-btn active" data-tab="maggy">Maggy</button>
+      <button class="tab-btn" data-tab="boris">Boris / Arpan</button>
+      <button class="tab-btn" data-tab="ponytail">Ponytail</button>
+      <button class="tab-btn" data-tab="trask">Trask</button>
+    </div>
+
+    <div class="tab-panel active" data-panel="maggy">
+      <h4>Structure compounds — selectively true</h4>
+      <p>Keep the TDD Stop hook, the read-only reviewer pipeline, the conditional-rules layer. Reject the maximalist scaffolding. Maggy proved that infrastructure (typed memory graphs, three-layer compaction defense, auto-fresh code graphs) can be genuinely sophisticated — but a ten-stage pipeline for solo work is ceremony, not structure.</p>
+    </div>
+    <div class="tab-panel" data-panel="boris">
+      <h4>Master the primitives</h4>
+      <p>Short <code class="inline">CLAUDE.md</code>, mistake-driven rules, native commands first. This is the dominant philosophy for the dogfood phase: don't reach for a heavier custom thing if a native Claude Code feature already covers the gap.</p>
+    </div>
+    <div class="tab-panel" data-panel="ponytail">
+      <h4>The YAGNI ladder</h4>
+      <p>Climb the smallest-thing-that-works ladder before reaching for the heavier abstraction — stdlib, then native platform, then an installed dependency, then one line, only then custom code. Applies to code <em>and</em> to tooling decisions about Tessera itself.</p>
+    </div>
+    <div class="tab-panel" data-panel="trask">
+      <h4>Ensembling is a tool, not a default</h4>
+      <p>Multi-model review and consequential-decision arbitration are real, valuable patterns for discrete high-stakes calls — and overhyped as a default for everyday agentic coding. Reserved for decisions that actually warrant it.</p>
+    </div>
+  </div>
+</section>
+
+<section id="principles">
+  <div class="wrap">
+    <h2 class="section-title">16 compounding principles</h2>
+    <p class="section-sub">The rules that outlive any specific implementation choice. Numbered and referenced throughout the design doc — never reordered, only appended to as the dogfood teaches new ones.</p>
+    <div class="accordion-controls">
+      <button onclick="setAllAccordion(true)">Expand all</button>
+      <button onclick="setAllAccordion(false)">Collapse all</button>
+    </div>
+    <div id="accordionList"></div>
+  </div>
+</section>
+
+<section id="skills">
+  <div class="wrap">
+    <h2 class="section-title">The skill mosaic</h2>
+    <p class="section-sub">Four skills load eagerly into every session. Everything else activates on demand — by file path, explicit invocation, or context. Skill defaults are starting points, not prescriptions (principle 15).</p>
+    <div class="skills-mosaic" id="skillsMosaic"></div>
+    <div class="legend"><span><span class="dot">●</span> = eagerly loaded into every session</span><span>hover a tile for what it does</span></div>
+  </div>
+</section>
+
+<section id="profiles">
+  <div class="wrap">
+    <h2 class="section-title">Project profiles</h2>
+    <p class="section-sub">A project declares its profile in <code class="inline">.tessera/project.yml</code>. Non-matching projects pay none of the overhead. Going up a tier is frictionless; going down warns and asks for confirmation.</p>
+    <div class="profile-demo">
+      <div class="profile-toggle-row">
+        <div class="switch" id="profileSwitch" onclick="toggleProfile()"></div>
+        <div class="profile-label" id="profileLabel">Standard profile<span class="sub">baseline Tessera — no specialized activations</span></div>
+      </div>
+      <div class="ext-list" id="extList"></div>
+    </div>
+  </div>
+</section>
+
+<section id="adr">
+  <div class="wrap">
+    <h2 class="section-title">Decisions, written down</h2>
+    <p class="section-sub">Architecture Decision Records are numbered, dated, and immutable once accepted — superseded by a new ADR rather than edited. The Observatory tracks everything noticed but not yet decided: lighter than an ADR, a junk drawer with structure.</p>
+    <div class="timeline" id="adrTimeline"></div>
+  </div>
+</section>
+
+<section id="dogfood">
+  <div class="wrap">
+    <h2 class="section-title">What dogfooding actually found</h2>
+    <p class="section-sub">Tessera's own development is governed by Tessera. That produces an unusually honest trail — including the bugs in its own memory layer and the conventions that turned out not to work.</p>
+    <p class="quote">"A kill/keep test on observed output is only valid once the input path is verified live. 'Feature never fired' must be disambiguated — unused vs. unreachable — before it counts as evidence."</p>
+    <div class="findings-list" id="findingsList"></div>
+  </div>
+</section>
+
+<footer>
+  <div class="mark-row">
+    <svg width="20" height="20" viewBox="0 0 24 24"><rect x="1" y="1" width="9" height="9" rx="1.5" fill="#5ec9a8"/><rect x="13" y="1" width="9" height="9" rx="1.5" fill="#d9a64e" opacity="0.85"/><rect x="1" y="13" width="9" height="9" rx="1.5" fill="#6b9fd9" opacity="0.85"/><rect x="13" y="13" width="9" height="9" rx="1.5" fill="#c97ed9" opacity="0.85"/></svg>
+  </div>
+  Tessera — MIT licensed, forked from maggy. Built for solo dogfooding first; everything else is downstream.
+</footer>
+
+<script>
+  // ---------- mosaic background generator ----------
+  (function buildMosaic() {
+    const svgNS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNS, "svg");
+    const cols = 14, rows = 9, size = 90;
+    svg.setAttribute("viewBox", "0 0 " + (cols*size) + " " + (rows*size));
+    svg.setAttribute("preserveAspectRatio", "xMidYMid slice");
+    const colors = ["#161a23","#161a23","#161a23","#161a23","#1a2c27","#241f17","#1b2230","#241a26"];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const rect = document.createElementNS(svgNS, "rect");
+        rect.setAttribute("x", c*size + 1);
+        rect.setAttribute("y", r*size + 1);
+        rect.setAttribute("width", size - 2);
+        rect.setAttribute("height", size - 2);
+        rect.setAttribute("rx", 6);
+        rect.classList.add("tile");
+        rect.style.fill = colors[Math.floor(Math.random()*colors.length)];
+        svg.appendChild(rect);
+      }
+    }
+    document.getElementById("mosaicBg").appendChild(svg);
+  })();
+
+  // ---------- clone copy ----------
+  function copyClone() {
+    const text = document.getElementById("cloneText").textContent;
+    navigator.clipboard && navigator.clipboard.writeText(text);
+  }
+
+  // ---------- philosophy tabs ----------
+  document.querySelectorAll("#philoTabs .tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#philoTabs .tab-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+      btn.classList.add("active");
+      document.querySelector('.tab-panel[data-panel="' + btn.dataset.tab + '"]').classList.add("active");
+    });
+  });
+
+  // ---------- principles accordion ----------
+  const PRINCIPLES = [
+    ["Native primitives first", "Don't reach for a heavier custom thing if a native command (/rewind, /goal, /batch, /insights) covers it adequately."],
+    ["YAGNI ladder", "Stdlib → native platform → installed dependency → one line → only then custom code."],
+    ["Short, mistake-driven CLAUDE.md", "“Would removing this line cause a mistake? If not, cut it.” Rules grow from real mistakes, not anticipated ones."],
+    ["CLAUDE.local.md for private feedback", "Gitignored. Personal corrections, PR feedback, and habits-to-correct accumulate here without polluting shared config."],
+    ["Ensembling is a tool, not a default", "/arbiter for consequential decisions; default single-model for normal flow."],
+    ["Direct integrations only", "No aggregators or middlemen. Trust and habit-building matter, especially with sensitive-data work in the longer arc."],
+    ["Data handling is a first-class concern", "A sensitive-data awareness layer activates based on project profile. Even the standard profile treats audit trails and secrets handling as baseline concerns."],
+    ["Verifiability over ceremony", "A TDD Stop hook earns its keep; a 10-stage agent pipeline does not, for solo use."],
+    ["Read-only reviewers", "Reviewers with write access defend their own edits."],
+    ["Single-harness focus", "Adapter sprawl is a cost, not a feature."],
+    ["Just-in-time provider addition", "Adding model providers is near-free with the right abstraction, but each one is still cognitive load. Add when a use case earns the slot."],
+    ["Heavy machinery is suggested, not silent", "Tessera proposes loops, multi-agent ceremonies, and other heavyweight workflows; the human accepts, declines, or modifies. Auto-invocation removes agency."],
+    ["Reviewers operate read-only", "When Claude is in a review role, it operates without write tools — regardless of whether multi-agent orchestration is active."],
+    ["Once a pipeline is invoked, no internal skipping", "Heavy machinery is opt-in, but once opted in, the pipeline runs all stages as defined. The human can abort mid-pipeline; the agent cannot."],
+    ["Skill defaults are starting points, not prescriptions", "Stack and tooling choices follow the project's needs first; skills inform but don't decide."],
+    ["Evaluate the ecosystem on a cadence; document the verdict", "A framework-evaluation skill and ADR convention turn ad-hoc “should we use this?” questions into structured decisions with named re-evaluate triggers."],
+  ];
+
+  const accList = document.getElementById("accordionList");
+  PRINCIPLES.forEach((p, i) => {
+    const item = document.createElement("div");
+    item.className = "accordion-item";
+    item.innerHTML = `
+      <div class="accordion-head" onclick="this.parentElement.classList.toggle('open')">
+        <div class="accordion-num">${i+1}</div>
+        <div class="accordion-title">${p[0]}</div>
+        <div class="accordion-chevron">&#9662;</div>
+      </div>
+      <div class="accordion-body"><p>${p[1]}</p></div>
+    `;
+    accList.appendChild(item);
+  });
+
+  function setAllAccordion(open) {
+    document.querySelectorAll(".accordion-item").forEach(el => {
+      el.classList.toggle("open", open);
+    });
+  }
+
+  // ---------- skills mosaic ----------
+  const SKILLS = [
+    ["base", "Universal coding patterns, TDD workflow, atomic todos", true],
+    ["iterative-development", "Stop-hook TDD loops that feed failures back automatically", true],
+    ["mnemos", "Typed memory graph — goals never evicted, survives compaction", true],
+    ["security", "OWASP patterns, secrets hygiene, security testing", true],
+    ["icpg", "Intent-augmented code graph — tracks WHY code exists, 6-dim drift detection", false],
+    ["code-graph", "Sub-millisecond structural queries, 64 languages, auto-fresh", false],
+    ["code-review", "Mandatory review pipeline before commits and deploys", false],
+    ["codex-review", "OpenAI Codex CLI review, GPT-class second opinion", false],
+    ["gemini-review", "Gemini CLI review, 1M-token context", false],
+    ["commit-hygiene", "Atomic commits, PR size limits, stacked PRs", false],
+    ["code-deduplication", "Capability index, check-before-write", false],
+    ["agent-teams", "Strict TDD pipeline enforcement for team-based dev", false],
+    ["polyphony", "Container-isolated multi-agent orchestration", false],
+    ["framework-evaluation", "Six-dimension methodology that produces a decision ADR", false],
+    ["workspace", "Multi-repo and monorepo topology awareness", false],
+    ["session-management", "Tiered summarization, context preservation, resumability", false],
+    ["cross-agent-delegation", "Routes tasks across agents by complexity score", false],
+    ["ticket-craft", "AI-native Jira/Asana/Linear ticket writing", false],
+  ];
+  const mosaic = document.getElementById("skillsMosaic");
+  SKILLS.forEach(s => {
+    const tile = document.createElement("div");
+    tile.className = "skill-tile" + (s[2] ? " core" : "");
+    tile.innerHTML = `<span class="name">${s[0]}</span><span class="desc">${s[1]}</span>`;
+    mosaic.appendChild(tile);
+  });
+
+  // ---------- profile toggle ----------
+  const EXTENSIONS = [
+    "PHI marker detection on touched files",
+    "Hard-gate behavior on PHI-touching code",
+    "Bumped encryption defaults",
+    "Healthcare-specific incident response templates",
+    "BAA scope tracking",
+    "Audited profile-change log (entry, reason, timestamp)",
+  ];
+  const extList = document.getElementById("extList");
+  EXTENSIONS.forEach(e => {
+    const el = document.createElement("div");
+    el.className = "ext-item";
+    el.innerHTML = `<span class="dot"></span><span>${e}</span>`;
+    extList.appendChild(el);
+  });
+
+  let healthcareOn = false;
+  function toggleProfile() {
+    healthcareOn = !healthcareOn;
+    document.getElementById("profileSwitch").classList.toggle("on", healthcareOn);
+    document.getElementById("profileLabel").innerHTML = healthcareOn
+      ? 'Healthcare profile<span class="sub">adds HIPAA-aware extensions — additive, nothing in standard is removed</span>'
+      : 'Standard profile<span class="sub">baseline Tessera — no specialized activations</span>';
+    document.querySelectorAll(".ext-item").forEach(el => el.classList.toggle("active", healthcareOn));
+  }
+
+  // ---------- ADR timeline ----------
+  const ADRS = [
+    ["ADR-0001", "2026-06", "Accepted", "Open GSD evaluation", "Adopt patterns (thin-orchestrator isolation, package legitimacy gate, plan drift guard concept) while keeping Tessera as the host framework. First worked example of the framework-evaluation methodology.", "accepted"],
+    ["ADR-0002", "2026-06-26", "Accepted", "Model effort-tier routing via dispatch-time hooks", "Rejected a running daemon that watches and switches models. The model binds at fixed dispatch points only — a hook can rewrite a subagent's model at spawn time, but nothing can hot-swap the main thread mid-turn. Routing is computed at the prompt boundary; application happens only at dispatch gates.", "accepted"],
+    ["ADR-0003", "2026-06-26", "Accepted", "Tessera owns its distribution", "Inverts the dependency on the upstream maggy repo rather than severing it. git clone tessera && ./install.sh now scaffolds projects with zero maggy dependency; maggy, as the superset, embeds Tessera — not the other way around.", "accepted"],
+  ];
+  const tl = document.getElementById("adrTimeline");
+  ADRS.forEach(a => {
+    const item = document.createElement("div");
+    item.className = "tl-item status-" + a[5];
+    item.innerHTML = `
+      <div class="tl-dot"></div>
+      <div class="tl-meta">${a[0]} &middot; ${a[1]} <span class="tl-status">${a[2]}</span></div>
+      <p class="tl-title">${a[3]}</p>
+      <p class="tl-body">${a[4]}</p>
+    `;
+    tl.appendChild(item);
+  });
+
+  // ---------- dogfood findings ----------
+  const FINDINGS = [
+    ["\u{1F50D}", "Mnemos read 0 nodes for two dogfood projects — looked like a kill signal", "It wasn't unused, it was unreachable: three silent breaks (a homebrew Python version mismatch dead-shebombed every hook call, a missing log writer, two dead intent feeds). Fixed all three; the memory layer now auto-captures 21 goals, 53 constraints, 9 results. Lesson: a kill/keep test on observed output is only valid once the input path is verified live."],
+    ["\u{1F4DD}", "The suggestion-gate convention had ~85% miss rate in real use", "CLAUDE.md said “when you surface a gate, log it.” Across a real session, ~6 decision points surfaced, 1 got logged. Model-memory is a lossy, drifting trigger — anything that depends on the model remembering to tell the user needs a non-model channel (statusline, hook), not a written convention."],
+    ["\u{1F300}", "A shell alias silently broke every project-local hook for a full session", "alias claude='cd ~/Claude; command claude' forced the cwd to the parent directory before every launch, so .claude/settings.json in the actual project was never loaded. The fix was visible in /status the whole time — “Setting sources” showed project-local config missing. Diagnostic discipline: check the shell first when behavior repeats across what should be different invocations."],
+    ["⚖️", "Hard quality gates from upstream got reframed as targets, not stop conditions", "20 lines/function, 200 lines/file, 80% coverage — the numbers survived, the “STOP and split immediately” enforcement language didn't. An honest override mechanism (inline annotations, audit-logged, periodically reviewed) replaced silent exceptions hidden in PR discussions."],
+  ];
+  const fl = document.getElementById("findingsList");
+  FINDINGS.forEach(f => {
+    const el = document.createElement("div");
+    el.className = "finding";
+    el.innerHTML = `<span class="icon">${f[0]}</span><div class="body"><strong>${f[1]}</strong><br>${f[2]}</div>`;
+    fl.appendChild(el);
+  });
+</script>
+
+</body>
+</html>
