@@ -1,5 +1,7 @@
 # Tessera repo's own project configuration (used for first test session)
 profile: standard
+# source: this repo's local .claude/scripts ARE the hooks install.sh ships (ADR-0004)
+hook_distro: source
 profile_history: []
 extensions_added: []
 extensions_removed: []
