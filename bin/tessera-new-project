@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # Stand up a new downstream Tessera project with the harness layer.
 #
-#   tessera-new-project <target-dir> [project-name] [profile]
+#   tessera-new-project [--frozen] <target-dir> [project-name] [profile]
+#
+# Hook distribution (ADR-0004): default is `global` — no local mnemos script
+# copies; hooks resolve from ~/.claude/templates (single source, zero drift).
+# Pass --frozen for ship-critical projects that want pinned, churn-immune local
+# copies. Flip later with `tessera-hooks freeze|thaw`.
 #
 # Lays down: .claude/ (mnemos hooks + settings), scripts/gate (recorder),
 # .tessera/ (profile + logs), CLAUDE.md, .gitignore, and `git init`. Harness
@@ -14,7 +19,10 @@ set -euo pipefail
 TESSERA_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TPL="$TESSERA_ROOT/templates/tessera"
 
-TARGET="${1:?usage: tessera-new-project <target-dir> [project-name] [profile]}"
+DISTRO=global
+if [ "${1:-}" = "--frozen" ]; then DISTRO=frozen; shift; fi
+
+TARGET="${1:?usage: tessera-new-project [--frozen] <target-dir> [project-name] [profile]}"
 NAME="${2:-$(basename "$TARGET")}"
 PROFILE="${3:-standard}"
 
@@ -26,18 +34,23 @@ done
 
 mkdir -p "$TARGET/.claude/scripts" "$TARGET/.tessera/logs" "$TARGET/.mnemos" "$TARGET/scripts/gate"
 
-# Harness scripts — from the live checkout, not a template copy (anti-drift).
-cp "$TESSERA_ROOT"/.claude/scripts/mnemos-*.sh "$TARGET/.claude/scripts/"
+# Harness scripts. Default (global): no local mnemos copies — settings.json falls
+# back to ~/.claude/templates. Frozen: pin live copies now (anti-drift snapshot).
+if [ "$DISTRO" = frozen ]; then
+  cp "$TESSERA_ROOT"/.claude/scripts/mnemos-*.sh "$TARGET/.claude/scripts/"
+  chmod +x "$TARGET"/.claude/scripts/*.sh
+fi
+# Gate recorder is always project-local (not a global-fallback hook).
 cp "$TESSERA_ROOT"/scripts/gate/emit.py "$TESSERA_ROOT"/scripts/gate/test_gate_emit.py \
    "$TARGET/scripts/gate/"
-chmod +x "$TARGET"/.claude/scripts/*.sh
 
 # Settings + gitignore (stack-agnostic bases — add your stack's commands after).
 cp "$TPL/settings.base.json" "$TARGET/.claude/settings.json"
 cp "$TPL/gitignore.base" "$TARGET/.gitignore"
 
 # .tessera/ config.
-sed "s|^profile: .*|profile: $PROFILE|" "$TPL/project.yml.template" > "$TARGET/.tessera/project.yml"
+sed -e "s|^profile: .*|profile: $PROFILE|" -e "s|^hook_distro: .*|hook_distro: $DISTRO|" \
+    "$TPL/project.yml.template" > "$TARGET/.tessera/project.yml"
 cp "$TPL/security-exceptions.yml.template" "$TARGET/.tessera/security-exceptions.yml"
 printf '*\n' > "$TARGET/.mnemos/.gitignore"
 cat > "$TARGET/.tessera/logs/README.md" <<'EOF'
@@ -62,7 +75,8 @@ if command -v icpg >/dev/null 2>&1; then
   ( cd "$TARGET" && icpg init >/dev/null 2>&1 ) || true
 fi
 
-echo "scaffolded '$NAME' at $TARGET (profile: $PROFILE)"
+echo "scaffolded '$NAME' at $TARGET (profile: $PROFILE, hooks: $DISTRO)"
+[ "$DISTRO" = global ] && echo "  hooks ride ~/.claude/templates — run install.sh on this machine if not yet done"
 echo "next:"
 echo "  - fill {{PROJECT_DESCRIPTION}} and {{COMMANDS}} in CLAUDE.md"
 echo "  - add your stack's build/test commands to .claude/settings.json allow[] (remove _stack_allow_note)"

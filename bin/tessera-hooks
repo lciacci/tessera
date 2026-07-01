@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# tessera-hooks — flip a project's mnemos hook distribution (ADR-0004).
+#
+#   tessera-hooks status   # declared mode + filesystem reality + drift check
+#   tessera-hooks freeze    # pin local copies from ~/.claude/templates (ship-critical)
+#   tessera-hooks thaw      # drop local copies, ride the global single source
+#
+# Run from a Tessera project root. The `.sh` scripts are the drift surface;
+# settings.json is per-project and carries the local→global fallback branch.
+set -euo pipefail
+
+YML=".tessera/project.yml"
+TPL="$HOME/.claude/templates"
+SCR=".claude/scripts"
+SETTINGS=".claude/settings.json"
+
+[ -f "$YML" ] || { echo "no $YML — run from a Tessera project root" >&2; exit 1; }
+distro=$(sed -n 's/^hook_distro: *//p' "$YML" | head -1)
+distro=${distro:-unset}
+
+local_count() { local f n=0; for f in "$SCR"/mnemos-*.sh; do [ -e "$f" ] && n=$((n+1)); done; echo "$n"; }
+settings_has_fallback() { grep -q 'HOME/.claude/templates/mnemos' "$SETTINGS" 2>/dev/null; }
+set_distro() {
+  if grep -q '^hook_distro:' "$YML"; then
+    sed -i '' "s|^hook_distro:.*|hook_distro: $1|" "$YML"
+  else
+    printf 'hook_distro: %s\n' "$1" >> "$YML"
+  fi
+}
+
+case "${1:-status}" in
+  status)
+    n=$(local_count)
+    echo "declared:  $distro"
+    echo "local mnemos scripts: $n"
+    if settings_has_fallback; then echo "settings global-fallback: yes"; else echo "settings global-fallback: NO"; fi
+    case "$distro" in
+      global) if [ "$n" -gt 0 ]; then echo "MISMATCH: declared global but $n local copies present (run thaw)"; fi ;;
+      frozen|source) if [ "$n" -eq 0 ]; then echo "MISMATCH: declared $distro but no local copies (run freeze)"; fi ;;
+    esac
+    ;;
+  freeze)
+    [ -d "$TPL" ] || { echo "no $TPL — run tessera install.sh on this machine first" >&2; exit 1; }
+    ls "$TPL"/mnemos-*.sh >/dev/null 2>&1 || { echo "no mnemos scripts in $TPL — install.sh incomplete" >&2; exit 1; }
+    mkdir -p "$SCR"
+    cp "$TPL"/mnemos-*.sh "$SCR"/ && chmod +x "$SCR"/mnemos-*.sh
+    set_distro frozen
+    echo "frozen: pinned $(local_count) scripts from $TPL"
+    ;;
+  thaw)
+    [ "$distro" = source ] && { echo "refuse: this repo is the hook 'source' — cannot thaw the framework itself" >&2; exit 1; }
+    settings_has_fallback || { echo "refuse: $SETTINGS lacks the local→global fallback branch — thaw would silently disable every mnemos hook. Add the fallback (see ADR-0004) first." >&2; exit 1; }
+    rm -f "$SCR"/mnemos-*.sh
+    set_distro global
+    echo "thawed: dropped local copies, now riding $TPL"
+    ;;
+  *) echo "usage: tessera-hooks status|freeze|thaw" >&2; exit 1 ;;
+esac
