@@ -28,8 +28,9 @@ EXISTING=$(echo "$INPUT" | jq -r '.tool_input.model // empty' 2>/dev/null || ech
 [ -f "$CACHE_FILE" ] || exit 0
 TIER=$(jq -r '.tier // empty' "$CACHE_FILE" 2>/dev/null || echo "")
 
-# Map CLAUDE_<TIER> -> opus|sonnet|haiku. Anything else: no override.
+# Map CLAUDE_<TIER> -> fable|opus|sonnet|haiku. Anything else: no override.
 case "$TIER" in
+  CLAUDE_FABLE)  MODEL="fable" ;;
   CLAUDE_OPUS)   MODEL="opus" ;;
   CLAUDE_SONNET) MODEL="sonnet" ;;
   CLAUDE_HAIKU)  MODEL="haiku" ;;

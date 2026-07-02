@@ -22,12 +22,13 @@ PROMPT=$(echo "$INPUT" | jq -r '.prompt // empty' 2>/dev/null || echo "")
 # Token-only + few-shot + temp 0: a 3B model parrots the middle option with a
 # descriptive prompt, but discriminates reliably when asked for the bare token.
 CLASSIFY="Classify into ONE tier. Output ONLY the tier token, nothing else.
-HAIKU = grep/rename/format/list/read/boilerplate. SONNET = features/refactor/debug/tests/day-to-day. OPUS = architecture/security/multi-service/complex-debug/auth.
+HAIKU = grep/rename/format/list/read/boilerplate. SONNET = features/refactor/debug/tests/day-to-day. OPUS = architecture/security/multi-service/complex-debug/auth. FABLE = frontier reasoning beyond OPUS: novel algorithm design, formal correctness/concurrency analysis, whole-system security audit.
 
 Examples:
 'list all test files' -> HAIKU
 'add a login form' -> SONNET
 'redesign auth token rotation across services' -> OPUS
+'prove the lock-free queue is linearizable and fix any races' -> FABLE
 
 Task: ${PROMPT}"
 
@@ -41,7 +42,7 @@ if curl -s --connect-timeout 2 "${OLLAMA_BASE}/api/tags" >/dev/null 2>&1; then
   RAW=$(curl -s --max-time 10 "${OLLAMA_BASE}/api/chat" \
     -d "{\"model\":\"${OLLAMA_MODEL}\",\"messages\":[{\"role\":\"user\",\"content\":${CONTENT}}],\"stream\":false,\"options\":{\"temperature\":0,\"num_predict\":10}}" \
     2>/dev/null | jq -r '.message.content // ""' || true)
-  PARSED=$(echo "$RAW" | grep -oE 'HAIKU|SONNET|OPUS' | head -1 || echo "")
+  PARSED=$(echo "$RAW" | grep -oE 'HAIKU|SONNET|OPUS|FABLE' | head -1 || echo "")
   if [ -n "$PARSED" ]; then
     TIER="CLAUDE_${PARSED}"
     REASON="qwen classified ${PARSED}"
