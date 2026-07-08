@@ -244,6 +244,14 @@ When an Observatory entry is closed (via ADR or explicit rejection), update its 
 - **Status:** Watching
 - **When to revisit:** first downstream `.sql`/dbt surface (Tessera side); pr-arbiter side is tracked in that repo.
 
+### Cross-cutting rename guard — Kotlin/manifest greppable, JNI coupled by string convention
+
+- **Source:** Howler dogfood F-004, 2026-06-30 — closed tester reported crash on open (Android 16).
+- **What it is:** A package rename (`com.example.howler` → `com.houseofyeti.howler`) updated the Kotlin/namespace/manifest layer but left `audio_engine.cpp` exporting `Java_com_example_howler_...` symbols. JNI resolves natives by mangled FQCN, so `nativeStart()` threw `UnsatisfiedLinkError` and the app crashed on open — **with no build error** (the C++ compiles and links; the symbol is just orphaned). A cross-cutting refactor Tessera has no guard for: the Kotlin layer is IDE-refactorable, the native layer is coupled to it only by string convention.
+- **Why it caught our attention:** Silent-at-build, crash-at-runtime is exactly the failure class a framework guard should catch. Two candidate guards: (1) a rename-checklist / lint that, for projects with an `externalNativeBuild`, greps `src/main/cpp` for `Java_<old_package_mangled>_` after an applicationId/namespace change; (2) a minimal JNI-load instrumented test in the NDK scaffold so symbol-name drift fails CI, not a tester's device. Secondary lesson (agent-behavior, not framework): pull the actual `logcat -b crash` stack *before* theorizing — anchoring on the 16KB-page theory cost time the stack trace would have saved.
+- **Status:** Watching
+- **When to revisit:** When iOS/KMP work starts (KMP moves the JNI boundary again) or any future rename touches native code. Narrow scope (NDK projects only) — not worth building until a second native-layer project exists. Howler is currently the only one.
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.

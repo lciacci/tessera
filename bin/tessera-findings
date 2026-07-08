@@ -1,0 +1,120 @@
+#!/usr/bin/env python3
+"""tessera-findings — scan downstream projects' FINDINGS.md for the framework backlog.
+
+Closes the downstream→framework feedback disconnect: findings surface while working
+in a downstream repo (howler, conclave, ...) but transfer to Tessera is manual and
+lossy. This scans every sibling project with a `.tessera/project.yml` for
+`docs/FINDINGS.md`, parses each finding's `**Status:**` line, and prints what is
+still open (un-transferred) so nothing rots in a downstream markdown.
+
+Contract: docs/contracts/findings.md.
+
+    tessera-findings                 # open backlog across all downstreams (default)
+    tessera-findings --all           # every finding, any status
+    tessera-findings --json          # machine output (for tess-dashboard)
+    tessera-findings --root ~/Claude # override project root (default: tessera's parent)
+"""
+import argparse
+import json
+import re
+import sys
+from pathlib import Path
+
+FINDING_RE = re.compile(r"^##\s+(F-\d+)\s*[—-]\s*(.+?)\s*$")
+STATUS_RE = re.compile(r"^\*\*Status:\*\*\s*(.+?)\s*$")
+
+
+def discover_projects(root: Path, exclude: Path) -> list[Path]:
+    """Downstream projects under root: dirs declaring a Tessera profile, minus the framework."""
+    projects = (p.parent.parent for p in root.glob("*/.tessera/project.yml"))
+    return sorted(p for p in projects if p.resolve() != exclude.resolve())
+
+
+def status_of(block: list[str]) -> str:
+    """First Status line in a finding block; 'open' if none (unknown = needs attention)."""
+    for line in block:
+        m = STATUS_RE.match(line)
+        if m:
+            return m.group(1)
+    return "open"
+
+
+def parse_findings(md: Path) -> list[dict]:
+    """Split FINDINGS.md into F-NNN blocks, tagging each with its status."""
+    findings, current, block = [], None, []
+    for line in md.read_text().splitlines():
+        header = FINDING_RE.match(line)
+        if header:
+            if current:
+                findings.append({**current, "status": status_of(block)})
+            current, block = {"id": header.group(1), "title": header.group(2)}, []
+        elif current:
+            block.append(line)
+    if current:
+        findings.append({**current, "status": status_of(block)})
+    return findings
+
+
+def is_open(status: str) -> bool:
+    return status.split(":", 1)[0].strip().lower() == "open"
+
+
+def collect(root: Path, framework: Path) -> list[dict]:
+    """One row per project: its findings, or a note that the channel is missing/empty."""
+    rows = []
+    for proj in discover_projects(root, framework):
+        md = proj / "docs" / "FINDINGS.md"
+        findings = parse_findings(md) if md.exists() else []
+        sections = md.read_text().count("\n## ") if md.exists() else 0
+        rows.append({
+            "project": proj.name,
+            "has_channel": md.exists(),
+            "findings": findings,
+            "nonconforming": bool(md.exists() and not findings and sections),
+        })
+    return rows
+
+
+def render(rows: list[dict], show_all: bool) -> str:
+    out = []
+    for row in rows:
+        items = row["findings"] if show_all else [
+            f for f in row["findings"] if is_open(f["status"])
+        ]
+        if not row["has_channel"]:
+            out.append(f"  {row['project']}: no docs/FINDINGS.md (channel missing)")
+            continue
+        if row["nonconforming"]:
+            out.append(f"  {row['project']}: FINDINGS.md present but no F-NNN findings — legacy format, not scannable")
+            continue
+        if not items:
+            out.append(f"  {row['project']}: nothing {'' if show_all else 'open'} ✓")
+            continue
+        out.append(f"  {row['project']}:")
+        out.extend(f"    {f['id']} [{f['status']}] {f['title']}" for f in items)
+    return "\n".join(out)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Scan downstream FINDINGS.md for the framework backlog.")
+    ap.add_argument("--all", action="store_true", help="show every finding, not just open")
+    ap.add_argument("--json", action="store_true", help="machine-readable output")
+    ap.add_argument("--root", type=Path, help="project root (default: tessera's parent dir)")
+    args = ap.parse_args()
+
+    framework = Path(__file__).resolve().parent.parent
+    root = args.root or framework.parent
+    rows = collect(root, framework)
+
+    if args.json:
+        print(json.dumps(rows, indent=2))
+        return 0
+
+    open_count = sum(1 for r in rows for f in r["findings"] if is_open(f["status"]))
+    print(f"Tessera findings backlog — {len(rows)} project(s), {open_count} open\n")
+    print(render(rows, args.all))
+    return 1 if open_count else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
