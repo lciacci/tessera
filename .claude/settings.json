@@ -144,6 +144,16 @@
             "statusMessage": "Loading session checkpoint + project context..."
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \".claude/scripts/tessera-findings-surface.sh\" ]; then exec \".claude/scripts/tessera-findings-surface.sh\"; fi; exit 0",
+            "timeout": 10,
+            "statusMessage": "Checking downstream findings backlog..."
+          }
+        ]
       }
     ]
   }

@@ -47,7 +47,7 @@ If conflicts emerge (state collisions, performance issues, noise), options are d
 
 The hooks in `.claude/settings.json` invoke scripts in `.claude/scripts/`:
 
-- **SessionStart** — `mnemos-session-start.sh` loads any prior checkpoint, restores session continuity
+- **SessionStart** — `mnemos-session-start.sh` loads any prior checkpoint, restores session continuity; `tessera-findings-surface.sh` runs `bin/tessera-findings` and injects the un-transferred downstream findings backlog (silent when nothing is open). This is the framework learning from its own downstreams without human recall — see `docs/contracts/findings.md`.
 - **PreCompact** — `mnemos-pre-compact.sh` writes an emergency checkpoint before compaction
 - **PreToolUse** — `mnemos-post-compact-inject.sh` checks for post-compaction restore; `mnemos-pre-edit.sh` (Edit/Write matcher) checks fatigue and intent context
 - **PostToolUse** — `mnemos-post-tool.sh` logs tool outcomes
