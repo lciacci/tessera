@@ -30,16 +30,36 @@ while a trivial lookup stays HAIKU. Empirical eval against local qwen, not hope.
 
 ---
 
-## [FOCUS-002] Sweep the observatory (18 open threads)
+## [FOCUS-002] Sweep the observatory (22 entries)
 
-**Status:** pending (after FOCUS-001)
+**Status:** done (2026-07-08)
+
+Triaged all 22. Framework too young for the >6mo cull — nothing dead. Outcomes:
+- **Promoted:** L217 convention-surfacing drift → **design principle #17** (3rd
+  instance was this session's findings SessionStart hook).
+- **Cluster cross-ref:** 5 GSD entries (byte-budget, `.planning` schema, domain
+  probes, gate types, plan-drift) tied to the Tier 1 discussion — resolve together.
+- **Near-due watch:** L174 Mnemos kill/keep clock resets ~2026-07-10 (drop signal
+  if the fed layer still hasn't aided a real recovery).
+- **Spawned:** FOCUS-003 (audit CLAUDE.md "surface X" against #17).
+- Rest legitimately parked on external triggers. Duplicate hook copies
+  (`hooks/` vs `.claude/scripts/`) noted — real F-003-shaped smell, folded into
+  the ADR-0004 re-eval space, not urgent.
+
+---
+
+## [FOCUS-003] Audit CLAUDE.md "surface X" instructions against principle #17
+
+**Status:** pending
 **Priority:** medium
+**Source:** principle #17 (channel-not-convention); its own follow-on clause.
 
-Triage all Investigating/Watching/Pending entries. Its own rule: >6mo untouched
-= evidence it doesn't matter. Promote what earned its keep to ADRs, reject the
-rest, name re-open conditions. Expected to spawn follow-on work — that's the
-point. Known input already: duplicate hook copies (`hooks/` vs `.claude/scripts/`),
-an F-003-shaped drift risk surfaced during FOCUS-001.
+Sweep CLAUDE.md (framework + downstream templates) for instructions telling the
+model to surface something to the user via convention alone ("surface X",
+"flag Y", "tell the user Z"). Each is a silent-drift risk. For each: is there a
+non-model channel (statusline / hook / harness tool), or does it rely on model
+recall? Convert the high-value ones; document the rest as accepted-convention
+with rationale.
 
 ---
 

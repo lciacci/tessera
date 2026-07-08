@@ -74,6 +74,13 @@ When an Observatory entry is closed (via ADR or explicit rejection), update its 
 - **When to revisit:** If Tessera ever needs third-party extension support (currently solo use; not in scope). Or if our profile compositional mechanism proves insufficient and we need a more general extension system.
 - **Resolution:** Skipped in ADR-0001 because different design philosophy (Tessera uses compositional profiles; GSD uses extensible capabilities).
 
+> **Cluster note (2026-07-08 sweep):** the next five entries — byte-budget numbers,
+> `.planning/` schema, domain probes, gate types, plan-drift guard — are all gated on
+> an **unbuilt planning/orchestration layer** Tessera has not committed to. That's the
+> same premise as roadmap **Tier 1** (`_project_specs/00-autonomous-engineering-roadmap.md`,
+> parked for discussion in `_project_specs/todos/active.md`). They resolve *together* with
+> that decision; don't action them independently before Tier 1 is decided.
+
 ### Byte-budget enforcement tier numbers (XL/LARGE/DEFAULT: 90000/54000/38000)
 
 - **Source:** Open GSD — `gsd-core/workflows/*.md` size budget enforced by `tests/workflow-size-budget.test.cjs`
@@ -222,8 +229,9 @@ When an Observatory entry is closed (via ADR or explicit rejection), update its 
   2. **Suggestion-gate logging.** CLAUDE.md said "when you surface a gate, also record it via `emit.py`." Real dogfood: ~6 gates surfaced, 1 logged (~85% miss). See the suggestion-gate entry above. Fix candidate is the same shape: a **Stop-hook** backstop, not reliance on the model.
 - **The pattern:** model-memory is a lossy, drifting trigger. Anything whose value depends on the user *seeing* it (advisories, friction logs, status) must ride a **non-model channel** — statusline (per-turn user-visible), a hook (deterministic on an event), or a tool the harness renders. CLAUDE.md conventions are fine for shaping *how the model works*; they're unreliable for *guaranteeing the user is informed*.
 - **Decision heuristic for new features:** when adding anything the model is "supposed to tell the user," ask first — *what's the non-model channel?* If the answer is "the model will mention it," expect ~drift-rate loss. The statusline is the underused default surface (one line, every turn, free); a Stop/PreToolUse hook is the default for event-triggered capture.
-- **Status:** Watching → promote to a design principle if a 3rd instance appears
-- **When to revisit:** Next time a feature relies on the model surfacing something. If a third instance lands, this is no longer a pattern-on-the-radar but a rule — fold it into `design-principles.md` (channel-not-convention for user-facing signals) and audit existing CLAUDE.md "surface X" instructions against it.
+- **3rd instance landed, 2026-07-08.** The downstream findings backlog: `tessera-findings` was built, then surfaced only via a "run it next time" note — a model/human-recall convention. Caught in dogfood ("a user shouldn't have to kick that over"), fixed with a **SessionStart hook** (non-model channel, fires every session). Same shape as the two above. Trigger fired → **promoted to design principle #17** (channel-not-convention for user-facing signals).
+- **Status:** Adopted → design principle #17
+- **When to revisit:** Closed as a pattern-on-the-radar. Follow-on audit (sweep existing CLAUDE.md "surface X" instructions against #17) tracked as FOCUS-003 in `_project_specs/todos/active.md`.
 
 ### Tier classifier under-rates discussion-heavy prompts
 
