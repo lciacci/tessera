@@ -22,12 +22,16 @@ PROMPT=$(echo "$INPUT" | jq -r '.prompt // empty' 2>/dev/null || echo "")
 # Token-only + few-shot + temp 0: a 3B model parrots the middle option with a
 # descriptive prompt, but discriminates reliably when asked for the bare token.
 CLASSIFY="Classify into ONE tier. Output ONLY the tier token, nothing else.
-HAIKU = grep/rename/format/list/read/boilerplate. SONNET = features/refactor/debug/tests/day-to-day. OPUS = architecture/security/multi-service/complex-debug/auth. FABLE = frontier reasoning beyond OPUS: novel algorithm design, formal correctness/concurrency analysis, whole-system security audit.
+Judge the reasoning the task demands, NOT the prompt's length or phrasing — a short question can demand deep reasoning.
+HAIKU = grep/rename/format/list/read/boilerplate, or a lookup with one factual answer. SONNET = features/refactor/debug/tests/day-to-day. OPUS = architecture/security/multi-service/complex-debug/auth, AND open design/strategy decisions (what to build next, whether to adopt/restructure, is-this-the-right-approach). FABLE = frontier reasoning beyond OPUS: novel algorithm design, formal correctness/concurrency analysis, whole-system security audit.
 
 Examples:
 'list all test files' -> HAIKU
+'what's the flag to amend a commit?' -> HAIKU
 'add a login form' -> SONNET
 'redesign auth token rotation across services' -> OPUS
+'what should we build next for the framework?' -> OPUS
+'should we fold the dashboard into the main repo?' -> OPUS
 'prove the lock-free queue is linearizable and fix any races' -> FABLE
 
 Task: ${PROMPT}"
