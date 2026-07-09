@@ -63,6 +63,18 @@ with rationale.
 
 ---
 
+## Backlog (triggered — do when the condition fires)
+
+- **Cut CHANGELOGs when repos go public.** conclave, tessera, tess-dashboard, and
+  howler are all expected to go public at some point. None but tessera has a
+  CHANGELOG yet — deliberately (premature until there's a public reader). When a
+  repo goes public: `cd <repo> && tessera-changelog --since <ref> --version <v> --date <d>`
+  (commits are already Conventional; verified plug-and-play on conclave). Keep the
+  tool **single-source in `tessera/bin`, reached via PATH — do NOT copy it into
+  each repo** (that's the F-003 drift trap). PATH the dir once per machine.
+
+---
+
 ## Parked for discussion (not started)
 
 - **Roadmap Tier 1** (runtime observability / verifiable contracts / human
