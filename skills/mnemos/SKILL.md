@@ -43,19 +43,38 @@ Fatigue states and actions:
 ### Automatic (hooks handle everything):
 1. **Statusline** writes `fatigue.json` on every API call
 2. **PreToolUse** hook reads fatigue before every edit, auto-checkpoints at 0.60+
-3. **PreCompact** hook writes emergency checkpoint, compaction marker, and tells summarizer what to preserve
-4. **SessionStart "compact"** fires immediately after compaction, re-injects full checkpoint (primary restore)
-5. **SessionStart "startup|resume"** loads last checkpoint on new/resumed sessions
-6. **PreToolUse fallback** (no matcher) detects compaction marker if SessionStart didn't fire
-7. **Stop** hook writes final checkpoint for next session
+3. **PreCompact** hook writes emergency checkpoint, compaction marker, a `compaction_fired` log line, and tells summarizer what to preserve
+4. **SessionStart** (no matcher, so it fires on `startup`, `resume`, *and* `compact`) runs `mnemos-session-start.sh`, which loads the last checkpoint — this is the primary restore on all three sources
+5. **PreToolUse fallback** (no matcher) detects the compaction marker on the first tool call and re-injects if SessionStart didn't fire
+6. **Stop** hook writes final checkpoint for next session
 
 ### Post-Compaction Recovery (Three-Layer Defense):
 When Claude Code compacts the context (~83% full), Mnemos uses three layers:
-- **Layer 1 (PreCompact)**: Outputs strong preservation instructions with inline checkpoint content for the summarizer. Writes `.mnemos/just-compacted` marker.
-- **Layer 2 (SessionStart "compact")**: **PRIMARY re-injection.** Fires immediately when Claude resumes after compaction — before any agent action. Consumes the marker and injects the full checkpoint into the fresh context. This is the recommended approach per the RFC (Wake State Reconstruction).
-- **Layer 3 (PreToolUse fallback)**: If SessionStart doesn't fire (older versions, edge cases), the first tool call triggers `mnemos-post-compact-inject.sh` which detects the marker and injects. Safety net only.
+- **Layer 1 (PreCompact)**: Outputs strong preservation instructions with inline checkpoint content for the summarizer. Writes `.mnemos/just-compacted` marker and appends `compaction_fired` to `.mnemos/compaction-log.jsonl`.
+- **Layer 2 (SessionStart, unmatched)**: **Primary re-injection.** `mnemos-session-start.sh` fires on every SessionStart source — including `compact` — and prints the checkpoint before the agent acts. It does *not* gate on source and does *not* consume the marker.
+- **Layer 3 (PreToolUse fallback)**: `mnemos-post-compact-inject.sh` fires on the first tool call, consumes the marker, injects, and appends `restore_injected` (or `restore_missed_stale` if >5min elapsed). Safety net for the case where Layer 2's output was dropped, and the only layer that fires if the post-compaction turn is pure text with no tool call.
+
+**Two known wrinkles, both benign:**
+- Layer 2 doesn't consume the marker, so Layer 3 also fires on the next tool call. The checkpoint gets injected twice. Redundant, not harmful.
+- There is no `mnemos-compact-recovery.sh` and no SessionStart `"compact"` matcher. Earlier docs described both; neither ever existed. Layer 2's role is played by the unmatched `mnemos-session-start.sh`. Coverage is intact — only the naming was wrong. (Corrected 2026-07-09.)
 
 The result: after compaction, you'll see a "CONTEXT RESTORED AFTER COMPACTION" block with your goal, constraints, what you were working on, and progress. Resume from there.
+
+### Is the compaction-recovery layer actually working?
+`.mnemos/compaction-log.jsonl` is the durable record — the marker is deleted on
+consumption and leaves no trace, and `checkpoints` has no trigger column, so this
+file is the *only* evidence that compaction ever fired. Tally it with:
+
+```bash
+python3 -c "
+import json,collections
+c=collections.Counter(json.loads(l)['event'] for l in open('.mnemos/compaction-log.jsonl'))
+print(dict(c))"
+```
+
+`compaction_fired` with no matching `restore_injected` means the recovery layer
+is failing. Zero lines means compaction has never fired — which is *not* evidence
+the layer is useless, only that it is untested.
 
 ### Manual CLI:
 ```bash

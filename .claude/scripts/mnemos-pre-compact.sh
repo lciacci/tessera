@@ -1,13 +1,19 @@
 #!/bin/bash
 # Mnemos PreCompact Hook — emergency checkpoint + typed preservation + compaction marker.
 #
-# TWO-LAYER DEFENSE against lossy compaction:
+# THREE-LAYER DEFENSE against lossy compaction:
 #   Layer 1 (this script): Write emergency checkpoint, output strong preservation
 #           instructions with inline content for the summarizer.
-#   Layer 2 (mnemos-post-compact-inject.sh): After compaction, the first tool call
-#           re-injects the full checkpoint. See that script for details.
+#   Layer 2 (mnemos-session-start.sh): SessionStart is wired without a matcher,
+#           so it fires on source=compact and prints the checkpoint before the
+#           agent acts. Primary restore. Does not consume the marker.
+#   Layer 3 (mnemos-post-compact-inject.sh): PreToolUse. Consumes the marker and
+#           re-injects on the first tool call. Only layer that fires when the
+#           post-compaction turn has no tool call.
 #
-# The marker file (.mnemos/just-compacted) bridges the two layers.
+# The marker file (.mnemos/just-compacted) bridges layers 1 and 3.
+# .mnemos/compaction-log.jsonl is the durable record — the marker is deleted
+# on consumption, so without the log there is NO evidence compaction occurred.
 #
 # Install: add to .claude/settings.json under hooks.PreCompact
 # This EXTENDS (not replaces) the existing pre-compact.sh
@@ -27,13 +33,20 @@ if [ -n "$MNEMOS_CMD" ]; then
     eval $MNEMOS_CMD checkpoint --force &>/dev/null
 fi
 
-# ─── 2. Write compaction marker for Layer 2 detection ───
+# ─── 2. Write compaction marker for Layer 2 detection + durable event record ───
+# The marker is consumed and deleted by the restore hook, leaving no trace.
+# compaction-log.jsonl is the durable record: it is what makes the Mnemos
+# compaction-recovery trial falsifiable. Without it, "never aided a recovery"
+# is unanswerable rather than false. See docs/observatory.md.
 
 python3 -c "
 import json, time, os
 os.makedirs('.mnemos', exist_ok=True)
+ts = time.time()
 with open('.mnemos/just-compacted', 'w') as f:
-    json.dump({'timestamp': time.time(), 'reason': 'pre_compact_hook'}, f)
+    json.dump({'timestamp': ts, 'reason': 'pre_compact_hook'}, f)
+with open('.mnemos/compaction-log.jsonl', 'a') as f:
+    f.write(json.dumps({'ts': ts, 'event': 'compaction_fired'}) + '\n')
 "
 
 # ─── 3. Build inline checkpoint content for summarizer ───
