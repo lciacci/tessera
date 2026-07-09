@@ -104,6 +104,15 @@ with rationale.
   signal. An **empty or absent log is not a signal at all** — it means compaction
   hasn't fired. Scope: compaction-recovery layer only, never session-continuity.
 
+- **Content-aware hook drift check.** `bin/tessera-hooks status` compares declared
+  mode vs local-copy *count*, never file *content* — so the three writable copies
+  of each hook (`.claude/scripts/` → `templates/` → `~/.claude/templates/`) drift
+  silently. This let a bare-`python3` regression sit in the install payload for
+  ~2 weeks (see observatory F-003 update, 2026-07-09). Fix: diff the three layers
+  by content, or make `templates/` generated rather than hand-maintained.
+  **Trigger:** next hook edit, or next `install.sh` rework. Until then, every
+  hook edit needs a manual three-way sync.
+
 - **Cut CHANGELOGs when repos go public.** conclave, tessera, tess-dashboard, and
   howler are all expected to go public at some point. None but tessera has a
   CHANGELOG yet — deliberately (premature until there's a public reader). When a
