@@ -7,8 +7,9 @@ downstream repo (howler, conclave, tess-dashboard, …). Transfer back to Tesser
 manual and lossy — a finding could sit written-down-but-un-actioned indefinitely (howler F-004
 did). This contract makes the backlog scannable so nothing rots.
 
-Producer: each downstream project. Consumer: `bin/tessera-findings` (and later a tess-dashboard
-panel). If this shape changes, it changes here.
+Producer: each downstream project. Consumers: `bin/tessera-findings` (CLI) and the tess-dashboard
+Overview findings strip (reads it via `--json`-shape data through the dashboard's own
+contract-conforming TS reader). If this shape changes, it changes here.
 
 ## File
 
