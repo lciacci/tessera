@@ -10,7 +10,55 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 > **Note:** this CHANGELOG fell behind after 6.47.0 — ADR-0004 (hook distribution)
 > and the FABLE effort tier shipped without entries. This section covers the
-> 2026-07-08 session only; earlier gaps are un-backfilled.
+> 2026-07-08 and 2026-07-09 sessions; earlier gaps are un-backfilled.
+
+### Mnemos compaction trial — made falsifiable, re-armed on an event trigger
+
+The kill/keep trial for Mnemos's compaction-recovery layer was due 2026-07-10.
+It was retired instead of decided: the clock was measuring nothing, and the
+criterion could never have been answered from disk.
+
+**Compaction has never fired** since the 2026-06-26 fed baseline — max
+`token_utilization` 0.51 across 131 `fatigue_log` samples, none above 0.7,
+against a ~83% trigger; fatigue was `flow` in 131/131. "Never aided a recovery"
+is therefore **untriggered**, not disconfirming. Turn count is not the driver
+(a 628-turn session peaked at 0.51).
+
+#### Added
+- **`.mnemos/compaction-log.jsonl`** (gitignored, append-only) — the durable
+  record. `mnemos-pre-compact.sh` appends `compaction_fired`;
+  `mnemos-post-compact-inject.sh` appends `restore_injected`, or
+  `restore_missed_stale` when the marker aged out (>5min), a failure the old
+  code swallowed silently. Previously the marker was consumed via
+  rename+unlink and `checkpoints` had no trigger column, so nothing on disk
+  distinguished "compaction never happened" from "happened twenty times."
+
+#### Fixed
+- **Layer-2 attribution.** The skill and both script headers named a
+  `mnemos-compact-recovery.sh` fired by a SessionStart `"compact"` matcher as
+  the primary restore path. Neither script nor matcher has ever existed, here
+  or in `~/.claude/templates/`. Layer 2's role is played by
+  `mnemos-session-start.sh` on an *unmatched* SessionStart, which fires on
+  `compact` alongside `startup`/`resume`. Three layers do exist; one was
+  misnamed for ~6 weeks. **Coverage was never affected.**
+
+#### Changed
+- **`docs/design-principles.md`** — calendar trigger struck; trial now fires
+  after **≥3 recorded `compaction_fired` events**. Pass-1.4 and pass-3.2
+  read-notes annotated (not rewritten) with dated corrections; pass 3's
+  "implementation matches documentation" left standing under its refutation.
+- **`docs/observatory.md`** — "empty ≠ unused" entry extended with the
+  **untriggered** third category, and a standing caveat: this trial governs the
+  *compaction-recovery* layer only. Mnemos's *session-continuity* layer (148
+  nodes, 134 checkpoints, restores every session) is independently demonstrated
+  and is **not** on trial. Conflating the two nearly killed a working subsystem
+  with a test that could not run.
+
+#### Known, documented, not fixed
+- Layer 2 does not consume the marker, so Layer 3 re-injects the checkpoint a
+  second time. Redundant, not harmful.
+- Layer 3 is the only layer that fires when the post-compaction turn is pure
+  text with no tool call.
 
 ### Downstream → framework findings loop
 
