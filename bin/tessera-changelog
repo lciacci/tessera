@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+"""tessera-changelog — generate a Keep-a-Changelog section from Conventional Commits.
+
+Subject-based by design: the commit chain keeps its honesty (Co-Authored-By, and
+generated-by trailers live in the bodies), but a subject-only changelog *cannot*
+leak those into the public-facing file — the trailer never appears in a subject.
+So the public marker problem is solved by construction, not fragile stripping.
+
+Groups commits since a ref by Conventional-Commit type, prints markdown to stdout.
+
+    tessera-changelog --since v6.47.0                       # since a tag
+    tessera-changelog --since 97e4334 --version 6.48.0 --date 2026-07-09
+"""
+import argparse
+import re
+import subprocess
+import sys
+
+TYPE_SECTION = {
+    "feat": "Added",
+    "fix": "Fixed",
+    "perf": "Changed",
+    "refactor": "Changed",
+    "docs": "Documentation",
+}
+SECTION_ORDER = ["Added", "Fixed", "Changed", "Documentation", "Other"]
+SUBJECT_RE = re.compile(
+    r"^(?P<type>[a-z]+)(?:\((?P<scope>[^)]+)\))?(?P<bang>!)?:\s*(?P<desc>.+)$"
+)
+
+
+def last_tag() -> str | None:
+    r = subprocess.run(
+        ["git", "describe", "--tags", "--abbrev=0"], capture_output=True, text=True
+    )
+    return r.stdout.strip() or None
+
+
+def commit_subjects(since: str) -> list[str]:
+    rng = f"{since}..HEAD" if since else "HEAD"
+    out = subprocess.run(
+        ["git", "log", "--no-merges", "--format=%s", rng],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    return [line for line in out.splitlines() if line.strip()]
+
+
+def classify(subject: str) -> tuple[str, str, bool]:
+    """(section, bullet, is_breaking) for one commit subject."""
+    m = SUBJECT_RE.match(subject)
+    if not m:
+        return "Other", subject, False
+    section = TYPE_SECTION.get(m["type"], "Changed")
+    bullet = f"**{m['scope']}:** {m['desc']}" if m["scope"] else m["desc"]
+    return section, bullet, bool(m["bang"])
+
+
+def group(subjects: list[str]) -> tuple[dict[str, list[str]], list[str]]:
+    sections = {s: [] for s in SECTION_ORDER}
+    breaking = []
+    for subj in subjects:
+        section, bullet, is_breaking = classify(subj)
+        sections[section].append(bullet)
+        if is_breaking:
+            breaking.append(bullet)
+    return sections, breaking
+
+
+def render(sections: dict[str, list[str]], breaking: list[str], header: str) -> str:
+    lines = [header, ""]
+    if breaking:
+        lines += ["### ⚠ BREAKING CHANGES", "", *[f"- {b}" for b in breaking], ""]
+    for name in SECTION_ORDER:
+        if sections[name]:
+            lines += [f"### {name}", "", *[f"- {b}" for b in sections[name]], ""]
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Generate a CHANGELOG section from Conventional Commits.")
+    ap.add_argument("--since", help="git ref/tag; covers <since>..HEAD (default: last tag)")
+    ap.add_argument("--version", default="Unreleased", help="section header name")
+    ap.add_argument("--date", help="release date, e.g. 2026-07-09")
+    args = ap.parse_args()
+
+    since = args.since or last_tag()
+    if not since:
+        print("No tags found; pass --since <ref> to bound the range.", file=sys.stderr)
+        return 2
+    subjects = commit_subjects(since)
+    if not subjects:
+        print(f"No commits since {since}.", file=sys.stderr)
+        return 1
+
+    sections, breaking = group(subjects)
+    header = f"## [{args.version}]" + (f" - {args.date}" if args.date else "")
+    print(render(sections, breaking, header))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -46,7 +46,10 @@ Autonomous agents fail in 10 specific, repeatable ways (see [comparison doc in c
 When picking up a spec:
 
 1. Create a feature branch `feat/spec-XX-<short-slug>`
-2. Add an entry to `CHANGELOG.md` under an "Unreleased" section
+2. Write good Conventional-Commit subjects — the CHANGELOG derives from them at
+   release time via `bin/tessera-changelog` (subject-based, so commit trailers
+   never reach the public file). No hand-maintained "Unreleased" section; the
+   per-change manual step was dropped after it silently drifted two weeks.
 3. Write the feature following TDD (as the rest of the project does)
 4. Update the spec file's `Status` field when merged
 
