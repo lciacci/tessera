@@ -6,6 +6,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+> **Note:** this CHANGELOG fell behind after 6.47.0 — ADR-0004 (hook distribution)
+> and the FABLE effort tier shipped without entries. This section covers the
+> 2026-07-08 session only; earlier gaps are un-backfilled.
+
+### Downstream → framework findings loop
+
+Closes the disconnect where findings surfaced in downstream repos (howler,
+conclave) reached Tessera only by manual recall — lossy (howler F-004 sat
+un-actioned 8 days).
+
+#### Added
+- **`bin/tessera-findings`** — scans every downstream (`*/.tessera/project.yml`)
+  for `docs/FINDINGS.md`, parses `F-NNN` + `Status`, prints the open backlog
+  (`--all` / `--json` / `--root`; exit 1 if any open). Flags legacy/unparseable
+  files instead of reporting them clean.
+- **`docs/contracts/findings.md`** — canonical findings contract (parity with
+  gate-event). Consumers: the CLI and the tess-dashboard Overview strip.
+- **`.claude/scripts/tessera-findings-surface.sh`** — SessionStart hook injects
+  the un-transferred backlog into context automatically; silent when clean.
+- **`scripts/test_tessera_findings.py`** — parser checks.
+
+#### Changed
+- **`hooks/tier-classify-hook`** — rate short decision/strategy prompts as OPUS
+  (were HAIKU: keyword-only on the bare prompt). Boundary-few-shot fix per
+  ADR-0002 re-eval trigger; 5/6 empirical. (`.claude/scripts/` copy synced.)
+- **`docs/design-principles.md`** — **principle #17** (channel, not convention,
+  for user-facing signals), promoted from the observatory on its 3rd instance.
+- **`docs/observatory.md`** — closed the convention-surfacing-drift entry
+  (→ #17); tier-classifier entry updated; cluster note ties 5 planning-layer
+  GSD entries to the Tier 1 discussion.
+- **`_project_specs/todos/active.md`** — was empty; now declares FOCUS-001 (done),
+  FOCUS-002 (done), FOCUS-003 (audit CLAUDE.md "surface X" against #17).
+
 ## [6.47.0] - 2026-06-26
 
 ### Override mechanism — honest, audited rule exceptions
