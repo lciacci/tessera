@@ -127,22 +127,25 @@ doc → surfaced for approval, not done silently.
 ## Backlog (triggered — do when the condition fires)
 
 - **Mnemos compaction-recovery verdict.** Fires when `.mnemos/compaction-log.jsonl`
-  records **≥3 `compaction_fired` events**. Tally with:
-  `python3 -c "import json,collections;print(dict(collections.Counter(json.loads(l)['event'] for l in open('.mnemos/compaction-log.jsonl'))))"`
-  Then judge: did `restore_injected` follow each `compaction_fired`, and did the
-  restored checkpoint let work resume without re-deriving? `compaction_fired`
-  with no matching restore, or repeated `restore_missed_stale`, is a **failure**
-  signal. An **empty or absent log is not a signal at all** — it means compaction
-  hasn't fired. Scope: compaction-recovery layer only, never session-continuity.
+  records **≥3 `compaction_fired` events**. *Detection is now automated — the
+  watcher's **P3** predicate surfaces this at session start; the manual tally is no
+  longer the trigger.* When P3 fires, judge: did `restore_injected` follow each
+  `compaction_fired`, and did the restored checkpoint let work resume without
+  re-deriving? `compaction_fired` with no matching restore, or repeated
+  `restore_missed_stale`, is a **failure** signal. An **empty or absent log is not
+  a signal at all** — it means compaction hasn't fired. Scope: compaction-recovery
+  layer only, never session-continuity.
 
-- **Content-aware hook drift check.** `bin/tessera-hooks status` compares declared
-  mode vs local-copy *count*, never file *content* — so the three writable copies
-  of each hook (`.claude/scripts/` → `templates/` → `~/.claude/templates/`) drift
-  silently. This let a bare-`python3` regression sit in the install payload for
-  ~2 weeks (see observatory F-003 update, 2026-07-09). Fix: diff the three layers
-  by content, or make `templates/` generated rather than hand-maintained.
-  **Trigger:** next hook edit, or next `install.sh` rework. Until then, every
-  hook edit needs a manual three-way sync.
+- **Content-aware hook drift check.** *Partly resolved 2026-07-10 — the watcher's
+  **P1** predicate now content-diffs `.claude/scripts/` ↔ `templates/` and fired on
+  two real drifts.* `bin/tessera-hooks status` still only compares declared mode vs
+  local-copy *count*, never content. **Remaining gap P1 does NOT cover:** the third
+  layer, `~/.claude/templates/` (out-of-repo, so the in-repo watcher can't diff it),
+  and making `templates/` generated rather than a hand-maintained copy. The
+  bare-`python3` regression that sat ~2 weeks (observatory F-003, 2026-07-09) would
+  now be caught by P1. **Trigger for the rest:** next `install.sh` rework — fold in a
+  global-layer diff or generate `templates/`. Until then the global copy still needs
+  a manual sync (in-repo pair is now watched).
 
 - **Cut CHANGELOGs when repos go public.** conclave, tessera, tess-dashboard, and
   howler are all expected to go public at some point. None but tessera has a
