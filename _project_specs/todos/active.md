@@ -216,10 +216,16 @@ doc → surfaced for approval, not done silently.
     fires (5 verbs — tessera-watch became the 5th), P1/P3/P4/P5 green. Graduation
     predicates (a consecutive-fire / b flap / c count>10 or non-one-liner) NOT yet
     built — add when the fire-log has history to read.
-  - **NEXT:** graduation predicates over the fire-log (needs run history first);
-    then decision on P2's perpetual fire (build `tess` umbrella, or add snooze —
-    which is itself graduation-signal-a). Commit the build (spans bin/, .claude/,
-    templates/, scripts/, settings.json).
+  - **G-a BUILT 2026-07-10 — self-eval loop closed.** `g_a_consecutive` reads the
+    fire-log; a core predicate firing ≥3 consecutive runs surfaces as its own fired
+    predicate ("build remedy or add snooze"). Detector only — the remedy (snooze
+    state) still waits until G-a fires. G-b (flap) / G-c (predicate-count scale)
+    deferred, no signal. 12 tests pass. Observatory entry "…triggers are prose"
+    updated to Piloting + kill criterion recorded. All committed + pushed.
+  - **NEXT (signal-gated, nothing to build now):** G-a fires after ~3 real sessions
+    (P2 perpetual) → then decide P2: build `tess` umbrella CLI vs add snooze (first
+    stateful piece). G-b/G-c only if their pattern appears. Pilot substrate is
+    complete; further builds wait on the fire-log producing evidence.
   - **#1 predicate set DRAFTED (silent AND machine-checkable; 5 of 22 entries):**
     - **P1** F-003 hook drift: `templates/` vs `.claude/scripts/` per-hook diff
       → **FIRES NOW (1 drift)**.
