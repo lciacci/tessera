@@ -13,8 +13,17 @@ Autonomous agents fail in 10 specific, repeatable ways (see [comparison doc in c
 | # | Spec | Why it matters |
 |---|---|---|
 | 01 | [Runtime observability](01-runtime-observability.md) | Drift detection is static — an agent that ships code needs a production feedback signal to know if the change actually worked |
-| 03 | [Verifiable contracts](03-verifiable-contracts.md) | iCPG postconditions are currently natural-language. Generating property-based tests from them makes them machine-checkable. |
+| 03 | [Verifiable contracts](03-verifiable-contracts.md) | iCPG postconditions are currently natural-language. Generating property-based tests from them makes them machine-checkable. **Carries a cheap de-risking pilot** — see "Pilot: the Observatory as a cheap corpus." |
 | 07 | [Human escalation protocol](07-human-escalation-protocol.md) | When the agent is stuck, it needs a formal "page a human with this packet" channel |
+
+> **Entry point (2026-07-09).** If Tier 1 is taken up, spec 03's observatory pilot
+> is the cheapest first move: it tests this tier's central premise — *prose
+> conditions go silently unchecked* — on a corpus where a wrong predicate costs a
+> noisy session-start line rather than a broken build. Evidence it isn't
+> theoretical: on 2026-07-09, three observatory triggers were found at or past
+> threshold, unnoticed, by running three shell commands. The observatory-watcher
+> idea was folded here rather than into spec 01, which observes the *deployed
+> product*, not the framework's own invariants.
 
 **Tier 2 — valuable, not blocking:**
 

@@ -273,6 +273,24 @@ When an Observatory entry is closed (via ADR or explicit rejection), update its 
 - **Status:** Watching
 - **When to revisit:** When iOS/KMP work starts (KMP moves the JNI boundary again) or any future rename touches native code. Narrow scope (NDK projects only) — not worth building until a second native-layer project exists. Howler is currently the only one.
 
+### The Observatory's own triggers are prose, therefore unchecked
+
+- **Source:** Tessera dogfood, 2026-07-09. Asked whether sqlfluff was worth adopting; the answer was "the entry already decided that — has its trigger fired?" Checking took three shell commands. Checking the *rest* of the entries took three more, and found trouble.
+- **What it is:** every entry here carries a **"When to revisit"** condition. Nothing evaluates them. They fire when a human happens to re-read the entry. On 2026-07-09, three were at or past threshold with nobody aware:
+
+  | Entry | Stated condition | Reality |
+  |---|---|---|
+  | Override mechanism — deferred pieces | "when a second `tess` verb appears" | four exist (`tessera-{changelog,findings,hooks,new-project}`) — though these are standalone binaries, not `tess <noun>` subcommands, so it is the spirit, not the letter |
+  | Downstream script drift (F-003) | "project count crossing ~4–5" | exactly 4 |
+  | Two-stage hierarchical skill routing | "60+ skills"; entry claims "currently at ~50" | 56 |
+
+- **The pattern:** **a trigger written as a sentence can only be checked by someone who reads the sentence.** A trigger written as a predicate checks itself. This is design principle #17 turned on the Observatory itself — the file is a *compendium*, and its value depends on a human seeing a fired condition, which is precisely the model/human-recall channel #17 says drifts. The findings backlog had the identical shape until `bin/tessera-findings` + a SessionStart hook converted it from compendium to channel.
+- **The sharp filter is silent vs. self-announcing, not checkable vs. not.** sqlfluff's trigger ("first `.sql` file") is trivially checkable and *worthless* to watch: the day you write SQL and want it linted, the need announces itself. Hook-layer content drift is checkable and **silent** — bare `python3` sat in `templates/` for two weeks with no symptom, because each copy was independently valid bash. Watch only what cannot announce itself. Roughly a third of entries are machine-checkable; about five are *also* silent, and every one of those five corresponds to a failure that already happened.
+- **Three things were conflated in the original question** and are worth keeping apart: (a) a **compendium** — this file, durable record, no evaluation; (b) a **watcher over declared triggers** — perfect precision (the condition is stated), recall bounded by expressibility; (c) a **scanner outside the declared set** — discovery of conditions nobody wrote down, unbounded and low-precision. (c) is not worth building: FOCUS-002 swept all 22 entries manually and found nothing dead. Discovery doesn't need automating; it needs **scheduling**.
+- **Status:** Pending eval — **folded into roadmap Tier 1, spec 03** (verifiable contracts) as its de-risking pilot. Same conversion (prose → predicate), ~2% of the risk: shell one-liners instead of property-based test generation. Deliberately *not* folded into spec 01, which observes the deployed product rather than the framework's own invariants.
+- **When to revisit:** with the Tier 1 decision. See the cluster note above — this joins the five GSD entries that resolve together with it. **Do not build the watcher independently**; it is the pilot that tests whether spec 03's premise holds, and building it early spends the evidence it was meant to produce.
+- **Honest bias note:** proposed at the end of a session spent finding drift bugs, by a party predisposed to want a drift-bug-finding tool. The five candidate checks all map to documented past failures rather than anticipated ones (principle #3), which is the strongest available answer to that objection — but the objection stands.
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.

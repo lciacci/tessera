@@ -91,6 +91,69 @@ When a ReasonNode's postconditions change, stale generated tests are flagged. Ag
 4. Natural-language postconditions fall back to LLM generation cleanly (doesn't silently skip)
 5. Drift detection differentiates "stale test" from "postcondition violation" in its severity score
 
+## Pilot: the Observatory as a cheap corpus (added 2026-07-09)
+
+This spec's premise — *natural-language conditions are unverifiable, so nobody
+knows when they're violated* — has a second, much cheaper instance in this repo.
+
+`docs/observatory.md` carries ~23 entries, each with a **"When to revisit"**
+condition written as prose. Nothing evaluates them. They are checked only when a
+human remembers to sweep. On 2026-07-09, three shell commands found **three
+triggers at or past threshold that nobody had noticed**:
+
+| Entry | Stated condition | Reality on 2026-07-09 |
+|---|---|---|
+| Override mechanism | "when a second `tess` verb appears" | four exist (`tessera-{changelog,findings,hooks,new-project}`) |
+| Downstream script drift (F-003) | "project count crossing ~4–5" | exactly 4 |
+| Namespace skill routing | "60+ skills"; entry says "currently ~50" | 56 |
+
+**A trigger written as a sentence can only be checked by someone who reads the
+sentence.** That is this spec's thesis, restated on a corpus where a wrong
+predicate costs nothing.
+
+### Why pilot here first
+
+This spec is **Effort: Large** — it needs structured postconditions, property-based
+test generation, and an LLM fallback for natural-language contracts. The
+observatory needs shell one-liners exiting 0 or 1. No codegen, no LLM, no CI
+coupling. Same conversion, ~2% of the risk.
+
+Prove "prose condition → machine-checked predicate" where a false positive is a
+noisy session-start line, *before* betting a Large effort on doing it to iCPG
+contracts where a false positive breaks the build.
+
+### Scope, if pursued
+
+Give each observatory entry an optional `check:` field — a shell predicate. Only
+entries that have one get evaluated. Ride the existing SessionStart channel next
+to `bin/tessera-findings`; print fired triggers, stay silent otherwise. Precedent
+is exact: the downstream findings backlog was a compendium read by human recall
+until `tessera-findings` + a SessionStart hook made it a channel — the third
+instance that promoted **design principle #17**.
+
+**Scope filter — build only the silent triggers.** The useful cut is not
+machine-checkable vs. not; it is *silent* vs. *self-announcing*. sqlfluff's
+trigger ("first `.sql` file") is machine-checkable and worthless to watch: the
+day you write SQL and want it linted, the need announces itself. Hook-layer
+content drift is machine-checkable and silent — bare `python3` sat in the install
+payload for two weeks with no symptom because every copy was independently valid
+bash. Watch only what cannot announce itself.
+
+Candidate checks, each corresponding to a **documented past failure**, not an
+anticipated one (principle #3):
+
+1. three-layer hook content diff (`.claude/scripts/` ↔ `templates/` ↔ `~/.claude/templates/`) — bit us 2026-07-09
+2. `compaction_fired` count ≥ 3 in `.mnemos/compaction-log.jsonl` — the re-armed Mnemos trial
+3. skills diverging from the global install
+4. a `hook_distro: global` project whose hooks silently no-op on this machine
+5. JNI symbol drift after a package rename — Howler F-004, cost a tester crash
+
+### Explicitly not folded into Spec 01
+
+Spec 01 observes the **deployed product** (Datadog, Sentry, p99 latency). This
+pilot observes the **framework's own invariants**. Same word, different referent.
+The shared vocabulary is a trap worth naming once.
+
 ## Depends on
 
 None (iCPG only). But pairs well with:

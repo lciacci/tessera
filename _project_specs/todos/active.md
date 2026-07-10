@@ -129,3 +129,20 @@ with rationale.
   escalation, `_project_specs/00-autonomous-engineering-roadmap.md`). Build-more-
   framework vision; rationale dates to an April 2026 chat. Discuss whether current
   dogfood pull justifies it before committing — do NOT start speculatively.
+  - **Now carries a concrete entry point (2026-07-09).** The observatory-watcher
+    idea folded into **spec 03** (verifiable contracts) as its de-risking pilot —
+    same conversion (prose condition → machine-checked predicate), on a corpus
+    where a wrong predicate costs a noisy session-start line instead of a broken
+    build. Deliberately *not* spec 01, which observes the deployed product.
+  - **The dogfood pull is no longer hypothetical.** Three observatory triggers
+    were found at or past threshold, unnoticed, on 2026-07-09: `tess`-verb count
+    (4, trigger said 2), downstream project count (4, trigger said ~4–5), skill
+    count (56, trigger said 60, entry claimed "~50"). Spec 03's premise —
+    natural-language conditions go silently unchecked — is demonstrated, not
+    argued.
+  - **Do not build the watcher standalone.** It is the experiment that tests
+    whether Tier 1's premise holds. Building it before the discussion spends the
+    evidence it exists to produce.
+  - Resolves together with the 5-entry GSD cluster (byte-budget, `.planning/`
+    schema, domain probes, gate types, plan-drift guard) per the observatory
+    cluster note.
