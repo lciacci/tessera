@@ -117,10 +117,11 @@ Six candidates; **one violation**, already tracked, no build needed.
 **Audit's own contribution:** L33 *conflates two things* — gate-**surfacing**
 (an accepted reasoning-convention) and gate-**recording** (the violation). The
 same bundling is copied into `CLAUDE.md.template:23-24`, so every downstream
-project inherits the ambiguity. **Open decision (gated, not executed):** reword
-the surface-decisions bullet in both files to split surfacing from recording, so
-the convention half isn't tarred with the violation half. Design change to a core
-doc → surfaced for approval, not done silently.
+project inherits the ambiguity. **RESOLVED 2026-07-10:** reworded both files —
+surfacing is now its own bullet (accepted convention, #17-permitted); recording is
+a separate bullet honestly labelled a lossy convention with the ~85% miss and the
+queued Stop-hook backstop stated inline. The convention half is no longer tarred
+with the violation half.
 
 ---
 

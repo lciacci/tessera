@@ -21,11 +21,15 @@ How the project owner works. The most important section.
 - **"Batching" is a one-word signal.** It means you're bundling decisions into prose instead of
   surfacing them as numbered choices. Stop, list the decisions, ask before committing.
 - **Surface decisions before committing them.** Multi-step or irreversible changes warrant a
-  brief "here's what I'd do, OK to proceed?" When you surface such a gate, **also record it**:
+  brief "here's what I'd do, OK to proceed?" This is an accepted *convention* — it shapes how
+  the model works, which principle #17 permits.
+- **Also record each surfaced gate — a separate, lossier step.**
   `python3 scripts/gate/emit.py --fired --kind <kind> --note "<what you proposed>"` (use
   `--held` if you weighed surfacing one and decided against). This is Tessera principle #12 (the
-  suggestion-gate) — the log is a reviewable journal of gate decisions. Forgetting to log a gate
-  is itself a finding, not a failure. Contract: the gate-event contract in the Tessera framework.
+  suggestion-gate); the log is a reviewable journal of gate decisions. **Known #17 gap:** the
+  recording rides model recall and drifts, so its value depends on the user seeing the log — a
+  hook backstop is the durable fix. Log it anyway; a forgotten gate is a finding, not a failure.
+  Contract: the gate-event contract in the Tessera framework.
 - **Use numbered lists for decision points.** Binary A/B beats a dense paragraph with embedded
   choices.
 - **Name biases you notice in your own reasoning** — confirmation, sunk-cost, excitement,
