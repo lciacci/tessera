@@ -291,6 +291,30 @@ When an Observatory entry is closed (via ADR or explicit rejection), update its 
 - **When to revisit:** with the Tier 1 decision. See the cluster note above — this joins the five GSD entries that resolve together with it. **Do not build the watcher independently**; it is the pilot that tests whether spec 03's premise holds, and building it early spends the evidence it was meant to produce.
 - **Honest bias note:** proposed at the end of a session spent finding drift bugs, by a party predisposed to want a drift-bug-finding tool. The five candidate checks all map to documented past failures rather than anticipated ones (principle #3), which is the strongest available answer to that objection — but the objection stands.
 
+### Reusable migration skill (path-slug caveat is the seed)
+
+- **Source:** Howler dogfood F-002, 2026-06-24 — restoring `claude-project.tgz` on a
+  new machine. Transferred here 2026-07-10.
+- **What it is:** moving a Claude project between machines requires renaming the
+  unpacked transcript dir to match the new machine's path-slug. Each downstream
+  ships its own `RESTORE.md` with this caveat. Candidate for a single reusable
+  `tessera` migration skill instead of per-project prose that drifts and is
+  re-derived each time.
+- **The concrete detail that must survive the transfer:** the slug derives from the
+  **realpath with on-disk casing**, not the cwd string. On case-insensitive macOS a
+  lowercase path *looks* equivalent (`/Users/x/claude/...`) but the slug is literal —
+  it takes the on-disk dir's actual case (`Claude`, capital C). In the F-002 case
+  only the username segment changed (`lciacci` → `lorenzociacci`); the case did not.
+  A migration skill's example must show casing-from-realpath, not just the cwd string,
+  or it will mislead exactly when the FS casing and the typed path disagree.
+- **Why it caught our attention:** small, but the kind of detail lost when it lives in
+  N per-project RESTORE.md copies (same divergence class as the hook-drift and
+  statusline-drift entries — one source vs. many hand-maintained copies).
+- **Status:** Watching.
+- **When to revisit:** when a second cross-machine migration happens, or the next
+  project scaffold would benefit from a shared restore path. Not worth building the
+  skill on n=1; the caveat is captured here so it is not re-derived.
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.
