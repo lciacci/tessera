@@ -172,11 +172,21 @@ When an Observatory entry is closed (via ADR or explicit rejection), update its 
 
 - **Source:** Override-mechanism hook integration build (2026-06-26, design-principles §593). Core shipped: annotation scanner + audit emitter + `override-event` contract + `report.py` + `tdd-loop-check.sh` wiring.
 - **Deferred, tracked for follow-up:**
-  1. **`tess` umbrella CLI** — the design names `tess overrides report --since 1w`. Shipped as a standalone `scripts/override/report.py` instead; the `tess` front-end doesn't exist yet. Revisit when a second `tess <noun>` subcommand is wanted (don't build a CLI framework for one verb).
+  1. **`tess` umbrella CLI — DECLINED 2026-07-10.** The observatory-watcher's P2
+     predicate (verb count ≥2 → build the umbrella) fired, forcing the decision.
+     Resolved *not to build*: the umbrella can't consolidate — the `tessera-*`
+     binaries are mostly hook-invoked and callers reference them by name, so an
+     umbrella adds a human-facing alias layer on top without retiring anything, for
+     a surface typed by hand a few times a month. The trigger fired on a proxy (verb
+     count) that tracks no real friction. **P2 retired from `bin/tessera-watch`**
+     accordingly — the watcher's first real lesson: a predicate can fire correctly
+     on its proxy while the proxy tracks no pain; the honest response is to fix the
+     predicate, not build what it flagged. Revisit only if a genuinely hand-driven
+     multi-command `tess` workflow ever emerges (not verb count).
   2. **Actual gate-bypass semantics** — v1 is **audit-only** (detect + log + review; native skip does the skipping). A mode where an annotation actively suppresses a specific failure was rejected (hard to scope from a whole-suite run; invites silent green). Revisit only if "log it" proves too weak in dogfood.
   3. **Healthcare compliance-review extension** (§54) — required-review-on-override for the healthcare layer. Out of scope until the healthcare layer activates.
 - **Status:** Deferred (core built)
-- **When to revisit:** #1 when a second `tess` verb appears; #2 if audit-only proves insufficient in dogfood; #3 with the healthcare layer.
+- **When to revisit:** #1 resolved (declined, 2026-07-10) — reopen only on a real hand-driven `tess` workflow; #2 if audit-only proves insufficient in dogfood; #3 with the healthcare layer.
 
 ### Mnemos kill/keep test was confounded — empty ≠ unused
 

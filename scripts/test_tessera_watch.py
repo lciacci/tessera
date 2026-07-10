@@ -41,14 +41,6 @@ def test_p1_fires_when_content_differs(tmp_path):
     assert tw.p1_hook_drift(root)[0] is True
 
 
-def test_p2_counts_tessera_verbs_against_threshold(tmp_path):
-    root = _root(tmp_path)
-    (root / "bin" / "tessera-a").write_text("")
-    assert tw.p2_tess_verbs(root)[0] is False  # 1 < 2
-    (root / "bin" / "tessera-b").write_text("")
-    assert tw.p2_tess_verbs(root)[0] is True   # 2 >= 2
-
-
 def test_p3_counts_only_compaction_fired_events(tmp_path):
     root = _root(tmp_path)
     log = root / ".mnemos" / "compaction-log.jsonl"
@@ -84,20 +76,20 @@ def _firelog(root: Path, runs: list[list[str]]) -> None:
 
 def test_ga_holds_below_three_runs(tmp_path):
     root = _root(tmp_path)
-    _firelog(root, [["P2 tess-umbrella"], ["P2 tess-umbrella"]])  # only 2
+    _firelog(root, [["P3 mnemos-trial"], ["P3 mnemos-trial"]])  # only 2
     assert tw.g_a_consecutive(root)[0] is False
 
 
 def test_ga_fires_on_three_consecutive_core_fires(tmp_path):
     root = _root(tmp_path)
-    _firelog(root, [["P2 tess-umbrella"]] * 3)
+    _firelog(root, [["P3 mnemos-trial"]] * 3)
     fired, detail = tw.g_a_consecutive(root)
-    assert fired is True and "P2 tess-umbrella" in detail
+    assert fired is True and "P3 mnemos-trial" in detail
 
 
 def test_ga_ignores_gap_in_last_three(tmp_path):
     root = _root(tmp_path)
-    _firelog(root, [["P2 tess-umbrella"], [], ["P2 tess-umbrella"]])  # cleared mid-window
+    _firelog(root, [["P3 mnemos-trial"], [], ["P3 mnemos-trial"]])  # cleared mid-window
     assert tw.g_a_consecutive(root)[0] is False
 
 

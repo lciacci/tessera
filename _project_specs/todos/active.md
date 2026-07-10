@@ -222,10 +222,17 @@ doc → surfaced for approval, not done silently.
     state) still waits until G-a fires. G-b (flap) / G-c (predicate-count scale)
     deferred, no signal. 12 tests pass. Observatory entry "…triggers are prose"
     updated to Piloting + kill criterion recorded. All committed + pushed.
-  - **NEXT (signal-gated, nothing to build now):** G-a fires after ~3 real sessions
-    (P2 perpetual) → then decide P2: build `tess` umbrella CLI vs add snooze (first
-    stateful piece). G-b/G-c only if their pattern appears. Pilot substrate is
-    complete; further builds wait on the fire-log producing evidence.
+  - **P2 RETIRED 2026-07-10 — pilot's first real lesson.** P2 (verb count → `tess`
+    umbrella) fired on a proxy that tracks no friction: the `tessera-*` binaries are
+    mostly hook-invoked and callers name them directly, so an umbrella adds an alias
+    layer without consolidating. Declined the umbrella, retired P2 from the watcher.
+    The watcher's value shown by *provoking scrutiny of a bad predicate*, not by
+    compliance. Recorded in observatory override entry (#1 declined). Watcher now
+    quiet — all green (only real signals fire). 11 tests pass.
+  - **NEXT (signal-gated, nothing to build now):** no predicate currently fires.
+    P3 fires when compaction hits 3 (Mnemos verdict); P1/P4/P5 on real drift/growth;
+    G-a if any core predicate sticks ≥3 runs. G-b/G-c only if their pattern appears.
+    Pilot substrate complete; further builds wait on the fire-log producing evidence.
   - **#1 predicate set DRAFTED (silent AND machine-checkable; 5 of 22 entries):**
     - **P1** F-003 hook drift: `templates/` vs `.claude/scripts/` per-hook diff
       → **FIRES NOW (1 drift)**.
