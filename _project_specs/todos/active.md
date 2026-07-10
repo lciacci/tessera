@@ -4,35 +4,38 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (last updated 2026-07-09)
+## Handoff — pick up here (last updated 2026-07-10)
 
-**Just finished:** Mnemos compaction trial re-armed. It was due 2026-07-10 and
-would have been decided on evidence the system never produced. Compaction has
-never fired (max `token_utilization` 0.51 / 131 samples, ~83% trigger; fatigue
-`flow` 131/131), and the marker was destroyed on consumption so nothing on disk
-could show otherwise. Added `.mnemos/compaction-log.jsonl`; swapped the calendar
-trigger for **≥3 recorded `compaction_fired` events**. Also corrected a ~6-week
-doc error: `mnemos-compact-recovery.sh` never existed — Layer 2 is
-`mnemos-session-start.sh` on an unmatched SessionStart. Commits `0f32d81`,
-`6372237`.
+**Just finished (big session):** the **observatory-watcher pilot is built** —
+roadmap Tier 1 / spec-03 de-risking. `bin/tessera-watch` evaluates the
+Observatory's silent+machine-checkable "When to revisit" triggers as predicates,
+surfaced by a SessionStart hook (`tessera-watch-surface.sh`, now wired + in the
+install payload). Substrate-only: predicate list + runner + append-only fire-log
+(`.tessera/logs/watch.jsonl`) + `G-a` graduation predicate that reads the log so
+the "graduate to a stateful engine" decision is itself channelized, not prose. 11
+tests. On first run it caught **two real drifts** (a live hook missing from
+`templates/`; a 167-line phantom `mnemos-compact-recovery.sh` contradicting its own
+doc — both fixed). Also this session: FOCUS-003 closed, findings backlog cleared to
+0 (howler F-002 transferred, tess-dashboard legacy `FINDINGS.md` renamed). **9
+commits across tessera/howler/tess-dashboard, all pushed.**
 
-**Do not re-litigate:** Mnemos's *session-continuity* layer is working and is
-**not** on trial. Only *compaction-recovery* is. Conflating them is what almost
-killed a working subsystem. An empty `compaction-log.jsonl` means **untested**,
-never **useless**.
+**Do not re-litigate (decided this session):**
+- **Substrate-only.** No snooze/hysteresis/prose-parsing/umbrella until a
+  graduation predicate fires on real fire-log evidence. Building any of them now is
+  the exact over-build the pilot exists to prevent.
+- **P2 (tess-umbrella) declined + retired.** Verb count tracked no real friction —
+  the `tessera-*` binaries are hook-invoked and callers name them directly, so an
+  umbrella aliases without consolidating. Don't rebuild it; reopen only on a real
+  hand-driven `tess` workflow. (observatory → Override entry #1.)
+- **Mnemos compaction trial** unchanged: still event-triggered (≥3
+  `compaction_fired`), now auto-watched by P3. Empty log = untested, not useless.
 
-**Next, in order:**
-1. **Roadmap Tier 1 discussion** (below, "Parked"). Was queued and not reached.
-   Unblocks the 5-entry GSD observatory cluster. Discuss before building — the
-   doc itself warns against starting it speculatively. **← only remaining item.**
-2. ~~**FOCUS-003**~~ **DONE 2026-07-10.** Audited; one #17 violation
-   (gate-recorder, already tracked); rest are accepted reasoning-conventions.
-   Open follow-on: reword the surface-decisions bullet to split surfacing from
-   recording (gate logged, awaiting approval).
-3. ~~**Findings backlog**~~ **DONE 2026-07-10.** howler F-002 →
-   `transferred:observatory "Reusable migration skill"`. tess-dashboard legacy
-   `FINDINGS.md` → renamed `carry-forward.md`, fresh contract stub added. Scanner
-   now reports 0 open across the fleet.
+**Next — signal-gated, nothing to build cold:** the fire-log starts populating at
+the *next* SessionStart (the hook wasn't live when this session began). No predicate
+currently fires — watcher is green. Pick up when one fires: **P3** (Mnemos verdict),
+**P1/P4/P5** (real drift/growth), or **G-a** (a predicate stuck ≥3 runs → decide its
+remedy). The one *discussion* still parked: **broader roadmap Tier 1** + the 5 GSD
+observatory cluster (below) — the pilot informs it but hasn't settled it.
 
 ---
 
