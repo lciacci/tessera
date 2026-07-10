@@ -76,6 +76,37 @@ def test_p5_counts_skill_dirs(tmp_path):
     assert fired is False and "3 skills" in detail  # 3 < 60
 
 
+def _firelog(root: Path, runs: list[list[str]]) -> None:
+    log = root / ".tessera" / "logs" / "watch.jsonl"
+    log.parent.mkdir(parents=True)
+    log.write_text("".join(json.dumps({"ts": "t", "fired": r}) + "\n" for r in runs))
+
+
+def test_ga_holds_below_three_runs(tmp_path):
+    root = _root(tmp_path)
+    _firelog(root, [["P2 tess-umbrella"], ["P2 tess-umbrella"]])  # only 2
+    assert tw.g_a_consecutive(root)[0] is False
+
+
+def test_ga_fires_on_three_consecutive_core_fires(tmp_path):
+    root = _root(tmp_path)
+    _firelog(root, [["P2 tess-umbrella"]] * 3)
+    fired, detail = tw.g_a_consecutive(root)
+    assert fired is True and "P2 tess-umbrella" in detail
+
+
+def test_ga_ignores_gap_in_last_three(tmp_path):
+    root = _root(tmp_path)
+    _firelog(root, [["P2 tess-umbrella"], [], ["P2 tess-umbrella"]])  # cleared mid-window
+    assert tw.g_a_consecutive(root)[0] is False
+
+
+def test_ga_ignores_non_core_persistence(tmp_path):
+    root = _root(tmp_path)
+    _firelog(root, [["G-a graduation:snooze"]] * 3)  # only a graduation label, no P*
+    assert tw.g_a_consecutive(root)[0] is False
+
+
 def test_evaluate_returns_one_result_per_predicate(tmp_path):
     results = tw.evaluate(_root(tmp_path))
     assert len(results) == len(tw.PREDICATES)

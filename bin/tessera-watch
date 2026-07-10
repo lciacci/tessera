@@ -27,6 +27,7 @@ TESS_VERB_MIN = 2       # override entry: "second tess verb" → build the umbre
 COMPACTION_MIN = 3      # mnemos trial: judge after ≥3 compaction_fired events
 DOWNSTREAM_MIN = 5      # F-003: hook-drift risk as downstream count crosses ~4–5
 SKILL_MIN = 60          # two-stage skill routing earns its keep at 60+ skills
+GRADUATION_RUNS = 3     # a core predicate firing this many runs running → graduation-a
 
 
 def p1_hook_drift(root: Path) -> tuple[bool, str]:
@@ -66,6 +67,37 @@ def p5_skills(root: Path) -> tuple[bool, str]:
     return n >= SKILL_MIN, f"{n} skills (≥{SKILL_MIN} → two-stage hierarchical routing)"
 
 
+def g_a_consecutive(root: Path) -> tuple[bool, str]:
+    """Graduation-a: a core predicate fired in ≥3 consecutive logged runs → needs snooze/ack.
+
+    Closes the self-evaluation loop — the fire-log has a reader, so 'when to graduate
+    to stateful machinery' is itself a fired predicate, not a prose note (#17). The
+    detector is substrate; the remedy (actual snooze state) waits until this fires.
+    """
+    runs = _read_firelog(root)
+    if len(runs) < GRADUATION_RUNS:
+        return False, f"{len(runs)} logged runs (<{GRADUATION_RUNS} → not yet judgeable)"
+    persistent = set.intersection(*(set(r) for r in runs[-GRADUATION_RUNS:]))
+    core = sorted(p for p in persistent if p.startswith("P"))
+    if not core:
+        return False, f"no core predicate fired {GRADUATION_RUNS} runs running"
+    return True, f"{', '.join(core)} fired {GRADUATION_RUNS} consecutive runs → build remedy or add snooze"
+
+
+def _read_firelog(root: Path) -> list[list[str]]:
+    """Fired-label lists per prior run, chronological. The watcher reading its own history."""
+    log = root / ".tessera" / "logs" / "watch.jsonl"
+    if not log.exists():
+        return []
+    runs = []
+    for line in log.read_text().splitlines():
+        try:
+            runs.append(json.loads(line).get("fired", []))
+        except ValueError:
+            pass
+    return runs
+
+
 def _count_event(log: Path, event: str) -> int:
     if not log.exists():
         return 0
@@ -90,6 +122,7 @@ PREDICATES = {
     "P3 mnemos-trial": p3_compaction,
     "P4 downstream-drift": p4_downstream,
     "P5 skill-routing": p5_skills,
+    "G-a graduation:snooze": g_a_consecutive,
 }
 
 
