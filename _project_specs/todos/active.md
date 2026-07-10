@@ -22,15 +22,17 @@ killed a working subsystem. An empty `compaction-log.jsonl` means **untested**,
 never **useless**.
 
 **Next, in order:**
-1. **Roadmap Tier 1 discussion** (below, "Parked"). Was queued for this session
-   and not reached. Unblocks the 5-entry GSD observatory cluster. Discuss before
-   building — the doc itself warns against starting it speculatively.
-2. **FOCUS-003** (below) — still pending. Cheapest real win; closes #17's own
-   follow-on clause. Note CLAUDE.md's gate-recorder instruction is itself a #17
-   violation with a measured ~85% miss rate.
-3. **Findings backlog** (surfaced by the SessionStart hook every session):
-   howler F-002 wording, and tess-dashboard's `FINDINGS.md` in a legacy
-   non-scannable format. Both small, both mechanical.
+1. **Roadmap Tier 1 discussion** (below, "Parked"). Was queued and not reached.
+   Unblocks the 5-entry GSD observatory cluster. Discuss before building — the
+   doc itself warns against starting it speculatively. **← only remaining item.**
+2. ~~**FOCUS-003**~~ **DONE 2026-07-10.** Audited; one #17 violation
+   (gate-recorder, already tracked); rest are accepted reasoning-conventions.
+   Open follow-on: reword the surface-decisions bullet to split surfacing from
+   recording (gate logged, awaiting approval).
+3. ~~**Findings backlog**~~ **DONE 2026-07-10.** howler F-002 →
+   `transferred:observatory "Reusable migration skill"`. tess-dashboard legacy
+   `FINDINGS.md` → renamed `carry-forward.md`, fresh contract stub added. Scanner
+   now reports 0 open across the fleet.
 
 ---
 
@@ -80,7 +82,7 @@ Triaged all 22. Framework too young for the >6mo cull — nothing dead. Outcomes
 
 ## [FOCUS-003] Audit CLAUDE.md "surface X" instructions against principle #17
 
-**Status:** pending
+**Status:** done (2026-07-10)
 **Priority:** medium
 **Source:** principle #17 (channel-not-convention); its own follow-on clause.
 
@@ -90,6 +92,32 @@ model to surface something to the user via convention alone ("surface X",
 non-model channel (statusline / hook / harness tool), or does it rely on model
 recall? Convert the high-value ones; document the rest as accepted-convention
 with rationale.
+
+### Outcome
+Swept `CLAUDE.md`, `templates/tessera/CLAUDE.md.template`, `templates/CLAUDE.md`.
+Six candidates; **one violation**, already tracked, no build needed.
+
+- **Accepted conventions** (#17 exempts "shape how the model works" — no
+  user-facing artifact whose value depends on being seen):
+  - Push back on drift (L31), Name biases (L35), Flag confidence (L37). All
+    introspective/reasoning behavior; no non-model channel is possible or wanted.
+- **Already channelized** (N/A — the "announce" is cosmetic atop a real channel):
+  - Announce `MNEMOS CHECKPOINT` (L56 → hook injection); Tier advisory (L60 →
+    statusline).
+- **The one #17 violation — surface-decisions → *also record it* (L33):** the
+  *record* (`scripts/gate/emit.py` → `.tessera/logs/*.jsonl` → dashboard) is the
+  user-facing friction journal; its trigger is pure model recall; **~85% miss**
+  measured (observatory line 154). Already documented (observatory 147-157) with
+  the fix queued: Stop-hook gate-scan backstop, gated on n≥2 dogfood reproduction.
+  No new work — correctly deferred there.
+
+**Audit's own contribution:** L33 *conflates two things* — gate-**surfacing**
+(an accepted reasoning-convention) and gate-**recording** (the violation). The
+same bundling is copied into `CLAUDE.md.template:23-24`, so every downstream
+project inherits the ambiguity. **Open decision (gated, not executed):** reword
+the surface-decisions bullet in both files to split surfacing from recording, so
+the convention half isn't tarred with the violation half. Design change to a core
+doc → surfaced for approval, not done silently.
 
 ---
 
@@ -146,3 +174,78 @@ with rationale.
   - Resolves together with the 5-entry GSD cluster (byte-budget, `.planning/`
     schema, domain probes, gate types, plan-drift guard) per the observatory
     cluster note.
+  - **Discussion opened 2026-07-10. Resolved: substrate-only, hard-stop before
+    stateful.** Verdict on starting: justified (4 self-surfaced instances of the
+    drift class; #17 already doctrine). Smaller-vs-engine resolved on a reframe —
+    the axis isn't small-vs-big but **shared-substrate vs speculative-requirements**:
+    - **Build now (substrate):** flat declarative `name: predicate` list (≈ cost
+      of inline greps, reads better) + generic runner + surfacing channel +
+      append-only **fire-log** + written kill criterion.
+    - **Defer HARD until a real fired trigger demands it (speculative):** snooze/
+      ack state, hysteresis/damping, per-entry config, and NL-prose parsing (the
+      actual spec-03 engine). Reshape is likely, kill is not — so don't cast
+      predicate *shape* in engine-concrete before writing 5 real ones. The
+      "second `tess` verb = spirit-not-letter" case already proves predicates are
+      subtler than greps.
+  - **Re-evaluation is itself channelized (the watcher watches itself).** The
+    "build the engine now?" decision must not be a prose note — that's the drift
+    being fixed. Graduation triggers = watcher predicates over its own fire-log:
+    (a) same trigger fired ≥3 consecutive sessions → needs snooze/state; (b) any
+    predicate flapped (fired→cleared→fired) in last 5 → needs hysteresis; (c) >10
+    active predicates OR a trigger that can't be a one-liner → declarative/prose
+    engine earns its slot. When one fires, reopen smaller-vs-engine in-channel.
+    Fire-log earns its keep 3 ways: product function, kill decision, graduate
+    decision.
+  - **4 scope decisions — ALL SETTLED 2026-07-10. Ready to build.** (1) predicate
+    set — DRAFTED, denominators settled, see below; (2) surface channel — SETTLED:
+    **SessionStart hook + on-demand verb, both** (the `tessera-findings` shape —
+    one `bin/tessera-watch` script, hook wraps it for auto-surface, runnable
+    on-demand for deliberate checks; statusline rejected as too cramped for N
+    lines); (3) kill criterion + (4) storage — both ride the shared append-only
+    fire-log; kill and graduate are two faces of one self-monitor.
+  - **Build shape (substrate-only, no stateful parts):** `bin/tessera-watch` runs
+    the 5 predicates over on-disk state, prints fired ones, appends fired-set to
+    the fire-log; SessionStart hook wraps it (silent when none fire). Graduation
+    predicates a/b/c read the fire-log. NO snooze/hysteresis/prose-parsing until a
+    graduation predicate fires.
+  - **BUILT 2026-07-10.** `bin/tessera-watch` (5 predicates, `--json`/`--log`,
+    exit 1 if any fire) + `.claude/scripts/tessera-watch-surface.sh` (SessionStart
+    wrapper, `--log`, silent unless fired) synced to `templates/` + wired into
+    `settings.json` SessionStart. Fire-log → `.tessera/logs/watch.jsonl`
+    (gitignored). Tests `scripts/test_tessera_watch.py` — 8 pass (py3.13). Live: P2
+    fires (5 verbs — tessera-watch became the 5th), P1/P3/P4/P5 green. Graduation
+    predicates (a consecutive-fire / b flap / c count>10 or non-one-liner) NOT yet
+    built — add when the fire-log has history to read.
+  - **NEXT:** graduation predicates over the fire-log (needs run history first);
+    then decision on P2's perpetual fire (build `tess` umbrella, or add snooze —
+    which is itself graduation-signal-a). Commit the build (spans bin/, .claude/,
+    templates/, scripts/, settings.json).
+  - **#1 predicate set DRAFTED (silent AND machine-checkable; 5 of 22 entries):**
+    - **P1** F-003 hook drift: `templates/` vs `.claude/scripts/` per-hook diff
+      → **FIRES NOW (1 drift)**.
+    - **P2** override→`tess` CLI: `ls bin/tessera-* | wc -l` ≥2 → **FIRES NOW (4)**.
+    - **P3** Mnemos trial: `grep -c compaction_fired .mnemos/compaction-log.jsonl`
+      ≥3 → no (0, clean/untested). Same as the trial's re-arm trigger — folds in free.
+    - **P4** F-003 project count: downstreams w/ frozen hooks ≥5 → no (3).
+    - **P5** skill routing: `ls -d .claude/skills/*/ | wc -l` ≥60 → no (56).
+    - Excluded: Tier-1-cluster entries (resolve with the decision), self-announcing
+      triggers (sqlfluff etc.), and the gate-scan backstop (can't be a one-liner →
+      it's graduation-signal-c, not a starter predicate).
+    - **Denominators SETTLED 2026-07-10:** P2 → count `bin/tessera-*` binaries
+      (spirit, not `tess <noun>` letter which reads 0), threshold ≥2, **fires now
+      (4)**; stateless so it fires every session until umbrella built/snoozed →
+      first exerciser of graduation-signal-a. P4 → downstream siblings EXCL.
+      framework (tessera is `source`, not a drift victim), ≥5, no fire (3);
+      frozen-only refinement deferred. P5 → `.claude/skills/*/` dirs, ≥60, no fire
+      (56); plugin/duplication excluded until proven to dominate.
+  - **P1 drift predicate caught + fixed a live bug (2026-07-10):**
+    `tessera-findings-surface.sh` was a live SessionStart hook present in
+    `.claude/scripts/` but **missing from `templates/` AND `~/.claude/templates/`**
+    → fresh `install.sh` would not install it; findings backlog channel goes dark
+    on a new machine. **FIXED** — synced to both layers; scripts→templates now clean.
+  - **Phantom in install payload — DELETED 2026-07-10.**
+    `templates/mnemos-compact-recovery.sh` (167 lines) was dead payload wired to
+    nothing, its header naming the "SessionStart compact matcher" the 2026-07-09
+    correction declared never existed. Removed from `templates/` (not in global).
+    The accurate correction comment in `mnemos-post-compact-inject.sh:24` stays —
+    that's the record, not stale.
