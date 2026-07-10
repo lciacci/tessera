@@ -154,6 +154,16 @@
             "statusMessage": "Checking downstream findings backlog..."
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \".claude/scripts/tessera-watch-surface.sh\" ]; then exec \".claude/scripts/tessera-watch-surface.sh\"; fi; exit 0",
+            "timeout": 10,
+            "statusMessage": "Checking Observatory triggers..."
+          }
+        ]
       }
     ]
   }
