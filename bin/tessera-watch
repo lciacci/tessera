@@ -27,6 +27,8 @@ COMPACTION_MIN = 3      # mnemos trial: judge after ≥3 compaction_fired events
 DOWNSTREAM_MIN = 5      # F-003: hook-drift risk as downstream count crosses ~4–5
 SKILL_MIN = 60          # two-stage skill routing earns its keep at 60+ skills
 GRADUATION_RUNS = 3     # a core predicate firing this many runs running → graduation-a
+GATE_LABEL_MIN = 20     # unlabeled post-backstop gates before should_fire labeling earns its slot
+BACKSTOP_LIVE = "2026-07-12"  # gate-scan wired everywhere; events from here are an honest sample
 
 
 def p1_hook_drift(root: Path) -> tuple[bool, str]:
@@ -89,6 +91,37 @@ def p6_escalations(root: Path) -> tuple[bool, str]:
     return open_count > 0, f"{open_count} open escalations (→ `tessera-escalate list`)"
 
 
+def p7_gate_labels(root: Path) -> tuple[bool, str]:
+    """Unlabeled gate events recorded AFTER the gate-scan backstop went live.
+
+    `should_fire` is the gate contract's ground-truth column and is null on every event
+    ever recorded. Labeling was deferred 2026-07-11 (ADR-0005) for two reasons: the
+    pre-backstop corpus is 61–91% truncated, and v1 escalation fires on hard blocks only,
+    so no threshold depends on it yet. Neither reason survives a corpus that is both
+    honest and large — so the revisit is a predicate, not a note. A note is what gets
+    dropped on the floor; that is the drift this watcher exists to catch.
+
+    Counts tessera + every downstream, since autonomy runs the downstreams.
+    """
+    total = 0
+    for project in [root, *_downstream_projects(root)]:
+        for log in (project / ".tessera" / "logs").glob("*.jsonl"):
+            for line in log.read_text().splitlines():
+                try:
+                    event = json.loads(line)
+                except ValueError:
+                    continue
+                if event.get("type") != "suggestion_gate":
+                    continue
+                if event.get("ts", "") < BACKSTOP_LIVE:
+                    continue  # pre-backstop = truncated sample, not worth labeling
+                if (event.get("data") or {}).get("should_fire") is None:
+                    total += 1
+    fired = total >= GATE_LABEL_MIN
+    return fired, (f"{total} unlabeled post-backstop gates "
+                   f"(≥{GATE_LABEL_MIN} → corpus is honest + big enough; label should_fire)")
+
+
 def g_a_consecutive(root: Path) -> tuple[bool, str]:
     """Graduation-a: a core predicate fired in ≥3 consecutive logged runs → needs snooze/ack.
 
@@ -144,6 +177,7 @@ PREDICATES = {
     "P4 downstream-drift": p4_downstream,
     "P5 skill-routing": p5_skills,
     "P6 escalations": p6_escalations,
+    "P7 gate-labels": p7_gate_labels,
     "G-a graduation:snooze": g_a_consecutive,
 }
 

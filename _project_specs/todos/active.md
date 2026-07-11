@@ -52,6 +52,22 @@ nodes, graded severity routing. 9 tests. E2E verified: raise → P6 fires → re
 
 ## Backlog (triggered — do when the condition fires)
 
+- **Label `should_fire` on the gate corpus. DEFERRED 2026-07-11 — and the deferral is a
+  predicate, not this bullet.** `bin/tessera-watch` **P7** counts unlabeled gate events
+  recorded *after* the backstop went live (across tessera + all downstreams) and fires at
+  ≥20. When it fires, the corpus is both honest and big enough to be worth labeling.
+  *Why deferred:* (1) the pre-backstop corpus is **61–91% truncated** (howler logged 4 of
+  43 gate-shaped turns, conclave 22 of 57), so labeling it calibrates on a biased sample;
+  (2) v1 escalation fires on **hard blocks only**, which need no threshold, so nothing is
+  blocked on it. *Two things to get right when it fires:* **(a) the model must not label its
+  own gates** — the contract requires a truth signal *independent of the gate's own
+  decision*, and Claude filling in 29 nulls with its own opinion is self-assessment wearing
+  calibration's clothes; **(b) `should_fire` ≠ "could an agent self-dispose this"** — they
+  come apart exactly where it matters (an `aws-launch` gate *should* have fired for a human,
+  yet an agent with a hard budget stop could safely self-dispose a $2 boot inside budget).
+  Overloading one column with both meanings corrupts a contract four repos already write to.
+  Add a distinct `can_self_dispose` label instead. See ADR-0005, `docs/contracts/gate-event.md`.
+
 - **`pytest scripts/` cannot run as a whole suite — two modules both named `emit`.**
   `scripts/gate/emit.py` and `scripts/override/emit.py` collide in `sys.modules` (no
   packages, rootdir sys.path insertion), so whichever imports first wins and

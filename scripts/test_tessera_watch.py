@@ -109,3 +109,37 @@ if __name__ == "__main__":
     import sys
     import subprocess
     sys.exit(subprocess.call(["pytest", "-q", __file__]))
+
+
+def _gate_event(ts, should_fire=None):
+    return json.dumps({"type": "suggestion_gate", "ts": ts, "data": {"should_fire": should_fire}})
+
+
+def test_p7_ignores_pre_backstop_gates(tmp_path):
+    """The pre-backstop corpus is 61-91% truncated — labeling it calibrates on a biased sample."""
+    logs = tmp_path / ".tessera" / "logs"
+    logs.mkdir(parents=True)
+    (logs / "s.jsonl").write_text("\n".join(_gate_event("2026-07-01T00:00:00Z") for _ in range(50)))
+    fired, detail = tw.p7_gate_labels(tmp_path)
+    assert fired is False
+    assert "0 unlabeled" in detail
+
+
+def test_p7_fires_on_enough_honest_unlabeled_gates(tmp_path):
+    logs = tmp_path / ".tessera" / "logs"
+    logs.mkdir(parents=True)
+    n = tw.GATE_LABEL_MIN
+    (logs / "s.jsonl").write_text("\n".join(_gate_event("2026-08-01T00:00:00Z") for _ in range(n)))
+    fired, _ = tw.p7_gate_labels(tmp_path)
+    assert fired is True
+
+
+def test_p7_ignores_already_labeled_gates(tmp_path):
+    logs = tmp_path / ".tessera" / "logs"
+    logs.mkdir(parents=True)
+    n = tw.GATE_LABEL_MIN
+    (logs / "s.jsonl").write_text(
+        "\n".join(_gate_event("2026-08-01T00:00:00Z", should_fire=True) for _ in range(n))
+    )
+    fired, _ = tw.p7_gate_labels(tmp_path)
+    assert fired is False
