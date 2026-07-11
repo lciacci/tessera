@@ -46,10 +46,24 @@ proposes, user disposes).
 
 ## Producers
 
-- **Model-emitted recorder** (current, the dogfood): Claude appends an event at each gate moment
+- **Model-emitted recorder** (the semantic producer): Claude appends an event at each gate moment
   via `scripts/gate/emit.py`. Captures the real *semantic* gate decision. `score`/`threshold`
-  absent (no scorer); `should_fire` null (labeled later in the dashboard). Reliability = the
-  CLAUDE.md convention itself — "Claude forgot to log a gate" is a dogfood finding, not a bug.
+  absent (no scorer); `should_fire` null (see below).
+- **Stop-hook gate-scan backstop** (`scripts/gate/scan.py`, live 2026-07-11 in tessera, howler
+  and conclave): **the recorder above is no longer trusted to remember.** It rode model recall
+  and missed **~85%** of gates under real work; measured against downstream transcripts, howler
+  had logged 4 of 43 gate-shaped turns and conclave 22 of 57. The Stop hook now counts
+  gate-shaped turns in the session transcript, diffs against this log, and exits 2 on a gap, so
+  the model must adjudicate before it can finish. **The trigger is the harness, not memory**
+  (principle #17).
+  - Detection is a deliberate **recall net, not an oracle** — it over-counts, and the model is
+    the precision filter on the exit-2 turn. What it cannot do is *forget*, which was the whole
+    failure mode.
+  - **Known recall hole:** the detector is *question-shaped*. A gate surfaced declaratively
+    ("here's what I'd do, proceeding unless you object") ends in a statement and is invisible to
+    it. So the miss rates above are **floors, not ceilings**.
+  - "Claude forgot to log a gate" **is now a bug, not just a finding** — the backstop exists to
+    catch it.
 - **Hook-detected / scored producer** (future, if wanted): a deterministic emitter that adds
   `score`/`threshold`. Not built — would answer a production-measurement question the dogfood
   doesn't yet pose.

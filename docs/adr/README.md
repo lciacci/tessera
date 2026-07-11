@@ -32,6 +32,7 @@ Auto-generated below as ADRs are created. Update when adding a new ADR.
 | 0002 | 2026-06-26 | Model effort-tier routing via dispatch-time hooks | Accepted |
 | 0003 | 2026-06-26 | Tessera owns its distribution; maggy depends on Tessera | Accepted |
 | 0004 | 2026-06-30 | Per-project hook distribution — global default, freeze for ship-critical | Accepted |
+| 0005 | 2026-07-11 | The autonomy inflection — Tier 1 reordered, spend promoted to Tier 1 | Accepted |
 
 ---
 
