@@ -4,7 +4,29 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (last updated 2026-07-10)
+## Handoff — pick up here (last updated 2026-07-11)
+
+**2026-07-11: gate-scan backstop BUILT — the last standing #17 violation is closed.**
+The 07-10 session reproduced the under-logging (≥8 gate-shaped decisions, 3 logged),
+hitting the n≥2 trigger the observatory had set. Built: Stop hook
+`.claude/scripts/tessera-gate-scan.sh` → `scripts/gate/scan.py` — counts gate-shaped
+turns in the transcript, diffs against the session's gate log, exits 2 on a gap so the
+model must adjudicate before finishing. **Trigger is now the harness, not model recall.**
+Detector is a recall net (over-counts by design); the model is the precision filter; it
+cannot *forget*, which was the whole failure. Fires on gap ≥2 **or zero-logged** (the
+zero-logged session leaves no file and was invisible to `ratio.py` — the case the
+backstop exists to see). Loop-safe: honors `stop_hook_active`, caps at 3 fires/session,
+fails open. 17 tests. Synced to `templates/` + both settings templates + the
+`tessera-new-project` scaffold (a downstream getting `emit.py` without the scan gets the
+broken half). Also fixed `ratio.py`'s untyped glob counting `watch.jsonl` as a phantom
+session. **New watch #4 (observatory): does the logged-gate rate actually move after
+2026-07-11? If not, the hook is ceremony — cut it, don't tune it.**
+
+**Next:** Roadmap Tier 1 discussion (below) — in progress, the last non-gated item.
+
+---
+
+## Handoff — prior (2026-07-10)
 
 **Just finished (big session):** the **observatory-watcher pilot is built** —
 roadmap Tier 1 / spec-03 de-risking. `bin/tessera-watch` evaluates the

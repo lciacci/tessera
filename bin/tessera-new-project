@@ -40,9 +40,14 @@ if [ "$DISTRO" = frozen ]; then
   cp "$TESSERA_ROOT"/.claude/scripts/mnemos-*.sh "$TARGET/.claude/scripts/"
   chmod +x "$TARGET"/.claude/scripts/*.sh
 fi
-# Gate recorder is always project-local (not a global-fallback hook).
+# Gate recorder is always project-local (not a global-fallback hook). Its Stop-hook
+# backstop rides along: the recorder alone rides model recall and under-logs badly
+# (~85%, observatory), so shipping it without the scan ships the broken half.
 cp "$TESSERA_ROOT"/scripts/gate/emit.py "$TESSERA_ROOT"/scripts/gate/test_gate_emit.py \
+   "$TESSERA_ROOT"/scripts/gate/scan.py "$TESSERA_ROOT"/scripts/gate/test_gate_scan.py \
    "$TARGET/scripts/gate/"
+cp "$TESSERA_ROOT"/.claude/scripts/tessera-gate-scan.sh "$TARGET/.claude/scripts/"
+chmod +x "$TARGET/.claude/scripts/tessera-gate-scan.sh"
 
 # Settings + gitignore (stack-agnostic bases — add your stack's commands after).
 cp "$TPL/settings.base.json" "$TARGET/.claude/settings.json"

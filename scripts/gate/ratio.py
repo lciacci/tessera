@@ -44,11 +44,17 @@ def load_edit_timestamps():
 
 
 def _gate_timestamps(path):
+    """Only suggestion_gate events. `.tessera/logs/` is shared — the observatory
+    watcher writes watch.jsonl there too, and an untyped glob counted it as a
+    phantom 0-gate session."""
     ts = []
     with open(path) as f:
         for line in f:
             try:
-                ts.append(_iso_to_epoch(json.loads(line)["ts"]))
+                event = json.loads(line)
+                if event.get("type") != "suggestion_gate":
+                    continue
+                ts.append(_iso_to_epoch(event["ts"]))
             except (json.JSONDecodeError, KeyError, ValueError):
                 pass
     return ts
@@ -66,6 +72,8 @@ def session_rows(edits):
     rows = []
     for path in sorted(glob.glob(f"{LOGS}/*.jsonl")):
         ts = _gate_timestamps(path)
+        if not ts:  # non-gate log (watch.jsonl) or an empty file — not a session
+            continue
         rows.append((os.path.basename(path)[:8], len(ts), _activity(ts, edits)))
     return rows
 
