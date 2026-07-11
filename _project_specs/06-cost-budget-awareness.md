@@ -1,7 +1,19 @@
 # Spec 06: Cost / Budget Awareness
 
 **Status:** pending
-**Priority:** Tier 3 (frontier)
+**Priority:** Tier 1 — **promoted from Tier 3 on 2026-07-11** (ADR-0005)
+
+> **Why this moved two tiers.** The roadmap filed this under "frontier / optional" and
+> justified it as *"agents stuck in loops burn real money."* The gate corpus says that
+> framing is far too weak. In conclave — the flagship downstream — **11 of 22 recorded gates
+> (50%) are `aws-launch` / `aws-teardown` / `aws-spend`**: booting g6e.xlarge GPUs, tearing
+> them down, "~45min, ~$2–3". Spend is not a tail risk of autonomy in this codebase; it is
+> the **largest single category of gate**, and the one class of decision that is irreversible
+> in the way that matters — money leaves, whereas a wrong refactor can be reverted.
+>
+> **An unsupervised agent in conclave is an agent that boots GPUs on its own.** A hard budget
+> stop is therefore a *precondition* of any unsupervised downstream run, not an optimization
+> to add afterwards. See ADR-0005.
 **Effort:** Small
 
 ## Context

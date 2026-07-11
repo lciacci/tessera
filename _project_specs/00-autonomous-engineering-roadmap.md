@@ -15,6 +15,7 @@ Autonomous agents fail in 10 specific, repeatable ways (see [comparison doc in c
 | 07 | [Human escalation protocol](07-human-escalation-protocol.md) | **STARTED 2026-07-11.** The suggestion-gate's *asynchronous* form. Principle #12 (Claude proposes, user disposes) structurally requires a human present; unsupervised there is no disposer, so a blocked agent must package and queue instead of compounding or exiting with an unactionable summary. |
 | 03 | [Verifiable contracts](03-verifiable-contracts.md) | iCPG postconditions are currently natural-language. Generating property-based tests from them makes them machine-checkable. **Sequenced after 07 — see the P2 risk below.** |
 | 01 | [Runtime observability](01-runtime-observability.md) | Drift detection is static — an agent that ships code needs a production feedback signal. **Gated on a downstream actually deploying to real users**; there is nothing to observe until then. |
+| 06 | [Cost / budget awareness](06-cost-budget-awareness.md) | **Promoted from Tier 3, 2026-07-11 (ADR-0005).** 50% of conclave's gates are AWS launch/teardown/spend. An unsupervised agent there is one that boots GPUs on its own. A hard budget stop is a *precondition* of unsupervised downstream work, not an optimization. |
 
 > **Tier 1 reordered 2026-07-11 — the inflection point.** The original order (01 → 03 → 07)
 > was written in April 2026. Three months of dogfood reorder it, on evidence:
@@ -38,14 +39,22 @@ Autonomous agents fail in 10 specific, repeatable ways (see [comparison doc in c
 >   postconditions: that is P2-shaped failure at scale, and the blast radius inverts (P2 cost
 >   one noisy session-start line; a bad generated contract costs a broken build or false
 >   confidence in a green suite). It needs calibration data first.
-> - **The calibration corpus is currently the wrong population, and we know it.** All 28 gate
->   events come from *framework development* — design-heavy meta-work, 54% `design` kind.
->   Autonomy will not run Tessera; it will run the downstreams. Gate distribution from a
->   downstream build session is the corpus that matters, and it does not exist yet.
-> - **`should_fire` is null on all 28 events.** The contract left it nullable as the
->   ground-truth column, and it has never been labeled. Until it is, any escalation threshold
->   is guesswork — which is why v1 escalates only on *hard blocks* (unambiguous, needs no
->   threshold) and defers graded escalation.
+> - **The downstream corpus DID exist — and it inverts the intuition.** (Corrected same day:
+>   the claim that it "does not exist yet" was wrong; nobody had looked.) howler and conclave
+>   have 29 recorded gates. The prediction was that downstream work would be *more mechanical*
+>   than framework design work, so more self-disposable. **The opposite is true.** Conclave is
+>   **50% `aws-launch` / `aws-teardown` / `aws-spend`** — irreversible, money-spending,
+>   real-world side effects. Framework-dev gates (54% `design`) are the *abstractions*; the
+>   downstream gates are the ones that boot GPUs. **This is what promoted spec 06 to Tier 1.**
+> - **But that corpus is badly truncated.** Measured against the transcripts: howler logged
+>   **4 of 43** gate-shaped turns (91% unlogged), conclave **22 of 57** (61%). The gate-scan
+>   backstop is now wired into both, so the corpus becomes trustworthy *going forward* —
+>   everything recorded before 2026-07-11 is a biased sample, skewed toward the gates the
+>   model happened to find notable.
+> - **`should_fire` is null on every event ever recorded.** The contract left it nullable as
+>   the ground-truth column, and it has never been labeled. Until it is, any escalation
+>   threshold is guesswork — which is why v1 escalates only on *hard blocks* (unambiguous,
+>   needs no threshold) and defers graded escalation.
 >
 > Much of the autonomy substrate already exists and this roadmap does not credit it:
 > `polyphony` (container-isolated agents on independent branches), `subagent-route`,
@@ -73,7 +82,6 @@ Autonomous agents fail in 10 specific, repeatable ways (see [comparison doc in c
 | # | Spec | Why it matters |
 |---|---|---|
 | 05 | [Confidence calibration](05-confidence-calibration.md) | Reinforcement loop — learn from past agent actions which patterns fail |
-| 06 | [Cost / budget awareness](06-cost-budget-awareness.md) | Agents stuck in loops burn real money. Hard budget stops. |
 | 09 | [Multimodal ingestion](09-multimodal-ingestion.md) | Graphify-style. Only matters if your repos include docs/images/video. |
 
 ## What each spec contains
