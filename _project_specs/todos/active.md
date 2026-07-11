@@ -52,6 +52,24 @@ nodes, graded severity routing. 9 tests. E2E verified: raise → P6 fires → re
 
 ## Backlog (triggered — do when the condition fires)
 
+- **Gate-scan detector is question-shaped — it misses *declarative* gates.** Found
+  2026-07-11 by the backstop's own first live fire: it flagged 5 turns, but a gate that WAS
+  logged (the spec-07 scope cut — "here are the cuts… Building.") was never detected,
+  because that turn ends in a statement, not a `?`. `_is_asking()` looks for a question mark
+  in the last 300 chars. The "here's what I'd do, proceeding unless you object" gate — the
+  ponytail-shaped one, used constantly — is **invisible** to it. **Consequence: the measured
+  miss rates (howler 91%, conclave 61%) are FLOORS, not ceilings.** *Trigger:* fold the fix
+  in when P7 fires (before labeling — a labeling pass on a corpus with a known recall hole
+  calibrates on the wrong sample). *Do not* reach for NLP: the cheap move is to also treat a
+  turn as asking when it ends on an explicit proposal marker, and to accept that some recall
+  is unreachable — the model is still the precision filter, and a recall net with a named
+  hole beats one with an unnamed one.
+
+- **First live fire, 2026-07-11 — the backstop moved the rate.** Gates logged this session
+  went 3 → 6 after the hook fired (5 detected, 3 logged, all 3 missing ones real, zero false
+  positives). First data point for observatory **watch #4** ("does the logged-gate rate
+  actually move? if not, the hook is ceremony — cut it, don't tune it"). It moved. n=1.
+
 - **Label `should_fire` on the gate corpus. DEFERRED 2026-07-11 — and the deferral is a
   predicate, not this bullet.** `bin/tessera-watch` **P7** counts unlabeled gate events
   recorded *after* the backstop went live (across tessera + all downstreams) and fires at
