@@ -22,7 +22,46 @@ broken half). Also fixed `ratio.py`'s untyped glob counting `watch.jsonl` as a p
 session. **New watch #4 (observatory): does the logged-gate rate actually move after
 2026-07-11? If not, the hook is ceremony — cut it, don't tune it.**
 
-**Next:** Roadmap Tier 1 discussion (below) — in progress, the last non-gated item.
+**2026-07-11 (same session): Tier 1 taken up. THE INFLECTION POINT.** Discussed and
+decided — the human-in-the-loop phase was the *on-ramp to autonomy, not the destination*.
+The gates/haze/fire-log are the instruments you build before you can trust an agent to run
+unsupervised. Claude's first read (decline Tier 1) was **wrong** — it inferred a terminal
+preference for supervision from the repo instead of asking; Lorenzo corrected it. Tier 1
+**reordered 07 → 03 → 01** on evidence (rationale recorded in
+`00-autonomous-engineering-roadmap.md`, not in a commit message).
+
+**Spec 07 v1 SHIPPED:** `bin/tessera-escalate` (raise/list/resolve) +
+`docs/contracts/escalation.md` + watcher predicate **P6**. Escalation = the gate's
+*asynchronous* form (#12 needs a disposer; unsupervised there is none). Packets are
+committed JSON under `.tessera/escalations/`. `--tried` required. Surfacing rides the
+watcher, not a 4th SessionStart hook. Cut (with triggers, see the spec): 4 delivery
+adapters, 4 of 5 auto-triggers (they depend on unbuilt specs 02/03/04/06), dedup, iCPG
+nodes, graded severity routing. 9 tests. E2E verified: raise → P6 fires → resolve → clears.
+
+**Next — REGROUP (Lorenzo's call).** Then, in rough order:
+1. **Calibration.** Label `should_fire` on the 28 gate events (all null today). More
+   important: **start collecting gates from a downstream build** — all 28 are from
+   framework-dev (54% `design` kind), which is the *wrong population*. Autonomy runs
+   howler/conclave, not Tessera.
+2. **An ADR for the inflection point.** Largest direction change since ADR-0001, and it
+   currently lives only in the roadmap doc. Deferred to regroup deliberately, not forgotten.
+3. **Spec 03** — after calibration. Its risk is P2-shaped (auto-generated contracts firing
+   confidently on proxies that track no real contract).
+
+---
+
+## Backlog (triggered — do when the condition fires)
+
+- **`pytest scripts/` cannot run as a whole suite — two modules both named `emit`.**
+  `scripts/gate/emit.py` and `scripts/override/emit.py` collide in `sys.modules` (no
+  packages, rootdir sys.path insertion), so whichever imports first wins and
+  `scripts/override/test_override.py` fails collection with
+  `ImportError: cannot import name 'Override' from 'emit'`. **Pre-existing** (reproduces two
+  commits back), invisible because everyone runs per-suite; every suite is green alone (gate
+  17, watch 11, escalate 9, override 13). F-003-shaped: two things, one name, no namespace.
+  **Trigger:** next time anything needs a single green-suite command (CI, a pre-commit gate,
+  or a downstream copying this test layout). Fix = namespace them, not `--import-mode`
+  (tried; it makes it worse).
 
 ---
 

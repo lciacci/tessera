@@ -66,6 +66,29 @@ def p5_skills(root: Path) -> tuple[bool, str]:
     return n >= SKILL_MIN, f"{n} skills (≥{SKILL_MIN} → two-stage hierarchical routing)"
 
 
+def p6_escalations(root: Path) -> tuple[bool, str]:
+    """Open escalation packets — an agent stopped, blocked, and needs a human decision.
+
+    Surfacing rides the watcher rather than a fourth SessionStart hook. If this stays
+    fired for 3 runs, G-a fires too — and that is correct, not noise: an escalation
+    ignored for three sessions is a real finding about the human, not a bad predicate.
+    Contract: docs/contracts/escalation.md.
+    """
+    directory = root / ".tessera" / "escalations"
+    if not directory.is_dir():
+        return False, "0 open escalations"
+    open_count = 0
+    for path in directory.glob("*.json"):
+        try:
+            packet = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError):
+            open_count += 1  # unreadable packet counts as needs-attention, never dropped
+            continue
+        if (packet.get("status") or "open").split(":", 1)[0].strip() == "open":
+            open_count += 1
+    return open_count > 0, f"{open_count} open escalations (→ `tessera-escalate list`)"
+
+
 def g_a_consecutive(root: Path) -> tuple[bool, str]:
     """Graduation-a: a core predicate fired in ≥3 consecutive logged runs → needs snooze/ack.
 
@@ -120,6 +143,7 @@ PREDICATES = {
     "P3 mnemos-trial": p3_compaction,
     "P4 downstream-drift": p4_downstream,
     "P5 skill-routing": p5_skills,
+    "P6 escalations": p6_escalations,
     "G-a graduation:snooze": g_a_consecutive,
 }
 

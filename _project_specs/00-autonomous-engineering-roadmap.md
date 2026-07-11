@@ -12,9 +12,44 @@ Autonomous agents fail in 10 specific, repeatable ways (see [comparison doc in c
 
 | # | Spec | Why it matters |
 |---|---|---|
-| 01 | [Runtime observability](01-runtime-observability.md) | Drift detection is static — an agent that ships code needs a production feedback signal to know if the change actually worked |
-| 03 | [Verifiable contracts](03-verifiable-contracts.md) | iCPG postconditions are currently natural-language. Generating property-based tests from them makes them machine-checkable. **Carries a cheap de-risking pilot** — see "Pilot: the Observatory as a cheap corpus." |
-| 07 | [Human escalation protocol](07-human-escalation-protocol.md) | When the agent is stuck, it needs a formal "page a human with this packet" channel |
+| 07 | [Human escalation protocol](07-human-escalation-protocol.md) | **STARTED 2026-07-11.** The suggestion-gate's *asynchronous* form. Principle #12 (Claude proposes, user disposes) structurally requires a human present; unsupervised there is no disposer, so a blocked agent must package and queue instead of compounding or exiting with an unactionable summary. |
+| 03 | [Verifiable contracts](03-verifiable-contracts.md) | iCPG postconditions are currently natural-language. Generating property-based tests from them makes them machine-checkable. **Sequenced after 07 — see the P2 risk below.** |
+| 01 | [Runtime observability](01-runtime-observability.md) | Drift detection is static — an agent that ships code needs a production feedback signal. **Gated on a downstream actually deploying to real users**; there is nothing to observe until then. |
+
+> **Tier 1 reordered 2026-07-11 — the inflection point.** The original order (01 → 03 → 07)
+> was written in April 2026. Three months of dogfood reorder it, on evidence:
+>
+> - **The human-in-the-loop phase was the on-ramp, not the destination.** The gates, the
+>   gate log, the haze scores, the watcher fire-log — these are the *instruments you build
+>   before you can trust an agent to run without you*. They are autonomy preconditions, not
+>   alternatives to autonomy. That phase has now produced enough wiring to read.
+> - **07 goes first because the gate machinery just became reliable.** The Stop-hook
+>   gate-scan backstop (2026-07-11) made gate *recording* harness-triggered instead of
+>   recall-triggered. Escalation is what that same gate becomes when nobody is there to
+>   dispose of it. It was not buildable before the gate was trustworthy; it is now.
+> - **Its trigger already fires organically.** The gate log contains
+>   `"wire route-task: BLOCKED — no classifier on this machine (Ollama down)"` — an
+>   escalation packet with nowhere to go, so it landed in the gate log instead. The event
+>   shape exists; only the channel was missing.
+> - **03 is sequenced *after* on the pilot's own evidence.** The observatory-watcher pilot
+>   was meant to de-risk spec 03 and did — by finding the risk. **P2 fired correctly on a
+>   proxy that tracked no real pain**, and the honest response was to fix the predicate, not
+>   build what it flagged. Spec 03 wants to *auto-generate* property tests from prose
+>   postconditions: that is P2-shaped failure at scale, and the blast radius inverts (P2 cost
+>   one noisy session-start line; a bad generated contract costs a broken build or false
+>   confidence in a green suite). It needs calibration data first.
+> - **The calibration corpus is currently the wrong population, and we know it.** All 28 gate
+>   events come from *framework development* — design-heavy meta-work, 54% `design` kind.
+>   Autonomy will not run Tessera; it will run the downstreams. Gate distribution from a
+>   downstream build session is the corpus that matters, and it does not exist yet.
+> - **`should_fire` is null on all 28 events.** The contract left it nullable as the
+>   ground-truth column, and it has never been labeled. Until it is, any escalation threshold
+>   is guesswork — which is why v1 escalates only on *hard blocks* (unambiguous, needs no
+>   threshold) and defers graded escalation.
+>
+> Much of the autonomy substrate already exists and this roadmap does not credit it:
+> `polyphony` (container-isolated agents on independent branches), `subagent-route`,
+> `tier-classify`. **The gap was never execution — it was the escalation channel.**
 
 > **Entry point (2026-07-09).** If Tier 1 is taken up, spec 03's observatory pilot
 > is the cheapest first move: it tests this tier's central premise — *prose

@@ -1,8 +1,48 @@
 # Spec 07: Human-in-the-Loop Escalation Protocol
 
-**Status:** pending
-**Priority:** Tier 1 (highest leverage)
+**Status:** in-progress — v1 substrate shipped 2026-07-11
+**Priority:** Tier 1, **first** (reordered — see `00-autonomous-engineering-roadmap.md`)
 **Effort:** Small-Medium
+
+## v1 — shipped 2026-07-11
+
+`bin/tessera-escalate` (raise / list / resolve) + `docs/contracts/escalation.md` +
+watcher predicate `P6 escalations`. Packets are JSON under `.tessera/escalations/`,
+**committed** — an escalation is a work item awaiting a human decision and must survive a
+machine, a branch, and a session (contrast `.tessera/logs/`, which is ignored telemetry).
+
+Surfacing rides the existing observatory watcher as a predicate rather than a fourth
+SessionStart hook. `--tried` is **required**: a packet with no attempts is a complaint, not
+an escalation, and that field is exactly what an exit-with-confused-summary omits.
+
+### Cut from the April-2026 spec, with triggers
+
+The spec below is the original vision. Most of it was written against dependencies that do
+not exist. What was deliberately *not* built, and what would earn it:
+
+| Cut | Why | Revisit when |
+|---|---|---|
+| **Steps 3 — four delivery adapters** (Slack / GitHub / email) | Zero unsupervised runs exist. File-only is the whole need. | A real unsupervised run proves file-only too slow to reach you. Build **one** adapter, not four. |
+| **Step 4 — 4 of 5 auto-triggers** | They fire on specs 02/03/04/06, **none of which exist**. Wiring triggers to unbuilt specs is building against vapor. | Each trigger lands with its own spec. |
+| **Step 6 — dedup / rate limiting** | One escalation source, zero observed spam. | Spam is observed. |
+| **iCPG node types** (`Escalation`, `EscalationResolution`) | The queue is the store. A graph earns its slot when something queries it. | Something queries it. |
+| **Graded escalation** (severity routing, `min_severity`) | The threshold needs calibration data, and `should_fire` is null on all 28 gate events. v1 escalates only on **hard blocks** — unambiguous, needs no threshold. | `should_fire` is labeled, ideally on a downstream corpus. |
+
+### Known #17 exposure — stated, not hidden
+
+`tessera-escalate` is **model-invoked**, the same shape as the gate recorder that missed
+~85% of gates before its Stop-hook backstop shipped (2026-07-11). Escalation is *less*
+exposed — a blocked agent cannot proceed, so the failure mode is not silence but "exits
+with a summary that isn't a packet." Survivable while you're watching. **Not survivable
+under autonomy, which is where this is going.**
+
+**Backstop trigger:** the first real unsupervised run. A Stop-hook check — *did this session
+end blocked without raising a packet?* — earns its slot then, and not before: there is
+nothing yet to protect.
+
+---
+
+## Original spec (April 2026) — below
 
 ## Context
 
