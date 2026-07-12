@@ -202,9 +202,20 @@ the venv). The blocker is gone.
    the pre-public provenance audit. It was *bigger than this item stated*: all **14** phase specs
    were Maggy's roadmap, not just the two with "maggy" in the filename, plus `benchmark-results.md`
    and `mwp.md`. Note how the item was scoped — from filenames, without opening the files. Reading
-   them took a minute and doubled the set. **Still open (new, not covered here):** `commands/maggy.md`,
-   `commands/maggy-init.md`, `bin/maggy-usage` — Tessera ships a `/maggy` command that launches a
-   dashboard **absent from this repo**, and `install.sh` copies `commands/` into `~/.claude/`.
+   them took a minute and doubled the set. **`commands/maggy.md`, `commands/maggy-init.md` and
+   `bin/maggy-usage` also pruned** (2026-07-12) — the commands launched a dashboard absent from this
+   repo, and `maggy-usage` read `~/.claude/routing-log.jsonl`, which only the *unwired*
+   `route-task-hook` writes: it reported `$0.00` forever, by construction.
+5. **The multi-provider harness is still shipped, and it is entangled — needs a decision (ADR-level).**
+   `bin/{deepseek,kimi,qwen3,grok,gemini-api,gemini-cli}`, `hooks/route-task-hook`,
+   `hooks/usage-summary-hook`, `commands/usage-summary.md`. **ADR-0003 §3 says Tessera does NOT own
+   this** — "the full DeepSeek/Gemini/MiniMax/Kimi stack is maggy's reason to exist"; Tessera keeps
+   only the Claude-tier sliver (`tier-classify-hook`/`subagent-route-hook`, both wired). But the
+   wrappers are *consumed* by `bin/research`, `bin/review`, `bin/validate-plan` and by three live
+   skills (`cross-agent-delegation`, `autonomous-testing`, `polyphony`). So this is not cleanup:
+   deleting them decides whether Tessera keeps cross-agent delegation at all. **Do it with FOCUS-004,
+   not before.** Note `install.sh` copies `bin/`, `hooks/` and `commands/` into `~/.claude/`, so
+   whatever survives here is installed globally on every downstream machine.
 2. **FOCUS-004 skill audit** — unblocked, and still the only honest path to a real `auto`
    compaction (the Mnemos trial's counter is still **0**). Deliberately not run concurrently
    with this session: the audit's 208k of reading must land in the *main thread* or the trial
