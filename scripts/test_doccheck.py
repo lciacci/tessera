@@ -421,3 +421,72 @@ def test_passes_on_path_based_or_non_python_commands(fake_repo, cmd):
 def test_real_repo_test_command_is_a_path():
     importlib.reload(doccheck)
     assert doccheck.check_test_command_is_not_a_bare_interpreter() == []
+
+
+# ── F-001 in the HOOK path: the two forms the detector was blind to ───────────
+# Found 2026-07-12 by an INDEPENDENT session verifying this work from a clean context. The
+# venv closed F-001 in the install path; it was still wide open in the hook path — which is
+# where F-001 actually lived. The detector built to prevent exactly this could not see it.
+#
+# Both forms silently SUCCEED rather than fail: with PYTHONPATH/sys.path pointing at scripts/,
+# ANY interpreter imports mnemos straight from source. The original F-001 failed silently
+# (import error → no-op). These *work*, on an interpreter Homebrew can re-point or delete.
+# A silent success is strictly harder to detect than a silent failure.
+
+def test_catches_bare_python3_dash_m_toolchain_module(fake_repo):
+    """FORM 1: `python3 -m mnemos` — the only form the hooks actually used, 16 times across
+    five files. The detector parsed `-c` and `file.py` and stopped there."""
+    _hook(fake_repo, "h.sh", '#!/bin/bash\nPYTHONPATH=scripts python3 -m mnemos checkpoint --force\n')
+    bad = doccheck.check_no_bare_python3_with_toolchain_import()
+    assert len(bad) == 1
+    assert "mnemos" in bad[0]
+
+
+def test_catches_bare_python3_dash_m_icpg(fake_repo):
+    _hook(fake_repo, "h.sh", '#!/bin/bash\nICPG_CMD="python3 -m icpg"\n')
+    assert doccheck.check_no_bare_python3_with_toolchain_import() != []
+
+
+def test_catches_bare_python3_on_a_RUNTIME_GENERATED_script(fake_repo):
+    """FORM 2, and the nastier one: mnemos-pre-compact.sh writes a temp .py via heredoc that
+    does `sys.path.insert(0, 'scripts')` + `from mnemos.store import ...`, then runs it as
+    `python3 "$TMPSCRIPT"`. There is no `.py` literal on the line, so the file branch saw
+    nothing. Fixing only `-m` would have left this behind, still live."""
+    _hook(fake_repo, "h.sh", (
+        '#!/bin/bash\n'
+        'cat > "$TMPSCRIPT" << PYSCRIPT\n'
+        "sys.path.insert(0, 'scripts')\n"
+        'from mnemos.store import MnemosStore\n'
+        'PYSCRIPT\n'
+        'OUT=$(python3 "$TMPSCRIPT")\n'
+    ))
+    bad = doccheck.check_no_bare_python3_with_toolchain_import()
+    assert len(bad) == 1
+    assert "mnemos" in bad[0]
+
+
+def test_bare_python3_on_a_generated_stdlib_script_is_FINE(fake_repo):
+    """The coarse fallback must not cry wolf. A hook that generates a stdlib-only temp script
+    and runs it on bare python3 is correct — that is exactly how the gate/spend hooks work,
+    deliberately, so they keep working when the venv is broken."""
+    _hook(fake_repo, "ok.sh", (
+        '#!/bin/bash\n'
+        'cat > "$TMP" << PY\n'
+        'import json, sys\n'
+        'print(json.dumps({}))\n'
+        'PY\n'
+        'OUT=$(python3 "$TMP")\n'
+    ))
+    assert doccheck.check_no_bare_python3_with_toolchain_import() == []
+
+
+def test_resolved_venv_interpreter_on_a_generated_script_is_FINE(fake_repo):
+    """The fix must not trip the check that demanded it."""
+    _hook(fake_repo, "ok.sh", (
+        '#!/bin/bash\n'
+        'cat > "$TMP" << PY\n'
+        'from mnemos.store import MnemosStore\n'
+        'PY\n'
+        'OUT=$("$TOOLCHAIN_PY" "$TMP")\n'
+    ))
+    assert doccheck.check_no_bare_python3_with_toolchain_import() == []

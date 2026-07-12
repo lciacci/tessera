@@ -189,6 +189,31 @@ verify() {
     fi
   fi
 
+  # 2b. mnemos must resolve in a PRISTINE NON-INTERACTIVE shell — what the hooks actually get.
+  #
+  #     THIS IS THE CHECK THAT WAS MISSING, and its absence cost us F-001 twice. `~/.zshrc` is
+  #     interactive-only. uv's installer wrote the ~/.local/bin PATH export there, so `mnemos`
+  #     was unresolvable non-interactively — and the Mnemos hooks then fell through to
+  #     `python3 -m mnemos`, which (with PYTHONPATH=scripts) does not fail: it SILENTLY
+  #     SUCCEEDS on whatever interpreter owns the `python3` name. Every checkpoint routed
+  #     through a Python Homebrew can re-point or delete, while `mnemos status` looked healthy.
+  #
+  #     `.zshenv` already carried a long comment explaining exactly this trap, from the last
+  #     time it happened. A prose lesson, written and read, did not prevent the recurrence —
+  #     because a third-party installer wrote the line. Only this check does.
+  #
+  #     `env -i` is the point: it strips the inherited environment, so this measures what a
+  #     fresh shell resolves, not what YOUR shell happens to have exported.
+  if ! env -i HOME="$HOME" zsh -c 'command -v mnemos' >/dev/null 2>&1; then
+    err "mnemos does NOT resolve in a pristine non-interactive shell — the hooks cannot find it"
+    err "    Your interactive shell may work fine; the agent's does not. Add to ~/.zshenv"
+    err "    (NOT ~/.zshrc, which is interactive-only):"
+    err "        export PATH=\"\$HOME/.local/bin:\$PATH\""
+    fail=1
+  else
+    ok "mnemos resolves non-interactively (what the hooks actually get)"
+  fi
+
   # 3. The venv's base interpreter is uv-managed, not a package manager's. If brew (or any
   #    other manager) owns the base, the whole fix is cosmetic — brew moves, we break.
   if [ -x "$root/.venv/bin/python" ]; then

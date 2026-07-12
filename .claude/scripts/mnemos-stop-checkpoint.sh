@@ -1,4 +1,12 @@
 #!/bin/bash
+
+# ── Toolchain resolution: a PATH, never a NAME, and NO bare-python3 fallback. (F-001) ──
+# This block used to fall back to `python3 -m mnemos`. That fallback was the bug: with
+# PYTHONPATH=scripts, ANY interpreter imports mnemos straight from source — so it did not
+# fail, it silently SUCCEEDED on an unmanaged Python that Homebrew can re-point or delete.
+# The original F-001 failed silently (import error → no-op); this one *worked*, on the wrong
+# interpreter. A silent success is strictly harder to detect than a silent failure.
+# If the toolchain is unreachable, this hook now goes QUIET. tessera-watch P9 catches that.
 # Mnemos Stop Hook — writes incremental checkpoint when agent stops.
 # Captures final session state so the next session can resume cleanly.
 # No set -euo pipefail: hook scripts must be defensive, not strict.
@@ -22,10 +30,10 @@ cd "$CWD" 2>/dev/null || true
 # script pins its own interpreter (mnemos installed for 3.13; bare `python3` may
 # be a newer homebrew python with no mnemos) — prefer it, then `python3 -m mnemos`,
 # then the inline sqlite fallback below (degraded: writes file only, no db row).
-if command -v mnemos >/dev/null 2>&1; then
+if [ -x ".venv/bin/mnemos" ]; then
+  MNEMOS_CMD=".venv/bin/mnemos"
+elif command -v mnemos >/dev/null 2>&1; then
   MNEMOS_CMD="mnemos"
-elif python3 -m mnemos --version >/dev/null 2>&1; then
-  MNEMOS_CMD="python3 -m mnemos"
 fi
 
 if [ -n "$MNEMOS_CMD" ]; then

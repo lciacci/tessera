@@ -1,4 +1,12 @@
 #!/bin/bash
+
+# ── Toolchain resolution: a PATH, never a NAME, and NO bare-python3 fallback. (F-001) ──
+# This block used to fall back to `python3 -m mnemos`. That fallback was the bug: with
+# PYTHONPATH=scripts, ANY interpreter imports mnemos straight from source — so it did not
+# fail, it silently SUCCEEDED on an unmanaged Python that Homebrew can re-point or delete.
+# The original F-001 failed silently (import error → no-op); this one *worked*, on the wrong
+# interpreter. A silent success is strictly harder to detect than a silent failure.
+# If the toolchain is unreachable, this hook now goes QUIET. tessera-watch P9 catches that.
 # Mnemos PreCompact Hook — emergency checkpoint + typed preservation + compaction marker.
 #
 # THREE-LAYER DEFENSE against lossy compaction:
@@ -31,11 +39,21 @@ HOOK_INPUT=$(cat 2>/dev/null || true)
 
 # ─── 1. Write emergency checkpoint with task narrative ───
 
+# The temp scripts below `from mnemos.store import ...`. Resolve an interpreter that OWNS the
+# toolchain — never bare `python3`, which imports it from source via sys.path and silently
+# succeeds on whatever Homebrew currently points that name at. (F-001, third form.)
+TOOLCHAIN_PY=""
+if [ -x ".venv/bin/python" ]; then
+    TOOLCHAIN_PY=".venv/bin/python"
+elif command -v mnemos >/dev/null 2>&1; then
+    TOOLCHAIN_PY="$(sed -n '1s/^#!//p' "$(command -v mnemos)" | awk '{print $1}')"
+fi
+
 MNEMOS_CMD=""
-if command -v mnemos &>/dev/null; then
+if [ -x ".venv/bin/mnemos" ]; then
+    MNEMOS_CMD=".venv/bin/mnemos"
+elif command -v mnemos &>/dev/null; then
     MNEMOS_CMD="mnemos"
-elif PYTHONPATH="${SCRIPT_DIR%/templates}/scripts" python3 -m mnemos --version &>/dev/null 2>&1; then
-    MNEMOS_CMD="PYTHONPATH=${SCRIPT_DIR%/templates}/scripts python3 -m mnemos"
 fi
 
 if [ -n "$MNEMOS_CMD" ]; then
@@ -120,7 +138,7 @@ try:
 except Exception as e:
     print('Error: ' + str(e), file=sys.stderr)
 PYSCRIPT
-    CHECKPOINT_CONTENT=$(python3 "$TMPSCRIPT")
+    [ -n "$TOOLCHAIN_PY" ] && CHECKPOINT_CONTENT=$("$TOOLCHAIN_PY" "$TMPSCRIPT")
     rm -f "$TMPSCRIPT"
 fi
 
@@ -170,7 +188,7 @@ try:
 except Exception:
     pass
 PYSCRIPT
-    MNEMOS_PRIORITIES=$(python3 "$TMPSCRIPT2")
+    [ -n "$TOOLCHAIN_PY" ] && MNEMOS_PRIORITIES=$("$TOOLCHAIN_PY" "$TMPSCRIPT2")
     rm -f "$TMPSCRIPT2"
 fi
 

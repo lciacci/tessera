@@ -368,19 +368,57 @@ def check_test_command_is_not_a_bare_interpreter() -> list[str]:
 
 
 def _bare_python_target(line: str, script: Path) -> str:
-    """What the bare `python3` on this line will actually execute: an inline -c, or a file."""
+    """What the bare `python3` on this line will actually execute: `-m mod`, `-c ...`, or a file.
+
+    THE `-m` BRANCH WAS MISSING, AND IT IS THE ONLY FORM THE HOOKS ACTUALLY USE. Found by an
+    independent session on 2026-07-12, verifying this work from a clean context.
+
+    The detector parsed `python3 -c "…"` and `python3 file.py` and stopped there — so it
+    returned `[]` against `PYTHONPATH=scripts python3 -m mnemos checkpoint --force`, which
+    appears **sixteen times** across five Mnemos hooks. **A detector built for F-001 that
+    cannot see F-001 in the place F-001 lives.** It went green while the bug sat inside the
+    very hooks it was written to guard.
+
+    And the miss was worse than a plain blind spot: `PYTHONPATH=scripts` lets ANY interpreter
+    import mnemos straight from source, so the fallback did not fail — it **silently succeeded
+    on an unmanaged Python**. The original F-001 failed silently (import error → no-op). This
+    one *works*, on an interpreter Homebrew can re-point or delete. A silent success is
+    strictly harder to detect than a silent failure, and nothing was watching for it.
+    """
+    module = re.search(r"python3?(?:\.\d+)?\s+-m\s+([\w.]+)", line)
+    if module:
+        # `-m mnemos` IS the import. No file to read, no source to inspect — the module name
+        # on the command line is the whole claim.
+        return f"import {module.group(1).split('.')[0]}"
     inline = re.search(r"""python3\s+-c\s+(['"])(.*?)\1""", line, re.DOTALL)
     if inline:
         return inline.group(2)
     ref = re.search(r"python3\s+\"?\$?[\w{}/.-]*?([\w-]+\.py)", line)
-    if not ref:
+    if ref:
+        for candidate in ROOT.rglob(ref.group(1)):
+            if ".venv" not in candidate.parts:
+                try:
+                    return candidate.read_text()
+                except OSError:
+                    return ""
         return ""
-    for candidate in ROOT.rglob(ref.group(1)):
-        if ".venv" not in candidate.parts:
-            try:
-                return candidate.read_text()
-            except OSError:
-                return ""
+
+    # `python3 "$TMPSCRIPT"` — a script GENERATED AT RUNTIME, usually by a heredoc earlier in
+    # the same hook. There is no `.py` literal to match, so the branch above sees nothing.
+    #
+    # This is the THIRD form of the same bug, and it was live: mnemos-pre-compact.sh writes a
+    # temp script that does `sys.path.insert(0, 'scripts')` + `from mnemos.store import …`,
+    # then runs it on bare python3. Fixing only `-m` would have left it behind.
+    #
+    # We cannot resolve a runtime variable, so fall back to the whole hook — if this file
+    # invokes bare python3 on *something* and anywhere imports a venv-only module, that is a
+    # landmine. Deliberately coarse: over-flagging a hook costs one `.venv/bin/python`; a
+    # missed one silently writes through an interpreter Homebrew owns.
+    if re.search(r"python3\s+[\"']?\$", line):
+        try:
+            return script.read_text()
+        except OSError:
+            return ""
     return ""
 
 
