@@ -66,6 +66,10 @@ PATH_ALLOWLIST = {
     # consumes downstreams' FINDINGS.md (see bin/tessera-findings) and does not carry one,
     # and _project_specs/session/ is the layout the base skill prescribes downstream.
     "docs/FINDINGS.md", "_project_specs/session",
+    # A PATH-fallback bridge copy that lives in DOWNSTREAM repos (conclave, howler), not here.
+    # Tessera reaches its own binaries through bin/. Kept only because CLAUDE.md's escalation
+    # instructions name it as the fallback when tessera/bin is not on PATH.
+    "scripts/tessera-escalate",
 }
 
 # Designed in docs, never built. NOT the same as a stale reference — these are promises
