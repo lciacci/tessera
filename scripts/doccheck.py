@@ -51,14 +51,13 @@ ROOT = Path(__file__).resolve().parent.parent
 # The docs a stranger reads first were the only ones held to no claim at all. That inverts
 # the moment Tessera goes public.
 #
-# docs/maggy-rfc.md is skipped on the same principle as docs/adr/: it makes no claim about
-# THIS repo's disk. It is *Maggy's* product RFC, inherited verbatim in the fork and never
-# rewritten. It is a DELETION CANDIDATE, not a permanent exemption — an unexplained skip is
-# how this checker rots into the theater it was built to prevent. Pruning the inherited Maggy
-# roadmap docs (this, docs/architecture-v5.md, _project_specs/phases/phase-*-maggy-*.md) is a
-# call for Lorenzo, adjacent to FOCUS-004's skill audit. Surfaced 2026-07-12; unresolved.
+# There was briefly a third skip here, for docs/maggy-rfc.md — Maggy's product RFC, inherited
+# verbatim. It is gone: the file was PRUNED (2026-07-12) rather than permanently exempted.
+# That is the only honest end-state for a skip. An exemption is a decision to tolerate, and a
+# tolerated exemption with no expiry is exactly how this checker rots into the theater it was
+# built to prevent — so a skip should either get resolved or get deleted, never just sit.
 DOC_GLOBS = ("docs/**/*.md", "CLAUDE.md", "README.md", "GETTING_STARTED.md", "NOTICE")
-DOC_SKIP = ("docs/adr/", "docs/maggy-rfc.md")
+DOC_SKIP = ("docs/adr/",)
 
 # A backticked token is treated as a repo path only if it starts with one of these.
 REPO_DIRS = ("docs/", "scripts/", "bin/", ".claude/", "templates/", "hooks/",
@@ -99,7 +98,6 @@ PATH_ALLOWLIST = {
 PLANNED_PATHS = {
     ".tessera/third-party-scope.yml",  # design-principles.md:726, 763 — build its CONSUMER first
     ".tessera/project.yml.template",   # design-principles.md:195 — deletion candidate, not a build
-    "docs/codex-review-v5.md",         # architecture-v5.md references a review never committed
 }
 
 INLINE_CODE = re.compile(r"`([^`\n]+)`")

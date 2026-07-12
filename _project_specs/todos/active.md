@@ -198,9 +198,13 @@ the venv). The blocker is gone.
    question-shaped detector misses declarative gates, and it cannot see the gate in the turn that
    fires it (*last-block → last-turn*).
 3. **Spec 03** — after calibration data.
-4. **Prune the inherited Maggy docs** (`docs/maggy-rfc.md`, `docs/architecture-v5.md`,
-   `_project_specs/phases/phase-*-maggy-*.md`). Surfaced by doccheck needing a skip for them.
-   Adjacent to FOCUS-004.
+4. ~~**Prune the inherited Maggy docs.**~~ **DONE 2026-07-12** — 18 files, 5,538 lines, during
+   the pre-public provenance audit. It was *bigger than this item stated*: all **14** phase specs
+   were Maggy's roadmap, not just the two with "maggy" in the filename, plus `benchmark-results.md`
+   and `mwp.md`. Note how the item was scoped — from filenames, without opening the files. Reading
+   them took a minute and doubled the set. **Still open (new, not covered here):** `commands/maggy.md`,
+   `commands/maggy-init.md`, `bin/maggy-usage` — Tessera ships a `/maggy` command that launches a
+   dashboard **absent from this repo**, and `install.sh` copies `commands/` into `~/.claude/`.
 2. **FOCUS-004 skill audit** — unblocked, and still the only honest path to a real `auto`
    compaction (the Mnemos trial's counter is still **0**). Deliberately not run concurrently
    with this session: the audit's 208k of reading must land in the *main thread* or the trial
