@@ -28,7 +28,22 @@
 set -uo pipefail
 
 cd "$(dirname "$0")/.." || exit 1
-PY="${TESSERA_PYTHON:-python3.13}"   # NOT bare python3 — that is 3.14 here, with no pytest (F-001)
+
+# THE INTERPRETER IS A PATH, NOT A NAME. This line used to read `python3.13`, and on
+# 2026-07-12 `uv python install` shimmed that very name into ~/.local/bin — ahead of
+# Homebrew on PATH — so `python3.13` silently became a DIFFERENT interpreter, one with no
+# pytest. The suite broke instantly. That is F-001's exact shape (a name re-pointing under
+# you), and it happened *during the session that was fixing F-001*.
+#
+# A name is a lookup through a mutable, ordered PATH that four package managers write to.
+# A path is a path. There is no fallback to `python3` on purpose: a silent fallback to a
+# toolchain-less interpreter is how F-001 stayed invisible for weeks. Fail loudly instead.
+PY="${TESSERA_PYTHON:-$PWD/.venv/bin/python}"
+if [ ! -x "$PY" ]; then
+    echo "FATAL: no toolchain interpreter at $PY" >&2
+    echo "       Run ./install.sh to build the venv (uv-managed; see docs/observatory.md F-001)." >&2
+    exit 1
+fi
 fail=0
 
 run() {

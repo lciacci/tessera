@@ -82,6 +82,15 @@ The `tier-classify-hook` (UserPromptSubmit) classifies each prompt into a Claude
 - **`./install.sh`** — idempotent; its `verify()` is the machine-known-good check.
 - `git status` / `git diff` / `git log` — standard repo operations.
 
-Note: bare `python3` on this machine is Homebrew **3.14**, which has **no pytest** — the toolchain lives in 3.13 (see `tessera-watch` P9, and the venv item in the backlog). Anything that needs a third-party import must not assume `python3`.
+**The toolchain lives in a uv-managed venv (`.venv/`), built by `./install.sh`. F-001 is closed.**
+
+Bare `python3` is whatever Homebrew currently points it at, and Homebrew re-points it whenever a *dependent* formula moves — 3.14 arrived because **ollama** wanted it. That is F-001: hooks called Mnemos through bare `python3`, the import silently failed, every checkpoint write no-op'd for weeks, and it confounded the entire Mnemos trial ("the graph is empty" read as *unused* when it meant *unreachable*).
+
+So: **an interpreter is a path, not a name.** A name is a lookup through a mutable, ordered PATH that four package managers write to. This is not theoretical — on 2026-07-12 `uv python install` shimmed `python3.13` into `~/.local/bin`, *ahead of* Homebrew, and `run-tests.sh`'s `python3.13` pin silently became a different interpreter with no pytest.
+
+- **Needs the toolchain** (`mnemos`, `icpg`, `polyphony`, `pytest`, any third-party import) → reach it by **path**: `.venv/bin/python`. Never by name.
+- **Stdlib-only** (`scripts/doccheck.py`, `scripts/gate/*.py`, `scripts/spend/*.py`) → bare `python3` is fine, and these are deliberately kept stdlib-only *so that it is*.
+
+That split is now **enforced**, not merely intended: doccheck's `no-bare-python3-with-toolchain-import` fails if any hook invokes bare `python3` on code importing a venv-only module. The venv fixes today's resolution; that check is what stops the next landmine. `tessera-watch` **P9** asserts the interpreter your hooks actually resolve can import the toolchain, and that its base is not owned by a package manager.
 
 Downstream Tessera-using projects declare their own `test:` in their own `.tessera/config.yml`.

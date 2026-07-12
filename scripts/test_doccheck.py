@@ -240,9 +240,21 @@ def test_no_spend_contract_means_no_claim_to_check(fake_repo):
 
 # ── spend-auth-is-not-tracked ─────────────────────────────────────────────────
 
-def test_spend_auth_is_not_tracked_in_the_real_repo():
-    """A committed grant would authorize spend on every clone, forever, past its own TTL."""
-    assert doccheck.check_spend_auth_is_not_tracked() == []
+def test_runtime_state_is_not_tracked_in_the_real_repo():
+    """Two real bugs, both shipped by `git add -A`, one hour apart, in the same directory.
+
+    `spend-auth.json`: a committed grant would authorize spend on every clone, forever, past
+    its own TTL. Caught before it shipped.
+
+    `.spend-backstop-fires`: SHIPPED TRACKED 2026-07-12 holding 5, against MAX_FIRES=3. Every
+    fresh clone would have inherited a backstop already past its cap — born disabled, silently.
+    The guard would deny a GPU boot and nothing would ever catch the denial going
+    undispositioned. The safety net shipped pre-torn.
+
+    The lesson did not generalize from the first bug to the second on its own. Hence the rule,
+    and hence this test.
+    """
+    assert doccheck.check_runtime_state_is_not_tracked() == []
 
 
 # ── spend-backstop-is-wired ───────────────────────────────────────────────────

@@ -130,13 +130,77 @@ construction) and pinned by a test, so no future test can pollute by forgetting 
 **Today's log still contains that test noise — it was not rewritten.** Treat spend-denial counts
 before 2026-07-12 as unusable; the journal is honest from here.
 
+### The venv landed — F-001 is closed, and it bit me *during the fix*
+
+Opened 2026-06-26. Resolved 2026-07-12 on a **uv-managed** interpreter (`.python-version`
+tracked, base under `~/.local/share/uv/python/`, brew cannot touch it). Toolchain removed from
+Homebrew's python entirely; console scripts symlinked into `~/.local/bin`, which **precedes**
+`/opt/homebrew/bin` — `tessera/bin` does **not** (position ~17, behind brew), so a symlink there
+would have been silently shadowed while everything *looked* fixed.
+
+**My first recommendation was a brew-based venv, and it was wrong.** Reflex ("don't add a
+dependency") applied without checking whether the cheap option met the *requirement*. It didn't:
+the requirement is *never again suffer a silent interpreter break*, our hooks all **fail open**,
+so a broken base degrades into **silence** — F-001 exactly. `uv` is a build-time tool with no
+runtime coupling; the anti-dependency rule never applied to it. Corrected on Lorenzo's pushback.
+
+**F-001 recurred live, inside the session fixing it.** `uv python install` shimmed the *name*
+`python3.13` into `~/.local/bin`, ahead of Homebrew. A `pip uninstall` and its verification both
+silently addressed **uv's** interpreter instead of brew's — **and reported success.**
+`run-tests.sh`'s `python3.13` pin became a different interpreter with no pytest.
+
+> **An interpreter is a path, not a name.** A name is a lookup through a mutable, ordered PATH
+> that four package managers write to. There is no fallback to `python3` anywhere anymore — a
+> silent fallback to a toolchain-less interpreter is *how F-001 stayed invisible for six weeks.*
+
+**Two detector bugs found, both by testing the failure and not just the fix:**
+
+1. **P9 could never have gone green.** Its predicate was *"bare `python3` can import mnemos"* —
+   which post-venv is **false, and correctly so**. It would have fired forever, G-a would have
+   escalated forever, and the only exit was snoozing our own detector. The pre-commit lesson
+   inverted: **a detector that cannot go green teaches you to ignore the watcher.** Rewritten to
+   assert the invariant F-001 actually violated: *the interpreter the consumer resolves must
+   import what it imports*, and its base must not be a package manager's.
+2. **P9 was silent on the worst case.** With `.venv` gone the symlink dangles, `which` returns
+   None, and it said *"nothing to drift from"* — quiet while the toolchain was **entirely
+   missing** and every hook was failing open. Absence is the loudest drift there is. Found by
+   parking `.venv`; fixed; re-tested.
+
+**And a shipped bug of my own, caught on the way past.** `.tessera/.spend-backstop-fires` — the
+backstop's fire counter — **was committed, holding 5, against a `MAX_FIRES` of 3.** Every fresh
+clone and downstream would have inherited a backstop **already past its cap: born disabled,
+silently.** The guard would deny a GPU boot and nothing would ever catch the denial going
+undispositioned. I gitignored `spend-auth.json` correctly one hour earlier and *the lesson did
+not generalize to the sibling file on its own.* Now a rule, with a check:
+`runtime-state-is-not-tracked`.
+
+**The venv is the mechanism; the guardrail is a check.** A venv does not stop anyone typing
+`python3` in a new script tomorrow. `doccheck`'s **`no-bare-python3-with-toolchain-import`**
+fails if any hook invokes bare `python3` on code importing a venv-only module. The
+stdlib/toolchain split was the de facto design for months and had **never once been enforced**.
+
+**G-a still fires** — it intersects the last 3 logged runs and P9 genuinely did fire in all
+three. It clears on its own as green runs accumulate. Deliberately *not* spamming `tessera-watch`
+to force it quiet: that is gaming a detector, same species as a hand-run `/compact` contaminating
+the Mnemos trial.
+
 ### Next
 
-1. **The venv (P9) — and G-a is now escalating it.** P9 has fired 3 consecutive runs, so the
-   graduation predicate tripped: *build the remedy or add a snooze.* This is now the **last**
-   precondition to an unsupervised run — spec 06 and the backstop were the other two. A silent
-   interpreter break with no human watching *is* F-001, which was invisible for weeks and
-   confounded the entire Mnemos trial.
+**All three preconditions to an unsupervised run are now met** (spec 06, the escalation backstop,
+the venv). The blocker is gone.
+
+1. **FOCUS-004 — the skill audit.** Now the front of the queue, and unchanged in shape: 56 skills,
+   zero ever evaluated, and it is still **the only honest path to a real `auto` compaction** — the
+   Mnemos trial's counter is *still 0* and its clock has never started. Must run in the **main
+   thread**, its own session; the ~208k of reading has to land in the real context or the trial
+   gets nothing.
+2. **Gate-scan recall holes** — before any `should_fire` labeling pass. Two known: the
+   question-shaped detector misses declarative gates, and it cannot see the gate in the turn that
+   fires it (*last-block → last-turn*).
+3. **Spec 03** — after calibration data.
+4. **Prune the inherited Maggy docs** (`docs/maggy-rfc.md`, `docs/architecture-v5.md`,
+   `_project_specs/phases/phase-*-maggy-*.md`). Surfaced by doccheck needing a skip for them.
+   Adjacent to FOCUS-004.
 2. **FOCUS-004 skill audit** — unblocked, and still the only honest path to a real `auto`
    compaction (the Mnemos trial's counter is still **0**). Deliberately not run concurrently
    with this session: the audit's 208k of reading must land in the *main thread* or the trial
@@ -229,14 +293,18 @@ but the lesson generalizes and should be applied *before* the autonomy work, not
 ## State of the machinery (verified 2026-07-12, end of session)
 
 ```
-tessera-test    183 green   (69 top-level + 17 gate + 13 override + 84 spend + 3 mnemos)
-doccheck        9 checks, 0 false claims  (+ignored-test-suites-are-run, spend-guard-is-wired,
-                                            spend-backstop-is-wired, spend-auth-is-not-tracked)
+toolchain       .venv/ — uv-managed python (NOT homebrew). `./install.sh` builds + verifies it,
+                idempotently; rebuilt from scratch to prove the fresh-machine path.
+                AN INTERPRETER IS A PATH, NOT A NAME. No fallback to `python3`, anywhere.
+tessera-test    194 green   (80 top-level + 17 gate + 13 override + 84 spend + 3 mnemos)
+doccheck        11 checks, 0 false claims  (+no-bare-python3-with-toolchain-import,
+                                             +runtime-state-is-not-tracked)
 spend guard     LIVE in tessera + conclave + templates + tessera-new-project
                 live-fired in all four; a fresh scaffold blocks a boot and allows a teardown
 spend backstop  LIVE — Stop hook; a denial must end in a grant or a packet, or exit 2
 pre-commit      wired + live-fire verified (a lying commit was refused)
-tessera-watch   P9 FIRING + G-a ESCALATING it (3 consecutive runs → build the remedy or snooze)
+tessera-watch   P9 GREEN — F-001 CLOSED (was firing every session since 2026-07-11)
+                G-a still firing: trailing indicator on P9's 3-run streak; clears itself
                 P1/P3/P4/P5/P6/P7/P8 green
 repos           tessera, conclave, howler, tess-dashboard
 ```

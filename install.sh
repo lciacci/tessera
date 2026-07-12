@@ -72,6 +72,62 @@ install_git_hooks() {
 # "New-machine bootstrap is tribal knowledge"). Does NOT install mnemos — that
 # is docs/install.md Step 2 (maggy-source + flat-layout dependency) — but it
 # verifies mnemos is healthy so a dead shebang (F-001) fails loud here.
+# The toolchain lives in a uv-managed venv, NOT in a Homebrew python. This is the F-001 fix.
+#
+# F-001: hooks called the toolchain through a bare `python3` that Homebrew had silently
+# re-pointed (3.13 → 3.14, because *ollama* wanted 3.14). Every checkpoint write no-op'd for
+# weeks, invisibly, and it confounded the whole Mnemos trial — "the graph is empty" read as
+# "unused" when it meant "unreachable".
+#
+# Migrating into 3.14 only resets the clock: brew re-points `python3` whenever a DEPENDENT
+# formula moves, and 3.15 will do it again. A brew-based venv is better but still roots the
+# interpreter in the package manager that caused the problem. uv owns its own interpreters
+# under ~/.local/share/uv/python — brew cannot touch them — and `uv` itself is a static
+# binary with no libpython linkage.
+#
+# Installed via uv's STANDALONE installer, deliberately not `brew install uv`: reintroducing
+# the coupling in the first line of the fix would be absurd.
+install_venv() {
+  local root; root="$(cd "$(dirname "$0")" && pwd)"
+
+  if ! command -v uv >/dev/null 2>&1; then
+    say "installing uv (standalone binary — not via brew, that is the whole point)"
+    curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1 || {
+      err "uv install failed — see https://docs.astral.sh/uv/"; return 1
+    }
+    export PATH="$HOME/.local/bin:$PATH"
+  fi
+
+  local pyver; pyver=$(cat "$root/.python-version")
+  uv python install "$pyver" >/dev/null 2>&1
+
+  # Idempotent: install.sh is re-run constantly, and `uv venv` refuses to clobber. Only
+  # create when absent. A venv that exists but is rooted in a package manager is NOT silently
+  # rebuilt here — verify() reports it and tells you to `rm -rf .venv`. Destroying an
+  # environment someone may be mid-debug in is not install.sh's call to make.
+  if [ ! -x "$root/.venv/bin/python" ]; then
+    uv venv "$root/.venv" --python "$pyver" --python-preference only-managed >/dev/null 2>&1 || {
+      err "uv venv failed"; return 1
+    }
+  fi
+  uv pip install -q --python "$root/.venv/bin/python" \
+     -e "$root/scripts/mnemos" -e "$root/scripts/icpg" \
+     -e "$root/scripts/polyphony" -e "$root/scripts/skill_lint" pytest || {
+    err "toolchain install into venv failed"; return 1
+  }
+
+  # Console scripts must WIN on PATH. ~/.local/bin precedes /opt/homebrew/bin; tessera/bin
+  # does NOT (it sits at position ~17, behind brew) — a symlink there would be silently
+  # shadowed by any leftover brew copy, and the hooks would keep resolving the old
+  # interpreter while everything *looked* fixed. Verified 2026-07-12, the hard way.
+  mkdir -p "$HOME/.local/bin"
+  local c
+  for c in mnemos icpg polyphony skill-lint; do
+    [ -x "$root/.venv/bin/$c" ] && ln -sf "$root/.venv/bin/$c" "$HOME/.local/bin/$c"
+  done
+  ok "venv built (uv-managed python, toolchain installed, console scripts linked)"
+}
+
 verify() {
   echo ""
   say "Verify"
@@ -106,21 +162,47 @@ verify() {
   fi
 
   # 2. mnemos on PATH, shebang resolves, runs (F-001 — the silent hook killer).
+  #    AND the shebang must point INTO THE VENV. A live mnemos is not enough: before the venv
+  #    landed, mnemos worked perfectly while resolving a Homebrew interpreter that brew was
+  #    free to re-point out from under it. "It runs" was exactly the false comfort F-001 hid
+  #    behind for six weeks — so check WHICH interpreter it runs on, not merely that it runs.
+  local root; root="$(cd "$(dirname "$0")" && pwd)"
   if ! command -v mnemos >/dev/null 2>&1; then
-    err "mnemos not on PATH — see docs/install.md Step 2"
+    err "mnemos not on PATH — run ./install.sh (it builds the venv and links ~/.local/bin)"
     fail=1
   else
     local interp
     interp=$(head -1 "$(command -v mnemos)"); interp=${interp#\#!}; interp=${interp%% *}
     if [ -n "$interp" ] && [ ! -x "$interp" ]; then
-      err "mnemos shebang dead ($interp missing, F-001) — reinstall via /opt/homebrew/bin/pip3.13"
+      err "mnemos shebang dead ($interp missing, F-001) — re-run ./install.sh"
       fail=1
     elif ! mnemos --version >/dev/null 2>&1; then
-      err "mnemos --version failed (bad interpreter?) — see docs/install.md Step 2"
+      err "mnemos --version failed (bad interpreter?)"
+      fail=1
+    elif [ "$interp" != "$root/.venv/bin/python" ]; then
+      err "mnemos resolves $interp, NOT the venv — a package manager owns your toolchain (F-001)"
+      err "    expected: $root/.venv/bin/python"
+      err "    re-run ./install.sh; if it persists, an older copy is shadowing ~/.local/bin"
       fail=1
     else
-      ok "mnemos healthy ($(mnemos --version 2>/dev/null))"
+      ok "mnemos healthy on the venv ($(mnemos --version 2>/dev/null))"
     fi
+  fi
+
+  # 3. The venv's base interpreter is uv-managed, not a package manager's. If brew (or any
+  #    other manager) owns the base, the whole fix is cosmetic — brew moves, we break.
+  if [ -x "$root/.venv/bin/python" ]; then
+    local base; base=$("$root/.venv/bin/python" -c 'import sys; print(sys.base_prefix)' 2>/dev/null)
+    case "$base" in
+      *homebrew*|*Cellar*)
+        err "venv is rooted in Homebrew ($base) — brew can re-point it. Rebuild: rm -rf .venv && ./install.sh"
+        fail=1 ;;
+      "") err "venv python is broken — rebuild: rm -rf .venv && ./install.sh"; fail=1 ;;
+      *)  ok "venv base is manager-independent ($base)" ;;
+    esac
+  else
+    err "no venv at $root/.venv — run ./install.sh"
+    fail=1
   fi
 
   # 3. Routing deps — warn only; tier-classify-hook fails open to Sonnet.
@@ -173,6 +255,7 @@ main() {
   install_scaffold_source
   write_marker
   install_git_hooks
+  install_venv
   verify
   echo ""
   say "Done. Tessera is now self-hosting — no maggy repo required."

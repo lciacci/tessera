@@ -39,3 +39,7 @@ build/
 
 # Live spend authorization — a run-scoped grant, never committed (spec 06)
 .tessera/spend-auth.json
+
+# Backstop fire-counter — per-session runtime state. TRACKED IT ONCE BY MISTAKE: a fresh
+# clone inherited count=5 against MAX_FIRES=3, so the backstop was born disabled, silently.
+.tessera/.spend-backstop-fires

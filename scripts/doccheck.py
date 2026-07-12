@@ -72,7 +72,7 @@ PLACEHOLDER = re.compile(r"[{}]|/X$|NNNN|YYYY|TITLE|\.\.\.")
 PATH_ALLOWLIST = {
     # Runtime-created, never committed. spend-auth.json is MORE than uncommitted — it must
     # never be tracked (a live grant would authorize spend on every clone). The positive
-    # assertion lives in check_spend_auth_is_not_tracked; this only exempts it from the `ls`.
+    # assertion lives in check_runtime_state_is_not_tracked; this only exempts it from the `ls`.
     ".mnemos", ".tessera/logs", ".tessera/escalations", ".tessera/spend-auth.json",
     # Other repos' files. The observatory *evaluates* GSD; it doesn't claim to contain it.
     "bin/lib/state.cjs", "bin/lib/capability-registry.cjs",
@@ -372,20 +372,34 @@ def check_spend_backstop_is_wired() -> list[str]:
     return []
 
 
-def check_spend_auth_is_not_tracked() -> list[str]:
-    """`.tessera/spend-auth.json` must NEVER be committed. The mirror of tessera-yml-is-tracked.
+# Per-session runtime state. Tracking any of these ships one machine's live state to every
+# clone. `tessera-yml-is-tracked` asserts config MUST be tracked; this asserts the opposite,
+# for the opposite reason. Both directions of "tracked" are claims about every clone.
+RUNTIME_STATE = (".tessera/spend-auth.json", ".tessera/.spend-backstop-fires")
 
-    A live spend authorization is run-scoped state. Committed, it would grant spend on every
-    clone, to every agent, forever — and it would outlive its own TTL in git history. The
-    `.yml` check asserts committed; this one asserts the opposite, for the opposite reason.
+
+def check_runtime_state_is_not_tracked() -> list[str]:
+    """No per-session runtime state may be committed. Two real bugs, both shipped by `git add -A`.
+
+    1. `spend-auth.json` — a live spend authorization. Committed, it would grant spend on every
+       clone, to every agent, forever, outliving its own TTL in git history. (Caught pre-ship.)
+    2. `.spend-backstop-fires` — the backstop's fire counter. **SHIPPED TRACKED on 2026-07-12,
+       holding the value 5 against a MAX_FIRES of 3.** Every fresh clone and every downstream
+       would have inherited a backstop *already past its cap* — born disabled, and silently.
+       The guard would deny a GPU boot and the backstop would never once fire to catch the
+       denial going undispositioned. The safety net shipped with a hole in it, pre-torn.
+
+    The second was committed one hour after the first was correctly gitignored. Same file, same
+    directory, same failure — and the lesson did not generalize on its own. So it is a rule now:
+    **existence is a local fact; tracked is the shared one** — and that cuts both ways.
     """
-    listed = subprocess.run(["git", "ls-files", ".tessera/spend-auth.json"], cwd=ROOT,
+    listed = subprocess.run(["git", "ls-files", *RUNTIME_STATE], cwd=ROOT,
                             capture_output=True, text=True)
-    if listed.returncode != 0 or not listed.stdout.strip():
-        return []
-    return [".tessera/spend-auth.json is git-tracked — a live spend authorization must never "
-            "be committed; it would authorize spend on every clone. Add it to .gitignore and "
-            "`git rm --cached` it."]
+    if listed.returncode != 0:
+        return []  # not a git repo / git unavailable — fail open
+    return [f"{path} is git-tracked — per-session runtime state. Committing it ships one "
+            f"machine's live state to every clone. `git rm --cached` it and add to .gitignore."
+            for path in sorted(listed.stdout.split())]
 
 
 def check_no_upstream_clone_instructions() -> list[str]:
@@ -422,7 +436,7 @@ CHECKS = {
     "ignored-test-suites-are-run": check_ignored_test_suites_are_run,
     "spend-guard-is-wired": check_spend_guard_is_wired,
     "spend-backstop-is-wired": check_spend_backstop_is_wired,
-    "spend-auth-is-not-tracked": check_spend_auth_is_not_tracked,
+    "runtime-state-is-not-tracked": check_runtime_state_is_not_tracked,
     "no-bare-python3-with-toolchain-import": check_no_bare_python3_with_toolchain_import,
 }
 

@@ -195,15 +195,72 @@ def p9_interpreter_drift(root: Path) -> tuple[bool, str]:
     So this fires every session until the venv lands. That is intentional, not noise — it is
     real, unresolved debt, and after 3 consecutive runs G-a escalates it. A prose note is what
     gets dropped on the floor; that is the entire lesson of this watcher.
+
+    ── REWRITTEN 2026-07-12, when the venv landed. The old predicate was:
+
+            subprocess.run(["python3", "-c", "import mnemos"])   # fires unless bare python3
+                                                                 # can import the toolchain
+
+    **That predicate could never go green after the fix it was demanding.** A venv does not
+    change what bare `python3` resolves to; post-venv it *should* be unable to import mnemos,
+    and that is correct, not broken. P9 would have fired forever, G-a would have escalated
+    forever, and the only way out would have been to snooze our own detector — the inverse of
+    the pre-commit lesson: **a detector that cannot go green teaches you to ignore the
+    watcher.** It was asserting the wrong invariant all along; it just happened to be red for
+    the right reason.
+
+    The invariant that actually matters is the one F-001 violated:
+    **does the interpreter the CONSUMER resolves actually have what it imports?**
+    F-001 was never "bare python3 lacks mnemos" — it was "the hooks' interpreter lacked
+    mnemos, and nobody checked *which* interpreter the hooks got."
+
+    So: resolve `mnemos` the way a hook does (`command -v`), read the shebang it will actually
+    execute under, and assert THAT interpreter can import the toolchain — and that its base is
+    not owned by a package manager free to re-point it.
     """
-    if not shutil.which("mnemos"):
-        return False, "mnemos CLI absent (nothing to drift from)"
-    probe = subprocess.run(["python3", "-c", "import mnemos"],
-                           capture_output=True, timeout=10)
-    if probe.returncode == 0:
-        return False, "bare `python3` can import the toolchain"
-    return True, ("bare `python3` cannot import mnemos (toolchain lives in another "
-                  "interpreter) — F-001's shape; venv is the fix, see observatory")
+    venv_python = root / ".venv" / "bin" / "python"
+    expects_venv = (root / ".python-version").exists()
+
+    mnemos_bin = shutil.which("mnemos")
+    if not mnemos_bin:
+        # "Nothing to drift from" was the old escape hatch, and it was a HOLE: with the venv
+        # missing, ~/.local/bin/mnemos dangles, `which` returns None, and the detector went
+        # SILENT on the worst possible state — the toolchain gone entirely, every hook failing
+        # open into quiet. Found 2026-07-12 by parking .venv and watching P9 say nothing.
+        # Absence is the loudest drift there is, not the absence of drift.
+        if expects_venv:
+            return True, ("mnemos is NOT resolvable, but this repo declares a toolchain "
+                          "(.python-version) — every hook is failing open into silence. "
+                          "Run ./install.sh")
+        return False, "mnemos CLI absent and no toolchain declared (nothing to drift from)"
+
+    if expects_venv and not venv_python.exists():
+        return True, (f"no venv at {venv_python} but .python-version declares one — "
+                      f"the toolchain is unbuilt. Run ./install.sh")
+
+    try:
+        shebang = Path(mnemos_bin).read_text().splitlines()[0]
+    except (OSError, IndexError):
+        return True, f"cannot read mnemos's shebang at {mnemos_bin} — interpreter unknowable"
+    if not shebang.startswith("#!"):
+        return False, "mnemos is not a script (packaged binary?) — nothing to drift"
+    interp = shebang[2:].split()[0]
+
+    # THE check: the interpreter the hooks will actually run under must have the toolchain.
+    probe = subprocess.run([interp, "-c", "import mnemos"], capture_output=True, timeout=10)
+    if probe.returncode != 0:
+        return True, (f"mnemos resolves {interp}, which CANNOT import mnemos — F-001 exactly: "
+                      f"the hooks' interpreter is missing the package. Run ./install.sh")
+
+    # And its base must not be a package manager's, or brew re-points it and we are back here.
+    base = subprocess.run([interp, "-c", "import sys; print(sys.base_prefix)"],
+                          capture_output=True, text=True, timeout=10).stdout.strip()
+    if "homebrew" in base.lower() or "Cellar" in base:
+        return True, (f"toolchain interpreter is rooted in Homebrew ({base}) — brew re-points "
+                      f"python whenever a dependent formula moves. That is how F-001 happened. "
+                      f"Rebuild on a uv-managed base: rm -rf .venv && ./install.sh")
+
+    return False, f"toolchain interpreter is reachable and manager-independent ({interp})"
 
 
 def g_a_consecutive(root: Path) -> tuple[bool, str]:
