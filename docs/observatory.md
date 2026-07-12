@@ -426,6 +426,34 @@ When an Observatory entry is closed (via ADR or explicit rejection), update its 
   let a verdict on the model condemn the marker. (Same conflation the Mnemos entry had to
   untangle between its recovery and continuity layers.)
 
+### The agent's shell is not your shell — verify capability the way the agent sees it
+
+- **Source:** 2026-07-11, wiring `.tessera/config.yml` into the downstreams.
+- **What it was:** `tessera-escalate`, `tessera-watch`, and `tessera-test` were **"command not
+  found" for Claude** while working perfectly for Lorenzo. The PATH export lived in `~/.zshrc`,
+  which zsh sources **only for interactive shells**; Claude Code's Bash tool runs a
+  *non-interactive* shell and never read it. Every downstream `CLAUDE.md` instructs the agent
+  to invoke `tessera-escalate` **by name** — so the escalation channel, built specifically for
+  the autonomy inflection (ADR-0005), **did not resolve for the only reader it was written
+  for.** `tess-dashboard` had no bridge copy at all; conclave and howler survived only by
+  accident, via `scripts/tessera-escalate` fallbacks.
+- **Fix:** moved the export to `~/.zshenv` (sourced for *every* zsh invocation, guarded against
+  duplicate PATH entries). `install.sh`'s verify already checked this correctly — it runs
+  non-interactively, so it tests what the *agent* sees. The check was right; the remedy it
+  printed named the wrong file.
+- **The general lesson, which is bigger than PATH:** **a capability check must run in the same
+  context as the consumer.** We verified with `which` at a human terminal and concluded the
+  channel worked. It did — for us. Any instruction in a `CLAUDE.md` is addressed to the agent,
+  so "does it work?" means "does it work *in the agent's shell*." This is the same shape as
+  F-001 (hooks resolving a different `python3` than the human's) and as the doc-drift class
+  (`doccheck`'s `tessera-yml-is-tracked`: **existence is a local fact, tracked is the shared
+  one**). Three failures, one root: *we validated against the environment we were standing in,
+  not the one the code runs in.*
+- **Status:** Fixed. Watching for the class, not the instance.
+- **When to revisit:** any time a doc tells the agent to invoke something by name. Ask: has
+  anyone run it *as the agent* — `zsh -c 'command -v X'`, not `which X`? A candidate `doccheck`
+  assertion if it recurs: every bare command named in a CLAUDE.md must resolve non-interactively.
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.

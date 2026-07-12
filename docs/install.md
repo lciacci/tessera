@@ -147,6 +147,14 @@ gh auth login  # if not already authenticated
 - **`Multiple top-level modules discovered in a flat-layout`** during Mnemos install — you skipped the `/tmp/mnemos-install/mnemos/` restructuring. The flat layout in `maggy-main/scripts/mnemos/` needs the modules nested one level deeper for setuptools to accept it.
 - **`/status` shows `cwd:` as a parent directory** — you have a `claude` shell alias that is `cd`ing somewhere before launching. Remove it (see Step 5).
 - **Hooks show in `/hooks` but `.mnemos/` is never created** — Mnemos CLI is not on PATH. Run `which mnemos` to check, reinstall if missing.
+- **`tessera-escalate: command not found` — but only for Claude, never for you.** The PATH export is in `~/.zshrc`, which zsh sources **only for interactive shells**. Claude Code's Bash tool runs a *non-interactive* shell, so it never reads it: the tools work perfectly at your terminal and do not exist for the agent — the exact reader `CLAUDE.md` writes those instructions for. Put the export in **`~/.zshenv`** (sourced for *every* zsh invocation) instead:
+  ```sh
+  # ~/.zshenv
+  if [[ ":$PATH:" != *":$HOME/Claude/tessera/bin:"* ]]; then
+    export PATH="$HOME/Claude/tessera/bin:$PATH"
+  fi
+  ```
+  Verify the way the agent sees it, not the way you do — `zsh -c 'command -v tessera-escalate'` (non-interactive), not `which`. `install.sh`'s verify step checks this correctly. Found 2026-07-11: an escalation channel that cannot be invoked is worse than none, because the docs claim it.
 - **First session works, second session does not** — you may have a stale `claude` process bound to the old cwd. `ps aux | grep claude` and kill any stragglers.
 
 ## What is not in this guide

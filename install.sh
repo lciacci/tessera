@@ -81,8 +81,15 @@ verify() {
   # is copying them into every repo). Without PATH, downstream CLAUDE.md instructions like
   # `tessera-escalate raise` silently refer to a command that does not exist — and an
   # escalation channel that cannot be invoked is worse than none, because the docs claim it.
+  #
+  # It MUST be ~/.zshenv, not ~/.zshrc. `.zshrc` is sourced only for INTERACTIVE shells, so an
+  # export there is invisible to the shell Claude Code runs its Bash tool in: the tools work
+  # for the human and are "command not found" for the agent — the exact reader the docs are
+  # written for. Found the hard way 2026-07-11. `.zshenv` is sourced for every zsh invocation.
+  # This check runs non-interactively, so it verifies what the AGENT sees, not what you see.
   if ! command -v tessera-escalate >/dev/null 2>&1; then
-    err "tessera/bin not on PATH — add: export PATH=\"\$HOME/Claude/tessera/bin:\$PATH\""
+    err "tessera/bin not on PATH — add to ~/.zshenv (NOT ~/.zshrc, which interactive-only):"
+    err "    export PATH=\"\$HOME/Claude/tessera/bin:\$PATH\""
     fail=1
   fi
 
