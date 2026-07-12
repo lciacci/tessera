@@ -6,7 +6,91 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-07-11)
+## Handoff — pick up here (2026-07-12)
+
+**Spec 06 shipped — but not the spec that was written. It was retargeted first, and that was
+the whole job.**
+
+### The spec did not solve the problem it was promoted for
+
+ADR-0005 promoted spec 06 to Tier 1 on one finding: *an unsupervised agent in conclave is an
+agent that boots GPUs on its own.* But spec 06's mechanism, written in April under its old
+Tier 3 framing, was a **Claude token meter** — declare `tokens`/`api_calls`, accumulate from
+the transcript, hard-stop. **A token budget cannot stop `terraform apply enable_gpu=true`.** The
+agent commits hundreds of dollars inside a few thousand tokens. All five of its success
+criteria were token-denominated; none mentioned cloud spend. **Built as written, it would have
+shipped green with the GPU boot path wide open.**
+
+Worse — its Step 4 hard-stopped by *"rejecting further Edit/Write/Bash."* **Teardown is a Bash
+command.** It would have frozen an agent with a live GPU and blocked its own teardown, *causing
+the runaway it existed to prevent.* That produced the invariant the guard is now built around:
+**a spend gate must never be able to block the exit.**
+
+The token budget is real but minor, and it is a different mechanism. Split out to **spec 10**,
+Tier 3, with an honest note that there is *no evidence it is worth building* (12 sessions, all
+`clear`, max haze 0.09 — the agent does not flail).
+
+### What shipped
+
+- **`bin/tessera-authorize`** — a human grants a run-scoped envelope (`--usd 20 --ttl 4h`).
+  **This is the piece that converts conclave from supervisable-only to unsupervised:** it
+  collapses 14 synchronous boot gates into one up-front authorization.
+- **`scripts/spend/guard.py`** + PreToolUse(Bash) hook — deny-by-default on spend-committing
+  commands. **Teardown always allowed, unconditionally.** Denied → spec 07 escalation.
+- **The TTL is enforced; the dollar figure is not.** Tessera cannot meter dollars; AWS can, and
+  does. Tessera gates *authorization*, AWS meters *spend*. Three layers, three trust domains —
+  don't collapse them.
+- **We did not rebuild the ceiling.** conclave already had one (`budget.tf` → SNS →
+  `hardstop.tf` lambda; `gpu.tf` idle-stop; tag chain verified end to end). It is *out-of-band*,
+  outside the agent's trust domain, and strictly stronger than a hook. What it lacked was
+  per-run *authorization* — a monthly cap bounds blast radius, it doesn't decide if the boot
+  should happen.
+- Wired into tessera + conclave + `templates/` + `bin/tessera-new-project`, each **verified by
+  invoking it**, not by checking that files copied.
+
+### Two things live-fire found that reasoning did not
+
+1. **A live hole in the flagship downstream.** `conclave/scripts/sweep-gpu-capacity.sh:23` runs
+   `terraform apply -auto-approve` — it boots g6e GPUs, it's the AZ-sweep from the gate log, and
+   the guard saw only the wrapper's *name*. **A classifier that reads the command but not what
+   the command runs is checking the wrong text.** Now reads local scripts one level down.
+2. **The guard blocked its own wiring commit — and I misread the result.** The install command
+   quoted `terraform apply` in a test string, so the guard blocked the *whole* Bash call and
+   **none of the wiring ran**. The probe that followed reported `allowed` for a GPU boot,
+   because the wrapper fails open when the guard is absent. *It looked like a working guard
+   saying yes. It was a missing guard saying nothing.* Caught only by checking disk.
+
+### A finding about the checker itself
+
+`doccheck` gained **`ignored-test-suites-are-run`**, and it is a finding, not just a check. The
+2026-07-11 *"test command ran 6 of 12 files and reported green"* bug was fixed **without leaving
+a check behind** — which is the one thing doccheck's standing rule forbids. The rule was
+violated by the commit that fixed the bug the rule exists for. Adding `scripts/spend/` to the
+`--ignore` list nearly repeated it. Now: `--ignore` a suite without running it → doccheck fails.
+
+Also added: `spend-guard-is-wired` (the doc claims a hook; is it in settings.json?) and
+`spend-auth-is-not-tracked` (a committed grant would authorize spend on every clone, forever,
+past its own TTL). **8 checks, 0 false claims.**
+
+### Next
+
+1. **The venv (P9, still firing).** Now the *last* thing between here and an unsupervised run —
+   spec 06 was the other. Hard trigger, unchanged: before the first unsupervised run.
+2. **FOCUS-004 skill audit** — unblocked, and still the only honest path to a real `auto`
+   compaction (the Mnemos trial's counter is still **0**). Deliberately not run concurrently
+   with this session: the audit's 208k of reading must land in the *main thread* or the trial
+   gets nothing.
+3. **Gate-scan recall hole** — before any `should_fire` labeling pass.
+4. **Spec 03** — after calibration data.
+
+**Standing caution, reinforced.** Every finding above came from *running the thing*, not from
+reading it. The spec's flaw was visible in its own text for three months. The sweep-script hole
+was live in conclave. Both surfaced within minutes of invocation. Under unsupervised runs
+nobody is there to invoke and look — **build the instruments accordingly.**
+
+---
+
+## Handoff — 2026-07-11
 
 Two sessions today. **25 commits across four repos, all pushed, all clean.**
 
@@ -77,15 +161,18 @@ but the lesson generalizes and should be applied *before* the autonomy work, not
 
 ---
 
-## State of the machinery (verified 2026-07-11, end of session)
+## State of the machinery (verified 2026-07-12, end of session)
 
 ```
-tessera-test    87 tests green   (57 top-level + 17 gate + 13 override + 3 mnemos self-checks)
-doccheck        5 checks, 0 false claims
+tessera-test    150 green   (66 top-level + 17 gate + 13 override + 54 spend + 3 mnemos)
+doccheck        8 checks, 0 false claims  (+ignored-test-suites-are-run, spend-guard-is-wired,
+                                            spend-auth-is-not-tracked)
+spend guard     LIVE in tessera + conclave + templates + tessera-new-project
+                live-fired in all four; a fresh scaffold blocks a boot and allows a teardown
 pre-commit      wired + live-fire verified (a lying commit was refused)
 tessera-watch   P9 FIRING (interpreter drift — the venv debt, deliberate)
                 P1/P3/P4/P5/P6/P7/P8, G-a all green
-repos           tessera, conclave, howler, tess-dashboard — clean, 0 ahead
+repos           tessera, conclave, howler, tess-dashboard
 ```
 
 **P9 is the only thing firing, and it is meant to.** It nags every session until the venv

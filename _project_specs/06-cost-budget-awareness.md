@@ -1,104 +1,148 @@
-# Spec 06: Cost / Budget Awareness
+# Spec 06: External spend authorization
 
-**Status:** pending
-**Priority:** Tier 1 — **promoted from Tier 3 on 2026-07-11** (ADR-0005)
-
-> **Why this moved two tiers.** The roadmap filed this under "frontier / optional" and
-> justified it as *"agents stuck in loops burn real money."* The gate corpus says that
-> framing is far too weak. In conclave — the flagship downstream — **11 of 22 recorded gates
-> (50%) are `aws-launch` / `aws-teardown` / `aws-spend`**: booting g6e.xlarge GPUs, tearing
-> them down, "~45min, ~$2–3". Spend is not a tail risk of autonomy in this codebase; it is
-> the **largest single category of gate**, and the one class of decision that is irreversible
-> in the way that matters — money leaves, whereas a wrong refactor can be reverted.
->
-> **An unsupervised agent in conclave is an agent that boots GPUs on its own.** A hard budget
-> stop is therefore a *precondition* of any unsupervised downstream run, not an optimization
-> to add afterwards. See ADR-0005.
+**Status:** v1 shipped 2026-07-12
+**Priority:** Tier 1 — promoted from Tier 3 on 2026-07-11 (ADR-0005)
 **Effort:** Small
+**Contract:** `docs/contracts/spend-authorization.md`
 
-## Context
+> **Retargeted 2026-07-12, before implementation.** This spec used to be about *Claude token
+> budgets* — declare `tokens`/`api_calls` on a ReasonNode, accumulate from the transcript,
+> hard-stop when the meter runs out. That was the right spec for its original Tier 3 framing
+> (*"agents stuck in loops burn real money"*). **It is not the spec ADR-0005 promoted.**
+>
+> ADR-0005 promoted this on one finding: *an unsupervised agent in conclave is an agent that
+> boots GPUs on its own.* **A token budget cannot stop `terraform apply enable_gpu=true`.** The
+> agent commits hundreds of dollars of AWS spend inside a few thousand tokens — comfortably
+> within any token ceiling. Every one of the old spec's five success criteria was
+> token-denominated; not one mentioned cloud spend. Built as written, it would have shipped
+> green with the GPU boot path untouched.
+>
+> The token budget is real but minor, and it is a *different mechanism*. It has been split out
+> to **spec 10**, at Tier 3, where it was correctly filed to begin with.
 
-Autonomous agents stuck in loops burn real money. Mnemos's fatigue detection (4-dim: tokens, scatter, re-reads, error density) is a *behavioral* proxy for "the agent is struggling" but it isn't a hard stop. An agent that's actually wasting tokens or API calls needs a budget ceiling.
+## The problem
 
-This matters especially for:
+In conclave, **14 of 25 recorded gates (56%) are `terraform apply` / `terraform destroy`**
+against g6e GPUs. Every one was a human saying yes to *one specific boot*. Spend is the one
+class of decision that is irreversible in the way that matters: money leaves; a wrong refactor
+can be reverted.
 
-- `/improve-maggy`, self-improvement flows, anything that spawns subagents
-- Team runs where one misbehaving agent shouldn't bankrupt the whole run
-- Maggy's TDD execute pipeline (up to 3 Claude Code invocations per ticket)
+Delete the human and nothing stands between the agent and the instance.
 
-## Goal
+## What already existed — and why we did not rebuild it
 
-Add per-task and per-session budget limits with hard stops and a budget-aware fatigue state.
+conclave shipped a cost layer at v0.5. Verified end to end on 2026-07-12, not taken on faith:
 
-## Approach
+- `infra/budget.tf` — $100/mo cap, alerts at 50/80%, 100% → SNS
+- `infra/hardstop.tf` — SNS → Lambda → `ec2:StopInstances` on `aws:ResourceTag/project=conclave`
+- provider `default_tags { project = "conclave" }` — **the GPU carries the tag the IAM policy
+  keys on.** The stop chain is intact.
+- `infra/gpu.tf` — two idle-stop alarms (GPU-util primary, CPU backstop), native `ec2:stop`
+- `enable_gpu` defaults `false`
 
-### Step 1 — Declare a budget in intent config
+**That is the hard ceiling, and it is in a better place than this spec could put it** — it is
+*out-of-band*, outside the agent's trust domain. An agent cannot confuse its way past AWS
+Budgets. A PreToolUse hook is in-band and strictly weaker. Rebuilding it in Tessera was the
+wrong rung.
 
-Extend ReasonNode:
+But it answers *"how much can conclave spend this month?"* — **not** *"is this agent, on this
+run, authorized to boot a GPU at all?"* The cap is a **blast-radius bound, not an
+authorization**. By its own comment, Budgets evaluates ~3×/day on lagging ACTUAL cost, so the
+hardstop bounds overrun to "a few hours", not zero. Idle-stop only catches *idle* — an agent in
+a busy inference loop keeps the GPU hot and never trips it.
 
-```yaml
-budget:
-  tokens: 100000
-  api_calls: 50
-  wall_clock_minutes: 30
-  usd: 5.00
-```
+## What v1 built
 
-All fields optional. `usd` calculated from model pricing tables (current Sonnet/Opus rates, refreshed quarterly).
+A **pre-commitment authorization gate**. Not accounting — Tessera does not meter dollars; AWS
+does, and it is the only system that knows the real number.
 
-### Step 2 — Track spend via hooks
+1. **`bin/tessera-authorize`** — a human grants a run-scoped envelope up front:
+   `tessera-authorize grant --usd 20 --ttl 4h --note "chunk 4 judge eval"`.
+   **This is the piece that converts conclave from supervisable-only to unsupervised**: it
+   collapses fourteen synchronous gates into one up-front authorization.
+2. **`scripts/spend/guard.py`** + PreToolUse hook (matcher `Bash`) — classifies each command
+   `committing` / `reducing` / `neutral`; denies committing commands with no live grant.
+3. **Cost-reducing commands are never blocked.** See the invariant below.
+4. **Denied → escalation.** The model is told to raise a `spend_unauthorized` packet (spec 07)
+   and explicitly **not** to route around the block.
+5. **Every grant, revoke, and denial is an event** in `.tessera/logs/<session>.jsonl`.
+   `spend_denied` is the friction journal for spend.
 
-PostToolUse hook accumulates:
+## The invariant — and the flaw that produced it
 
-- Tokens consumed (from `transcript_path` JSON blobs)
-- Claude API calls (by counting tool uses)
-- Wall clock elapsed since intent started
+> **A spend gate must never be able to block the exit.**
 
-Stored in `.icpg/budgets/<intent-id>.json` with heartbeats.
+The old spec's Step 4 hard-stopped by *"rejecting further Edit/Write/Bash"*. **Teardown is a
+Bash command** — four of those conclave gates are `aws-teardown`. That design would freeze an
+agent with a live GPU and block its own teardown, **causing the exact runaway spend it existed
+to prevent.** conclave's idle-stop would have eventually caught it — by luck, not design.
 
-### Step 3 — Budget-aware fatigue state
+Cost-reducing commands are therefore allowed unconditionally: no authorization, no expiry
+check, no exceptions. `test_teardown_always_allowed_even_with_no_authorization` is the check.
 
-Add a 5th Mnemos fatigue dimension: `budget_burn_rate`. If the agent has consumed 70% of its token budget at 40% progress, that's a signal to compress / consolidate / consider abandoning. Threshold behavior:
+## Why the TTL is enforced and the dollar figure is not
 
-| Budget consumed | Action |
-|---|---|
-| <60% | Normal |
-| 60-85% | Mnemos COMPRESS state forced |
-| 85-100% | Mnemos REM state forced, agent warned to wrap up |
-| >100% | Hard stop — PreToolUse hook rejects further Edit/Write/Bash |
+Pricing a boot up front — spot vs on-demand, AZ, unknown duration — is a rabbit hole, and AWS
+already knows the real number. Tessera enforces **time**, which is the bound it can honestly
+hold; for a GPU, cost is ~linear in runtime, so a time-boxed envelope *is* a spend bound. The
+cloud budget is the backstop when the estimate is wrong.
 
-### Step 4 — Graceful stop behavior
+Three layers, three trust domains. Do not collapse them.
 
-When budget is exceeded:
+## Success criteria — all met
 
-1. PreToolUse hook returns `budget_exceeded` error with context about remaining work
-2. Agent is expected to write a handoff Mnemos checkpoint before exiting
-3. Intent status flips to `deferred_budget`
-4. Human (or another agent with a fresh budget) can resume from the checkpoint
+1. ✅ `terraform apply -var enable_gpu=true` with no live grant → **blocked** (exit 2), with the
+   escalation path in stderr. Live-fired, not inferred.
+2. ✅ `terraform destroy` / `enable_gpu=false` / `stop-instances` → **allowed with no grant.**
+3. ✅ `terraform destroy && terraform apply` → **blocked.** (A first-match classifier reads
+   `destroy`, says "reducing", and boots a GPU for free. Committing wins across segments.)
+4. ✅ A live grant permits the boot; an expired or revoked one does not.
+5. ✅ Corrupt/absent grant ⇒ not a grant (fails closed).
+6. ✅ No grant declared and no spend command ⇒ no enforcement. Backward compatible.
+7. ✅ 45 tests, `scripts/spend/`.
 
-### Step 5 — Budget override
+## What live-fire found that the design did not
 
-A human can set `allow_overage: true` on an intent or raise the limit mid-run. Override requires a commit to the intent's config (auditable).
+Both of these were found by running the guard in conclave, not by reasoning about it. Neither
+was predicted.
 
-## Integration points
+1. **A live hole in the flagship downstream.** `scripts/sweep-gpu-capacity.sh:23` runs
+   `terraform apply -auto-approve` — it boots g6e GPUs, and it is the AZ-sweep named in the
+   gate log. The guard sees only the command *string*, so the wrapper's name told it nothing.
+   **A classifier that reads the command but not what the command runs is checking the wrong
+   text.** Fixed: local scripts are read one level down. This is the spend-shaped sibling of
+   *"existence is a local fact; reachable-by-the-consumer is the shared one."*
 
-- `scripts/icpg/models.py` — `Budget` field on ReasonNode
-- `scripts/icpg/budget.py` — new module for tracking and enforcement
-- `hooks/pre-tool-use` — budget check before Edit/Write/Bash
-- `hooks/post-tool-use` — accumulate spend
-- `templates/pricing.yaml` — model → $/token table, refreshed quarterly
-- `skills/mnemos/SKILL.md` — document the 5th fatigue dimension
-- `skills/icpg/SKILL.md` — document budget declaration
+2. **The guard blocked its own wiring commit, and I misread the result.** The command that was
+   supposed to install the guard into conclave contained `terraform apply` inside a quoted test
+   string; the guard blocked the *entire* Bash call, so **none of the wiring ran** — and the
+   probe that followed happily reported `allowed` for a GPU boot, because the wrapper fails open
+   when the guard is absent. It looked like a working guard saying yes. It was a missing guard
+   saying nothing. Caught only by checking whether the files were actually on disk.
 
-## Success criteria
+## Known ceilings
 
-1. An intent with a 10k-token budget hard-stops at 10k tokens via PreToolUse rejection
-2. Mnemos fatigue state reflects budget consumption (COMPRESS / REM / EMERGENCY)
-3. Budget overruns leave a Mnemos handoff checkpoint so work can resume
-4. `icpg budgets list` shows current spend vs limit per active intent
-5. No budget declared → no enforcement (backward compatible)
+- **The pattern list is a recall net, not an oracle.** A script that calls a script, or
+  anything using a cloud SDK (boto3 `run_instances`) instead of the CLI, still slips through.
+  Layer 3 bounds that. A miss is a finding *about the list* — fix is a pattern plus a
+  regression test.
+- **Mentions read as invocations** — `grep -r "terraform apply" .` is blocked. Accepted, not a
+  bug: stripping quotes would open `bash -c "..."` as a bypass. Safe direction. Use a non-Bash
+  tool when a false positive blocks non-spend work; never reword to slip past the pattern.
+- **The hook wrapper fails open** (no `jq`/`python3`/guard) — a hook that wedges every Bash
+  call is its own outage. `guard.py` itself fails closed.
+- **`tessera-authorize` is human-invoked, by design.** The agent cannot self-authorize. If a
+  future flow needs an agent to raise its own envelope, that is a new decision, not an
+  extension.
+
+## Deferred
+
+- **Per-command cost estimation.** Deliberately not built — see above.
+- **Budget-aware fatigue (the 5th Mnemos dimension).** Belonged to the token-budget framing;
+  moved to spec 10.
+- **`icpg budgets list`.** Nothing to list until there is accounting, and there is none.
 
 ## Depends on
 
-- Mnemos fatigue model (already exists)
-- Nothing else
+- Spec 07 (escalation) — shipped. This spec is its trigger.
+- Nothing else.

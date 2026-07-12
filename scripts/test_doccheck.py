@@ -158,3 +158,88 @@ def test_git_is_actually_pointed_at_the_tracked_hooks():
     assert configured == ".githooks", (
         f"core.hooksPath is {configured!r}, not '.githooks' — the pre-commit doccheck gate "
         f"is INERT. Run ./install.sh, or: git config core.hooksPath .githooks")
+
+
+# ── ignored-test-suites-are-run ───────────────────────────────────────────────
+# The regression check for the 2026-07-11 "ran 6 of 12 files, reported green" bug. That bug
+# was fixed without a check, which is the one thing the standing rule forbids. This is it.
+
+def _run_tests_sh(repo: Path, body: str) -> None:
+    (repo / "scripts").mkdir(exist_ok=True)
+    (repo / "scripts" / "run-tests.sh").write_text(body)
+
+
+def test_catches_ignored_suite_that_nothing_runs(fake_repo):
+    _run_tests_sh(fake_repo, "pytest scripts/ -q --ignore=scripts/gate --ignore=scripts/spend\n"
+                             "pytest scripts/gate -q\n")  # spend ignored, never run
+    bad = doccheck.check_ignored_test_suites_are_run()
+    assert len(bad) == 1
+    assert "scripts/spend" in bad[0]
+    assert "silently skipped" in bad[0]
+
+
+def test_passes_when_every_ignored_suite_is_run(fake_repo):
+    _run_tests_sh(fake_repo, "pytest scripts/ -q --ignore=scripts/gate --ignore=scripts/spend\n"
+                             "pytest scripts/gate -q\npytest scripts/spend -q\n")
+    assert doccheck.check_ignored_test_suites_are_run() == []
+
+
+def test_module_run_suites_count_as_run(fake_repo):
+    """mnemos ships assert-based self-checks run via `-m`, not pytest targets."""
+    _run_tests_sh(fake_repo, "pytest scripts/ -q --ignore=scripts/mnemos\n"
+                             '"$PY" -m scripts.mnemos.test_haziness\n')
+    assert doccheck.check_ignored_test_suites_are_run() == []
+
+
+def test_missing_run_tests_sh_is_a_violation(fake_repo):
+    assert doccheck.check_ignored_test_suites_are_run() != []
+
+
+# ── spend-guard-is-wired ──────────────────────────────────────────────────────
+
+def _spend_contract(repo: Path) -> None:
+    (repo / "docs" / "contracts" / "spend-authorization.md").write_text(
+        "PreToolUse, matcher Bash, blocks unauthorized spend.")
+
+
+def _settings(repo: Path, hooks: dict) -> None:
+    (repo / ".claude" / "settings.json").write_text(json.dumps(hooks))
+
+
+def test_catches_spend_contract_with_no_hook_wired(fake_repo):
+    _spend_contract(fake_repo)
+    _settings(fake_repo, {"hooks": {"PreToolUse": [{"matcher": "Edit|Write", "hooks": []}]}})
+    bad = doccheck.check_spend_guard_is_wired()
+    assert len(bad) == 1
+    assert "boot a GPU with no authorization" in bad[0]
+
+
+def test_passes_when_spend_guard_is_wired(fake_repo):
+    _spend_contract(fake_repo)
+    _settings(fake_repo, {"hooks": {"PreToolUse": [{
+        "matcher": "Bash",
+        "hooks": [{"type": "command", "command": ".claude/scripts/tessera-spend-guard.sh"}],
+    }]}})
+    assert doccheck.check_spend_guard_is_wired() == []
+
+
+def test_spend_guard_wired_under_wrong_matcher_is_a_violation(fake_repo):
+    """Wired to Edit|Write instead of Bash: the script exists, and guards nothing."""
+    _spend_contract(fake_repo)
+    _settings(fake_repo, {"hooks": {"PreToolUse": [{
+        "matcher": "Edit|Write",
+        "hooks": [{"type": "command", "command": ".claude/scripts/tessera-spend-guard.sh"}],
+    }]}})
+    assert doccheck.check_spend_guard_is_wired() != []
+
+
+def test_no_spend_contract_means_no_claim_to_check(fake_repo):
+    _settings(fake_repo, {"hooks": {}})
+    assert doccheck.check_spend_guard_is_wired() == []
+
+
+# ── spend-auth-is-not-tracked ─────────────────────────────────────────────────
+
+def test_spend_auth_is_not_tracked_in_the_real_repo():
+    """A committed grant would authorize spend on every clone, forever, past its own TTL."""
+    assert doccheck.check_spend_auth_is_not_tracked() == []

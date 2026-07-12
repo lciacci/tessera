@@ -46,10 +46,13 @@ run() {
 echo "Tessera test suite"
 echo "──────────────────"
 
-# Separate processes: gate/ and override/ cannot share one (see header).
-run "top-level" "$PY" -m pytest scripts/ -q --ignore=scripts/gate --ignore=scripts/override --ignore=scripts/mnemos
+# Separate processes: gate/ and override/ cannot share one (see header). spend/ gets its
+# own for the same reason — it has a same-dir `event.py`/`guard.py` import contract, and
+# joining the pool is how the collision bites the next suite that lands.
+run "top-level" "$PY" -m pytest scripts/ -q --ignore=scripts/gate --ignore=scripts/override --ignore=scripts/mnemos --ignore=scripts/spend
 run "gate"      "$PY" -m pytest scripts/gate -q
 run "override"  "$PY" -m pytest scripts/override -q
+run "spend"     "$PY" -m pytest scripts/spend -q
 
 # mnemos ships assert-based self-checks, not pytest tests — zero `def test_`, run via -m.
 # pytest collects them as zero tests and says "no tests ran", which reads exactly like success.

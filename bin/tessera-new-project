@@ -33,7 +33,8 @@ for f in "$TPL/CLAUDE.md.template" "$TPL/settings.base.json" "$TPL/gitignore.bas
   [ -f "$f" ] || { echo "missing template: $f" >&2; exit 1; }
 done
 
-mkdir -p "$TARGET/.claude/scripts" "$TARGET/.tessera/logs" "$TARGET/.mnemos" "$TARGET/scripts/gate"
+mkdir -p "$TARGET/.claude/scripts" "$TARGET/.tessera/logs" "$TARGET/.mnemos" \
+         "$TARGET/scripts/gate" "$TARGET/scripts/spend"
 
 # Harness scripts. Default (global): no local mnemos copies — settings.json falls
 # back to ~/.claude/templates. Frozen: pin live copies now (anti-drift snapshot).
@@ -53,6 +54,15 @@ chmod +x "$TARGET/.claude/scripts/tessera-gate-scan.sh"
 # where PATH is not set — delete it once install.sh's PATH check is green everywhere.
 cp "$TESSERA_ROOT"/bin/tessera-escalate "$TARGET/scripts/tessera-escalate"
 chmod +x "$TARGET/scripts/tessera-escalate"
+
+# Spend guard (spec 06). The hook wrapper FAILS OPEN when guard.py is absent — so shipping
+# tessera-spend-guard.sh without scripts/spend/ ships a hook that silently protects nothing
+# and still looks wired. Same shape as the gate recorder above: ship both halves or neither.
+cp "$TESSERA_ROOT"/scripts/spend/guard.py "$TESSERA_ROOT"/scripts/spend/event.py \
+   "$TESSERA_ROOT"/scripts/spend/authorize.py "$TESSERA_ROOT"/scripts/spend/test_guard.py \
+   "$TARGET/scripts/spend/"
+cp "$TESSERA_ROOT"/.claude/scripts/tessera-spend-guard.sh "$TARGET/.claude/scripts/"
+chmod +x "$TARGET/.claude/scripts/tessera-spend-guard.sh" "$TARGET/scripts/spend/guard.py"
 
 # Settings + gitignore (stack-agnostic bases — add your stack's commands after).
 cp "$TPL/settings.base.json" "$TARGET/.claude/settings.json"

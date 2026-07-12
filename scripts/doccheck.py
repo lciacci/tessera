@@ -56,8 +56,10 @@ PLACEHOLDER = re.compile(r"[{}]|/X$|NNNN|YYYY|TITLE|\.\.\.")
 # Paths that legitimately aren't on disk. Every entry is a deliberate exemption with a
 # reason — an unexplained allowlist is how a checker rots into theater.
 PATH_ALLOWLIST = {
-    # Runtime-created, never committed.
-    ".mnemos", ".tessera/logs", ".tessera/escalations",
+    # Runtime-created, never committed. spend-auth.json is MORE than uncommitted — it must
+    # never be tracked (a live grant would authorize spend on every clone). The positive
+    # assertion lives in check_spend_auth_is_not_tracked; this only exempts it from the `ls`.
+    ".mnemos", ".tessera/logs", ".tessera/escalations", ".tessera/spend-auth.json",
     # Other repos' files. The observatory *evaluates* GSD; it doesn't claim to contain it.
     "bin/lib/state.cjs", "bin/lib/capability-registry.cjs",
     "bin/lib/capability-loader.cjs", "docs/ARCHITECTURE.md",
@@ -209,12 +211,91 @@ def check_tessera_yml_is_tracked() -> list[str]:
             if _rel(f) not in tracked]
 
 
+def check_ignored_test_suites_are_run() -> list[str]:
+    """Every suite `run-tests.sh` --ignores must be run separately somewhere in the file.
+
+    THIS IS A FINDING ABOUT THE CHECKER, not just a new check. On 2026-07-11 `.tessera/config.yml`
+    shipped a `test:` that enumerated six files, ran 6 of 12, and reported "57 passed" all
+    evening. A human found it. It was fixed — by writing run-tests.sh — and **left no check
+    behind**, which is precisely what doccheck's standing rule exists to forbid. The rule was
+    violated by the commit that fixed the bug the rule was written for.
+
+    The trap is still live: `pytest scripts/` cannot collect `gate/` and `override/` in one
+    process (both carry an `emit.py`), so each must be --ignored from the top-level run AND
+    given its own. --ignore it and forget the `run` line, and the suite vanishes in silence
+    while the script still exits green. That is the same failure wearing a different hat, and
+    it is a one-line mistake away at all times. This is the `ls`.
+    """
+    script = ROOT / "scripts" / "run-tests.sh"
+    if not script.exists():
+        return ["scripts/run-tests.sh missing — the test command has no definition"]
+    text = script.read_text()
+    bad = []
+    for ignored in re.findall(r"--ignore=(\S+)", text):
+        # The suite must be invoked on its own: as a pytest target, or (mnemos) via -m.
+        as_module = ignored.replace("/", ".")
+        invoked = re.search(rf"pytest\s+{re.escape(ignored)}\b", text) or \
+            re.search(rf"-m\s+[\"']?{re.escape(as_module)}\.", text)
+        if not invoked:
+            bad.append(f"scripts/run-tests.sh: --ignore={ignored} but nothing runs it — "
+                       f"the suite is silently skipped and the script still exits green")
+    return bad
+
+
+def check_spend_guard_is_wired() -> list[str]:
+    """The spend contract claims a PreToolUse Bash hook blocks unauthorized spend. Is it wired?
+
+    `docs/contracts/spend-authorization.md` asserts the guard is reachable from Claude Code.
+    An unwired guard is worse than none: the doc says an agent cannot boot a GPU unauthorized,
+    and it can. Existence is a local fact; *wired into settings.json* is the shared one — the
+    same lesson as the PATH export that lived in ~/.zshrc and was invisible to the agent.
+    """
+    contract = ROOT / "docs" / "contracts" / "spend-authorization.md"
+    if not contract.exists():
+        return []  # no claim, nothing to check
+    settings = ROOT / ".claude" / "settings.json"
+    if not settings.exists():
+        return ["docs/contracts/spend-authorization.md claims a PreToolUse hook, but "
+                ".claude/settings.json does not exist"]
+    try:
+        hooks = json.loads(settings.read_text()).get("hooks", {}).get("PreToolUse", [])
+    except json.JSONDecodeError:
+        return [".claude/settings.json is not valid JSON — cannot verify the spend guard"]
+    wired = any(h.get("matcher") == "Bash"
+                and "tessera-spend-guard" in json.dumps(h.get("hooks", []))
+                for h in hooks)
+    if not wired:
+        return ["docs/contracts/spend-authorization.md claims the spend guard runs on "
+                "PreToolUse(Bash), but no such hook is wired in .claude/settings.json — "
+                "an agent could boot a GPU with no authorization"]
+    return []
+
+
+def check_spend_auth_is_not_tracked() -> list[str]:
+    """`.tessera/spend-auth.json` must NEVER be committed. The mirror of tessera-yml-is-tracked.
+
+    A live spend authorization is run-scoped state. Committed, it would grant spend on every
+    clone, to every agent, forever — and it would outlive its own TTL in git history. The
+    `.yml` check asserts committed; this one asserts the opposite, for the opposite reason.
+    """
+    listed = subprocess.run(["git", "ls-files", ".tessera/spend-auth.json"], cwd=ROOT,
+                            capture_output=True, text=True)
+    if listed.returncode != 0 or not listed.stdout.strip():
+        return []
+    return [".tessera/spend-auth.json is git-tracked — a live spend authorization must never "
+            "be committed; it would authorize spend on every clone. Add it to .gitignore and "
+            "`git rm --cached` it."]
+
+
 CHECKS = {
     "referenced-paths-exist": check_referenced_paths_exist,
     "adr-index-complete": check_adr_index_complete,
     "compaction-threshold-qualified": check_compaction_threshold_qualified,
     "gate-recording-not-recall": check_gate_recording_not_claimed_as_recall,
     "tessera-yml-is-tracked": check_tessera_yml_is_tracked,
+    "ignored-test-suites-are-run": check_ignored_test_suites_are_run,
+    "spend-guard-is-wired": check_spend_guard_is_wired,
+    "spend-auth-is-not-tracked": check_spend_auth_is_not_tracked,
 }
 
 
