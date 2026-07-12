@@ -28,6 +28,7 @@ it is how we learn the assertion set has rotted into theater.
 import argparse
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -178,11 +179,38 @@ def check_gate_recording_not_claimed_as_recall() -> list[str]:
             for doc in _docs() if stale.search(doc.read_text())]
 
 
+def check_tessera_yml_is_tracked() -> list[str]:
+    """Every `.tessera/*.yml` is COMMITTED. Existing-on-disk is not the same as tracked.
+
+    Found 2026-07-11, the hard way, an hour after doccheck shipped. `.tessera/config.yml` was
+    written, documented as "COMMITTED, not gitignored" in four places, and **gitignored in all
+    four repos** — the rule inherited from `templates/tessera/gitignore.base`, whose comment I
+    corrected while never checking the rule itself. `git add -A` skipped it in silence and the
+    commit message claimed otherwise. On a fresh clone the file simply would not be there, and
+    the agent it exists for — one that must never guess the test command — would have nothing
+    to read.
+
+    `referenced-paths-exist` is blind to this: the path DOES exist, on my disk, forever, and
+    nowhere else. **Existence is a local fact; tracked is the shared one.** A doc that says
+    "committed" is asserting the second, so the second is what gets checked.
+    """
+    listed = subprocess.run(["git", "ls-files", ".tessera"], cwd=ROOT,
+                            capture_output=True, text=True)
+    if listed.returncode != 0:
+        return []  # not a git repo / git unavailable — fail open
+    tracked = set(listed.stdout.split())
+    return [f"{_rel(f)} exists but is NOT git-tracked — a doc claims it is committed, and on "
+            f"a fresh clone it would not exist"
+            for f in sorted((ROOT / ".tessera").glob("*.yml"))
+            if _rel(f) not in tracked]
+
+
 CHECKS = {
     "referenced-paths-exist": check_referenced_paths_exist,
     "adr-index-complete": check_adr_index_complete,
     "compaction-threshold-qualified": check_compaction_threshold_qualified,
     "gate-recording-not-recall": check_gate_recording_not_claimed_as_recall,
+    "tessera-yml-is-tracked": check_tessera_yml_is_tracked,
 }
 
 

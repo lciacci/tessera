@@ -1,0 +1,15 @@
+# Tessera tuning configuration — Tessera's own.
+#
+# COMMITTED, not gitignored: a test command that vanishes on a fresh clone is useless to the
+# unsupervised agent it exists for. Keep secrets out; this file is for toolchain facts.
+#
+# Only keys that something ACTUALLY READS belong here. A knob that silently does nothing is
+# worse than no knob — it grants false assurance. See scripts/tessera_config.py.
+
+# --- toolchain (read by bin/tessera-test) ---
+#
+# NOT `python3 -m pytest`. On this machine (and any dual-Homebrew mac) `python3` is 3.14,
+# which has no pytest — the same interpreter split that silently killed the Mnemos hooks
+# (F-001). `python3.13` is PATH-relative, so this stays portable; do NOT pin an absolute
+# /opt/homebrew path here.
+test: python3.13 -m pytest scripts/test_doccheck.py scripts/test_tessera_config.py scripts/test_tessera_watch.py scripts/test_tessera_escalate.py scripts/test_tessera_findings.py scripts/test_tessera_changelog.py
