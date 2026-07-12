@@ -46,13 +46,17 @@ is NOT version-independent:** when the interpreter NAME drifts, the VERSION drif
 
 ### Where to pick up — in this order, in SEPARATE sessions
 
-1. **The paired-detector design** (observatory → "Fail-open everywhere" → *When to revisit*).
-   This is the real work. Candidate shape: every fail-open path emits a `degraded` event; a
-   watcher predicate fires on any degraded event. A hook that silently does nothing should be
-   **loud in the log** even when it is **quiet in the session**. Promote to an ADR once decided.
-   **Bar for "done": a deliberately-broken component (venv removed, guard corrupted, hook
-   typo'd) is caught by the framework within one session, with no human asking.** Nothing today
-   would have met that bar.
+1. **Fail-open detection — `_project_specs/11-fail-open-detection.md`. SCOPE AND ORDERING ARE
+   WRITTEN DOWN THERE. Read it before starting.**
+   Five components (spend guard, spend backstop, gate-scan, Mnemos hooks, doccheck) — **not** the
+   54 bail-out sites. Mechanism is ~35 lines (`tessera-degraded` + watcher P10); the substance is
+   the chaos tests and the classification.
+   **THE ORDERING IS THE POINT: write the break-it-on-purpose tests FIRST and watch them all
+   fail.** Today's session built a detector and then verified the fix *with the detector that had
+   the hole* — three times, reporting green each time. If a future session proposes building the
+   mechanism first, **push back and point at spec 11.**
+   **Bar for done (binary): break a component on purpose → Tessera says so within one session,
+   with no human asking.** Nothing today would have met it.
 
 2. **Ship the portable doccheck core downstream.** 7 of 13 checks are portable
    (`no-bare-python3-with-toolchain-import`, `safety-scripts-run-on-system-python`,

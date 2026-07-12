@@ -95,10 +95,11 @@ Both were found by adversarial verification, **not** by the framework. **The rea
 
 #### When to revisit / what would close this
 
-- **Design the paired-detector rule into the framework**, not into prose. Candidate shape: every fail-open path emits a `degraded` event, and a watcher predicate fires on any degraded event in the last N sessions. A hook that silently did nothing should be *loud in the log* even when it is *quiet in the session*.
-- **Promote to an ADR** once that shape is decided. This entry is the evidence base.
+- **The remedy is scoped and ordered in `_project_specs/11-fail-open-detection.md`.** Five components (spend guard, spend backstop, gate-scan, Mnemos hooks, doccheck) — *not* the 54 measured bail-out sites. Mechanism is ~35 lines (`tessera-degraded` + watcher **P10**); the substance is the chaos tests and the per-site classification of *"nothing to do"* vs *"could not do my job."*
+- **The ordering is load-bearing: chaos tests FIRST, watched failing, before any mechanism exists.** The session that produced this entry built a detector and then certified the fix *with the detector that had the hole* — three times, reporting green each time, refuted by three independent verifications. A detector you certify a fix with must be tested against that fix's own failure mode, or it is a mirror.
+- **Promote to an ADR** once spec 11 ships and the bar is met. This entry is the evidence base.
 - **Re-open ADR-0005's readiness assessment** in light of the two broken preconditions.
-- **Close when:** a deliberately-broken component (venv removed, guard corrupted, hook typo'd) is detected by the framework *within one session, without a human asking*. That is the bar. Nothing today would have met it.
+- **Close when:** a deliberately-broken component (venv removed, guard corrupted, hook typo'd, `python3` pointed at 3.9) is detected by the framework *within one session, without a human asking* — and **confirmed by an independent session, not the one that built it.** That is the bar. Nothing today would have met it.
 
 ---
 
