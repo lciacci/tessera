@@ -66,11 +66,30 @@ def p3_compaction(root: Path) -> tuple[bool, str]:
     compactions deliver the trial's verdict on manufactured data: the P2 failure exactly
     (a predicate firing correctly on a proxy that tracks no real pain).
 
-    A missing trigger field is counted as real — pre-2026-07-11 entries predate the tagging,
-    and any compaction from back then was necessarily an auto one.
+    A MISSING trigger key is counted as real — pre-2026-07-11 entries predate the tagging, and
+    any compaction from back then was necessarily an auto one.
+
+    ── `trigger: "unknown"` IS NOT THE SAME AS A MISSING KEY. Fixed 2026-07-12. ─────────────
+
+    The PreCompact hook defaults to the literal string `"unknown"` and overwrites it only if it
+    can read `.trigger` off stdin. So `"unknown"` means **the tagger ran and could not classify
+    the event** — a measurement failure, not a measurement.
+
+    This predicate lumped it into `else: real += 1`. So an event we cannot classify was silently
+    promoted to **evidence for a kill/keep trial** — which is the exact contamination the whole
+    trigger-tagging fix was built to prevent, arriving through the one door nobody watched.
+
+    It was live: a compaction fired on 2026-07-12 with `trigger: "unknown"`, and P3 read it as
+    `1 real`. The hook itself is fine (fed `manual` and `auto` on stdin, it records both
+    correctly) — Claude Code simply sent no trigger field for that event, and it is not
+    reconstructable after the fact.
+
+    So: **unknown is excluded from BOTH counts and reported LOUDLY.** A verdict must never rest
+    on an event whose provenance the instrument could not read, and an instrument that cannot
+    read should say so rather than guess. (docs/observatory.md → "Fail-open everywhere".)
     """
     log = root / ".mnemos" / "compaction-log.jsonl"
-    real = manual = 0
+    real = manual = unknown = 0
     if log.exists():
         for line in log.read_text().splitlines():
             try:
@@ -79,11 +98,19 @@ def p3_compaction(root: Path) -> tuple[bool, str]:
                 continue
             if event.get("event") != "compaction_fired":
                 continue
-            if event.get("trigger") == "manual":
+            trigger = event.get("trigger", "__absent__")
+            if trigger == "manual":
                 manual += 1
+            elif trigger == "unknown":
+                unknown += 1          # the tagger failed. Not evidence, not a test. Unusable.
             else:
-                real += 1
-    note = f" ({manual} manual test(s) excluded)" if manual else ""
+                real += 1             # "auto", or a pre-tagging entry with no key at all
+    notes = []
+    if manual:
+        notes.append(f"{manual} manual test(s) excluded")
+    if unknown:
+        notes.append(f"⚠️ {unknown} UNCLASSIFIABLE (trigger unreadable — NOT counted as evidence)")
+    note = f" ({'; '.join(notes)})" if notes else ""
     return real >= COMPACTION_MIN, (f"{real} real compaction_fired{note} "
                                     f"(≥{COMPACTION_MIN} → judge the Mnemos trial)")
 

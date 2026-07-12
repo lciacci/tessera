@@ -179,3 +179,35 @@ def test_p3_counts_untagged_legacy_entries_as_real(tmp_path):
     m.mkdir()
     (m / "compaction-log.jsonl").write_text("\n".join(_compaction() for _ in range(3)))
     assert tw.p3_compaction(tmp_path)[0] is True
+
+
+# ── P3: an unclassifiable compaction must NOT become evidence ─────────────────
+
+def test_p3_does_not_count_an_unreadable_trigger_as_real(tmp_path):
+    """`trigger: "unknown"` is the PreCompact hook's DEFAULT — it means the tagger ran and
+    could not classify the event. P3 lumped it into `else: real += 1`, silently promoting a
+    measurement FAILURE into evidence for a kill/keep trial. That is the exact contamination
+    the trigger-tagging fix was built to prevent, arriving through the one door nobody watched.
+
+    It was live: a compaction fired 2026-07-12 tagged `unknown`, and P3 read it as `1 real`."""
+    log = tmp_path / ".mnemos"; log.mkdir()
+    (log / "compaction-log.jsonl").write_text(
+        '{"event":"compaction_fired","trigger":"unknown"}\n'
+        '{"event":"compaction_fired","trigger":"manual"}\n'
+    )
+    fired, note = tw.p3_compaction(tmp_path)
+    assert fired is False
+    assert "0 real" in note
+    assert "UNCLASSIFIABLE" in note, "an unreadable trigger must be reported LOUDLY, not hidden"
+
+
+def test_p3_counts_auto_and_pre_tagging_entries_as_real(tmp_path):
+    """A MISSING key is a pre-2026-07-11 entry — necessarily an auto compaction. That is
+    different from an explicit "unknown", and must still count."""
+    log = tmp_path / ".mnemos"; log.mkdir()
+    (log / "compaction-log.jsonl").write_text(
+        '{"event":"compaction_fired","trigger":"auto"}\n'
+        '{"event":"compaction_fired"}\n'
+    )
+    fired, note = tw.p3_compaction(tmp_path)
+    assert "2 real" in note
