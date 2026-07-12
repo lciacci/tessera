@@ -14,6 +14,28 @@
 # Deliberately a POINTER, not a dump: printing 344 lines every session buys a context tax and
 # teaches the model to skim. The date is included so a stale handoff is visible as stale.
 
+# ── IT STITCHED THE NEW HEADING ONTO THE OLD PRIORITIES. Found 2026-07-12. ────────────────
+#
+# The heading came from `grep -m1` (the FIRST handoff block — correct). The priority list came
+# from an awk that scanned the WHOLE FILE for `^## Next session` — so when the newest handoff
+# didn't happen to use that exact heading, awk fell through to the PREVIOUS handoff's section,
+# further down, and printed ITS priorities.
+#
+# The result was perfectly coherent: today's title over yesterday's todo list. A fresh session
+# would have been told to go do "Spec 06 (BLOCKS unsupervised work)" and "the venv (P9 is
+# firing)" — the two things that had just been finished. Neither half was wrong on its own.
+#
+# This is the fail-open pattern sitting on the one artifact that tells tomorrow what to do:
+# **it did not break, it produced something plausible.** Nothing could have told us.
+#
+# Two fixes, and the second is the rule this repo just wrote for itself:
+#   1. Extraction is SCOPED to the first handoff block. It cannot reach a previous handoff.
+#   2. If the block has no priority list, SAY SO LOUDLY. A surfacer that silently prints
+#      nothing is indistinguishable from a surfacer that has nothing to print — and that is
+#      exactly the class of failure this session spent 90 minutes on.
+#      (docs/observatory.md → "Fail-open everywhere": a mechanism that fails open needs a
+#       paired signal that fails loud.)
+
 HANDOFF="_project_specs/todos/active.md"
 
 if [ -f "$HANDOFF" ]; then
@@ -22,9 +44,24 @@ if [ -f "$HANDOFF" ]; then
         echo "=== TESSERA HANDOFF ==="
         echo "${heading#\#\# }"
         echo "  → read the top section of $HANDOFF, then run bin/tessera-watch"
-        # The priority list, so the next session knows the shape without reading 344 lines.
-        awk '/^## Next session/{f=1;next} f&&/^## /{exit} f&&/^[0-9]+\. /{print "  " $0}' \
-            "$HANDOFF" | cut -c1-110
+
+        # Scoped to the FIRST handoff block only: start at its heading, stop at the next
+        # top-level `## ` (a `### ` subheading does not match, so it stays inside the block).
+        items=$(awk '
+            /^## Handoff — pick up here/ { blk=1; next }
+            blk && /^## /               { exit }
+            blk && /^#{3,} .*([Pp]ick up|[Nn]ext|[Pp]riorit)/ { want=1; next }
+            blk && want && /^#{3,} /    { want=0 }
+            blk && want && /^[0-9]+\. / { print "  " $0 }
+        ' "$HANDOFF" | cut -c1-110)
+
+        if [ -n "$items" ]; then
+            echo "$items"
+        else
+            echo "  ⚠️  THE HANDOFF HAS NO PRIORITY LIST — read it directly, do not guess."
+            echo "     (This line is deliberate: a silent surfacer is indistinguishable from a"
+            echo "      working one. See docs/observatory.md → 'Fail-open everywhere'.)"
+        fi
         echo ""
     fi
 fi
