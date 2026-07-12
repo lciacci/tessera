@@ -1,0 +1,60 @@
+#!/bin/bash
+# Tessera pre-commit — refuse a commit whose docs assert things that are not true.
+#
+# WHY THIS EXISTS: on 2026-07-11 commit 8589280 was pushed with doccheck RED. The verify
+# command was chained with `&&`, doccheck's exit 1 short-circuited it, and the `git commit`
+# on the next line ran anyway. The checker did its job; nothing was listening. **Green is
+# only meaningful if failing it actually stops something.** doccheck was advisory at commit
+# time and enforced only at session start (tessera-watch P8) — which means red could be
+# pushed and discovered a session later, by which point it is in the history.
+#
+# WHY .githooks/ AND NOT .git/hooks/: .git/hooks/ is NOT tracked by git. A hook installed
+# there exists on one disk and nowhere else — a fresh clone gets no gate, silently. That is
+# the exact class that produced three separate bugs on 2026-07-11 (the gitignored config.yml,
+# the interactive-only PATH, F-001's interpreter): **we validated against the environment we
+# were standing in, not the one the code runs in.** This directory is committed, and
+# `install.sh` points git at it (`core.hooksPath`) and verifies it stayed pointed.
+#
+# This gate is for BOTH readers: Lorenzo at a terminal and Claude via the Bash tool. git runs
+# it either way, which is why the gate lives in git and not in a shell profile or a convention.
+#
+# Bypass with `git commit --no-verify` when you mean it. It is a gate, not a jail — but a
+# bypass is a decision, and now it is one you have to make on purpose.
+#
+# KNOWN LIMIT: doccheck reads the WORKING TREE, not the index. On a partial commit (staged
+# subset + dirty working tree) it judges content that is not exactly what you are committing.
+# Accepted: near-100% of commits here are `git add -A`. Fixing it properly needs a temp
+# checkout of the index, which is not worth the complexity until a partial commit bites.
+
+ROOT="$(git rev-parse --show-toplevel)"
+DOCCHECK="$ROOT/scripts/doccheck.py"
+
+[ -f "$DOCCHECK" ] || exit 0          # not the tessera repo (or a very old checkout)
+command -v python3 >/dev/null 2>&1 || exit 0
+
+OUTPUT=$(python3 "$DOCCHECK" 2>&1)
+STATUS=$?
+
+if [ "$STATUS" -eq 0 ]; then
+    exit 0
+fi
+
+# Distinguish "docs are lying" (block) from "the checker itself broke" (warn, allow).
+# A crashing checker must not wedge every commit in the repo — but it must never fail
+# QUIETLY either, because a silent checker looks exactly like a passing one.
+if ! echo "$OUTPUT" | grep -q "claim(s) that are no longer true"; then
+    echo "warning: doccheck could not run (allowing commit)" >&2
+    echo "$OUTPUT" >&2
+    exit 0
+fi
+
+echo "" >&2
+echo "COMMIT BLOCKED — the docs in this commit make claims that are not true:" >&2
+echo "" >&2
+echo "$OUTPUT" >&2
+echo "" >&2
+echo "Fix the doc, or the code it describes. If the claim is about something" >&2
+echo "deliberately unbuilt, park it in doccheck's PLANNED_PATHS with a reason." >&2
+echo "Override with: git commit --no-verify" >&2
+echo "" >&2
+exit 1

@@ -55,6 +55,18 @@ write_marker() {
   say ".bootstrap-dir -> $REPO (self-hosted)"
 }
 
+# Point git at the TRACKED hook dir. .git/hooks/ is not tracked, so a hook installed there
+# exists on one disk and nowhere else — a fresh clone would silently have no pre-commit gate.
+# core.hooksPath is per-clone config, so it must be set by the installer and CHECKED by
+# verify(); otherwise the gate is present in the repo and simply not wired, which is the
+# worst state: it looks like coverage and enforces nothing.
+install_git_hooks() {
+  [ -d "$REPO/.githooks" ] || return 0
+  chmod +x "$REPO/.githooks/"* 2>/dev/null || true
+  git -C "$REPO" config core.hooksPath .githooks
+  say "git hooks -> .githooks (pre-commit: doccheck)"
+}
+
 # Turn silent-success into loud-failure. Hard checks (✗) abort; soft checks (!)
 # warn only. Audited against the four new-machine bootstrap steps (observatory:
 # "New-machine bootstrap is tribal knowledge"). Does NOT install mnemos — that
@@ -118,6 +130,20 @@ verify() {
     warn "ollama/qwen2.5-coder absent — routing fails open to Sonnet (ollama pull qwen2.5-coder:3b)"
   fi
 
+  # 3b. The pre-commit gate is actually WIRED. The hook being present in .githooks/ proves
+  # nothing — core.hooksPath is per-clone config, and without it git runs .git/hooks/ instead
+  # and the gate is inert. A gate that looks installed and enforces nothing is worse than no
+  # gate. (This is the same shape as the 2026-07-11 trio: config.yml existed but was
+  # gitignored; the PATH export existed but only for interactive shells.)
+  if [ -d "$REPO/.githooks" ]; then
+    if [ "$(git -C "$REPO" config core.hooksPath)" = ".githooks" ]; then
+      ok "pre-commit gate wired (doccheck)"
+    else
+      err "core.hooksPath not set — the pre-commit doccheck gate is INERT"
+      fail=1
+    fi
+  fi
+
   # 4. Scaffold source is valid JSON (a broken copy breaks every new project).
   if python3 -c "import json; json.load(open('$TEMPLATES/settings.json'))" 2>/dev/null; then
     ok "scaffold settings.json valid"
@@ -146,6 +172,7 @@ main() {
   install_script_fallback
   install_scaffold_source
   write_marker
+  install_git_hooks
   verify
   echo ""
   say "Done. Tessera is now self-hosting — no maggy repo required."

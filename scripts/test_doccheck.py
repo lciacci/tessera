@@ -14,6 +14,7 @@ that no test covers, that is a finding about the checker, not just the doc.
 """
 import importlib
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -132,3 +133,28 @@ def test_real_repo_is_green():
     importlib.reload(doccheck)
     assert doccheck.ROOT == Path(__file__).resolve().parent.parent
     assert _violations(doccheck.run()) == [], "tessera's own docs make a false claim"
+
+
+# ─── The gate must not go INERT. Commit 8589280 was pushed with doccheck red because nothing
+# was listening — the checker worked and enforced nothing. These two tests guard the wiring,
+# not the logic: an unwired gate looks exactly like a passing one, which is the worse failure.
+REPO = Path(__file__).resolve().parent.parent
+
+
+def test_precommit_hook_is_executable():
+    hook = REPO / ".githooks" / "pre-commit"
+    assert hook.exists(), "the pre-commit gate is missing"
+    assert hook.stat().st_mode & 0o111, "pre-commit hook is not executable — git will skip it"
+
+
+def test_git_is_actually_pointed_at_the_tracked_hooks():
+    """THE ONE THAT MATTERS. `.githooks/pre-commit` being present proves nothing: git only
+    runs it if core.hooksPath says so, and that is per-clone config, not tracked. Without it
+    git runs .git/hooks/ (empty) and the gate is silently inert — present in the repo,
+    enforcing nothing. Same shape as config.yml existing but gitignored, and the PATH export
+    existing but interactive-only. install.sh sets and verifies this; so does this test."""
+    configured = subprocess.run(["git", "config", "core.hooksPath"], cwd=REPO,
+                                capture_output=True, text=True).stdout.strip()
+    assert configured == ".githooks", (
+        f"core.hooksPath is {configured!r}, not '.githooks' — the pre-commit doccheck gate "
+        f"is INERT. Run ./install.sh, or: git config core.hooksPath .githooks")

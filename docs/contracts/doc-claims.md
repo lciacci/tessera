@@ -65,6 +65,41 @@ exemption sets, and every entry states its reason:
   neither exists; a reader (or a future Claude) goes looking for a file that was never
   written. Either build them or reword to the conditional.
 
+## Where it is enforced — two channels, because one was not enough
+
+| Channel | When | Effect |
+|---|---|---|
+| **`.githooks/pre-commit`** | every `git commit`, by human or agent | **blocks the commit** |
+| **`tessera-watch` P8** | session start | surfaces existing red |
+
+The pre-commit gate exists because P8 alone was not enough. On 2026-07-11, commit `8589280`
+was pushed **with doccheck red**: the verify command was chained with `&&`, doccheck's exit 1
+short-circuited it, and the `git commit` on the next line ran anyway. The checker worked
+perfectly and **nothing was listening.** Red could be pushed and discovered a session later —
+by which point it is in the history.
+
+> **Green is only meaningful if failing it actually stops something.**
+
+Two design points, both learned the hard way the same day:
+
+- **The hook lives in `.githooks/`, not `.git/hooks/`.** `.git/hooks/` is **not tracked** — a
+  hook installed there exists on one disk and nowhere else, so a fresh clone silently gets no
+  gate. `install.sh` points git at the tracked directory (`core.hooksPath`) **and `verify()`
+  asserts it stayed pointed**, because a gate that is present but unwired is the worst state
+  of all: it looks like coverage and enforces nothing. `test_git_is_actually_pointed_at_the_tracked_hooks`
+  guards the same thing from the test suite.
+- **It fails open on a crash, closed on a violation.** A checker that raises must not wedge
+  every commit in the repo — but it prints loudly, because a silent checker is indistinguishable
+  from a passing one.
+
+Bypass with `git commit --no-verify`. It is a gate, not a jail — but the bypass is now a
+decision you make on purpose, which is the entire point of a suggestion-gate (principle #12).
+
+**Known limit:** doccheck reads the **working tree**, not the index. On a partial commit
+(staged subset + dirty tree) it judges content that is not exactly what you are committing.
+Accepted deliberately — nearly every commit here is `git add -A`, and fixing it properly needs
+a temp checkout of the index. Revisit if a partial commit ever slips something through.
+
 ## The standing rule
 
 **Every doc-drift bug a human finds becomes an assertion in `doccheck.py` and a regression
