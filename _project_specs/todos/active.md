@@ -48,17 +48,41 @@ Tier 3, with an honest note that there is *no evidence it is worth building* (12
 - Wired into tessera + conclave + `templates/` + `bin/tessera-new-project`, each **verified by
   invoking it**, not by checking that files copied.
 
-### Two things live-fire found that reasoning did not
+### Three things live-fire found that reasoning did not
+
+Every one came from *running* the guard. None from reading the design.
 
 1. **A live hole in the flagship downstream.** `conclave/scripts/sweep-gpu-capacity.sh:23` runs
    `terraform apply -auto-approve` — it boots g6e GPUs, it's the AZ-sweep from the gate log, and
    the guard saw only the wrapper's *name*. **A classifier that reads the command but not what
    the command runs is checking the wrong text.** Now reads local scripts one level down.
 2. **The guard blocked its own wiring commit — and I misread the result.** The install command
-   quoted `terraform apply` in a test string, so the guard blocked the *whole* Bash call and
+   quoted a boot command in a test string, so the guard blocked the *whole* Bash call and
    **none of the wiring ran**. The probe that followed reported `allowed` for a GPU boot,
    because the wrapper fails open when the guard is absent. *It looked like a working guard
    saying yes. It was a missing guard saying nothing.* Caught only by checking disk.
+3. **The guard blocked `cp guard.py test_guard.py`** — it followed the `.py` token, opened the
+   *test file*, and found a boot command quoted in a fixture. **Naming a script is not invoking
+   it.** Scripts are now followed only in *command position*. `git add`, `cat`, `vim`, `cp` on a
+   script are no longer boots.
+
+### The false-positive posture changed — v1's noise was buying less than it looked like
+
+v1 classified raw text, so a *mention* read as an *invocation*. It produced **four false
+positives against its own author in one session** (a test heredoc, the conclave install command,
+the commit message describing the guard, the gate-log entry describing the false positive).
+
+The defence of that noise was "stripping quotes opens `bash -c` as a bypass." **Checked rather
+than trusted: the no-evasion property was already only partly true** — `echo "…" | bash` splits
+to a bare, neutral `bash` segment either way. So quoted text and heredoc bodies are now data,
+*unless the command is wrapper-led* (`bash -c`, `python3 -c`, `eval`, heredoc→shell), where they
+are code. **Wrapper-ness is global, never per-segment** — `python3 -c "a; b"` splits on the `;`
+inside its own quotes; judging that fragment alone reopens the bypass. That mistake was made and
+caught by tests before shipping.
+
+**Residual, deliberate:** `echo "…" | bash`, cloud-SDK calls, and script-calls-script are not
+caught. This guard stops an agent booting a GPU *by mistake or without authorization*; it is not
+built to defeat one actively evading it, which has easier routes. Layer 3 bounds those.
 
 ### A finding about the checker itself
 
