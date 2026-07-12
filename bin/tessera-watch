@@ -16,6 +16,12 @@ that also feeds the kill and graduate decisions. See _project_specs/todos/active
     tessera-watch --json     # machine output
     tessera-watch --log      # append the run to the fire-log (the SessionStart hook passes this)
 """
+
+# Runs on ANY python3 — including macOS's /usr/bin/python3 (3.9), which a PATH can hand
+# you at any time. `#!/usr/bin/env python3` resolves a NAME, and the name's VERSION drifts
+# with it. PEP-604 annotations (`str | None`) raise TypeError at definition time on 3.9.
+# `from __future__ import annotations` makes them lazy strings. Do not remove.
+from __future__ import annotations
 import argparse
 import json
 import shutil

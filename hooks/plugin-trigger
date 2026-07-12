@@ -8,6 +8,19 @@ Usage:
   plugin-trigger on_review_passed '{"verdict":"APPROVED","plan":"..."}'
 """
 
+# ── Resolve the interpreter by PATH, not by the shebang's NAME. (F-001) ───────────────────
+# `#!/usr/bin/env python3` resolves a NAME. This module needs `yaml`, which lives only in the
+# toolchain venv — so under whatever `python3` currently means, the import fails, and (in
+# plugin-trigger's case) an `except Exception: pass` swallowed it and silently discovered ZERO
+# plugins. A silent success on the wrong interpreter is the F-001 signature.
+# Re-exec on the venv interpreter, once, before importing anything venv-only.
+import os as _os, sys as _sys
+from pathlib import Path as _Path
+_venv = _Path(__file__).resolve().parent.parent / ".venv" / "bin" / "python"
+if _venv.exists() and _Path(_sys.executable).resolve() != _venv.resolve():
+    _os.execv(str(_venv), [str(_venv), *_sys.argv])
+# ──────────────────────────────────────────────────────────────────────────────────────────
+
 import json
 import os
 import sys

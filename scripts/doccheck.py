@@ -26,6 +26,7 @@ it is how we learn the assertion set has rotted into theater.
     python3 scripts/doccheck.py --json    # machine output
 """
 import argparse
+import ast
 import json
 import re
 import subprocess
@@ -297,12 +298,25 @@ BARE_PYTHON = re.compile(r"(?<![\w./-])python3(?![\w.])")
 # Every shell file that could execute the toolchain. NOT just `.claude/scripts/*.sh` — that
 # glob was the first version's scope, and it was too narrow in three separate ways at once:
 # it missed `hooks/` (extensionless files), `templates/` (the install payload), and `bin/`.
-SHELL_SCOPE = (".claude/scripts/*", "hooks/*", "templates/*.sh", "scripts/*.sh", "bin/*.sh")
+# Every executable that could reach the toolchain. Each entry here was a HOLE an adversarial
+# verifier walked through: `bin/*.sh` matched nothing (every file in bin/ is extensionless),
+# `.githooks/` was unscoped (its pre-commit runs bare python3), repo-root `*.sh` was unscoped
+# (install.sh runs bare python3), and `templates/*.sh` missed templates/tessera/ subdirs.
+SHELL_SCOPE = (
+    ".claude/scripts/*", "hooks/*", "bin/*", ".githooks/*",
+    "templates/**/*", "scripts/*.sh", "*.sh",
+)
 
 # An interpreter named, not pathed. Matches `python`, `python3`, `python3.13` — as a command,
-# or ASSIGNED TO A VARIABLE (`MNEMOS_PY="python3"`, which is then executed as "$MNEMOS_PY").
-# Excluded by the lookbehind: `.venv/bin/python`, `/usr/bin/python3` — those are PATHS, the fix.
-BARE_INTERP = re.compile(r"(?<![\w./-])python(?:3(?:\.\d+)?)?(?![\w.-])")
+# ASSIGNED TO A VARIABLE (`MNEMOS_PY="python3"`), or **in a shebang**.
+#
+# The lookbehind excludes `/` and word chars, so `.venv/bin/python` and `/usr/bin/python3` are
+# PATHS and stay green — that is the fix, and the check must not fire on it.
+#
+# It used to exclude `-` as well, and that was a hole: `${PY:-python3}` evaded it entirely.
+# `-` is gone from the lookbehind; it stays in the LOOKAHEAD so `python3-config` (a different
+# binary) still doesn't match.
+BARE_INTERP = re.compile(r"(?<![\w./])python(?:3(?:\.\d+)?)?(?![\w.-])")
 
 # A venv-only module being imported, anywhere in the file — inline, in a heredoc, in a `-c`
 # body spanning fifteen lines, it does not matter. If the file names the module, it needs it.
@@ -310,7 +324,13 @@ BARE_INTERP = re.compile(r"(?<![\w./-])python(?:3(?:\.\d+)?)?(?![\w.-])")
 # import, and requiring whitespace there missed it. Caught by a test, not by inspection.
 VENV_IMPORT = re.compile(
     r"""(?:^|[\s;("'])(?:import|from)\s+(mnemos|icpg|polyphony|skill_lint|pytest|yaml|requests)\b"""
-    r"|-m\s+(mnemos|icpg|polyphony|skill_lint|pytest)\b",
+    r"|-m\s+(mnemos|icpg|polyphony|skill_lint|pytest)\b"
+    # Dynamic imports evade a literal `import` match. `importlib.import_module("mnemos")` and
+    # `__import__("icpg")` are still imports; the verifier used exactly this to walk past v2.
+    # The `\\?` is not decoration: inside a shell `-c "…"` the inner quotes are ESCAPED, so the
+    # file literally contains `import_module(\"mnemos\")`. A pattern expecting a bare quote
+    # walks straight past it — which it did, on the first probe.
+    r"""|(?:import_module|__import__)\(\s*\\?["'](mnemos|icpg|polyphony|skill_lint|pytest|yaml)""",
     re.MULTILINE,
 )
 
@@ -322,22 +342,83 @@ PY_TARGET = re.compile(r"[\w${}/.-]*?([\w-]+\.py)\b")
 
 
 def _strip_sh_comments(text: str) -> str:
-    """Drop whole-line comments. A `python3` inside a comment explaining why we removed it is
-    a MENTION, not an invocation — the same distinction the spend guard had to learn."""
-    return "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("#"))
+    """Drop whole-line comments — BUT KEEP THE SHEBANG.
+
+    A `python3` inside a comment explaining why we removed it is a MENTION, not an invocation
+    (the same distinction the spend guard had to learn). But `#!/usr/bin/env python3` is not a
+    comment in any sense that matters: **it IS the interpreter resolution.** Stripping every
+    line starting with `#` deleted the shebang, so the detector was structurally blind to the
+    single most common way a name gets resolved — and `hooks/plugin-trigger` was sitting there
+    with `#!/usr/bin/env python3` and `import yaml` wrapped in `except Exception: pass`,
+    silently discovering zero plugins under an interpreter with no yaml.
+
+    I was stripping the exact thing I was hunting.
+    """
+    lines = text.splitlines()
+    keep = [ln for ln in lines[1:] if not ln.lstrip().startswith("#")]
+    shebang = lines[:1] if lines and lines[0].startswith("#!") else []
+    return "\n".join(shebang + keep)
+
+
+REEXEC = re.compile(r"execv\s*\(\s*str\(\s*_?venv", re.IGNORECASE)
+
+
+def _reexecs_on_venv(raw: str) -> bool:
+    """Does this module hand itself off to the venv interpreter before importing venv-only code?
+
+    A shebang cannot hold a relative path, so `#!/usr/bin/env python3` is the only portable
+    form — which means it always names an interpreter. The fix for a python script is to
+    RE-EXEC on the venv, once, before the venv-only import runs. This recognises that fix; a
+    checker that cannot tell a fix from the bug it demands is a checker that gets ignored.
+    """
+    return bool(REEXEC.search(raw)) and ".venv" in raw
+
+
+def _is_python(path: Path, raw: str) -> bool:
+    first = raw.splitlines()[0] if raw else ""
+    return path.suffix == ".py" or ("python" in first and first.startswith("#!"))
+
+
+def _python_venv_imports(raw: str) -> list[str]:
+    """Venv-only modules this python file REALLY imports — AST, not text.
+
+    The difference is the whole point. `subprocess.run([interp, "-c", "import mnemos"])` contains
+    the string "import mnemos" and imports nothing. Grep cannot tell those apart; the parser can.
+    """
+    venv = {"mnemos", "icpg", "polyphony", "skill_lint", "pytest", "yaml", "requests"}
+    try:
+        tree = ast.parse(raw)
+    except SyntaxError:
+        return []
+    found = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            found |= {a.name.split(".")[0] for a in node.names}
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            found.add(node.module.split(".")[0])
+    return sorted(found & venv)
 
 
 def _referenced_py_sources(text: str) -> str:
-    """The source of every .py file this shell text invokes. The import may live THERE."""
+    """The REAL imports of every .py this shell invokes — parsed, not grepped.
+
+    Grepping the followed source was its own false-positive engine: `.githooks/pre-commit` runs
+    `python3 scripts/doccheck.py`, and doccheck's *text* is full of the words "mnemos", "icpg"
+    and "pytest" (they are in its own pattern lists and error messages). Grep called that an
+    import. The AST does not: doccheck imports argparse, ast, json, re, subprocess, sys.
+
+    Returns synthetic `import X` lines so the caller's VENV_IMPORT match still works.
+    """
     out = []
     for name in set(PY_TARGET.findall(text)):
         for candidate in ROOT.rglob(name):
             if ".venv" in candidate.parts:
                 continue
             try:
-                out.append(candidate.read_text(errors="replace"))
+                mods = _python_venv_imports(candidate.read_text(errors="replace"))
             except OSError:
-                pass
+                mods = []
+            out += [f"import {m}" for m in mods]
             break
     return "\n".join(out)
 
@@ -386,14 +467,37 @@ def check_no_bare_python3_with_toolchain_import() -> list[str]:
     so they stay green — which is exactly the line this check draws.
     """
     bad = []
+    seen = set()
     for pattern in SHELL_SCOPE:
         for script in sorted(ROOT.glob(pattern)):
-            if not script.is_file() or script.name.endswith((".py", ".json", ".md")):
+            if not script.is_file() or script.suffix in (".json", ".md", ".yml", ".yaml", ".txt"):
                 continue
+            if script in seen:
+                continue
+            seen.add(script)
             try:
-                text = _strip_sh_comments(script.read_text(errors="replace"))
+                raw = script.read_text(errors="replace")
             except OSError:
                 continue
+
+            # A PYTHON file gets parsed, not grepped. Its interpreter is the shebang, and its
+            # imports are AST nodes — not every string that happens to contain the word
+            # "import". `bin/tessera-watch` runs `subprocess.run([interp, "-c", "import mnemos"])`
+            # as P9's PROBE: that is data, not an import, and a text rule flags it as a landmine.
+            # A checker that cries wolf gets ignored, and an ignored checker is worse than none.
+            if _is_python(script, raw):
+                mods = _python_venv_imports(raw)
+                if mods and _reexecs_on_venv(raw):
+                    continue  # it re-execs onto the venv before importing — that IS the fix
+                if mods and BARE_INTERP.search(raw.splitlines()[0] if raw else ""):
+                    bad.append(
+                        f"{_rel(script)}:1: shebang NAMES an interpreter and the module really "
+                        f"imports venv-only {', '.join(mods)}. A `#!` line IS the resolution — "
+                        f"whatever owns the name runs this (F-001)."
+                    )
+                continue
+
+            text = _strip_sh_comments(raw)
             if not BARE_INTERP.search(text):
                 continue
             # The "\n" is load-bearing: without it the shell text and the followed .py source
@@ -507,6 +611,62 @@ def _bare_python_target(line: str, script: Path) -> str:
     return ""
 
 
+# The safety machinery, which hooks run on BARE `python3` on purpose so it survives a broken
+# venv. That only holds if it survives whatever `python3` turns out to BE.
+SAFETY_SCRIPTS = (
+    "scripts/spend/guard.py", "scripts/spend/backstop.py", "scripts/spend/authorize.py",
+    "scripts/spend/event.py", "scripts/gate/scan.py", "scripts/gate/emit.py",
+    "scripts/doccheck.py",
+)
+OLDEST_PYTHON = "/usr/bin/python3"  # macOS system python — the floor a PATH can drop you to
+
+
+def check_safety_scripts_run_on_the_system_python() -> list[str]:
+    """The safety machinery must run on the OLDEST python a drifting PATH can hand it.
+
+    **THE WORST BUG OF 2026-07-12, and my own reasoning caused it.** I carved out an exception:
+    the gate and spend hooks may invoke bare `python3`, because they are *stdlib-only* and must
+    keep working when the venv is broken. That is half right, and the wrong half is lethal:
+
+        **stdlib-only is NOT version-independent.**
+
+    When the interpreter NAME drifts, the VERSION drifts with it. On a `/usr/bin`-first PATH,
+    `python3` is macOS 3.9. PEP-604 annotations (`str | None`) raise TypeError at definition
+    time. `guard.py` exits 1. And the hook wrapper passes that straight through as "not 2" —
+    which Claude Code reads as **ALLOW**.
+
+        healthy interpreter → unauthorized GPU boot → exit 2 → BLOCKED
+        python3 == 3.9      → unauthorized GPU boot → exit 1 → *** THE GPU BOOTS ***
+
+    The spend guard failed open. Found by an adversarial verifier, not by me, and not by any
+    test — the suite runs on the venv's 3.13, where the bug is invisible. **A test that only
+    ever runs on the good interpreter cannot see an interpreter bug.**
+
+    So this check EXECUTES each safety script on the system python. Not `ast.parse` — that
+    passes, because PEP-604 is syntactically valid and only explodes when evaluated. Compiling
+    is not running, and the distinction is the entire bug.
+    """
+    if not Path(OLDEST_PYTHON).exists():
+        return []  # no system python to test against — nothing to assert
+    bad = []
+    for name in SAFETY_SCRIPTS:
+        script = ROOT / name
+        if not script.exists():
+            continue
+        probe = subprocess.run(
+            [OLDEST_PYTHON, "-c", f"import sys; sys.path.insert(0, {str(script.parent)!r}); "
+                                  f"__import__({script.stem!r})"],
+            capture_output=True, text=True, cwd=ROOT, env={"PATH": "/usr/bin:/bin"},
+        )
+        if probe.returncode != 0:
+            err = (probe.stderr or "").strip().splitlines()
+            bad.append(f"{name} does NOT run on {OLDEST_PYTHON} ({err[-1] if err else '?'}) — "
+                       f"a hook invokes it via bare `python3`, and a /usr/bin-first PATH makes "
+                       f"that 3.9. The spend guard would exit non-2, which Claude Code reads as "
+                       f"ALLOW. Add `from __future__ import annotations`.")
+    return bad
+
+
 def check_spend_backstop_is_wired() -> list[str]:
     """The escalation contract claims a Stop hook catches undispositioned spend denials.
 
@@ -596,6 +756,7 @@ CHECKS = {
     "spend-backstop-is-wired": check_spend_backstop_is_wired,
     "runtime-state-is-not-tracked": check_runtime_state_is_not_tracked,
     "no-bare-python3-with-toolchain-import": check_no_bare_python3_with_toolchain_import,
+    "safety-scripts-run-on-system-python": check_safety_scripts_run_on_the_system_python,
     "test-command-is-not-a-bare-interpreter": check_test_command_is_not_a_bare_interpreter,
 }
 

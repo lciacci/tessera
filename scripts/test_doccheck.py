@@ -571,3 +571,88 @@ def test_file_following_works_without_a_trailing_newline(fake_repo):
     (fake_repo / "scripts" / "ingest.py").write_text("import mnemos\nmnemos.go()\n")
     _sh(fake_repo, "bad.sh", '#!/bin/bash\npython3 scripts/ingest.py')  # no trailing newline
     assert doccheck.check_no_bare_python3_with_toolchain_import() != []
+
+
+# ── Detector v3: the SEVEN holes an adversarial verifier walked through ───────
+# v1 caught 1 of 5 landmines. v2 caught 5 of 7. This is v3. Each test below is a landmine the
+# verifier planted in a clean session while doccheck reported "0 false claims".
+
+def test_v2_HOLE_shebang_was_stripped_as_a_comment(fake_repo):
+    """THE STRUCTURAL ONE. `_strip_sh_comments` dropped every line starting with `#` — which
+    deleted the SHEBANG. A `#!` line is not a comment in any sense that matters: it IS the
+    interpreter resolution. The detector was stripping the exact thing it was hunting.
+    Live instance: hooks/plugin-trigger, `#!/usr/bin/env python3` + `import yaml` under an
+    `except Exception: pass` — silently discovering zero plugins."""
+    (fake_repo / "hooks").mkdir(exist_ok=True)
+    (fake_repo / "hooks" / "p").write_text("#!/usr/bin/env python3\nimport yaml\nprint(yaml)\n")
+    assert doccheck.check_no_bare_python3_with_toolchain_import() != []
+
+
+def test_v2_HOLE_bin_glob_matched_nothing(fake_repo):
+    """The glob was `bin/*.sh`. Every file in bin/ is EXTENSIONLESS, so it matched zero files
+    — while bin/tessera-watch runs at SessionStart and bin/tessera-authorize gates spend."""
+    (fake_repo / "bin").mkdir(exist_ok=True)
+    (fake_repo / "bin" / "tool").write_text("#!/bin/bash\nPYTHONPATH=scripts python3 -m mnemos x\n")
+    assert doccheck.check_no_bare_python3_with_toolchain_import() != []
+
+
+def test_v2_HOLE_githooks_and_repo_root_unscoped(fake_repo):
+    (fake_repo / ".githooks").mkdir(exist_ok=True)
+    (fake_repo / ".githooks" / "pre-commit").write_text("#!/bin/bash\npython3 -m mnemos x\n")
+    assert doccheck.check_no_bare_python3_with_toolchain_import() != []
+
+
+def test_v2_HOLE_dollar_brace_default_evasion(fake_repo):
+    """`${PY:-python3}` — the lookbehind excluded a preceding `-`, so this walked straight past."""
+    _sh(fake_repo, "h.sh", '#!/bin/bash\n"${PY:-python3}" -c "import mnemos"\n')
+    assert doccheck.check_no_bare_python3_with_toolchain_import() != []
+
+
+def test_v2_HOLE_dynamic_import_evasion(fake_repo):
+    """`importlib.import_module("mnemos")` is still an import. And inside a shell `-c "…"` the
+    inner quotes are ESCAPED — the pattern must tolerate `import_module(\\"mnemos\\")`."""
+    _sh(fake_repo, "a.sh", '#!/bin/bash\npython3 -c "import importlib; importlib.import_module(\\"mnemos\\")"\n')
+    assert doccheck.check_no_bare_python3_with_toolchain_import() != []
+
+
+def test_python_files_are_PARSED_not_grepped(fake_repo):
+    """PRECISION, and it matters as much as recall. bin/tessera-watch contains the STRING
+    `subprocess.run([interp, "-c", "import mnemos"])` — that is P9's probe, data, not an import.
+    A text rule called it a landmine. The AST does not. A checker that cries wolf gets ignored,
+    and an ignored checker is worse than none because it looks like coverage."""
+    (fake_repo / "bin").mkdir(exist_ok=True)
+    (fake_repo / "bin" / "watch").write_text(
+        '#!/usr/bin/env python3\nimport subprocess\nsubprocess.run(["p", "-c", "import mnemos"])\n')
+    assert doccheck.check_no_bare_python3_with_toolchain_import() == []
+
+
+def test_reexec_on_the_venv_is_recognised_as_THE_FIX(fake_repo):
+    """A shebang cannot hold a relative path, so a python script's fix is to RE-EXEC on the venv
+    before importing venv-only code. The checker must not fire on the very fix it demands."""
+    (fake_repo / "bin").mkdir(exist_ok=True)
+    (fake_repo / "bin" / "t").write_text(
+        '#!/usr/bin/env python3\n'
+        'import os as _os, sys as _sys\nfrom pathlib import Path as _Path\n'
+        '_venv = _Path(__file__).resolve().parent.parent / ".venv" / "bin" / "python"\n'
+        'if _venv.exists() and _Path(_sys.executable).resolve() != _venv.resolve():\n'
+        '    _os.execv(str(_venv), [str(_venv), *_sys.argv])\n'
+        'import yaml\n')
+    assert doccheck.check_no_bare_python3_with_toolchain_import() == []
+
+
+# ── safety-scripts-run-on-system-python ──────────────────────────────────────
+
+def test_safety_scripts_run_on_the_system_python():
+    """THE WORST BUG OF 2026-07-12. I carved out an exception — the gate/spend hooks may use bare
+    `python3` because they are stdlib-only and must survive a broken venv. Half right, and the
+    wrong half was lethal: STDLIB-ONLY IS NOT VERSION-INDEPENDENT. On a /usr/bin-first PATH,
+    `python3` is macOS 3.9; PEP-604 (`str | None`) raises TypeError at definition time; guard.py
+    exits 1; and the hook wrapper passes that through as "not 2" — which Claude Code reads as
+    ALLOW. An unauthorized GPU boot proceeded.
+
+    The suite never saw it: it runs on the venv's 3.13, where the bug is invisible. A test that
+    only ever runs on the good interpreter cannot see an interpreter bug. So this EXECUTES them
+    on the system python — `ast.parse` would pass, because PEP-604 is syntactically valid and
+    only explodes when evaluated. Compiling is not running."""
+    importlib.reload(doccheck)
+    assert doccheck.check_safety_scripts_run_on_the_system_python() == []
