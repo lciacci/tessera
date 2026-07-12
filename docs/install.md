@@ -11,14 +11,8 @@ You need:
 - Node.js 20.19+ or 22.12+ (for any downstream Tessera projects that scaffold from Vite)
 - Git
 - [Claude Code](https://docs.claude.com/claude-code) CLI installed and authenticated
-- A reference clone of [maggy-main](https://github.com/alinaqi/maggy) at a known path. The original install used `/Users/lciacci/Claude/maggy-main`. Mnemos source lives inside it.
 
-If you do not have maggy-main yet:
-
-```bash
-cd ~/Claude  # or wherever you keep reference clones
-git clone https://github.com/alinaqi/maggy.git maggy-main
-```
+You do **not** need a clone of [Maggy](https://github.com/alinaqi/maggy), the project Tessera was forked from. Earlier revisions of this guide told you to clone `maggy-main` because "Mnemos source lives inside it" — that was never true of *this* repo: Tessera vendors its own `scripts/mnemos/`, and that is what a working install actually imports. ADR-0003 decided Tessera owns its distribution; this guide now matches. See [NOTICE](../NOTICE) for provenance.
 
 ## Step 1 — Clone Tessera
 
@@ -30,16 +24,18 @@ cd tessera
 
 ## Step 2 — Install Mnemos
 
-The Mnemos Python package backs Tessera hook scripts. It lives in `maggy-main/scripts/mnemos/` but ships with a flat-layout `pyproject.toml` that setuptools rejects on modern Python. The original install fixed this by copying source into a proper package layout in `/tmp`.
+The Mnemos Python package backs Tessera hook scripts. Tessera vendors its own copy at `scripts/mnemos/`, but that copy ships a flat-layout `pyproject.toml` that setuptools rejects on modern Python, so it cannot be `pip install`ed in place. Copy the source into a proper package layout in `/tmp` first. Run this from the root of the Tessera clone:
 
 ```bash
 mkdir -p /tmp/mnemos-install/mnemos
-cp /path/to/maggy-main/scripts/mnemos/*.py /tmp/mnemos-install/mnemos/
-cp /path/to/maggy-main/scripts/mnemos/pyproject.toml /tmp/mnemos-install/
+cp scripts/mnemos/*.py /tmp/mnemos-install/mnemos/
+cp scripts/mnemos/pyproject.toml /tmp/mnemos-install/
 /opt/homebrew/bin/pip3.13 install --break-system-packages /tmp/mnemos-install
 ```
 
-Replace `/path/to/maggy-main` with the actual path. **On Apple Silicon keep `/opt/homebrew/bin/pip3.13` explicit — do not substitute "whatever pip is on PATH". A stale Intel `/usr/local` pip produces a `mnemos` shebang that later breaks (see Prerequisites).** On Linux or Intel Macs, use your Python 3.10+ pip.
+**On Apple Silicon keep `/opt/homebrew/bin/pip3.13` explicit — do not substitute "whatever pip is on PATH". A stale Intel `/usr/local` pip produces a `mnemos` shebang that later breaks (see Prerequisites).** On Linux or Intel Macs, use your Python 3.10+ pip.
+
+> The `/tmp` restructuring is a workaround for the flat layout, not a design. Fixing the layout (and moving the toolchain into a venv) is tracked in the backlog.
 
 Verify:
 
@@ -144,7 +140,7 @@ gh auth login  # if not already authenticated
 
 - **`pip: command not found`** — your default `pip` is too old or missing. Use `/opt/homebrew/bin/pip3.13` (or whatever your Homebrew Python ships).
 - **`no such option: --break-system-packages`** — same cause as above. Modern pip needs this flag on macOS due to PEP 668; older pips do not recognize it.
-- **`Multiple top-level modules discovered in a flat-layout`** during Mnemos install — you skipped the `/tmp/mnemos-install/mnemos/` restructuring. The flat layout in `maggy-main/scripts/mnemos/` needs the modules nested one level deeper for setuptools to accept it.
+- **`Multiple top-level modules discovered in a flat-layout`** during Mnemos install — you skipped the `/tmp/mnemos-install/mnemos/` restructuring. The flat layout in `scripts/mnemos/` needs the modules nested one level deeper for setuptools to accept it.
 - **`/status` shows `cwd:` as a parent directory** — you have a `claude` shell alias that is `cd`ing somewhere before launching. Remove it (see Step 5).
 - **Hooks show in `/hooks` but `.mnemos/` is never created** — Mnemos CLI is not on PATH. Run `which mnemos` to check, reinstall if missing.
 - **`tessera-escalate: command not found` — but only for Claude, never for you.** The PATH export is in `~/.zshrc`, which zsh sources **only for interactive shells**. Claude Code's Bash tool runs a *non-interactive* shell, so it never reads it: the tools work perfectly at your terminal and do not exist for the agent — the exact reader `CLAUDE.md` writes those instructions for. Put the export in **`~/.zshenv`** (sourced for *every* zsh invocation) instead:
