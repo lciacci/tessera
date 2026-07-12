@@ -143,7 +143,7 @@ Candidate checks, each corresponding to a **documented past failure**, not an
 anticipated one (principle #3):
 
 1. three-layer hook content diff (`.claude/scripts/` ↔ `templates/` ↔ `~/.claude/templates/`) — bit us 2026-07-09
-2. `compaction_fired` count ≥ 3 in `.mnemos/compaction-log.jsonl` — the re-armed Mnemos trial
+2. **non-manual** `compaction_fired` count ≥ 3 in `.mnemos/compaction-log.jsonl` — the re-armed Mnemos trial. `trigger: manual` entries are *tests* of the recovery layer, not evidence about it, and must never count (see `tessera-watch` P3)
 3. skills diverging from the global install
 4. a `hook_distro: global` project whose hooks silently no-op on this machine
 5. JNI symbol drift after a package rename — Howler F-004, cost a tester crash

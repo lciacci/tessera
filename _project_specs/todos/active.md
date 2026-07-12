@@ -482,6 +482,9 @@ with the violation half.
     - **P2** override→`tess` CLI: `ls bin/tessera-* | wc -l` ≥2 → **FIRES NOW (4)**.
     - **P3** Mnemos trial: `grep -c compaction_fired .mnemos/compaction-log.jsonl`
       ≥3 → no (0, clean/untested). Same as the trial's re-arm trigger — folds in free.
+      *(Superseded 2026-07-11: this naive grep counts `trigger: manual` test compactions
+      as evidence. P3 now excludes them — see `bin/tessera-watch:p3_compaction`. Do not
+      copy this recipe.)*
     - **P4** F-003 project count: downstreams w/ frozen hooks ≥5 → no (3).
     - **P5** skill routing: `ls -d .claude/skills/*/ | wc -l` ≥60 → no (56).
     - Excluded: Tier-1-cluster entries (resolve with the decision), self-announcing
