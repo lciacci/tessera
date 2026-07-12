@@ -1,0 +1,44 @@
+# NOTICE — Tessera provenance
+
+Tessera is a **fork of [Maggy](https://github.com/alinaqi/maggy)** (MIT,
+Copyright (c) 2025 Ali Naqi), not an independent reimplementation. This file
+records the split honestly so that anyone reading the code knows which half
+they are looking at.
+
+## What came from Maggy
+
+The repository was seeded by importing Maggy wholesale (commit `ad19913`,
+"Import Maggy baseline (pre-prune)" — 345 files). As of this writing a large
+majority of those files are still byte-identical to that import:
+
+- `skills/` — the skill library (the single largest inherited component)
+- `commands/`, `hooks/`, `rules/`, `agents/` — the Claude Code surface
+- `cortex-mcp/`, and much of `scripts/` and `bin/`
+- Several documents under `docs/` and `_project_specs/` that describe **Maggy's**
+  architecture and roadmap, not Tessera's
+
+## What is original to Tessera
+
+The governing layer — the parts that make Tessera a framework rather than a
+copy — was written from scratch:
+
+- `docs/design-principles.md` — the compounding-principles design doc
+- `docs/adr/` — the Architecture Decision Records
+- `docs/observatory.md`, `docs/contracts/` — the watch list and the contracts
+- `scripts/gate/`, `scripts/doccheck.py`, `scripts/spend/`, `scripts/override/` and
+  `bin/tessera-escalate` — the gate, doc-honesty, spend-authorization, and escalation
+  machinery
+- `.tessera/` — the project-profile model
+- `install.sh` — Tessera's self-hosting installer (see ADR-0003)
+
+## Direction of dependency
+
+Per **ADR-0003**, the dependency is inverted: **Tessera stands alone, and Maggy
+(as the superset product) may embed Tessera — never the reverse.** Installing
+or using Tessera does not require cloning Maggy.
+
+## Thanks
+
+Maggy's skills/rules/hooks architecture, its TDD-via-Stop-hook loop, and its
+PreCompact recovery pattern are the foundation Tessera is built on. Credit for
+those ideas belongs to Ali Naqi and Maggy's contributors.
