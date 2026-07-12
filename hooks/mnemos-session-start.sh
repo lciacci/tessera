@@ -4,6 +4,22 @@
 # No set -euo pipefail: hook scripts must be defensive, not strict.
 
 # Set usage summary baseline (decisions before this session started)
+
+# ── Toolchain interpreter: a PATH, never a NAME. (F-001) ──────────────────────────────────
+# This hook used bare `python3`. With sys.path/PYTHONPATH pointed at scripts/, ANY interpreter
+# imports mnemos/icpg straight from source — so that did NOT fail, it SILENTLY SUCCEEDED on
+# whatever Homebrew currently owns the `python3` name. The original F-001 failed silently
+# (import error → no-op); this one *worked*, on an interpreter brew can re-point or delete.
+# A silent success is strictly harder to detect than a silent failure.
+# No toolchain → this hook goes QUIET. tessera-watch P9 makes that visible.
+TOOLCHAIN_PY=""
+if [ -x ".venv/bin/python" ]; then
+    TOOLCHAIN_PY=".venv/bin/python"
+elif command -v mnemos >/dev/null 2>&1; then
+    TOOLCHAIN_PY="$(sed -n '1s/^#!//p' "$(command -v mnemos)" 2>/dev/null | awk '{print $1}')"
+fi
+[ -n "$TOOLCHAIN_PY" ] && [ -x "$TOOLCHAIN_PY" ] || exit 0
+# ──────────────────────────────────────────────────────────────────────────────────────────
 LOG="$HOME/.claude/routing-log.jsonl"
 TODAY=$(date -u +%Y-%m-%d)
 if [ -f "$LOG" ]; then
@@ -34,7 +50,7 @@ fi
 
 # Get checkpoint from mnemos
 RESULT=$(echo "{\"cwd\":\"$CWD\"}" | \
-  python3 -m mnemos _hook session_start 2>/dev/null || echo "")
+  "$TOOLCHAIN_PY" -m mnemos _hook session_start 2>/dev/null || echo "")
 
 if [ -z "$RESULT" ]; then
   exit 0
@@ -43,7 +59,7 @@ fi
 # For clear/compact: append auto-announce instruction via Python
 # For resume/startup: pass through unchanged
 if [ "$SESSION_TYPE" = "clear" ] || [ "$SESSION_TYPE" = "compact" ]; then
-  python3 -c "
+  "$TOOLCHAIN_PY" -c "
 import json, sys
 
 session_type = sys.argv[1]

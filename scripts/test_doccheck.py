@@ -341,7 +341,7 @@ def test_catches_f001_bare_python3_running_inline_toolchain_import(fake_repo):
     _hook(fake_repo, "bad.sh", '#!/bin/bash\npython3 -c "import mnemos; mnemos.checkpoint()"\n')
     bad = doccheck.check_no_bare_python3_with_toolchain_import()
     assert len(bad) == 1
-    assert "mnemos" in bad[0] and "silently no-op" in bad[0]
+    assert "mnemos" in bad[0]
 
 
 def test_catches_f001_bare_python3_running_a_toolchain_script(fake_repo):
@@ -490,3 +490,84 @@ def test_resolved_venv_interpreter_on_a_generated_script_is_FINE(fake_repo):
         'OUT=$("$TOOLCHAIN_PY" "$TMP")\n'
     ))
     assert doccheck.check_no_bare_python3_with_toolchain_import() == []
+
+
+# ── F-001 detector v2: the five landmines v1 let through ──────────────────────
+# v1 caught 1 of 5. An adversarial verifier in a clean session planted these and proved the
+# detector was a mirror, not an instrument: it went GREEN over three live, wired hooks
+# (pre-edit on every Edit/Write, post-tool on every tool call, post-compact-inject) — and I
+# used that green to certify my own fix. A detector you verify a fix with must be tested
+# against that fix's own failure mode.
+
+def _sh(repo: Path, name: str, body: str) -> None:
+    (repo / ".claude" / "scripts").mkdir(parents=True, exist_ok=True)
+    (repo / ".claude" / "scripts" / name).write_text(body)
+
+
+def test_v1_HOLE_multiline_dash_c_body(fake_repo):
+    """THE ONE THAT MATTERED. The hooks open `python3 -c "` and put the import four lines
+    down. v1 matched `-c` only when the closing quote was on the SAME line, so line 69 —
+    literally `python3 -c "` — parsed to an empty target and reported nothing."""
+    _sh(fake_repo, "h.sh", '#!/bin/bash\nX=$(python3 -c "\nimport sys\nfrom mnemos.fatigue import compute\n")\n')
+    assert doccheck.check_no_bare_python3_with_toolchain_import() != []
+
+
+def test_v1_HOLE_dotted_version_name(fake_repo):
+    """v1's regex was `python3(?![\\w.])` — so `python3.13` slipped through, the very name uv
+    shimmed into ~/.local/bin ahead of Homebrew."""
+    _sh(fake_repo, "h.sh", "#!/bin/bash\npython3.13 -m mnemos checkpoint\n")
+    assert doccheck.check_no_bare_python3_with_toolchain_import() != []
+
+
+def test_v1_HOLE_outside_the_glob(fake_repo):
+    """v1 globbed `.claude/scripts/*.sh` only — blind to hooks/, bin/, templates/, all of
+    which ship in the install payload."""
+    (fake_repo / "hooks").mkdir(exist_ok=True)
+    (fake_repo / "hooks" / "h").write_text("#!/bin/bash\npython3 -m icpg query\n")
+    assert doccheck.check_no_bare_python3_with_toolchain_import() != []
+
+
+def test_v1_HOLE_extensionless_file(fake_repo):
+    _sh(fake_repo, "h", "#!/bin/bash\npython3 -m mnemos checkpoint\n")
+    assert doccheck.check_no_bare_python3_with_toolchain_import() != []
+
+
+def test_v1_HOLE_interpreter_assigned_to_a_variable(fake_repo):
+    """`MNEMOS_PY="python3"` then `"$MNEMOS_PY" -c` — post-tool.sh's actual shape. No bare
+    `python3 ` token ever appears in command position."""
+    _sh(fake_repo, "h.sh", '#!/bin/bash\nMNEMOS_PY="python3"\n"$MNEMOS_PY" -c "from mnemos.auto_nodes import go"\n')
+    assert doccheck.check_no_bare_python3_with_toolchain_import() != []
+
+
+def test_stdlib_only_bare_python3_STAYS_LEGAL(fake_repo):
+    """LOAD-BEARING. tessera-gate-scan.sh, tessera-spend-guard.sh and tessera-spend-backstop.sh
+    run bare `python3` deliberately, so the SAFETY MACHINERY keeps working when the venv is
+    broken. A checker that forbade all bare python3 would break the very hooks that catch a
+    broken venv."""
+    _sh(fake_repo, "ok.sh", '#!/bin/bash\npython3 -c "import json,sys; print(json.dumps({}))"\npython3 "$SCAN"\n')
+    assert doccheck.check_no_bare_python3_with_toolchain_import() == []
+
+
+def test_path_resolved_interpreter_stays_legal(fake_repo):
+    """The fix must not trip the check that demanded it."""
+    _sh(fake_repo, "ok.sh", '#!/bin/bash\nTOOLCHAIN_PY=".venv/bin/python"\n"$TOOLCHAIN_PY" -c "from mnemos.store import S"\n')
+    assert doccheck.check_no_bare_python3_with_toolchain_import() == []
+
+
+def test_real_repo_has_no_bare_interpreter_landmines():
+    importlib.reload(doccheck)
+    assert doccheck.check_no_bare_python3_with_toolchain_import() == []
+
+
+def test_file_following_works_without_a_trailing_newline(fake_repo):
+    """The `\\n` join in check_no_bare_python3_with_toolchain_import is load-bearing. Without
+    it the shell text and the followed .py source concatenate into `...ingest.pyimport mnemos`
+    — the import is no longer at a line start and VENV_IMPORT misses it.
+
+    The original test for file-following PASSED anyway, because its fixture body ended in a
+    newline. A live probe against a real file caught it. Fixtures are not reality; this test
+    reproduces the reality."""
+    (fake_repo / "scripts").mkdir(exist_ok=True)
+    (fake_repo / "scripts" / "ingest.py").write_text("import mnemos\nmnemos.go()\n")
+    _sh(fake_repo, "bad.sh", '#!/bin/bash\npython3 scripts/ingest.py')  # no trailing newline
+    assert doccheck.check_no_bare_python3_with_toolchain_import() != []

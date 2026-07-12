@@ -27,11 +27,8 @@
       "Bash(head *)",
       "Bash(wc *)",
       "Bash(icpg *)",
-      "Bash(python -m icpg *)",
       "Bash(mnemos *)",
-      "Bash(python -m mnemos *)",
       "Bash(polyphony *)",
-      "Bash(python -m polyphony *)",
       "Bash(docker ps *)",
       "Bash(docker logs *)"
     ],

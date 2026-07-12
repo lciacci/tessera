@@ -294,39 +294,124 @@ VENV_ONLY = ("mnemos", "icpg", "polyphony", "skill_lint", "pytest", "yaml", "req
 BARE_PYTHON = re.compile(r"(?<![\w./-])python3(?![\w.])")
 
 
+# Every shell file that could execute the toolchain. NOT just `.claude/scripts/*.sh` — that
+# glob was the first version's scope, and it was too narrow in three separate ways at once:
+# it missed `hooks/` (extensionless files), `templates/` (the install payload), and `bin/`.
+SHELL_SCOPE = (".claude/scripts/*", "hooks/*", "templates/*.sh", "scripts/*.sh", "bin/*.sh")
+
+# An interpreter named, not pathed. Matches `python`, `python3`, `python3.13` — as a command,
+# or ASSIGNED TO A VARIABLE (`MNEMOS_PY="python3"`, which is then executed as "$MNEMOS_PY").
+# Excluded by the lookbehind: `.venv/bin/python`, `/usr/bin/python3` — those are PATHS, the fix.
+BARE_INTERP = re.compile(r"(?<![\w./-])python(?:3(?:\.\d+)?)?(?![\w.-])")
+
+# A venv-only module being imported, anywhere in the file — inline, in a heredoc, in a `-c`
+# body spanning fifteen lines, it does not matter. If the file names the module, it needs it.
+# The leading class includes QUOTES: `python3 -c "import mnemos"` puts a `"` right before the
+# import, and requiring whitespace there missed it. Caught by a test, not by inspection.
+VENV_IMPORT = re.compile(
+    r"""(?:^|[\s;("'])(?:import|from)\s+(mnemos|icpg|polyphony|skill_lint|pytest|yaml|requests)\b"""
+    r"|-m\s+(mnemos|icpg|polyphony|skill_lint|pytest)\b",
+    re.MULTILINE,
+)
+
+# A .py file the shell invokes. The imports that matter may live in the SCRIPT, not the hook:
+# `python3 scripts/ingest.py` names no module, but ingest.py may import mnemos. v1 followed
+# these; v2's rewrite dropped it and a test caught the regression immediately. Five holes
+# closed, one opened — which is exactly what the regression suite is for.
+PY_TARGET = re.compile(r"[\w${}/.-]*?([\w-]+\.py)\b")
+
+
+def _strip_sh_comments(text: str) -> str:
+    """Drop whole-line comments. A `python3` inside a comment explaining why we removed it is
+    a MENTION, not an invocation — the same distinction the spend guard had to learn."""
+    return "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("#"))
+
+
+def _referenced_py_sources(text: str) -> str:
+    """The source of every .py file this shell text invokes. The import may live THERE."""
+    out = []
+    for name in set(PY_TARGET.findall(text)):
+        for candidate in ROOT.rglob(name):
+            if ".venv" in candidate.parts:
+                continue
+            try:
+                out.append(candidate.read_text(errors="replace"))
+            except OSError:
+                pass
+            break
+    return "\n".join(out)
+
+
 def check_no_bare_python3_with_toolchain_import() -> list[str]:
     """THE F-001 DETECTOR. The venv fixes resolution; only this stops the next landmine.
 
     F-001: a hook invoked the toolchain through bare `python3`. Homebrew re-pointed that name
-    (3.13 → 3.14, because *ollama* wanted 3.14), the import silently failed, and every
-    checkpoint write no-op'd for weeks. It was invisible, and it confounded the entire Mnemos
-    kill/keep trial — "the graph is empty" read as "unused" when it meant "unreachable".
+    (3.13 → 3.14, because *ollama* wanted 3.14) and every checkpoint write no-op'd for weeks,
+    invisibly, confounding the entire Mnemos trial — "the graph is empty" read as *unused* when
+    it meant *unreachable*.
 
-    **A venv does not prevent anyone writing `python3` in a new script tomorrow.** The venv is
-    the mechanism; this is the guardrail. It is why `guard.py`, `backstop.py`, `emit.py`,
-    `scan.py` and this file are deliberately stdlib-only — that split has been the de facto
-    design for months and was never once enforced.
+    ── REWRITTEN 2026-07-12, TWICE, and the second time is the lesson. ──────────────────────
 
-    The rule: a hook/script may invoke bare `python3` ONLY if what it runs is stdlib-only.
-    Import a venv-only module, and you must be reached through a path, not a name.
+    v1 scanned `.claude/scripts/*.sh` LINE BY LINE, matching `python3 -c "…"` only when the
+    closing quote landed on the same line. The Mnemos hooks open a **multi-line** `-c`:
 
-    Proved live on 2026-07-12: `uv python install` shimmed `python3.13` into ~/.local/bin,
-    AHEAD of Homebrew — so `run-tests.sh`'s `python3.13` pin silently became a different
-    interpreter with no pytest. A NAME is a lookup through a mutable PATH that four package
-    managers write to. A path is a path.
+        FATIGUE_ACTION=$(python3 -c "
+        import sys; sys.path.insert(0, 'scripts')
+        from mnemos.fatigue import compute_fatigue        ← the import is FOUR LINES DOWN
+
+    Line 69 is just `python3 -c "`. No import on it. So v1 returned **zero hits across three
+    live, wired hooks** — pre-edit (every Edit/Write), post-tool (every tool call), and
+    post-compact-inject. It reported "12 checks, 0 false claims" over the exact bug it exists
+    to find, and **I used that green to certify my own fix.** An independent session found it.
+
+    *A detector you verify your fix with must be tested against the fix's own failure mode,
+    or it is a mirror, not an instrument.*
+
+    v1 was also blind to `python3.13` (its regex excluded a dotted version), to `hooks/` and
+    `bin/` and `templates/` (glob too narrow), and to `MNEMOS_PY="python3"` then `"$MNEMOS_PY"`.
+    It caught 1 of 5 landmines an adversarial verifier planted.
+
+    ── So v2 does not parse shell. It asks two questions PER FILE: ──────────────────────────
+
+        1. Does this file name an interpreter instead of pathing to one?
+        2. Does this file, ANYWHERE, import a venv-only module?
+
+    Both → landmine. Deliberately coarse. Shell is not parseable in a regex and pretending
+    otherwise is what produced v1. Over-flagging costs one `.venv/bin/python`; under-flagging
+    routes every checkpoint through an interpreter Homebrew can delete, silently, for weeks.
+
+    The stdlib carve-out survives and is load-bearing: `tessera-gate-scan.sh`,
+    `tessera-spend-guard.sh` and `tessera-spend-backstop.sh` run bare `python3` on purpose, so
+    the safety machinery keeps working *when the venv is broken*. They import nothing venv-only,
+    so they stay green — which is exactly the line this check draws.
     """
     bad = []
-    for script in sorted((ROOT / ".claude" / "scripts").glob("*.sh")):
-        text = script.read_text()
-        for i, line in enumerate(text.splitlines(), 1):
-            if line.lstrip().startswith("#") or not BARE_PYTHON.search(line):
+    for pattern in SHELL_SCOPE:
+        for script in sorted(ROOT.glob(pattern)):
+            if not script.is_file() or script.name.endswith((".py", ".json", ".md")):
                 continue
-            target = _bare_python_target(line, script)
-            hits = sorted({m for m in VENV_ONLY if re.search(rf"\b(import|from)\s+{m}\b", target)})
-            if hits:
-                bad.append(f"{_rel(script)}:{i}: invokes bare `python3` on code importing "
-                           f"{', '.join(hits)} — venv-only. It will silently no-op when the "
-                           f"`python3` name re-points (F-001). Use the venv by PATH.")
+            try:
+                text = _strip_sh_comments(script.read_text(errors="replace"))
+            except OSError:
+                continue
+            if not BARE_INTERP.search(text):
+                continue
+            # The "\n" is load-bearing: without it the shell text and the followed .py source
+            # concatenate into `...ingest.pyimport mnemos`, the import is no longer at a line
+            # start, and VENV_IMPORT misses it. The unit test passed anyway — its fixture body
+            # happened to end in a newline. A live probe caught it. Fixtures are not reality.
+            searchable = text + "\n" + _referenced_py_sources(text)
+            mods = sorted({m for g in VENV_IMPORT.findall(searchable) for m in g if m})
+            if not mods:
+                continue  # bare python3 on stdlib-only code — correct, and deliberate
+            names = sorted(set(BARE_INTERP.findall(text) or []))
+            line = next((i for i, ln in enumerate(text.splitlines(), 1) if BARE_INTERP.search(ln)), 1)
+            bad.append(
+                f"{_rel(script)}:{line}: names an interpreter (`{'`, `'.join(n or 'python' for n in names) or 'python3'}`) "
+                f"and imports venv-only {', '.join(mods)}. With PYTHONPATH/sys.path pointing at "
+                f"scripts/, that does NOT fail — it SILENTLY SUCCEEDS on whatever owns the name "
+                f"(F-001). Resolve the interpreter by PATH."
+            )
     return bad
 
 

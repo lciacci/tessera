@@ -10,6 +10,22 @@
 # Timeout: 3 seconds — never blocks tool execution
 # No set -euo pipefail: hook scripts must be defensive.
 
+
+# ── Toolchain interpreter: a PATH, never a NAME. (F-001) ──────────────────────────────────
+# This hook used bare `python3`. With sys.path/PYTHONPATH pointed at scripts/, ANY interpreter
+# imports mnemos/icpg straight from source — so that did NOT fail, it SILENTLY SUCCEEDED on
+# whatever Homebrew currently owns the `python3` name. The original F-001 failed silently
+# (import error → no-op); this one *worked*, on an interpreter brew can re-point or delete.
+# A silent success is strictly harder to detect than a silent failure.
+# No toolchain → this hook goes QUIET. tessera-watch P9 makes that visible.
+TOOLCHAIN_PY=""
+if [ -x ".venv/bin/python" ]; then
+    TOOLCHAIN_PY=".venv/bin/python"
+elif command -v mnemos >/dev/null 2>&1; then
+    TOOLCHAIN_PY="$(sed -n '1s/^#!//p' "$(command -v mnemos)" 2>/dev/null | awk '{print $1}')"
+fi
+[ -n "$TOOLCHAIN_PY" ] && [ -x "$TOOLCHAIN_PY" ] || exit 0
+# ──────────────────────────────────────────────────────────────────────────────────────────
 INPUT=$(cat 2>/dev/null || true)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null || echo "")
 TOOL_INPUT=$(echo "$INPUT" | jq -r '.tool_input // empty' 2>/dev/null || echo "")
@@ -21,7 +37,7 @@ case "$TOOL_NAME" in
 esac
 
 # Extract file path and check for existing ReasonNodes
-FILE_PATH=$(echo "$TOOL_INPUT" | python3 -c "
+FILE_PATH=$(echo "$TOOL_INPUT" | "$TOOLCHAIN_PY" -c "
 import sys, json
 try:
     d = json.loads(sys.stdin) if sys.stdin.read() else {}
@@ -35,8 +51,8 @@ except:
 ICPG_CMD=""
 if command -v icpg &>/dev/null; then
   ICPG_CMD="icpg"
-elif python3 -c "import icpg" 2>/dev/null; then
-  ICPG_CMD="python3 -m icpg"
+elif "$TOOLCHAIN_PY" -c "import icpg" 2>/dev/null; then
+  ICPG_CMD=""$TOOLCHAIN_PY" -m icpg"
 else
   exit 0
 fi
