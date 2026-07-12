@@ -17,15 +17,28 @@
 #
 # The command that runs this project's tests. Declare it so an agent never has to GUESS.
 #
-# Not hypothetical: on a dual-Homebrew mac, bare `python3` can resolve to an interpreter with
-# no pytest installed — the same interpreter split that silently killed the Mnemos hooks
-# (F-001). A human guesses wrong once and recovers in a second. An unsupervised agent
-# (ADR-0005) reads "No module named pytest", concludes the suite is broken, and acts on it.
+# Not hypothetical: bare `python3` can resolve to an interpreter with no pytest — the same
+# interpreter split that silently killed the Mnemos hooks (F-001). A human guesses wrong once
+# and recovers in a second. An unsupervised agent (ADR-0005) reads "No module named pytest",
+# concludes the suite is broken, and acts on it.
 #
-# Prefer PATH-relative commands. Do NOT pin absolute paths like /opt/homebrew/bin/python3.13
-# — they break on every other machine.
+# ── AN INTERPRETER IS A PATH, NOT A NAME. ───────────────────────────────────────────────────
 #
-#   python:  test: python3.13 -m pytest
-#   node:    test: npm test
-#   kotlin:  test: ./gradlew test
+# This template used to advise "prefer PATH-relative commands" and offer
+# `test: python3.13 -m pytest` as the Python example. **That advice was the bug.** It is where
+# conclave's test command came from, and on 2026-07-12 `uv python install` shimmed the name
+# `python3.13` into ~/.local/bin — ahead of Homebrew — so it silently became a *different*
+# interpreter with no pytest, and conclave's suite broke.
+#
+# A NAME (`python3`, `python3.13`) is a lookup through a mutable, ordered PATH that several
+# package managers write to. Any of them can win, at any time, without telling you.
+# A REPO-RELATIVE PATH (`.venv/bin/python`) resolves to one interpreter, forever, on every
+# machine. That is the fix — and note it is neither a bare name NOR a machine-absolute path.
+#
+# Still true: do NOT pin machine-absolute paths like /opt/homebrew/bin/python3.13 — those
+# break on every other machine. Repo-relative is the sweet spot.
+#
+#   python:  test: .venv/bin/python -m pytest      ← a path. build it: uv venv && uv pip install pytest
+#   node:    test: npm test                         ← npm resolves node_modules/ locally already
+#   kotlin:  test: ./gradlew test                   ← the wrapper IS the path, that is its point
 test:
