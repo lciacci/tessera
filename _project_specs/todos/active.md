@@ -353,7 +353,25 @@ with the violation half.
 
 ## Backlog (triggered — do when the condition fires)
 
-- **`design-principles.md` promises three files that were never built.** Surfaced by
+- **Kill the dual-Homebrew Python split — do the venv.** *Decided 2026-07-11 (1a/2b): venv is
+  the right fix, deliberately deferred.* **`tessera-watch` P9 fires every session until this
+  lands**, so it cannot be quietly dropped; after 3 consecutive runs G-a escalates it.
+  - **The facts, measured:** `python@3.14` is `installed_on_request: False` — a brew
+    **dependency** of awscli/httpie/mlx/mlx-c/**ollama** (the tier-classifier's engine). It is
+    **not removable** and owns the `python3` name with *nothing installed in it*.
+    `python@3.13` is `installed_on_request: True`, nothing in brew depends on it, and it holds
+    the entire toolchain (pytest, pyyaml, mnemos, icpg). The removable one is the one we use.
+  - **Why not "just migrate to 3.14":** Homebrew re-points `python3` whenever a *dependent*
+    formula moves. 3.14 arrived because ollama wanted it; 3.15 will do the same and orphan the
+    toolchain again. Migration resets the clock, it does not stop it.
+  - **Hard trigger: before the first unsupervised downstream run (ADR-0005).** A silent
+    interpreter break with no human watching is F-001 exactly — and F-001 was invisible for
+    weeks, confounding the whole Mnemos trial.
+  - Scope: touches `install.sh` + the bin scaffold. Interim pin (`python3.13`, PATH-relative,
+    in `.tessera/config.yml`) works and is honest.
+
+- **`design-principles.md` promises two files that were never built.** *(`.tessera/config.yml`
+  was the third — it graduated: built 2026-07-11 with a live consumer.)* Surfaced by
   `doccheck` (2026-07-11), parked in its `PLANNED_PATHS` so the debt stays legible instead
   of silently allowlisted: `.tessera/config.yml` (described in the **present tense** at
   :196/:589/:638 as where tuning values live), `.tessera/third-party-scope.yml` (:726/:763),

@@ -28,7 +28,8 @@ PROFILE="${3:-standard}"
 
 [ -e "$TARGET" ] && { echo "refuse: $TARGET already exists" >&2; exit 1; }
 for f in "$TPL/CLAUDE.md.template" "$TPL/settings.base.json" "$TPL/gitignore.base" \
-         "$TPL/project.yml.template" "$TPL/security-exceptions.yml.template"; do
+         "$TPL/project.yml.template" "$TPL/security-exceptions.yml.template" \
+         "$TPL/config.yml.template"; do
   [ -f "$f" ] || { echo "missing template: $f" >&2; exit 1; }
 done
 
@@ -61,6 +62,9 @@ cp "$TPL/gitignore.base" "$TARGET/.gitignore"
 sed -e "s|^profile: .*|profile: $PROFILE|" -e "s|^hook_distro: .*|hook_distro: $DISTRO|" \
     "$TPL/project.yml.template" > "$TARGET/.tessera/project.yml"
 cp "$TPL/security-exceptions.yml.template" "$TARGET/.tessera/security-exceptions.yml"
+# config.yml is COMMITTED, not gitignored: `test:` must survive a fresh clone or the agent
+# that needs it most — an unsupervised one — has nothing to read. Ships with test: blank.
+cp "$TPL/config.yml.template" "$TARGET/.tessera/config.yml"
 printf '*\n' > "$TARGET/.mnemos/.gitignore"
 cat > "$TARGET/.tessera/logs/README.md" <<'EOF'
 # Tessera Event Logs

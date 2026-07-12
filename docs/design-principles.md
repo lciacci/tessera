@@ -192,8 +192,8 @@ Profiles are how Tessera adapts to different kinds of projects without forcing o
 
 - **First-session prompt at project incept.** When Tessera opens a project with no `.tessera/project.yml`, it suggests a profile based on lightweight signals (e.g., FHIR/HL7 libraries → healthcare suggestion). Single-keystroke pick from the list. Tessera writes the file; no manual YAML editing required.
 - **Profile switching via command:** `tess profile show`, `tess profile switch healthcare`, `tess profile list-extensions`. The file is updated by Tessera, not by hand.
-- **`.tessera/project.yml` checked in by default.** Reasons: reproducibility across machines, team coordination if the project is ever shared, audit trail via git for free, PR review visibility into what gates were in force. For sensitive open-source-bound projects, a `.tessera/project.yml.template` pattern (like `.env.example`) is available as opt-in.
-- **Tuning values live separately in `.tessera/config.yml`** (optionally gitignored). Profiles set defaults; configs override them.
+- **`.tessera/project.yml` checked in by default.** Reasons: reproducibility across machines, team coordination if the project is ever shared, audit trail via git for free, PR review visibility into what gates were in force. For sensitive open-source-bound projects, a `.tessera/project.yml.template` pattern (like `.env.example`) *would be* the opt-in. **Not built** — every project is private, so the profile field leaks nothing. Deletion candidate, not a build candidate.
+- **Tuning values live separately in `.tessera/config.yml`.** **Built 2026-07-11**, but *not* as the profile-override layer this doc originally imagined — there is still only one profile, so there is nothing to override. It was built bottom-up from one observed failure: an agent must never have to **guess the test command**. On this machine bare `python3` is Homebrew 3.14, which has no pytest (F-001's interpreter split); a human guesses wrong once and recovers, an unsupervised agent (ADR-0005) concludes the suite is broken and acts on it. One key (`test:`), one consumer (`bin/tessera-test`), zero speculative knobs. **Committed, not gitignored** — a test command that vanishes on a fresh clone is useless to the agent it exists for. The template that preceded it shipped six knobs and every one was dead; see observatory → "The profile model has no consumer."
 
 ### Audit asymmetry
 
@@ -586,7 +586,7 @@ The `tdd-loop-check.sh` **25-iteration safety cap** is the smartest single bit. 
 
 **Tessera version generalizations:**
 - Package manager detection (npm/yarn/pnpm/bun)
-- Test/lint/typecheck commands configurable via `.tessera/config.yml`
+- Test/lint/typecheck commands configurable via `.tessera/config.yml` *(`test:` built 2026-07-11 and read by `bin/tessera-test`; lint/typecheck not built — no consumer yet)*
 - Per-project timeout override
 - Monorepo support via workspace patterns
 
@@ -635,7 +635,7 @@ The hook layer is where several Tessera design decisions need to land as actual 
 
 Hooks are where the abstractions become real behavior. Maggy's hook layer is generally well-engineered — defensive, graceful, async-aware, atomic where needed. Tessera adopts the core architecture (three-layer compaction defense, fatigue pipeline, marker/atomic patterns, hook lookup with fallback) and adds the things specific to Tessera's design:
 
-1. Configurable toolchain via `.tessera/config.yml`
+1. Configurable toolchain via `.tessera/config.yml` *(`test:` built 2026-07-11; lint/typecheck await a consumer)*
 2. Structured logging output for the audit log
 3. Override annotation parsing
 4. Unified iCPG/Mnemos pre-edit hook (no duplication)
@@ -723,7 +723,7 @@ Several pass-4 takeaways are genuinely good practice regardless of project type.
 
 **Third-party scope tracking pattern** (in `code-review` skill / `security` skill):
 - Track which third-party services your project depends on and what their data-handling characteristics are.
-- File pattern: `.tessera/third-party-scope.yml`. Lists services, what data they receive, what agreements (privacy policy, terms of service, BAA, etc.) are in place.
+- File pattern: `.tessera/third-party-scope.yml` *(not built)*. Would list services, what data they receive, and what agreements (privacy policy, terms of service, BAA, etc.) are in place. Trigger: build its **consumer** first — the Data Handling review category, which does not exist either. A data file with no reader is ceremony.
 - Code review's Data Handling category flags code that introduces a new third-party dependency without updating the scope file.
 - `standard` profile uses lightweight version (just track services and what data they receive). `healthcare` profile specializes this as BAA scope tracking.
 
@@ -760,7 +760,7 @@ These extensions activate only when `.tessera/project.yml` declares `profile: he
 - When PHI-touching code is detected, the suggestion-gate offers multi-engine review (Claude + Codex + Gemini) automatically.
 
 **BAA scope tracking** (specialization of baseline third-party scope tracking):
-- `.tessera/third-party-scope.yml` gains a `baa_status` field per service.
+- `.tessera/third-party-scope.yml` *(not built)* would gain a `baa_status` field per service.
 - Data Handling category flags PHI-handling code that talks to a service without a BAA on file.
 
 **Bumped encryption defaults:**

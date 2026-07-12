@@ -1,0 +1,65 @@
+#!/usr/bin/env python3
+"""tessera-test — run this project's test command, as declared in `.tessera/config.yml`.
+
+The config layer's first and (deliberately) only consumer. See scripts/tessera_config.py for
+why the config layer exists at all.
+
+The problem it solves is small and completely real: **an agent should not have to guess how to
+run the tests.** On this machine `python3 -m pytest` resolves to Homebrew 3.14, which has no
+pytest; Tessera's suite runs only under 3.13. Every project differs — howler is Kotlin/JNI,
+conclave is Python/AWS, tessera is Python — and a shared hook or a fresh agent has no way to
+know. A human guesses wrong once and recovers in a second. **An unsupervised agent (ADR-0005)
+cannot**: it reads "no module named pytest", concludes the tests are broken, and acts on it.
+
+    tessera-test              # run the project's tests
+    tessera-test --show       # print the command without running it
+
+Exit code is the test command's own, so this drops into a hook or CI unchanged.
+
+`.tessera/config.yml` is COMMITTED, not gitignored — deliberately, and against the original
+template's "gitignored by default". A test command that vanishes on a fresh clone is useless
+to the exact agent this exists for. Keep machine-specific absolute paths OUT of it: prefer
+`python3.13 -m pytest` (PATH-relative) over `/opt/homebrew/bin/python3.13`.
+"""
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+import tessera_config  # noqa: E402
+
+KEY = "test"
+
+
+def find_root(start: Path) -> Path | None:
+    """Nearest ancestor declaring a Tessera project. Lets this run from any subdirectory."""
+    for directory in [start, *start.parents]:
+        if (directory / ".tessera" / "project.yml").exists():
+            return directory
+    return None
+
+
+def main() -> int:
+    root = find_root(Path.cwd().resolve())
+    if root is None:
+        print("not inside a Tessera project (no .tessera/project.yml)", file=sys.stderr)
+        return 2
+
+    command = tessera_config.get(root, KEY)
+    if not command:
+        # Fail LOUD, not silent-pass: a green exit with no tests run is the worst outcome —
+        # it tells an unsupervised agent the suite passed when it never ran.
+        print(f"no `{KEY}:` in {root}/{tessera_config.CONFIG_PATH} — declare the test command",
+              file=sys.stderr)
+        return 2
+
+    if "--show" in sys.argv[1:]:
+        print(command)
+        return 0
+
+    return subprocess.call(command, shell=True, cwd=root, env=os.environ)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

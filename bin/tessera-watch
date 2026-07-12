@@ -18,6 +18,8 @@ that also feeds the kill and graduate decisions. See _project_specs/todos/active
 """
 import argparse
 import json
+import shutil
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -169,6 +171,41 @@ def p8_doc_drift(root: Path) -> tuple[bool, str]:
     return True, f"{len(violations)} false doc claim(s) → `python3 scripts/doccheck.py`: {head}"
 
 
+def p9_interpreter_drift(root: Path) -> tuple[bool, str]:
+    """Bare `python3` cannot import the toolchain the hooks depend on.
+
+    THIS IS THE F-001 DETECTOR, three months late. F-001 was: hooks invoked Mnemos via bare
+    `python3` (Homebrew 3.14) while the package was installed for 3.13, so `auto_nodes` and
+    every checkpoint write silently no-op'd for weeks. It was invisible — and it confounded
+    the entire Mnemos kill/keep trial, because "the graph is empty" read as "unused" when it
+    actually meant "unreachable". Nothing has ever watched for a recurrence.
+
+    The condition is live RIGHT NOW: python@3.14 owns the `python3` name (Homebrew installed
+    it as a dependency of awscli/httpie/mlx/ollama — `installed_on_request: False`, so it is
+    NOT removable), while the whole toolchain lives in 3.13. Nothing is broken today, because
+    mnemos's console-script shebang hard-pins 3.13 and the hooks probe `command -v mnemos`
+    first. But every bare-`python3` script that grows a third-party import is a landmine, and
+    it fails SILENTLY — the worst shape for an unsupervised run (ADR-0005).
+
+    Deprecating 3.14 is impossible (five formulae need it). Migrating the toolchain INTO 3.14
+    only resets the clock — Homebrew re-points `python3` whenever a dependent formula moves,
+    so 3.15 will do this again. **A venv is the durable fix**, and docs/observatory.md said so
+    long before this predicate existed. Decided 2026-07-11 (1a/2b): venv is right, deferred.
+
+    So this fires every session until the venv lands. That is intentional, not noise — it is
+    real, unresolved debt, and after 3 consecutive runs G-a escalates it. A prose note is what
+    gets dropped on the floor; that is the entire lesson of this watcher.
+    """
+    if not shutil.which("mnemos"):
+        return False, "mnemos CLI absent (nothing to drift from)"
+    probe = subprocess.run(["python3", "-c", "import mnemos"],
+                           capture_output=True, timeout=10)
+    if probe.returncode == 0:
+        return False, "bare `python3` can import the toolchain"
+    return True, ("bare `python3` cannot import mnemos (toolchain lives in another "
+                  "interpreter) — F-001's shape; venv is the fix, see observatory")
+
+
 def g_a_consecutive(root: Path) -> tuple[bool, str]:
     """Graduation-a: a core predicate fired in ≥3 consecutive logged runs → needs snooze/ack.
 
@@ -226,6 +263,7 @@ PREDICATES = {
     "P6 escalations": p6_escalations,
     "P7 gate-labels": p7_gate_labels,
     "P8 doc-drift": p8_doc_drift,
+    "P9 interpreter-drift": p9_interpreter_drift,
     "G-a graduation:snooze": g_a_consecutive,
 }
 

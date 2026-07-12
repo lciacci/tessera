@@ -72,10 +72,12 @@ PATH_ALLOWLIST = {
 # tense, so a reader (or a future Claude) goes looking for a file that was never written.
 # Parked here rather than allowlisted so the debt stays legible: either build them, or
 # reword the doc to the conditional. Tracked in _project_specs/todos/active.md.
+# (.tessera/config.yml graduated OUT of this set on 2026-07-11 — it was built, with one live
+# consumer in bin/tessera-test. That is what a PLANNED_PATHS entry is supposed to do: get
+# built, or get reworded. It should never just sit here.)
 PLANNED_PATHS = {
-    ".tessera/config.yml",             # design-principles.md:196, 589, 638
-    ".tessera/third-party-scope.yml",  # design-principles.md:726, 763
-    ".tessera/project.yml.template",   # design-principles.md:195 (opt-in pattern)
+    ".tessera/third-party-scope.yml",  # design-principles.md:726, 763 — build its CONSUMER first
+    ".tessera/project.yml.template",   # design-principles.md:195 — deletion candidate, not a build
     "docs/codex-review-v5.md",         # architecture-v5.md references a review never committed
 }
 

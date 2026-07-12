@@ -224,8 +224,14 @@ When an Observatory entry is closed (via ADR or explicit rejection), update its 
 - **What it is:** `mnemos`/`icpg`/`polyphony` are `pip install --break-system-packages` into homebrew's python (currently 3.13). When homebrew bumps the default `python3` (it moved to 3.14), bare `python3 -m mnemos` stops resolving the package — the break that silently emptied the Mnemos graph.
 - **Mitigation in place:** hooks now resolve the package's interpreter from the `mnemos` console-script shebang, so the pipeline is version-agnostic regardless of which `python3` is default. The symptom is handled.
 - **The deferred decision:** the *durable* fix is a dedicated venv (pins the interpreter, immune to homebrew bumps, no `--break-system-packages`). NOT doing it now — reinstalling for each new homebrew python is a treadmill, but a venv is a packaging/install change touching `install.sh` + the bin scaffold, larger than this session warranted. The console-script resolution holds until then.
-- **Status:** Mitigated; venv deferred
-- **When to revisit:** if `--break-system-packages` bites again (a homebrew bump the shebang-resolution doesn't absorb, or a second machine where the install layout differs), or when `install.sh` is next reworked — fold the venv in then.
+- **Update, 2026-07-11 — the "just upgrade and deprecate the old one" escape hatch is CLOSED.** Measured, not assumed:
+  - `python@3.14` is `installed_on_request: **False**` — Homebrew pulled it in as a **dependency** of `awscli`, `httpie`, `mlx`, `mlx-c`, and **`ollama`** (which the tier-classifier hook runs on). **It cannot be removed.** It owns the `python3` name and has *nothing* installed in it.
+  - `python@3.13` is `installed_on_request: **True**` and **nothing in brew depends on it.** It holds the entire toolchain: pytest, pyyaml, mnemos, icpg. It is the *removable* one — the exact inverse of the intuitive read.
+  - So migrating the toolchain into 3.14 and dropping 3.13 is *possible*, and **still wrong**: **Homebrew owns the `python3` name and re-points it whenever a dependent formula moves.** 3.14 arrived because ollama/awscli wanted it; 3.15 will arrive the same way and orphan the toolchain again. Migration **resets the clock, it does not stop it** — and it hands the interpreter choice to whatever `awscli` decides next release.
+  - **The venv remains the only fix that addresses the class.** This entry said so on 2026-06-26 and was right.
+- **The reminder is now mechanical, not prose.** `tessera-watch` **P9 (interpreter-drift)** probes whether bare `python3` can import the toolchain and fires when it cannot — which it does today, and will every session until the venv lands. That is intentional: it is real unresolved debt, and after 3 consecutive runs G-a escalates it. **This is also the F-001 detector we never had** — F-001 was exactly this failure (hooks calling bare `python3` against a package installed elsewhere) and it was *silent* for weeks, confounding the whole Mnemos trial. Nothing watched for a recurrence until now.
+- **Status:** Mitigated; venv deferred **with a firing predicate** (decided 2026-07-11 — venv is the right fix, deferred deliberately, not forgotten)
+- **When to revisit:** P9 fires every session now, so this cannot be quietly dropped. Do the venv when there is a clear runway — it touches `install.sh` + the bin scaffold. Hard trigger: **before the first unsupervised downstream run** (ADR-0005). A silent interpreter break in an agent nobody is watching is precisely F-001, with no human present to notice the graph went empty.
 
 ---
 
@@ -357,6 +363,68 @@ When an Observatory entry is closed (via ADR or explicit rejection), update its 
 - **When to revisit:** when a second cross-machine migration happens, or the next
   project scaffold would benefit from a shared restore path. Not worth building the
   skill on n=1; the caveat is captured here so it is not re-derived.
+
+### The profile model has no consumer — `profile:` is a decorative string
+
+- **Source:** 2026-07-11. `doccheck` (new, `scripts/doccheck.py`) flagged three `.tessera/`
+  files that `design-principles.md` describes in the **present tense** and that have never
+  existed. Chasing why surfaced something larger than three missing files.
+- **What it is:** `.tessera/project.yml` declares `profile: standard`. **Nothing reads that
+  field.** Verified by grep across every tool, hook, and script:
+  - `bin/tessera-new-project` *writes* it (a `sed` substitution) and never reads it back.
+  - `bin/tessera-findings`, `bin/tessera-watch`, and `scripts/doccheck.py` use
+    `.tessera/project.yml` purely as a **presence marker** — *"is this dir a Tessera
+    project?"* They never open the file.
+  - **No `profiles/` directory exists anywhere.** There is one profile name and no
+    definition of what it means. `healthcare` — named throughout `design-principles.md`,
+    load-bearing for the audit-asymmetry, Data Handling, and BAA-tracking sections — exists
+    as **zero bytes on disk.**
+- **Why the three files were unbuilt, and why that was correct:** all three are *downstream of
+  a mechanism that does not branch.* `.tessera/config.yml` would override profile defaults —
+  but there is one profile and one set of defaults, so it would override nothing.
+  `.tessera/third-party-scope.yml` is an input to the Data Handling review category, which
+  does not exist — a data file with no reader is ceremony. `.tessera/project.yml.template`
+  solves a leak problem for public projects; all three repos are private. **This is YAGNI
+  holding correctly.** The bug was never the missing files — it was the doc's present tense
+  implying they exist. Reworded to the conditional, 2026-07-11.
+- **`config.yml` was then built the same day — bottom-up, and NOT as the override layer.**
+  The doc's framing was speculative; a real need was not. An agent must never have to *guess
+  the test command*: bare `python3` on this machine is Homebrew 3.14 with no pytest (F-001's
+  interpreter split), and while a human guesses wrong once and recovers, an unsupervised agent
+  (ADR-0005) reads "No module named pytest", concludes the suite is broken, and acts on it.
+  So: **one key (`test:`), one live consumer (`bin/tessera-test`), zero speculative knobs**,
+  and committed rather than gitignored (a command that vanishes on a fresh clone is useless to
+  the agent it exists for). The profile-defaults layer remains unbuilt and still has nothing
+  to override — the file exists *despite* the profile model, not because of it.
+- **The old template is the whole lesson in miniature.** `templates/tessera/config.yml.template`
+  already existed, fully written, with six knobs — `claude_code_auto_compact_window`,
+  `bcrypt_rounds`, `tls_minimum`, `coverage_threshold`, mnemos fatigue bands, suggestion-gate
+  threshold — and **every single one was dead**: commented out, read by nothing, and
+  `tessera-new-project` did not even scaffold the file. Designed top-down from the design
+  doc's imagination, while the one key that mapped to a real failure was absent. Worse than
+  useless: a **silent no-op config knob is a hazard**, because someone sets `tls_minimum:
+  "1.3"` or `coverage_threshold: 90` and *believes it is enforced*. All six removed.
+- **Why it caught our attention — this has the shape of P2.** P2 (the `tess` umbrella) was
+  retired because it fired on a proxy that tracked no real friction. `profile:` is a field
+  that currently tracks nothing: a hypothesis about future variation (standard vs. healthcare)
+  that has **never been tested, because no second profile exists.** CLAUDE.md calls the
+  profile model "original IP." It may be. It is also, today, unexercised and unfalsifiable as
+  instrumented — the same posture that made the Mnemos trial meaningless until it was
+  re-armed on an event. **Naming the bias:** the profile model is Tessera's most distinctive
+  idea, which is exactly why it gets graded generously. Distinctiveness is not evidence.
+- **Status:** Watching — kill/keep, on an **event trigger, not a date.**
+- **When to revisit:** the trigger is **a second profile becoming real**, i.e. the first time
+  a project genuinely needs different gates than `standard`. Then judge: did the profile
+  abstraction make that cheaper than a plain per-project config would have? If a second
+  profile never arrives, that is the answer — a one-valued enum is a constant, and a constant
+  does not need a model. Adjacent, sharper trigger for `.tessera/config.yml` specifically:
+  the first *shared hook* that must run a project-specific command (howler is Kotlin/JNI,
+  conclave Python/AWS, tessera Python — no hook needs their test commands today).
+- **Standing caveat:** this entry is about the profile *model* (does `profile:` earn its
+  keep?), **not** about `.tessera/project.yml` as a marker file — which demonstrably works
+  and is what lets `tessera-findings` and `tessera-watch` discover downstreams at all. Do not
+  let a verdict on the model condemn the marker. (Same conflation the Mnemos entry had to
+  untangle between its recovery and continuity layers.)
 
 ## Closing notes
 
