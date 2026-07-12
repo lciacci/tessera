@@ -58,7 +58,13 @@ When Claude Code compacts the context (~83% full), Mnemos uses three layers:
 - Layer 2 doesn't consume the marker, so Layer 3 also fires on the next tool call. The checkpoint gets injected twice. Redundant, not harmful.
 - There is no `mnemos-compact-recovery.sh` and no SessionStart `"compact"` matcher. Earlier docs described both; neither ever existed. Layer 2's role is played by the unmatched `mnemos-session-start.sh`. Coverage is intact — only the naming was wrong. (Corrected 2026-07-09.)
 
-The result: after compaction, you'll see a "CONTEXT RESTORED AFTER COMPACTION" block with your goal, constraints, what you were working on, and progress. Resume from there.
+The result: after compaction, you'll see a restore block — `MNEMOS SESSION RESUME` (Layer 2) and/or `CONTEXT RESTORED AFTER COMPACTION` (Layer 3) — with your goal, constraints, what you were working on, and progress. Resume from there.
+
+**What's actually been observed (2026-07-11, first-ever compaction, hand-run `/compact`):** Layer 2
+delivered — goal, constraints, and a fresh checkpoint landed in post-compaction context, and the
+summarizer honored the PreCompact preservation block. Layer 3 logged `restore_injected` and consumed
+the marker, but its injected text was never *seen* reaching the model: the plumbing is confirmed, the
+injection is not. Treat Layer 2 as the load-bearing one.
 
 ### Is the compaction-recovery layer actually working?
 `.mnemos/compaction-log.jsonl` is the durable record — the marker is deleted on
@@ -68,13 +74,20 @@ file is the *only* evidence that compaction ever fired. Tally it with:
 ```bash
 python3 -c "
 import json,collections
-c=collections.Counter(json.loads(l)['event'] for l in open('.mnemos/compaction-log.jsonl'))
+c=collections.Counter((json.loads(l)['event'], json.loads(l).get('trigger','-')) for l in open('.mnemos/compaction-log.jsonl'))
 print(dict(c))"
 ```
 
 `compaction_fired` with no matching `restore_injected` means the recovery layer
 is failing. Zero lines means compaction has never fired — which is *not* evidence
 the layer is useless, only that it is untested.
+
+**`trigger` is load-bearing, not decoration.** `auto` = context filled up: the real
+event this layer exists for. `manual` = a hand-run `/compact`, i.e. a **test** of the
+layer. A test is never evidence about the thing it tests — so `tessera-watch` P3 (the
+Mnemos kill/keep verdict) counts only non-manual events. Without this split, three
+deliberate test compactions would trip the trial's verdict on data we manufactured.
+Compact by hand as often as you like; it cannot contaminate the trial.
 
 ### Manual CLI:
 ```bash

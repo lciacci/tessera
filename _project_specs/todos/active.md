@@ -93,14 +93,15 @@ read-heavy. Expect **1–2 auto-compactions**, which is exactly what the Mnemos 
 that work, and it is cheap to lose: reading and doc edits, no builds, no spend, nothing
 irreversible. If the restore layer fails mid-audit, the cost is re-reading.
 
-### Preconditions (do these first, in order)
+### Preconditions — both MET (2026-07-11)
 
-1. **Manual `/compact` machinery check must pass first** (see below). The three-layer restore
-   has **never executed**. Discovering it is broken 160k tokens into an audit is the expensive
-   way to learn it. Last time we assumed Mnemos plumbing worked, it was broken three separate
-   ways, silently — see observatory "Mnemos kill/keep test was confounded."
-2. Trigger-tagging is **done** (`22f06b9`) — manual `/compact` is now safe and will not
-   pollute P3.
+1. ~~**Manual `/compact` machinery check must pass first.**~~ **PASSED.** See the protocol
+   section below for the result. The restore layer is credible enough to spend a 200k-token
+   session on.
+2. Trigger-tagging is **done** (`22f06b9`) — manual `/compact` is safe and does not pollute P3
+   (verified live: P3 read `0 real (1 manual test excluded)` after the run).
+
+FOCUS-004 is **unblocked**. It is now the only remaining way to produce a `trigger: auto` event.
 
 ### What "done" looks like
 
@@ -115,28 +116,39 @@ irreversible. If the restore layer fails mid-audit, the cost is re-reading.
 
 ---
 
-## Compaction test protocol (run at the START of the next session)
+## Compaction test protocol — Step 1 RUN, PASSED (2026-07-11)
 
-The compaction-recovery layer is Mnemos' largest untested surface: **`.mnemos/compaction-log.jsonl`
-does not exist — compaction has never fired, once.** 171 fatigue samples, max token_utilization
-**0.51**, state=`flow` in **171/171**. Every band above 0.4 (COMPRESS / PRE-SLEEP / REM /
-EMERGENCY) and every action it gates is dead code by observation.
+The compaction-recovery layer was Mnemos' largest untested surface: for 171 fatigue samples
+(max token_utilization **0.51**, state=`flow` in **171/171**) compaction had **never fired,
+once**. Every band above 0.4 (COMPRESS / PRE-SLEEP / REM / EMERGENCY) was dead code by
+observation.
 
-**Step 1 — machinery (cheap, ~30 seconds).** Type `/compact` by hand. Then verify:
+**Step 1 — machinery. Done. All four checks green.**
 
-```bash
-cat .mnemos/compaction-log.jsonl          # expect: trigger "manual" (excluded from P3 ✓)
-ls .mnemos/just-compacted                 # marker: written by PreCompact, consumed by restore
-python3 -c "import json;print(json.load(open('.mnemos/checkpoint-latest.json'))['id'])"
-tessera-watch                             # P3 must still read 0 real — a test is not evidence
-```
-Pass = a `CONTEXT RESTORED AFTER COMPACTION` block appears, the marker is consumed, and P3
-still reads **0 real**. Fail = fix the restore layer *before* spending a long session on it.
+| Check | Result |
+|---|---|
+| `compaction-log.jsonl` exists | ✅ first entry ever, `trigger: "manual"` |
+| marker consumed, not orphaned | ✅ absent; `restore_injected` logged |
+| restore block reached the model | ✅ **Layer 2** (`MNEMOS SESSION RESUME`) — goal, constraints, fresh checkpoint |
+| P3 still reads `0 real` | ✅ `0 real (1 manual test(s) excluded)` |
 
-**Step 2 — value (needs the real thing).** Only a genuine auto-compaction answers the question
-the trial actually asks: *did the restored checkpoint let work resume without re-deriving?*
-That is what FOCUS-004 above is for. It cannot be faked — a padded session produces a restore
-judgment about work you were not really doing.
+The summarizer also honored the PreCompact preservation block — `## Mnemos Task State` landed
+verbatim. **The trigger-tagging fix worked on its first live exercise: a test did not become
+evidence.**
+
+**One caveat, recorded honestly.** Layer 3 (`mnemos-post-compact-inject.sh`) logged
+`restore_injected` and consumed the marker, but its `CONTEXT RESTORED AFTER COMPACTION` text was
+never *observed* arriving in context. Plumbing confirmed; injection unconfirmed. Operationally
+moot — Layer 2 had already delivered, which is the redundancy the three-layer design exists for —
+but **do not record Layer 3 as proven.** If a future auto-compaction lands mid-turn with no
+SessionStart, Layer 3 is the only net, and it is untested.
+
+**Step 2 — value (needs the real thing). STILL OPEN.** `trigger: auto` — compaction firing
+unbidden at ~83%, mid-turn — has never happened. Same hook, same code path; the only difference
+is who pulls the trigger. Only a genuine auto-compaction answers what the trial actually asks:
+*did the restored checkpoint let work resume without re-deriving?* That is FOCUS-004's job. It
+cannot be faked — a padded session produces a restore judgment about work you were not really
+doing. **P3's counter remains at 0 real. The trial's clock has not started.**
 
 ---
 
@@ -239,8 +251,10 @@ commits across tessera/howler/tess-dashboard, all pushed.**
   the `tessera-*` binaries are hook-invoked and callers name them directly, so an
   umbrella aliases without consolidating. Don't rebuild it; reopen only on a real
   hand-driven `tess` workflow. (observatory → Override entry #1.)
-- **Mnemos compaction trial** unchanged: still event-triggered (≥3
-  `compaction_fired`), now auto-watched by P3. Empty log = untested, not useless.
+- **Mnemos compaction trial** still event-triggered (≥3 **non-manual** `compaction_fired`),
+  auto-watched by P3. Machinery passed its first live exercise 2026-07-11 (manual `/compact`);
+  the *value* question needs a real auto event and the counter is still **0 real**. Empty log =
+  untested, not useless — and a manual test is not an entry in it.
 
 **Next — signal-gated, nothing to build cold:** the fire-log starts populating at
 the *next* SessionStart (the hook wasn't live when this session began). No predicate
@@ -340,14 +354,24 @@ with the violation half.
 ## Backlog (triggered — do when the condition fires)
 
 - **Mnemos compaction-recovery verdict.** Fires when `.mnemos/compaction-log.jsonl`
-  records **≥3 `compaction_fired` events**. *Detection is now automated — the
+  records **≥3 non-manual `compaction_fired` events** (currently **0 real**; one
+  `manual` test on 2026-07-11, correctly excluded). *Detection is automated — the
   watcher's **P3** predicate surfaces this at session start; the manual tally is no
   longer the trigger.* When P3 fires, judge: did `restore_injected` follow each
   `compaction_fired`, and did the restored checkpoint let work resume without
   re-deriving? `compaction_fired` with no matching restore, or repeated
   `restore_missed_stale`, is a **failure** signal. An **empty or absent log is not
-  a signal at all** — it means compaction hasn't fired. Scope: compaction-recovery
-  layer only, never session-continuity.
+  a signal at all** — it means compaction hasn't fired. A **`trigger: manual` entry
+  is not a signal either** — it is a test of the layer, not evidence about it. Scope:
+  compaction-recovery layer only, never session-continuity.
+
+- **Prove Layer 3 (`mnemos-post-compact-inject.sh`) actually injects.** Its
+  `restore_injected` log line and marker consumption were confirmed 2026-07-11, but its
+  `CONTEXT RESTORED AFTER COMPACTION` text was never observed reaching the model — PreToolUse
+  stdout may not surface. Moot while Layer 2 fires (SessionStart runs on `source=compact`), but
+  Layer 3 is the **only** net when a post-compaction turn has no SessionStart. Fires when: a
+  real auto-compaction lands and the restore block is absent from context. Cheap check first —
+  confirm whether PreToolUse stdout reaches the model at all.
 
 - **Content-aware hook drift check.** *Partly resolved 2026-07-10 — the watcher's
   **P1** predicate now content-diffs `.claude/scripts/` ↔ `templates/` and fired on
