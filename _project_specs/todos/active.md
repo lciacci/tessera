@@ -96,15 +96,56 @@ Also added: `spend-guard-is-wired` (the doc claims a hook; is it in settings.jso
 `spend-auth-is-not-tracked` (a committed grant would authorize spend on every clone, forever,
 past its own TTL). **8 checks, 0 false claims.**
 
+### The escalation backstop — spec 06 falsified the reason it was deferred
+
+`docs/contracts/escalation.md` deferred the backstop on this premise: *"a blocked agent cannot
+proceed, so the failure mode is not silence but a summary that isn't a packet."* **Spec 06 made
+that false.** The guard denies **one tool call** — the agent can do other work, take an offline
+path, or just move on, and the denial vanishes with it. The trigger was never really "the first
+unsupervised run"; it was **the moment a block stops halting the agent**, and spec 06 was that
+moment. I shipped a mechanism whose deny path ended in *prose* ("raise a packet"), i.e. model
+recall — the exact trigger that missed ~85% of gates.
+
+**BUILT.** Stop hook → `scripts/spend/backstop.py`. A denial must end in a grant (supervised) or
+a packet (unsupervised); **neither → exit 2**. A grant *before* the denial doesn't count — an
+expired envelope is what caused it. Better-conditioned than the gate-scan: `spend_denied` is a
+*logged event*, not a text heuristic, so there is nothing to adjudicate away. The one quiet
+disposition it invites is *"that was a guard false-positive"* — **a backstop that forces a bogus
+packet is worse than none.**
+
+### The suite was manufacturing the evidence
+
+Found by reading the log the backstop was about to fire on: `guard.main()` → `_log_denial()` →
+`emit()` keys on `CLAUDE_CODE_SESSION_ID`, **which is set under a real session** — so every hook
+test wrote a *real* `spend_denied` to the production log. **26 of this session's 31 denials were
+made by pytest.** An 84%-polluted friction journal, and a backstop poised to fire on its own
+tests.
+
+This is the P3 trigger-tagging lesson in a new costume: **a test must never become evidence about
+the thing it tests.** There, a hand-run `/compact` could have delivered the Mnemos verdict on
+manufactured data. Here, pytest was manufacturing the spend journal. Fixed at the root
+(`scripts/spend/conftest.py` strips the session id suite-wide, so `emit()` is inert by
+construction) and pinned by a test, so no future test can pollute by forgetting to mock.
+
+**Today's log still contains that test noise — it was not rewritten.** Treat spend-denial counts
+before 2026-07-12 as unusable; the journal is honest from here.
+
 ### Next
 
-1. **The venv (P9, still firing).** Now the *last* thing between here and an unsupervised run —
-   spec 06 was the other. Hard trigger, unchanged: before the first unsupervised run.
+1. **The venv (P9) — and G-a is now escalating it.** P9 has fired 3 consecutive runs, so the
+   graduation predicate tripped: *build the remedy or add a snooze.* This is now the **last**
+   precondition to an unsupervised run — spec 06 and the backstop were the other two. A silent
+   interpreter break with no human watching *is* F-001, which was invisible for weeks and
+   confounded the entire Mnemos trial.
 2. **FOCUS-004 skill audit** — unblocked, and still the only honest path to a real `auto`
    compaction (the Mnemos trial's counter is still **0**). Deliberately not run concurrently
    with this session: the audit's 208k of reading must land in the *main thread* or the trial
    gets nothing.
-3. **Gate-scan recall hole** — before any `should_fire` labeling pass.
+3. **Gate-scan recall hole** — before any `should_fire` labeling pass. **Grew a second head on
+   2026-07-12: the scan cannot see the gate in the turn that fires it** (the transcript it reads
+   does not yet contain the turn in flight). Observed twice in one session. It is the last-block
+   bug one level up — *last-block → last-turn* — and the miss is not random: it is always the
+   *freshest* gate, i.e. the one most likely still unlogged. See observatory.
 4. **Spec 03** — after calibration data.
 
 **Standing caution, reinforced.** Every finding above came from *running the thing*, not from
@@ -188,14 +229,15 @@ but the lesson generalizes and should be applied *before* the autonomy work, not
 ## State of the machinery (verified 2026-07-12, end of session)
 
 ```
-tessera-test    150 green   (66 top-level + 17 gate + 13 override + 54 spend + 3 mnemos)
-doccheck        8 checks, 0 false claims  (+ignored-test-suites-are-run, spend-guard-is-wired,
-                                            spend-auth-is-not-tracked)
+tessera-test    183 green   (69 top-level + 17 gate + 13 override + 84 spend + 3 mnemos)
+doccheck        9 checks, 0 false claims  (+ignored-test-suites-are-run, spend-guard-is-wired,
+                                            spend-backstop-is-wired, spend-auth-is-not-tracked)
 spend guard     LIVE in tessera + conclave + templates + tessera-new-project
                 live-fired in all four; a fresh scaffold blocks a boot and allows a teardown
+spend backstop  LIVE — Stop hook; a denial must end in a grant or a packet, or exit 2
 pre-commit      wired + live-fire verified (a lying commit was refused)
-tessera-watch   P9 FIRING (interpreter drift — the venv debt, deliberate)
-                P1/P3/P4/P5/P6/P7/P8, G-a all green
+tessera-watch   P9 FIRING + G-a ESCALATING it (3 consecutive runs → build the remedy or snooze)
+                P1/P3/P4/P5/P6/P7/P8 green
 repos           tessera, conclave, howler, tess-dashboard
 ```
 

@@ -271,6 +271,29 @@ def check_spend_guard_is_wired() -> list[str]:
     return []
 
 
+def check_spend_backstop_is_wired() -> list[str]:
+    """The escalation contract claims a Stop hook catches undispositioned spend denials.
+
+    The guard's deny path ends in a PROSE instruction ("raise a packet"), i.e. model recall —
+    the trigger that missed ~85% of gates. The backstop is what makes it a channel. An unwired
+    backstop means the docs promise a guarantee that rides recall, which is the #17 failure
+    wearing the label of its own fix.
+    """
+    contract = ROOT / "docs" / "contracts" / "escalation.md"
+    if not contract.exists() or "tessera-spend-backstop" not in contract.read_text():
+        return []  # no claim, nothing to check
+    settings = ROOT / ".claude" / "settings.json"
+    try:
+        stop = json.loads(settings.read_text()).get("hooks", {}).get("Stop", [])
+    except (OSError, json.JSONDecodeError):
+        return [".claude/settings.json unreadable — cannot verify the spend backstop"]
+    if "tessera-spend-backstop" not in json.dumps(stop):
+        return ["docs/contracts/escalation.md claims a Stop-hook backstop catches "
+                "undispositioned spend denials, but no such hook is wired in "
+                ".claude/settings.json — the deny path is back to riding model recall"]
+    return []
+
+
 def check_spend_auth_is_not_tracked() -> list[str]:
     """`.tessera/spend-auth.json` must NEVER be committed. The mirror of tessera-yml-is-tracked.
 
@@ -295,6 +318,7 @@ CHECKS = {
     "tessera-yml-is-tracked": check_tessera_yml_is_tracked,
     "ignored-test-suites-are-run": check_ignored_test_suites_are_run,
     "spend-guard-is-wired": check_spend_guard_is_wired,
+    "spend-backstop-is-wired": check_spend_backstop_is_wired,
     "spend-auth-is-not-tracked": check_spend_auth_is_not_tracked,
 }
 

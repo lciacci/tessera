@@ -58,11 +58,18 @@ chmod +x "$TARGET/scripts/tessera-escalate"
 # Spend guard (spec 06). The hook wrapper FAILS OPEN when guard.py is absent — so shipping
 # tessera-spend-guard.sh without scripts/spend/ ships a hook that silently protects nothing
 # and still looks wired. Same shape as the gate recorder above: ship both halves or neither.
+# The backstop rides along, same rule as the gate recorder: the guard's deny path ends in a
+# PROSE instruction ("raise a packet"), which is model recall — the exact trigger that missed
+# ~85% of gates. Shipping the guard without its backstop ships the broken half.
 cp "$TESSERA_ROOT"/scripts/spend/guard.py "$TESSERA_ROOT"/scripts/spend/event.py \
-   "$TESSERA_ROOT"/scripts/spend/authorize.py "$TESSERA_ROOT"/scripts/spend/test_guard.py \
+   "$TESSERA_ROOT"/scripts/spend/authorize.py "$TESSERA_ROOT"/scripts/spend/backstop.py \
+   "$TESSERA_ROOT"/scripts/spend/conftest.py "$TESSERA_ROOT"/scripts/spend/test_guard.py \
+   "$TESSERA_ROOT"/scripts/spend/test_backstop.py \
    "$TARGET/scripts/spend/"
-cp "$TESSERA_ROOT"/.claude/scripts/tessera-spend-guard.sh "$TARGET/.claude/scripts/"
-chmod +x "$TARGET/.claude/scripts/tessera-spend-guard.sh" "$TARGET/scripts/spend/guard.py"
+cp "$TESSERA_ROOT"/.claude/scripts/tessera-spend-guard.sh \
+   "$TESSERA_ROOT"/.claude/scripts/tessera-spend-backstop.sh "$TARGET/.claude/scripts/"
+chmod +x "$TARGET"/.claude/scripts/tessera-spend-guard.sh \
+         "$TARGET"/.claude/scripts/tessera-spend-backstop.sh "$TARGET"/scripts/spend/guard.py
 
 # Settings + gitignore (stack-agnostic bases — add your stack's commands after).
 cp "$TPL/settings.base.json" "$TARGET/.claude/settings.json"

@@ -79,14 +79,40 @@ silently dropped. (Same rule as `docs/contracts/findings.md`, for the same reaso
 A model-invoked producer rides model recall — the exact failure the gate recorder had
 (~85% miss) before its Stop-hook backstop shipped on 2026-07-11.
 
-Escalation is **less** exposed than gate-recording was, because a blocked agent cannot
-proceed: the failure mode is not silence but "exits with a summary that isn't a packet."
-Under supervision that is survivable — you read the summary. **Under autonomy it is not**,
-and that is precisely where autonomy is going.
+~~Escalation is **less** exposed than gate-recording was, because a blocked agent cannot
+proceed: the failure mode is not silence but "exits with a summary that isn't a packet."~~
+~~**Backstop trigger:** the first real unsupervised run.~~
 
-**Backstop trigger:** the first real unsupervised run. At that point a Stop-hook check —
-*did this session end blocked without raising a packet?* — earns its slot. Not before; there
-is nothing yet to protect.
+**Falsified by spec 06, and the backstop is BUILT (2026-07-12).** The premise above was that a
+blocked agent *cannot proceed*, so it must say something. Spec 06's spend guard broke that: it
+denies **one tool call**. The agent is free to do other work, take an offline path, or simply
+move on — and the denial disappears with it. **The failure mode became silence**, which is
+exactly what the deferral was predicated on being impossible.
+
+The trigger was never "the first unsupervised run" in substance; it was *"the moment a block
+stops halting the agent."* Spec 06 was that moment.
+
+**Shape:** Stop hook `.claude/scripts/tessera-spend-backstop.sh` → `scripts/spend/backstop.py`.
+A denial must end in one of two places, and it checks which:
+
+| denied → | verdict |
+|---|---|
+| a human granted an envelope (`spend_authorized` *after* the denial) | ✓ the supervised path |
+| an escalation packet was raised this session | ✓ the unsupervised path |
+| **neither** | ✗ the block vanished silently — **exit 2** |
+
+**Better-conditioned than the gate-scan.** That one reads a text heuristic and over-counts on
+purpose, with the model as precision filter. This reads `spend_denied` — a *logged event*. There
+is nothing to adjudicate away: if it fires, something really was denied and really was never
+dispositioned. The only legitimate quiet disposition is *"that was a false positive of the
+guard's patterns"*, which the hook explicitly invites — a backstop that forces a bogus packet is
+worse than none.
+
+Loop-safe: honors `stop_hook_active`, caps at 3 fires/session, fails open on every error path.
+
+**Still model-invoked, and still exposed:** the *content* of the packet. The backstop guarantees
+a denial gets answered for; it cannot guarantee the answer is a good summary. That is the
+residual, and it is the one ADR-0005 actually named.
 
 ## Consumers
 

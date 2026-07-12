@@ -160,6 +160,34 @@ Appended to `.tessera/logs/<session-id>.jsonl`, same shape as the gate and overr
 agent tried to commit spend it was not authorized for. **A burst of `spend_denied` under an
 unsupervised run is the signal that the envelope was set too small** — it is data, not a fault.
 
+> **The log is the one artifact that must never be manufactured.** `scripts/spend/conftest.py`
+> strips `CLAUDE_CODE_SESSION_ID` for the whole suite, because without it every hook test wrote
+> a *real* `spend_denied` to the production log — 26 of one session's 31 denials were made by
+> pytest. Same lesson as the Mnemos trial's `manual`/`auto` compaction split: **a test must
+> never become evidence about the thing it tests.**
+
+## The backstop — a denial must be dispositioned
+
+The guard's deny path ends in a *prose instruction* ("raise a packet and stop"). That is model
+recall, and this repo has watched model recall fail twice (the gate recorder missed ~85%;
+doccheck's lesson sat in prose through five more bugs). **A mechanism whose failure path rides
+recall has no failure path.**
+
+Stop hook `.claude/scripts/tessera-spend-backstop.sh` → `scripts/spend/backstop.py`:
+
+| denied → | verdict |
+|---|---|
+| a human granted an envelope (`spend_authorized` *after* the denial) | ✓ the supervised path |
+| an escalation packet was raised this session | ✓ the unsupervised path |
+| **neither** | ✗ the block vanished silently — **exit 2** |
+
+A grant *before* the denial does not count — an expired envelope is what **caused** it. Counting
+it would silence the hook on precisely the case it exists for.
+
+The only quiet disposition besides those two is *"that was a false positive of the guard's
+patterns"*, which the hook explicitly invites. **A backstop that forces a bogus packet is worse
+than none.** See `docs/contracts/escalation.md`.
+
 ## Hook
 
 PreToolUse, matcher `Bash` → `.claude/scripts/tessera-spend-guard.sh` → `scripts/spend/guard.py`.
