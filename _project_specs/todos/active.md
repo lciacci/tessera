@@ -38,15 +38,52 @@ watcher, not a 4th SessionStart hook. Cut (with triggers, see the spec): 4 deliv
 adapters, 4 of 5 auto-triggers (they depend on unbuilt specs 02/03/04/06), dedup, iCPG
 nodes, graded severity routing. 9 tests. E2E verified: raise → P6 fires → resolve → clears.
 
-**Next — REGROUP (Lorenzo's call).** Then, in rough order:
-1. **Calibration.** Label `should_fire` on the 28 gate events (all null today). More
-   important: **start collecting gates from a downstream build** — all 28 are from
-   framework-dev (54% `design` kind), which is the *wrong population*. Autonomy runs
-   howler/conclave, not Tessera.
-2. **An ADR for the inflection point.** Largest direction change since ADR-0001, and it
-   currently lives only in the roadmap doc. Deferred to regroup deliberately, not forgotten.
-3. **Spec 03** — after calibration. Its risk is P2-shaped (auto-generated contracts firing
-   confidently on proxies that track no real contract).
+**ADR-0005 RECORDED** — the inflection point, Tier 1 reorder, and **spec 06 (spend)
+promoted Tier 3 → Tier 1**. That promotion is the day's biggest finding and came from the
+data, not from reasoning: **50% of conclave's gates are `aws-launch`/`aws-teardown`/
+`aws-spend`.** An unsupervised agent in conclave is an agent that boots GPUs on its own. The
+autonomy boundary in real work is **spend and irreversible infrastructure, not design** — the
+exact opposite of what Claude predicted. A hard budget stop is now a *precondition* of any
+unsupervised downstream run, not an optimization.
+
+**Escalation channel wired everywhere (end of day).** It had shipped tessera-only — which was
+backwards, since 3 of the 4 organic escalations came from conclave. Fixed: `tessera/bin` is on
+PATH (`~/.zshrc`), `install.sh` now *fails loudly* if it isn't (a channel the docs promise but
+that cannot be invoked is worse than none), bridge copy at `scripts/tessera-escalate` in each
+downstream for no-PATH machines, CLAUDE.md + scaffold + template all wired.
+
+**The backstop fired on its own build session and was right.** 5 gate-shaped turns detected,
+3 logged, zero false positives; the 3 missing were real (incl. the "what is Tessera for"
+decision). Session went 3 → 6 gates. **First data point for observatory watch #4: the rate
+moved.** It also named its own recall hole (see backlog: question-shaped detector misses
+declarative gates → the 91%/61% miss rates are **floors, not ceilings**).
+
+---
+
+## Next session — pick up here
+
+**Nothing is due cold.** Every open item is signal-gated; the watcher is green. Check
+`tessera-watch` first — it now carries **P6** (open escalations) and **P7** (unlabeled
+post-backstop gates ≥20 → time to label `should_fire`).
+
+In rough priority when a signal fires or you want to push forward:
+
+1. **Spec 06 (cost/budget) — now Tier 1, and it blocks unsupervised downstream work.** This
+   is the real next build. Conclave is the target: hard budget stop, spend ceiling, no
+   GPU boot without one. Not started.
+2. **Fix the gate-scan recall hole** (declarative gates invisible) — fold in *before* any
+   `should_fire` labeling pass, or the labeling calibrates on a known-biased sample.
+3. **Spec 03** — only after calibration data exists. Its risk is P2-shaped.
+4. **Escalation Stop-hook backstop** — trigger is the *first real unsupervised run*
+   (a session that ends blocked without raising a packet is the failure to catch). The
+   escalation producer is still model-invoked, which is the same #17 exposure the gate
+   recorder had this morning. Known, stated, deferred on purpose.
+
+**Standing caution for the autonomy push:** two of today's three real findings came from
+Lorenzo pushing back, not from the machinery — the Tier 1 premise (supervision was the
+on-ramp, not the destination) and the doc audit that found the escalation channel missing
+downstream. Claude inferred instead of looking, twice. Under unsupervised runs that check is
+absent by construction. Build accordingly.
 
 ---
 
