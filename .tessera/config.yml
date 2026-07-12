@@ -8,8 +8,10 @@
 
 # --- toolchain (read by bin/tessera-test) ---
 #
-# NOT `python3 -m pytest`. On this machine (and any dual-Homebrew mac) `python3` is 3.14,
-# which has no pytest — the same interpreter split that silently killed the Mnemos hooks
-# (F-001). `python3.13` is PATH-relative, so this stays portable; do NOT pin an absolute
-# /opt/homebrew path here.
-test: python3.13 -m pytest scripts/test_doccheck.py scripts/test_tessera_config.py scripts/test_tessera_watch.py scripts/test_tessera_escalate.py scripts/test_tessera_findings.py scripts/test_tessera_changelog.py
+# Runs EVERY suite. It is a script, not a bare pytest call, because scripts/gate/ and
+# scripts/override/ each contain an emit.py and a scan.py and collide in one pytest process —
+# so they need separate processes. The first version of this key ENUMERATED six test files and
+# silently skipped half the suite while reporting green. See scripts/run-tests.sh.
+#
+# The script pins python3.13: bare `python3` is 3.14 here, with no pytest (F-001's split).
+test: bash scripts/run-tests.sh

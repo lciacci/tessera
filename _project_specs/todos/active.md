@@ -2,106 +2,162 @@
 
 Declared current priority for Tessera framework dev. One focus at a time.
 
+**Read this top section, run `tessera-watch`, and you are caught up.**
+
 ---
 
-## Handoff — pick up here (last updated 2026-07-11)
+## Handoff — pick up here (2026-07-11)
 
-**2026-07-11: gate-scan backstop BUILT — the last standing #17 violation is closed.**
-The 07-10 session reproduced the under-logging (≥8 gate-shaped decisions, 3 logged),
-hitting the n≥2 trigger the observatory had set. Built: Stop hook
-`.claude/scripts/tessera-gate-scan.sh` → `scripts/gate/scan.py` — counts gate-shaped
-turns in the transcript, diffs against the session's gate log, exits 2 on a gap so the
-model must adjudicate before finishing. **Trigger is now the harness, not model recall.**
-Detector is a recall net (over-counts by design); the model is the precision filter; it
-cannot *forget*, which was the whole failure. Fires on gap ≥2 **or zero-logged** (the
-zero-logged session leaves no file and was invisible to `ratio.py` — the case the
-backstop exists to see). Loop-safe: honors `stop_hook_active`, caps at 3 fires/session,
-fails open. 17 tests. Synced to `templates/` + both settings templates + the
-`tessera-new-project` scaffold (a downstream getting `emit.py` without the scan gets the
-broken half). Also fixed `ratio.py`'s untyped glob counting `watch.jsonl` as a phantom
-session. **New watch #4 (observatory): does the logged-gate rate actually move after
-2026-07-11? If not, the hook is ceremony — cut it, don't tune it.**
+Two sessions today. **25 commits across four repos, all pushed, all clean.**
 
-**2026-07-11 (same session): Tier 1 taken up. THE INFLECTION POINT.** Discussed and
-decided — the human-in-the-loop phase was the *on-ramp to autonomy, not the destination*.
-The gates/haze/fire-log are the instruments you build before you can trust an agent to run
-unsupervised. Claude's first read (decline Tier 1) was **wrong** — it inferred a terminal
-preference for supervision from the repo instead of asking; Lorenzo corrected it. Tier 1
-**reordered 07 → 03 → 01** on evidence (rationale recorded in
-`00-autonomous-engineering-roadmap.md`, not in a commit message).
+### Session A — the autonomy inflection
 
-**Spec 07 v1 SHIPPED:** `bin/tessera-escalate` (raise/list/resolve) +
-`docs/contracts/escalation.md` + watcher predicate **P6**. Escalation = the gate's
-*asynchronous* form (#12 needs a disposer; unsupervised there is none). Packets are
-committed JSON under `.tessera/escalations/`. `--tried` required. Surfacing rides the
-watcher, not a 4th SessionStart hook. Cut (with triggers, see the spec): 4 delivery
-adapters, 4 of 5 auto-triggers (they depend on unbuilt specs 02/03/04/06), dedup, iCPG
-nodes, graded severity routing. 9 tests. E2E verified: raise → P6 fires → resolve → clears.
+- **Gate-scan backstop BUILT** — the last standing #17 violation is closed. Stop hook
+  `.claude/scripts/tessera-gate-scan.sh` → `scripts/gate/scan.py` counts gate-shaped turns in
+  the transcript, diffs against the session's gate log, exits 2 on a gap so the model must
+  adjudicate before finishing. **The trigger is now the harness, not model recall.** The
+  detector is a recall net (over-counts on purpose); the model is the precision filter; it
+  cannot *forget*, which was the whole failure. Fires on gap ≥2 **or zero-logged**. Loop-safe,
+  caps at 3 fires/session, fails open. Wired into all downstreams.
+- **THE INFLECTION POINT — Tier 1 taken up.** Decided: the human-in-the-loop phase was the
+  *on-ramp to autonomy, not the destination*. Claude's first read (decline Tier 1) was **wrong**
+  — it inferred a terminal preference for supervision from the repo instead of asking. Lorenzo
+  corrected it. Tier 1 reordered **07 → 03 → 01**.
+- **Spec 07 v1 SHIPPED:** `bin/tessera-escalate` + `docs/contracts/escalation.md` + watcher
+  **P6**. Escalation is the suggestion-gate's *asynchronous* form (#12 needs a disposer;
+  unsupervised there is none).
+- **ADR-0005 RECORDED**, and it carries the day's biggest finding — one that came from data,
+  not reasoning: **50% of conclave's gates are `aws-launch` / `aws-teardown` / `aws-spend`.**
+  An unsupervised agent in conclave is an agent that boots GPUs on its own. **The autonomy
+  boundary in real work is spend and irreversible infrastructure, not design** — the exact
+  opposite of what Claude predicted. Spec 06 promoted Tier 3 → **Tier 1**. A hard budget stop
+  is now a *precondition* of any unsupervised run, not an optimization.
 
-**ADR-0005 RECORDED** — the inflection point, Tier 1 reorder, and **spec 06 (spend)
-promoted Tier 3 → Tier 1**. That promotion is the day's biggest finding and came from the
-data, not from reasoning: **50% of conclave's gates are `aws-launch`/`aws-teardown`/
-`aws-spend`.** An unsupervised agent in conclave is an agent that boots GPUs on its own. The
-autonomy boundary in real work is **spend and irreversible infrastructure, not design** — the
-exact opposite of what Claude predicted. A hard budget stop is now a *precondition* of any
-unsupervised downstream run, not an optimization.
+### Session B — the machinery started catching *Claude's* mistakes
 
-**Escalation channel wired everywhere (end of day).** It had shipped tessera-only — which was
-backwards, since 3 of the 4 organic escalations came from conclave. Fixed: `tessera/bin` is on
-PATH (`~/.zshrc`), `install.sh` now *fails loudly* if it isn't (a channel the docs promise but
-that cannot be invoked is worse than none), bridge copy at `scripts/tessera-escalate` in each
-downstream for no-PATH machines, CLAUDE.md + scaffold + template all wired.
+- **COMPACTION FIRED FOR THE FIRST TIME EVER** (hand-run `/compact`). All four machinery
+  checks passed. **Layer 2 delivered** — goal, constraints, and a fresh checkpoint landed in
+  post-compaction context with no re-derivation. The trigger-tagging fix worked on its first
+  live exercise: **P3 correctly read `0 real (1 manual test excluded)`.** A test did not become
+  evidence. *Layer 3's injection remains unproven* (see backlog). **The trial's clock has NOT
+  started** — a real `auto` compaction has still never happened.
+- **`scripts/doccheck.py` + watcher P8 + a pre-commit gate.** Six doc-drift bugs had been found
+  in three days — *every one* because Lorenzo got suspicious and asked "all docs updated?", and
+  every one fixed without leaving a check behind. **The human was the detector.** Now
+  mechanical: doccheck asserts the checkable claims docs make about the repo, `.githooks/pre-commit`
+  **blocks** a lying commit, P8 surfaces red at session start. See `docs/contracts/doc-claims.md`.
+- **`.tessera/config.yml` built — bottom-up, not as the profile-override layer the design doc
+  imagined.** One key (`test:`), one live consumer (`bin/tessera-test`), zero speculative knobs.
+  An agent must never have to *guess the test command*. Wired into all three downstreams, each
+  command **verified by running it**, not inferred from the manifest.
+- **`tessera-watch` P9 — interpreter-drift.** The F-001 detector we never had. Fires every
+  session until the venv lands (see backlog). This is the "clean up the python fun" reminder,
+  made mechanical — *a note is what gets dropped on the floor.*
 
-**The backstop fired on its own build session and was right.** 5 gate-shaped turns detected,
-3 logged, zero false positives; the 3 missing were real (incl. the "what is Tessera for"
-decision). Session went 3 → 6 gates. **First data point for observatory watch #4: the rate
-moved.** It also named its own recall hole (see backlog: question-shaped detector misses
-declarative gates → the 91%/61% miss rates are **floors, not ceilings**).
+### The thread that ties Session B together — read this before building anything
+
+**Five separate bugs today, one root cause: we validated against the environment we were
+standing in, not the one the code runs in.**
+
+| Bug | It existed… | …but not where it mattered |
+|---|---|---|
+| **F-001** (historical) | `python3` on my PATH | not the one the *hook* resolved |
+| **`.tessera/config.yml`** | on disk, in 4 repos | **gitignored** — untracked, would vanish on clone |
+| **PATH export** | in `~/.zshrc` | **interactive-only** — invisible to the *agent's* shell |
+| **pre-commit hook** | would have been in `.git/hooks/` | **not tracked** — no gate in any other clone |
+| **`test:` command** | ran and reported "57 passed" | **6 of 12 files** — gate + override + mnemos silently skipped |
+
+Three of these were **shipped by Claude today, inside the very machinery built to catch that
+class**, and were caught by the tooling rather than by Lorenzo. That is the system working —
+but the lesson generalizes and should be applied *before* the autonomy work, not after:
+
+> **Existence is a local fact. Reachable-by-the-consumer is the shared one.** Before trusting
+> any capability, invoke it the way the consumer will: `zsh -c` not `which`; `git ls-files`
+> not `ls`; run the suite, don't count the files.
+
+---
+
+## State of the machinery (verified 2026-07-11, end of session)
+
+```
+tessera-test    87 tests green   (57 top-level + 17 gate + 13 override + 3 mnemos self-checks)
+doccheck        5 checks, 0 false claims
+pre-commit      wired + live-fire verified (a lying commit was refused)
+tessera-watch   P9 FIRING (interpreter drift — the venv debt, deliberate)
+                P1/P3/P4/P5/P6/P7/P8, G-a all green
+repos           tessera, conclave, howler, tess-dashboard — clean, 0 ahead
+```
+
+**P9 is the only thing firing, and it is meant to.** It nags every session until the venv
+lands; G-a escalates it after 3 consecutive runs.
+
+---
+
+## Next session — priorities
+
+Nothing is due *cold*; everything is signal-gated. **Run `tessera-watch` first.** In priority
+order when you want to push forward:
+
+1. **Spec 06 (cost/budget) — Tier 1, and it BLOCKS unsupervised downstream work.** This is the
+   real next build. Conclave is the target: hard budget stop, spend ceiling, no GPU boot
+   without one. **Not started.** The evidence is in ADR-0005 — half of conclave's gates are
+   spend gates. Until this exists, "let the agent run unsupervised in conclave" means "let the
+   agent boot GPUs unsupervised."
+
+2. **The venv (P9 is firing).** Kills the dual-Homebrew Python split. **Hard trigger: before
+   the first unsupervised run.** A silent interpreter break with no human watching *is* F-001 —
+   and F-001 was invisible for weeks and confounded the entire Mnemos trial. Details in backlog.
+
+3. **FOCUS-004 — the skill audit.** Now **unblocked** (both preconditions met). 56 skills,
+   never once evaluated despite principle #15 saying they're a starting point. It is also the
+   only realistic way to produce a **real `auto` compaction** (~208k tokens of reading, ~25%
+   past the auto-compact threshold) — which is what the Mnemos trial actually needs. Two birds.
+
+4. **Fix the gate-scan recall hole** *before* any `should_fire` labeling pass, or the labeling
+   calibrates on a knowingly biased sample. See backlog.
+
+5. **Spec 03** — only after calibration data exists. Its risk is P2-shaped.
+
+**Standing caution for the autonomy push.** Across today, the findings that most changed
+direction came from *Lorenzo pushing back*, not from the machinery: the Tier 1 premise, the
+downstream doc audit, "actually do the config.yml", and "we should have a note to clean up the
+python fun." Claude inferred instead of looking, repeatedly. **Under unsupervised runs that
+check is absent by construction.** Build the instruments accordingly — that is the entire
+argument for spec 06 and the escalation backstop.
 
 ---
 
 ## [FOCUS-004] Skill audit — and the session that finally tests compaction
 
-**Status:** queued (prepped 2026-07-11, not started)
+**Status:** queued, unblocked
 **Priority:** high — overdue by our own doctrine, and it is the compaction test vehicle
-**Estimate:** L (it is *meant* to be large — that is the point)
 
 ### Why this is two things at once
 
 **1. It is overdue.** `CLAUDE.md` says the skill set is "a starting point per principle #15 —
-trim or expand based on evidence in subsequent sessions." That never happened. We are at **56
-skills**; watcher **P5** fires at 60. Nobody has ever evaluated whether they earn their slots.
-Candidates for the chop on sight: `posthog-analytics`, `supabase-python`, `web-content`,
-`user-journeys`, `build-in-public` — none of which have been touched in any dogfood session.
+trim or expand based on evidence in subsequent sessions." **56 skills. Zero have ever been
+evaluated.** No evidence has ever been gathered. The doctrine was written and never executed.
 
 **2. It is the only honest way to reach compaction.** Measured 2026-07-11:
 
-| Corpus | ~Tokens |
+| | tokens |
 |---|---|
-| **All 56 `SKILL.md` files** | **~208,000** |
-| design-principles + observatory + ADRs + specs + contracts | ~82,000 |
-| *Context window (Opus)* | *~200,000* |
-| *Auto-compaction fires at ~83%* | *~166,000* |
-| *Longest session ever recorded (token_util 0.51)* | *~102,000* |
+| all 56 `SKILL.md` files | **~208,000** |
+| *context window* | *~200,000* |
+| *auto-compaction fires at ~83%* | *~166,000* |
 
-**The skills alone exceed the entire context window.** Reading them blows through the
-compaction threshold by ~25% with no padding and no artifice — the work is *genuinely*
-read-heavy. Expect **1–2 auto-compactions**, which is exactly what the Mnemos trial needs
-(P3 requires ≥3 *real* compaction_fired events; the counter is currently **0**).
+Reading the corpus to audit it overshoots the auto-compaction threshold by ~25% **with no
+padding and no artifice** — the work is *genuinely* read-heavy. Expect **1–2 auto-compactions**,
+which is exactly what the Mnemos trial needs (P3 requires ≥3 *non-manual* `compaction_fired`;
+the counter is **0**).
 
-**Do not pad a session to force compaction.** Pick work whose nature is token-heavy. This is
-that work, and it is cheap to lose: reading and doc edits, no builds, no spend, nothing
-irreversible. If the restore layer fails mid-audit, the cost is re-reading.
+**Do not pad a session to force compaction.** Pick work whose nature is token-heavy. A padded
+session produces a restore judgment about work you were not really doing.
 
 ### Preconditions — both MET (2026-07-11)
 
-1. ~~**Manual `/compact` machinery check must pass first.**~~ **PASSED.** See the protocol
-   section below for the result. The restore layer is credible enough to spend a 200k-token
-   session on.
-2. Trigger-tagging is **done** (`22f06b9`) — manual `/compact` is safe and does not pollute P3
-   (verified live: P3 read `0 real (1 manual test excluded)` after the run).
-
-FOCUS-004 is **unblocked**. It is now the only remaining way to produce a `trigger: auto` event.
+1. ~~Manual `/compact` machinery check must pass first.~~ **PASSED** — see below.
+2. Trigger-tagging **done** (`22f06b9`) — manual `/compact` cannot pollute P3. Verified live.
 
 ### What "done" looks like
 
@@ -109,19 +165,18 @@ FOCUS-004 is **unblocked**. It is now the only remaining way to produce a `trigg
   session? covered by another skill? never once loaded?).
 - Cuts recorded in `docs/design-principles.md` (the framework-evaluation section is where
   skill-set changes get their reasoning, per CLAUDE.md).
-- **Secondary payload — the docs↔code consistency audit.** On 2026-07-11 two docs were found
-  silently lying (the ADR index omitted 0005; `gate-event.md` still claimed the recorder rode
-  model recall) — and both were found *by luck*, when Lorenzo asked "all docs updated?" Nobody
-  has ever checked the rest. Fold it in; it is the same read-heavy shape.
+- **Secondary payload — the docs↔code consistency audit.** Partly mechanized now (`doccheck`),
+  but doccheck covers only the ~60–70% that is machine-checkable. The prose 30% still needs
+  eyes, and it bit twice today (design-principles said config.yml was "not built" 30 minutes
+  after it was built). Same read-heavy shape; fold it in.
 
 ---
 
 ## Compaction test protocol — Step 1 RUN, PASSED (2026-07-11)
 
-The compaction-recovery layer was Mnemos' largest untested surface: for 171 fatigue samples
-(max token_utilization **0.51**, state=`flow` in **171/171**) compaction had **never fired,
-once**. Every band above 0.4 (COMPRESS / PRE-SLEEP / REM / EMERGENCY) was dead code by
-observation.
+For 171 fatigue samples (max token_utilization **0.51**, `flow` in **171/171**) compaction had
+**never fired, once**. Every band above 0.4 (COMPRESS / PRE-SLEEP / REM / EMERGENCY) was dead
+code by observation.
 
 **Step 1 — machinery. Done. All four checks green.**
 
@@ -129,225 +184,20 @@ observation.
 |---|---|
 | `compaction-log.jsonl` exists | ✅ first entry ever, `trigger: "manual"` |
 | marker consumed, not orphaned | ✅ absent; `restore_injected` logged |
-| restore block reached the model | ✅ **Layer 2** (`MNEMOS SESSION RESUME`) — goal, constraints, fresh checkpoint |
+| restore block reached the model | ✅ **Layer 2** (`MNEMOS SESSION RESUME`) |
 | P3 still reads `0 real` | ✅ `0 real (1 manual test(s) excluded)` |
 
-The summarizer also honored the PreCompact preservation block — `## Mnemos Task State` landed
-verbatim. **The trigger-tagging fix worked on its first live exercise: a test did not become
-evidence.**
+The summarizer also honored the PreCompact preservation block. **The trigger-tagging fix worked
+on its first live exercise: a test did not become evidence.**
 
-**One caveat, recorded honestly.** Layer 3 (`mnemos-post-compact-inject.sh`) logged
-`restore_injected` and consumed the marker, but its `CONTEXT RESTORED AFTER COMPACTION` text was
-never *observed* arriving in context. Plumbing confirmed; injection unconfirmed. Operationally
-moot — Layer 2 had already delivered, which is the redundancy the three-layer design exists for —
-but **do not record Layer 3 as proven.** If a future auto-compaction lands mid-turn with no
-SessionStart, Layer 3 is the only net, and it is untested.
+**Caveat, recorded honestly.** Layer 3 (`mnemos-post-compact-inject.sh`) logged `restore_injected`
+and consumed the marker, but its `CONTEXT RESTORED AFTER COMPACTION` text was never *observed*
+arriving in context. Plumbing confirmed; injection unconfirmed. Moot while Layer 2 fires — but
+**do not record Layer 3 as proven.**
 
-**Step 2 — value (needs the real thing). STILL OPEN.** `trigger: auto` — compaction firing
-unbidden at ~83%, mid-turn — has never happened. Same hook, same code path; the only difference
-is who pulls the trigger. Only a genuine auto-compaction answers what the trial actually asks:
-*did the restored checkpoint let work resume without re-deriving?* That is FOCUS-004's job. It
-cannot be faked — a padded session produces a restore judgment about work you were not really
-doing. **P3's counter remains at 0 real. The trial's clock has not started.**
-
----
-
-## Next session — pick up here
-
-**Nothing is due cold.** Every open item is signal-gated; the watcher is green. Check
-`tessera-watch` first — it now carries **P6** (open escalations) and **P7** (unlabeled
-post-backstop gates ≥20 → time to label `should_fire`).
-
-In rough priority when a signal fires or you want to push forward:
-
-1. **Spec 06 (cost/budget) — now Tier 1, and it blocks unsupervised downstream work.** This
-   is the real next build. Conclave is the target: hard budget stop, spend ceiling, no
-   GPU boot without one. Not started.
-2. **Fix the gate-scan recall hole** (declarative gates invisible) — fold in *before* any
-   `should_fire` labeling pass, or the labeling calibrates on a known-biased sample.
-3. **Spec 03** — only after calibration data exists. Its risk is P2-shaped.
-4. **Escalation Stop-hook backstop** — trigger is the *first real unsupervised run*
-   (a session that ends blocked without raising a packet is the failure to catch). The
-   escalation producer is still model-invoked, which is the same #17 exposure the gate
-   recorder had this morning. Known, stated, deferred on purpose.
-
-**Standing caution for the autonomy push:** two of today's three real findings came from
-Lorenzo pushing back, not from the machinery — the Tier 1 premise (supervision was the
-on-ramp, not the destination) and the doc audit that found the escalation channel missing
-downstream. Claude inferred instead of looking, twice. Under unsupervised runs that check is
-absent by construction. Build accordingly.
-
----
-
-## Backlog (triggered — do when the condition fires)
-
-- **Gate-scan detector is question-shaped — it misses *declarative* gates.** Found
-  2026-07-11 by the backstop's own first live fire: it flagged 5 turns, but a gate that WAS
-  logged (the spec-07 scope cut — "here are the cuts… Building.") was never detected,
-  because that turn ends in a statement, not a `?`. `_is_asking()` looks for a question mark
-  in the last 300 chars. The "here's what I'd do, proceeding unless you object" gate — the
-  ponytail-shaped one, used constantly — is **invisible** to it. **Consequence: the measured
-  miss rates (howler 91%, conclave 61%) are FLOORS, not ceilings.** *Trigger:* fold the fix
-  in when P7 fires (before labeling — a labeling pass on a corpus with a known recall hole
-  calibrates on the wrong sample). *Do not* reach for NLP: the cheap move is to also treat a
-  turn as asking when it ends on an explicit proposal marker, and to accept that some recall
-  is unreachable — the model is still the precision filter, and a recall net with a named
-  hole beats one with an unnamed one.
-
-- **First live fire, 2026-07-11 — the backstop moved the rate.** Gates logged this session
-  went 3 → 6 after the hook fired (5 detected, 3 logged, all 3 missing ones real, zero false
-  positives). First data point for observatory **watch #4** ("does the logged-gate rate
-  actually move? if not, the hook is ceremony — cut it, don't tune it"). It moved. n=1.
-
-- **Label `should_fire` on the gate corpus. DEFERRED 2026-07-11 — and the deferral is a
-  predicate, not this bullet.** `bin/tessera-watch` **P7** counts unlabeled gate events
-  recorded *after* the backstop went live (across tessera + all downstreams) and fires at
-  ≥20. When it fires, the corpus is both honest and big enough to be worth labeling.
-  *Why deferred:* (1) the pre-backstop corpus is **61–91% truncated** (howler logged 4 of
-  43 gate-shaped turns, conclave 22 of 57), so labeling it calibrates on a biased sample;
-  (2) v1 escalation fires on **hard blocks only**, which need no threshold, so nothing is
-  blocked on it. *Two things to get right when it fires:* **(a) the model must not label its
-  own gates** — the contract requires a truth signal *independent of the gate's own
-  decision*, and Claude filling in 29 nulls with its own opinion is self-assessment wearing
-  calibration's clothes; **(b) `should_fire` ≠ "could an agent self-dispose this"** — they
-  come apart exactly where it matters (an `aws-launch` gate *should* have fired for a human,
-  yet an agent with a hard budget stop could safely self-dispose a $2 boot inside budget).
-  Overloading one column with both meanings corrupts a contract four repos already write to.
-  Add a distinct `can_self_dispose` label instead. See ADR-0005, `docs/contracts/gate-event.md`.
-
-- **`pytest scripts/` cannot run as a whole suite — two modules both named `emit`.**
-  `scripts/gate/emit.py` and `scripts/override/emit.py` collide in `sys.modules` (no
-  packages, rootdir sys.path insertion), so whichever imports first wins and
-  `scripts/override/test_override.py` fails collection with
-  `ImportError: cannot import name 'Override' from 'emit'`. **Pre-existing** (reproduces two
-  commits back), invisible because everyone runs per-suite; every suite is green alone (gate
-  17, watch 11, escalate 9, override 13). F-003-shaped: two things, one name, no namespace.
-  **Trigger:** next time anything needs a single green-suite command (CI, a pre-commit gate,
-  or a downstream copying this test layout). Fix = namespace them, not `--import-mode`
-  (tried; it makes it worse).
-
----
-
-## Handoff — prior (2026-07-10)
-
-**Just finished (big session):** the **observatory-watcher pilot is built** —
-roadmap Tier 1 / spec-03 de-risking. `bin/tessera-watch` evaluates the
-Observatory's silent+machine-checkable "When to revisit" triggers as predicates,
-surfaced by a SessionStart hook (`tessera-watch-surface.sh`, now wired + in the
-install payload). Substrate-only: predicate list + runner + append-only fire-log
-(`.tessera/logs/watch.jsonl`) + `G-a` graduation predicate that reads the log so
-the "graduate to a stateful engine" decision is itself channelized, not prose. 11
-tests. On first run it caught **two real drifts** (a live hook missing from
-`templates/`; a 167-line phantom `mnemos-compact-recovery.sh` contradicting its own
-doc — both fixed). Also this session: FOCUS-003 closed, findings backlog cleared to
-0 (howler F-002 transferred, tess-dashboard legacy `FINDINGS.md` renamed). **9
-commits across tessera/howler/tess-dashboard, all pushed.**
-
-**Do not re-litigate (decided this session):**
-- **Substrate-only.** No snooze/hysteresis/prose-parsing/umbrella until a
-  graduation predicate fires on real fire-log evidence. Building any of them now is
-  the exact over-build the pilot exists to prevent.
-- **P2 (tess-umbrella) declined + retired.** Verb count tracked no real friction —
-  the `tessera-*` binaries are hook-invoked and callers name them directly, so an
-  umbrella aliases without consolidating. Don't rebuild it; reopen only on a real
-  hand-driven `tess` workflow. (observatory → Override entry #1.)
-- **Mnemos compaction trial** still event-triggered (≥3 **non-manual** `compaction_fired`),
-  auto-watched by P3. Machinery passed its first live exercise 2026-07-11 (manual `/compact`);
-  the *value* question needs a real auto event and the counter is still **0 real**. Empty log =
-  untested, not useless — and a manual test is not an entry in it.
-
-**Next — signal-gated, nothing to build cold:** the fire-log starts populating at
-the *next* SessionStart (the hook wasn't live when this session began). No predicate
-currently fires — watcher is green. Pick up when one fires: **P3** (Mnemos verdict),
-**P1/P4/P5** (real drift/growth), or **G-a** (a predicate stuck ≥3 runs → decide its
-remedy). The one *discussion* still parked: **broader roadmap Tier 1** + the 5 GSD
-observatory cluster (below) — the pilot informs it but hasn't settled it.
-
----
-
-## [FOCUS-001] Fix tier-classifier under-rating of decision/question prompts
-
-**Status:** done (2026-07-08) — few-shot mitigation applied, 5/6 empirical; residual (context-blind lookup-shaped decisions) logged to observatory as mitigation #1, still open
-**Priority:** high
-**Source:** observatory "Tier classifier under-rates discussion-heavy prompts" (ADR-0002 open thread); observed live 2026-07-08 — "what's next for tessera?" classified HAIKU.
-
-### Problem
-`hooks/tier-classify-hook` classifies by task-type keywords on the bare prompt.
-Short decision/strategy questions ("what's next?", "should we go global?") match
-no keyword and fall through to HAIKU/SONNET — under-rating the most
-reasoning-heavy turns exactly when stakes are highest. Sanctioned fix path:
-ADR-0002 re-evaluate trigger ("misclassification costs quality → boundary
-few-shot examples").
-
-### Approach
-Prompt-engineering the classifier (smallest diff, reversible): add a
-"judge reasoning demanded, not prompt length" rule, extend OPUS to open
-design/strategy decisions, and add balanced few-shot examples (short decision Q
-→ OPUS; short trivial lookup → HAIKU) so length stops being the signal.
-
-### Validation
-Re-classify this session's real prompts (decision questions) — must land OPUS,
-while a trivial lookup stays HAIKU. Empirical eval against local qwen, not hope.
-
----
-
-## [FOCUS-002] Sweep the observatory (22 entries)
-
-**Status:** done (2026-07-08)
-
-Triaged all 22. Framework too young for the >6mo cull — nothing dead. Outcomes:
-- **Promoted:** L217 convention-surfacing drift → **design principle #17** (3rd
-  instance was this session's findings SessionStart hook).
-- **Cluster cross-ref:** 5 GSD entries (byte-budget, `.planning` schema, domain
-  probes, gate types, plan-drift) tied to the Tier 1 discussion — resolve together.
-- **Near-due watch:** L174 Mnemos kill/keep clock resets ~2026-07-10 (drop signal
-  if the fed layer still hasn't aided a real recovery).
-- **Spawned:** FOCUS-003 (audit CLAUDE.md "surface X" against #17).
-- Rest legitimately parked on external triggers. Duplicate hook copies
-  (`hooks/` vs `.claude/scripts/`) noted — real F-003-shaped smell, folded into
-  the ADR-0004 re-eval space, not urgent.
-
----
-
-## [FOCUS-003] Audit CLAUDE.md "surface X" instructions against principle #17
-
-**Status:** done (2026-07-10)
-**Priority:** medium
-**Source:** principle #17 (channel-not-convention); its own follow-on clause.
-
-Sweep CLAUDE.md (framework + downstream templates) for instructions telling the
-model to surface something to the user via convention alone ("surface X",
-"flag Y", "tell the user Z"). Each is a silent-drift risk. For each: is there a
-non-model channel (statusline / hook / harness tool), or does it rely on model
-recall? Convert the high-value ones; document the rest as accepted-convention
-with rationale.
-
-### Outcome
-Swept `CLAUDE.md`, `templates/tessera/CLAUDE.md.template`, `templates/CLAUDE.md`.
-Six candidates; **one violation**, already tracked, no build needed.
-
-- **Accepted conventions** (#17 exempts "shape how the model works" — no
-  user-facing artifact whose value depends on being seen):
-  - Push back on drift (L31), Name biases (L35), Flag confidence (L37). All
-    introspective/reasoning behavior; no non-model channel is possible or wanted.
-- **Already channelized** (N/A — the "announce" is cosmetic atop a real channel):
-  - Announce `MNEMOS CHECKPOINT` (L56 → hook injection); Tier advisory (L60 →
-    statusline).
-- **The one #17 violation — surface-decisions → *also record it* (L33):** the
-  *record* (`scripts/gate/emit.py` → `.tessera/logs/*.jsonl` → dashboard) is the
-  user-facing friction journal; its trigger is pure model recall; **~85% miss**
-  measured (observatory line 154). Already documented (observatory 147-157) with
-  the fix queued: Stop-hook gate-scan backstop, gated on n≥2 dogfood reproduction.
-  No new work — correctly deferred there.
-
-**Audit's own contribution:** L33 *conflates two things* — gate-**surfacing**
-(an accepted reasoning-convention) and gate-**recording** (the violation). The
-same bundling is copied into `CLAUDE.md.template:23-24`, so every downstream
-project inherits the ambiguity. **RESOLVED 2026-07-10:** reworded both files —
-surfacing is now its own bullet (accepted convention, #17-permitted); recording is
-a separate bullet honestly labelled a lossy convention with the ~85% miss and the
-queued Stop-hook backstop stated inline. The convention half is no longer tarred
-with the violation half.
+**Step 2 — value. STILL OPEN.** `trigger: auto` has never happened. Only a genuine
+auto-compaction answers what the trial asks: *did the restored checkpoint let work resume
+without re-deriving?* That is FOCUS-004's job. **P3 remains at 0 real.**
 
 ---
 
@@ -355,183 +205,140 @@ with the violation half.
 
 - **Kill the dual-Homebrew Python split — do the venv.** *Decided 2026-07-11 (1a/2b): venv is
   the right fix, deliberately deferred.* **`tessera-watch` P9 fires every session until this
-  lands**, so it cannot be quietly dropped; after 3 consecutive runs G-a escalates it.
-  - **The facts, measured:** `python@3.14` is `installed_on_request: False` — a brew
-    **dependency** of awscli/httpie/mlx/mlx-c/**ollama** (the tier-classifier's engine). It is
-    **not removable** and owns the `python3` name with *nothing installed in it*.
-    `python@3.13` is `installed_on_request: True`, nothing in brew depends on it, and it holds
-    the entire toolchain (pytest, pyyaml, mnemos, icpg). The removable one is the one we use.
-  - **Why not "just migrate to 3.14":** Homebrew re-points `python3` whenever a *dependent*
-    formula moves. 3.14 arrived because ollama wanted it; 3.15 will do the same and orphan the
-    toolchain again. Migration resets the clock, it does not stop it.
-  - **Hard trigger: before the first unsupervised downstream run (ADR-0005).** A silent
-    interpreter break with no human watching is F-001 exactly — and F-001 was invisible for
-    weeks, confounding the whole Mnemos trial.
-  - Scope: touches `install.sh` + the bin scaffold. Interim pin (`python3.13`, PATH-relative,
-    in `.tessera/config.yml`) works and is honest.
+  lands**, so it cannot be quietly dropped; G-a escalates after 3 consecutive runs.
+  - **Measured, and it closes the obvious escape hatch:** `python@3.14` is
+    `installed_on_request: **False**` — a brew **dependency** of awscli/httpie/mlx/mlx-c/**ollama**
+    (the tier-classifier's engine). **Not removable**, and it owns the `python3` name with
+    *nothing installed in it*. `python@3.13` is `installed_on_request: **True**`, nothing in brew
+    depends on it, and it holds the **entire** toolchain. *The removable one is the one we use.*
+  - **Why not just migrate to 3.14:** Homebrew re-points `python3` whenever a *dependent* formula
+    moves. 3.14 arrived because ollama wanted it; 3.15 will do the same and orphan the toolchain
+    again. **Migration resets the clock, it does not stop it.**
+  - **Hard trigger: before the first unsupervised downstream run (ADR-0005).**
+  - Scope: `install.sh` + the bin scaffold. Interim pin (`python3.13`, PATH-relative) works.
+
+- **Namespace `scripts/gate/` and `scripts/override/` — the trigger already FIRED.** Both dirs
+  contain an `emit.py` *and* a `scan.py`; with no packages, pytest binds `import emit` to
+  whichever collected first and the other suite fails collection. The backlog said the trigger
+  was *"next time anything needs a single green-suite command (CI, **a pre-commit gate**, ...)"* —
+  **a pre-commit gate was built on 2026-07-11 and the trigger was not noticed.** Worse, the
+  workaround (enumerating test files in `config.yml`) **silently ran 6 of 12 files while
+  reporting green.** *Mitigated same day:* `scripts/run-tests.sh` runs each suite in a separate
+  process (separate `sys.modules`, no collision) — all 87 tests now run. **Still open:** proper
+  namespacing. *Deferred because* `python3 scripts/gate/emit.py` is the invocation documented in
+  four repos' CLAUDE.md and in the gate-event contract; packagifying breaks that bare same-dir
+  import contract. That is a real migration. *Trigger:* CI, or the next time the contract is
+  being touched anyway.
+
+- **Gate-scan detector is question-shaped — it misses *declarative* gates.** Found by the
+  backstop's own first live fire. `_is_asking()` looks for a `?` in the last 300 chars, so the
+  "here's what I'd do, proceeding unless you object" gate — the one used constantly — is
+  **invisible**. **Consequence: the measured miss rates (howler 91%, conclave 61%) are FLOORS,
+  not ceilings.** *Trigger:* fold in when P7 fires, **before** labeling. *Do not reach for NLP*:
+  also treat a turn as asking when it ends on an explicit proposal marker, and accept that some
+  recall is unreachable — a recall net with a **named** hole beats one with an unnamed one.
+
+- **Label `should_fire` on the gate corpus. DEFERRED — and the deferral is watcher P7, not a
+  note.** Fires at ≥20 unlabeled post-backstop gates. *Two things to get right when it fires:*
+  **(a) the model must not label its own gates** — the contract needs a truth signal independent
+  of the gate's own decision, and Claude filling in nulls with its own opinion is self-assessment
+  wearing calibration's clothes; **(b) `should_fire` ≠ "could an agent self-dispose this"** — they
+  come apart exactly where it matters (an `aws-launch` gate *should* have fired for a human, yet
+  an agent with a hard budget stop could safely self-dispose a $2 boot inside budget). Add a
+  distinct `can_self_dispose` label. See ADR-0005, `docs/contracts/gate-event.md`.
+
+- **Prove Layer 3 (`mnemos-post-compact-inject.sh`) actually injects.** Its `restore_injected`
+  line and marker consumption were confirmed 2026-07-11, but its text was never observed
+  reaching the model — PreToolUse stdout may not surface. Moot while Layer 2 fires, but **Layer 3
+  is the only net when a post-compaction turn has no SessionStart.** Cheap check first: does
+  PreToolUse stdout reach the model at all?
+
+- **Mnemos compaction-recovery verdict.** Fires at **≥3 non-manual `compaction_fired`**
+  (currently **0 real**; one `manual` test, correctly excluded). Watcher **P3**. When it fires:
+  did `restore_injected` follow each one, and did the restored checkpoint let work resume
+  without re-deriving? An **empty log is not a signal** (untested ≠ useless), and a
+  **`trigger: manual` entry is not a signal either** (a test of the layer, not evidence about
+  it). Scope: compaction-recovery only, never session-continuity.
 
 - **`design-principles.md` promises two files that were never built.** *(`.tessera/config.yml`
-  was the third — it graduated: built 2026-07-11 with a live consumer.)* Surfaced by
-  `doccheck` (2026-07-11), parked in its `PLANNED_PATHS` so the debt stays legible instead
-  of silently allowlisted: `.tessera/config.yml` (described in the **present tense** at
-  :196/:589/:638 as where tuning values live), `.tessera/third-party-scope.yml` (:726/:763),
-  `.tessera/project.yml.template` (:195). None exist. A reader — or a future Claude — goes
-  looking for a file that was never written. **Decide per file: build it, or reword the doc
-  to the conditional.** Not urgent, but it is the same drift class aimed at
-  unbuilt-vs-built rather than changed-vs-stale.
+  was the third — it **graduated**: built 2026-07-11 with a live consumer. That is what a
+  `PLANNED_PATHS` entry is *for*.)* Remaining, parked in doccheck's `PLANNED_PATHS` so the debt
+  stays legible: `.tessera/third-party-scope.yml` (**build its consumer first** — the Data
+  Handling review category does not exist; a data file with no reader is ceremony) and
+  `.tessera/project.yml.template` (**deletion candidate**, not a build candidate — all repos are
+  private, so the profile field leaks nothing).
 
-- **Mnemos compaction-recovery verdict.** Fires when `.mnemos/compaction-log.jsonl`
-  records **≥3 non-manual `compaction_fired` events** (currently **0 real**; one
-  `manual` test on 2026-07-11, correctly excluded). *Detection is automated — the
-  watcher's **P3** predicate surfaces this at session start; the manual tally is no
-  longer the trigger.* When P3 fires, judge: did `restore_injected` follow each
-  `compaction_fired`, and did the restored checkpoint let work resume without
-  re-deriving? `compaction_fired` with no matching restore, or repeated
-  `restore_missed_stale`, is a **failure** signal. An **empty or absent log is not
-  a signal at all** — it means compaction hasn't fired. A **`trigger: manual` entry
-  is not a signal either** — it is a test of the layer, not evidence about it. Scope:
-  compaction-recovery layer only, never session-continuity.
+- **The profile model has no consumer.** `profile: standard` is read by **nothing**; no
+  `profiles/` dir exists; `healthcare` is named throughout design-principles and is zero bytes
+  on disk. Same shape as the retired P2 — a mechanism whose value is *assumed*, never
+  exercised. Observatory entry opened 2026-07-11 with an **event trigger**: *a second profile
+  becoming real.* If one never arrives, that is the answer — a one-valued enum is a constant,
+  and a constant does not need a model. **Do not let a verdict on the model condemn
+  `.tessera/project.yml` as a marker file** — that demonstrably works and is how every tool
+  discovers downstreams.
 
-- **Prove Layer 3 (`mnemos-post-compact-inject.sh`) actually injects.** Its
-  `restore_injected` log line and marker consumption were confirmed 2026-07-11, but its
-  `CONTEXT RESTORED AFTER COMPACTION` text was never observed reaching the model — PreToolUse
-  stdout may not surface. Moot while Layer 2 fires (SessionStart runs on `source=compact`), but
-  Layer 3 is the **only** net when a post-compaction turn has no SessionStart. Fires when: a
-  real auto-compaction lands and the restore block is absent from context. Cheap check first —
-  confirm whether PreToolUse stdout reaches the model at all.
+- **Content-aware hook drift, remaining gap.** Watcher **P1** now content-diffs
+  `.claude/scripts/` ↔ `templates/`. **Not covered:** the third layer, `~/.claude/templates/`
+  (out-of-repo), and making `templates/` generated rather than hand-copied. *Trigger:* next
+  `install.sh` rework.
 
-- **Content-aware hook drift check.** *Partly resolved 2026-07-10 — the watcher's
-  **P1** predicate now content-diffs `.claude/scripts/` ↔ `templates/` and fired on
-  two real drifts.* `bin/tessera-hooks status` still only compares declared mode vs
-  local-copy *count*, never content. **Remaining gap P1 does NOT cover:** the third
-  layer, `~/.claude/templates/` (out-of-repo, so the in-repo watcher can't diff it),
-  and making `templates/` generated rather than a hand-maintained copy. The
-  bare-`python3` regression that sat ~2 weeks (observatory F-003, 2026-07-09) would
-  now be caught by P1. **Trigger for the rest:** next `install.sh` rework — fold in a
-  global-layer diff or generate `templates/`. Until then the global copy still needs
-  a manual sync (in-repo pair is now watched).
-
-- **Cut CHANGELOGs when repos go public.** conclave, tessera, tess-dashboard, and
-  howler are all expected to go public at some point. None but tessera has a
-  CHANGELOG yet — deliberately (premature until there's a public reader). When a
-  repo goes public: `cd <repo> && tessera-changelog --since <ref> --version <v> --date <d>`
-  (commits are already Conventional; verified plug-and-play on conclave). Keep the
-  tool **single-source in `tessera/bin`, reached via PATH — do NOT copy it into
-  each repo** (that's the F-003 drift trap). PATH the dir once per machine.
+- **Cut CHANGELOGs when repos go public.** All four are expected to go public eventually. Only
+  tessera has one — deliberately (premature until there is a public reader). When a repo goes
+  public: `tessera-changelog --since <ref> --version <v> --date <d>` (commits are already
+  Conventional). Keep the tool **single-source in `tessera/bin`, reached via PATH — do NOT copy
+  it into each repo** (the F-003 drift trap).
 
 ---
 
 ## Parked for discussion (not started)
 
-- **Roadmap Tier 1** (runtime observability / verifiable contracts / human
-  escalation, `_project_specs/00-autonomous-engineering-roadmap.md`). Build-more-
-  framework vision; rationale dates to an April 2026 chat. Discuss whether current
-  dogfood pull justifies it before committing — do NOT start speculatively.
-  - **Now carries a concrete entry point (2026-07-09).** The observatory-watcher
-    idea folded into **spec 03** (verifiable contracts) as its de-risking pilot —
-    same conversion (prose condition → machine-checked predicate), on a corpus
-    where a wrong predicate costs a noisy session-start line instead of a broken
-    build. Deliberately *not* spec 01, which observes the deployed product.
-  - **The dogfood pull is no longer hypothetical.** Three observatory triggers
-    were found at or past threshold, unnoticed, on 2026-07-09: `tess`-verb count
-    (4, trigger said 2), downstream project count (4, trigger said ~4–5), skill
-    count (56, trigger said 60, entry claimed "~50"). Spec 03's premise —
-    natural-language conditions go silently unchecked — is demonstrated, not
-    argued.
-  - **Do not build the watcher standalone.** It is the experiment that tests
-    whether Tier 1's premise holds. Building it before the discussion spends the
-    evidence it exists to produce.
-  - Resolves together with the 5-entry GSD cluster (byte-budget, `.planning/`
-    schema, domain probes, gate types, plan-drift guard) per the observatory
-    cluster note.
-  - **Discussion opened 2026-07-10. Resolved: substrate-only, hard-stop before
-    stateful.** Verdict on starting: justified (4 self-surfaced instances of the
-    drift class; #17 already doctrine). Smaller-vs-engine resolved on a reframe —
-    the axis isn't small-vs-big but **shared-substrate vs speculative-requirements**:
-    - **Build now (substrate):** flat declarative `name: predicate` list (≈ cost
-      of inline greps, reads better) + generic runner + surfacing channel +
-      append-only **fire-log** + written kill criterion.
-    - **Defer HARD until a real fired trigger demands it (speculative):** snooze/
-      ack state, hysteresis/damping, per-entry config, and NL-prose parsing (the
-      actual spec-03 engine). Reshape is likely, kill is not — so don't cast
-      predicate *shape* in engine-concrete before writing 5 real ones. The
-      "second `tess` verb = spirit-not-letter" case already proves predicates are
-      subtler than greps.
-  - **Re-evaluation is itself channelized (the watcher watches itself).** The
-    "build the engine now?" decision must not be a prose note — that's the drift
-    being fixed. Graduation triggers = watcher predicates over its own fire-log:
-    (a) same trigger fired ≥3 consecutive sessions → needs snooze/state; (b) any
-    predicate flapped (fired→cleared→fired) in last 5 → needs hysteresis; (c) >10
-    active predicates OR a trigger that can't be a one-liner → declarative/prose
-    engine earns its slot. When one fires, reopen smaller-vs-engine in-channel.
-    Fire-log earns its keep 3 ways: product function, kill decision, graduate
-    decision.
-  - **4 scope decisions — ALL SETTLED 2026-07-10. Ready to build.** (1) predicate
-    set — DRAFTED, denominators settled, see below; (2) surface channel — SETTLED:
-    **SessionStart hook + on-demand verb, both** (the `tessera-findings` shape —
-    one `bin/tessera-watch` script, hook wraps it for auto-surface, runnable
-    on-demand for deliberate checks; statusline rejected as too cramped for N
-    lines); (3) kill criterion + (4) storage — both ride the shared append-only
-    fire-log; kill and graduate are two faces of one self-monitor.
-  - **Build shape (substrate-only, no stateful parts):** `bin/tessera-watch` runs
-    the 5 predicates over on-disk state, prints fired ones, appends fired-set to
-    the fire-log; SessionStart hook wraps it (silent when none fire). Graduation
-    predicates a/b/c read the fire-log. NO snooze/hysteresis/prose-parsing until a
-    graduation predicate fires.
-  - **BUILT 2026-07-10.** `bin/tessera-watch` (5 predicates, `--json`/`--log`,
-    exit 1 if any fire) + `.claude/scripts/tessera-watch-surface.sh` (SessionStart
-    wrapper, `--log`, silent unless fired) synced to `templates/` + wired into
-    `settings.json` SessionStart. Fire-log → `.tessera/logs/watch.jsonl`
-    (gitignored). Tests `scripts/test_tessera_watch.py` — 8 pass (py3.13). Live: P2
-    fires (5 verbs — tessera-watch became the 5th), P1/P3/P4/P5 green. Graduation
-    predicates (a consecutive-fire / b flap / c count>10 or non-one-liner) NOT yet
-    built — add when the fire-log has history to read.
-  - **G-a BUILT 2026-07-10 — self-eval loop closed.** `g_a_consecutive` reads the
-    fire-log; a core predicate firing ≥3 consecutive runs surfaces as its own fired
-    predicate ("build remedy or add snooze"). Detector only — the remedy (snooze
-    state) still waits until G-a fires. G-b (flap) / G-c (predicate-count scale)
-    deferred, no signal. 12 tests pass. Observatory entry "…triggers are prose"
-    updated to Piloting + kill criterion recorded. All committed + pushed.
-  - **P2 RETIRED 2026-07-10 — pilot's first real lesson.** P2 (verb count → `tess`
-    umbrella) fired on a proxy that tracks no friction: the `tessera-*` binaries are
-    mostly hook-invoked and callers name them directly, so an umbrella adds an alias
-    layer without consolidating. Declined the umbrella, retired P2 from the watcher.
-    The watcher's value shown by *provoking scrutiny of a bad predicate*, not by
-    compliance. Recorded in observatory override entry (#1 declined). Watcher now
-    quiet — all green (only real signals fire). 11 tests pass.
-  - **NEXT (signal-gated, nothing to build now):** no predicate currently fires.
-    P3 fires when compaction hits 3 (Mnemos verdict); P1/P4/P5 on real drift/growth;
-    G-a if any core predicate sticks ≥3 runs. G-b/G-c only if their pattern appears.
-    Pilot substrate complete; further builds wait on the fire-log producing evidence.
-  - **#1 predicate set DRAFTED (silent AND machine-checkable; 5 of 22 entries):**
-    - **P1** F-003 hook drift: `templates/` vs `.claude/scripts/` per-hook diff
-      → **FIRES NOW (1 drift)**.
-    - **P2** override→`tess` CLI: `ls bin/tessera-* | wc -l` ≥2 → **FIRES NOW (4)**.
-    - **P3** Mnemos trial: `grep -c compaction_fired .mnemos/compaction-log.jsonl`
-      ≥3 → no (0, clean/untested). Same as the trial's re-arm trigger — folds in free.
-      *(Superseded 2026-07-11: this naive grep counts `trigger: manual` test compactions
-      as evidence. P3 now excludes them — see `bin/tessera-watch:p3_compaction`. Do not
-      copy this recipe.)*
-    - **P4** F-003 project count: downstreams w/ frozen hooks ≥5 → no (3).
-    - **P5** skill routing: `ls -d .claude/skills/*/ | wc -l` ≥60 → no (56).
-    - Excluded: Tier-1-cluster entries (resolve with the decision), self-announcing
-      triggers (sqlfluff etc.), and the gate-scan backstop (can't be a one-liner →
-      it's graduation-signal-c, not a starter predicate).
-    - **Denominators SETTLED 2026-07-10:** P2 → count `bin/tessera-*` binaries
-      (spirit, not `tess <noun>` letter which reads 0), threshold ≥2, **fires now
-      (4)**; stateless so it fires every session until umbrella built/snoozed →
-      first exerciser of graduation-signal-a. P4 → downstream siblings EXCL.
-      framework (tessera is `source`, not a drift victim), ≥5, no fire (3);
-      frozen-only refinement deferred. P5 → `.claude/skills/*/` dirs, ≥60, no fire
-      (56); plugin/duplication excluded until proven to dominate.
-  - **P1 drift predicate caught + fixed a live bug (2026-07-10):**
-    `tessera-findings-surface.sh` was a live SessionStart hook present in
-    `.claude/scripts/` but **missing from `templates/` AND `~/.claude/templates/`**
-    → fresh `install.sh` would not install it; findings backlog channel goes dark
-    on a new machine. **FIXED** — synced to both layers; scripts→templates now clean.
-  - **Phantom in install payload — DELETED 2026-07-10.**
-    `templates/mnemos-compact-recovery.sh` (167 lines) was dead payload wired to
-    nothing, its header naming the "SessionStart compact matcher" the 2026-07-09
-    correction declared never existed. Removed from `templates/` (not in global).
-    The accurate correction comment in `mnemos-post-compact-inject.sh:24` stays —
-    that's the record, not stale.
+- **The 5-entry GSD observatory cluster** (byte-budget, `.planning` schema, domain probes, gate
+  types, plan-drift). Tied to the Tier 1 discussion — resolve together, not piecemeal.
+
+- **Roadmap Tiers 2–3.** Tier 1 is now taken up (ADR-0005), so the old "does Tier 1 earn its
+  keep" question is settled. The successor question — how far past Tier 1 to go — is *not* open
+  yet and should not be until spec 06 ships.
+
+---
+
+## Archive
+
+### Handoff — 2026-07-10
+
+**Observatory-watcher pilot built** — roadmap Tier 1 / spec-03 de-risking. `bin/tessera-watch`
+evaluates the Observatory's silent+machine-checkable "When to revisit" triggers as predicates,
+surfaced by a SessionStart hook. Substrate-only: predicate list + runner + append-only fire-log
++ `G-a` graduation predicate that reads the log, so "graduate to a stateful engine" is itself
+channelized, not prose. On first run it caught **two real drifts** (a live hook missing from
+`templates/`; a 167-line phantom `mnemos-compact-recovery.sh` contradicting its own doc).
+FOCUS-003 closed; findings backlog cleared to 0.
+
+**Do not re-litigate:**
+- **Substrate-only.** No snooze/hysteresis/prose-parsing/umbrella until a graduation predicate
+  fires on real fire-log evidence. Building any of them now is the exact over-build the pilot
+  exists to prevent.
+- **P2 (tess-umbrella) declined + RETIRED.** Verb count tracked no real friction — the
+  `tessera-*` binaries are hook-invoked and callers name them directly, so an umbrella aliases
+  without consolidating. Don't rebuild it. **P2 is now the canonical name for the failure mode
+  "a predicate that fires correctly on a proxy tracking no real pain"** — it gets cited a lot.
+
+### [FOCUS-001] Tier-classifier under-rating — **done (2026-07-08)**
+
+Short decision/strategy prompts ("what's next?") matched no keyword and fell through to
+HAIKU/SONNET — under-rating the most reasoning-heavy turns exactly when stakes were highest.
+Fixed by prompt-engineering the classifier (judge *reasoning demanded*, not prompt length;
+balanced few-shot). 5/6 empirical. Residual (context-blind lookup-shaped decisions) logged to
+observatory as mitigation #1, still open.
+
+### [FOCUS-002] Observatory sweep, 22 entries — **done (2026-07-08)**
+
+Framework too young for a >6mo cull; nothing dead. **Promoted:** convention-surfacing drift →
+**design principle #17**. Spawned FOCUS-003. Flagged the 5-entry GSD cluster (still parked, above).
+
+### [FOCUS-003] Audit CLAUDE.md "surface X" against #17 — **done (2026-07-10)**
+
+Six candidates, **one real violation**. The audit's own contribution: the instruction
+*conflated* gate-**surfacing** (an accepted reasoning-convention, which #17 explicitly permits)
+with gate-**recording** (the violation — a user-facing artifact riding pure model recall, ~85%
+miss). Both files reworded so the convention half is no longer tarred with the violation half.
+**The violation itself was then closed 2026-07-11 by the gate-scan backstop.**

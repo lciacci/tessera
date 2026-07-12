@@ -75,9 +75,12 @@ The `tier-classify-hook` (UserPromptSubmit) classifies each prompt into a Claude
 
 ## Commands
 
-Tessera is a framework. It has no test or build commands of its own; downstream Tessera-using projects will have their own. For working in this repo:
+- **`tessera-test`** — run the full suite (87 tests). Reads `test:` from `.tessera/config.yml`, so **never guess the test command** — in any Tessera project, this is it. Here it runs `scripts/run-tests.sh`, which runs each suite in a *separate process*: `scripts/gate/` and `scripts/override/` both contain an `emit.py` and a `scan.py`, and they collide in a single pytest process. **Do not "simplify" it to a bare `pytest scripts/`** — that fails collection, and the previous workaround (enumerating files) silently ran half the suite while reporting green.
+- **`tessera-watch`** — evaluate the observatory's machine-checkable triggers. Also runs at SessionStart.
+- **`python3 scripts/doccheck.py`** — assert the docs' checkable claims. Enforced by `.githooks/pre-commit`.
+- **`./install.sh`** — idempotent; its `verify()` is the machine-known-good check.
+- `git status` / `git diff` / `git log` — standard repo operations.
 
-- `git status` / `git diff` / `git log` — standard repo operations
-- File operations under the `.claude/`, `.tessera/`, `docs/`, `skills/`, `commands/` directories
+Note: bare `python3` on this machine is Homebrew **3.14**, which has **no pytest** — the toolchain lives in 3.13 (see `tessera-watch` P9, and the venv item in the backlog). Anything that needs a third-party import must not assume `python3`.
 
-Downstream Tessera-using projects will have their own command sections in their own CLAUDE.md files.
+Downstream Tessera-using projects declare their own `test:` in their own `.tessera/config.yml`.

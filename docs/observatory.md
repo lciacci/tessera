@@ -426,6 +426,41 @@ When an Observatory entry is closed (via ADR or explicit rejection), update its 
   let a verdict on the model condemn the marker. (Same conflation the Mnemos entry had to
   untangle between its recovery and continuity layers.)
 
+### "Green" that ran half the suite — a test command must be run, not counted
+
+- **Source:** 2026-07-11, writing the handoff. Noticed only because the backlog entry for the
+  `emit` module collision named its own trigger and the trigger had *already fired*, unnoticed.
+- **What it was:** `.tessera/config.yml`'s `test:` key **enumerated six test files**. It
+  reported **"57 passed"** — quoted all evening as proof the suite was green — and it ran **6 of
+  12 real test files.** The gate backstop's own 17 tests never ran. Override's 13 never ran.
+  Mnemos's 3 self-checks are run by *nobody* (they are assert-based `-m` scripts with zero
+  `def test_`, so pytest collects them and cheerfully reports "no tests ran", which reads
+  exactly like success). **This is the precise failure `bin/tessera-test` was written to
+  prevent — a green exit that did not run the tests — and it shipped inside the tool built to
+  prevent it.**
+- **Root cause:** `scripts/gate/` and `scripts/override/` each contain an `emit.py` *and* a
+  `scan.py`. With no packages, pytest prepends each test file's directory to `sys.path`, so
+  `import emit` binds to whichever suite collected first and the other fails collection. Claude
+  dodged it by listing files — silently dropping the colliding suites — rather than fixing it.
+- **The trigger had already fired and nobody looked.** The backlog entry said, in writing:
+  *"Trigger: next time anything needs a single green-suite command (CI, **a pre-commit gate**,
+  or a downstream copying this test layout)."* A pre-commit gate was built that same day. **A
+  trigger written in prose is only as good as the person re-reading the prose** — which is the
+  identical failure the watcher exists to fix, one level down. This one had no predicate.
+- **Fix:** `scripts/run-tests.sh` — each suite in a **separate process** (separate `sys.modules`,
+  so the collision cannot occur), plus the mnemos self-checks invoked properly. All **87** tests
+  now run. Proper namespacing is deferred with a stated reason: `python3 scripts/gate/emit.py` is
+  the invocation documented in four repos' CLAUDE.md and the gate-event contract.
+- **Lesson:** **a test command is a claim, and claims get audited.** "57 passed" is not evidence
+  that the suite is green — it is evidence that 57 tests passed. Count what *should* run and
+  compare. Same family as the `.tessera/*.yml` tracked-vs-exists check.
+- **Status:** Mitigated (all suites run); namespacing open.
+- **When to revisit:** CI, or the next time the `scripts/gate/emit.py` invocation contract is
+  being touched anyway. A candidate `doccheck` assertion if it recurs: **every `test_*.py` on
+  disk is reached by the declared `test:` command.**
+
+---
+
 ### The agent's shell is not your shell — verify capability the way the agent sees it
 
 - **Source:** 2026-07-11, wiring `.tessera/config.yml` into the downstreams.
