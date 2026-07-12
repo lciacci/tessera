@@ -77,6 +77,15 @@ verify() {
     fi
   done
 
+  # 1b. tessera/bin on PATH. These are single-source tools reached by name (the F-003 trap
+  # is copying them into every repo). Without PATH, downstream CLAUDE.md instructions like
+  # `tessera-escalate raise` silently refer to a command that does not exist — and an
+  # escalation channel that cannot be invoked is worse than none, because the docs claim it.
+  if ! command -v tessera-escalate >/dev/null 2>&1; then
+    err "tessera/bin not on PATH — add: export PATH=\"\$HOME/Claude/tessera/bin:\$PATH\""
+    fail=1
+  fi
+
   # 2. mnemos on PATH, shebang resolves, runs (F-001 — the silent hook killer).
   if ! command -v mnemos >/dev/null 2>&1; then
     err "mnemos not on PATH — see docs/install.md Step 2"

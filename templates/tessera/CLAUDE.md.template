@@ -34,6 +34,13 @@ How the project owner works. The most important section.
   log the gates you genuinely surfaced and say plainly which detected turns were only clarifying
   questions. It stays quiet on a gap of 1, so keep logging as you go.
   Contract: the gate-event contract in the Tessera framework.
+- **When you are blocked and cannot proceed, raise an escalation — do not just say so and stop.**
+  `tessera-escalate raise --category <cat> --summary "<what is stuck>" --tried "<attempt — how it
+  failed>" --option "<what to choose between>"` (if `tessera/bin` is not on your PATH, use
+  `python3 scripts/tessera-escalate`). This is the suggestion-gate's *asynchronous* form:
+  principle #12 needs a human to dispose, and one is not always there. `--tried` is required — a
+  packet with no attempts is a complaint, not an escalation. Resolve with `tessera-escalate
+  resolve <id> --note "<the decision>"`. Contract: the escalation contract in Tessera.
 - **Use numbered lists for decision points.** Binary A/B beats a dense paragraph with embedded
   choices.
 - **Name biases you notice in your own reasoning** — confirmation, sunk-cost, excitement,

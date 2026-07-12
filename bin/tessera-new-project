@@ -48,6 +48,10 @@ cp "$TESSERA_ROOT"/scripts/gate/emit.py "$TESSERA_ROOT"/scripts/gate/test_gate_e
    "$TARGET/scripts/gate/"
 cp "$TESSERA_ROOT"/.claude/scripts/tessera-gate-scan.sh "$TARGET/.claude/scripts/"
 chmod +x "$TARGET/.claude/scripts/tessera-gate-scan.sh"
+# Escalation: reached by name from PATH (tessera/bin). The copy is a BRIDGE for machines
+# where PATH is not set — delete it once install.sh's PATH check is green everywhere.
+cp "$TESSERA_ROOT"/bin/tessera-escalate "$TARGET/scripts/tessera-escalate"
+chmod +x "$TARGET/scripts/tessera-escalate"
 
 # Settings + gitignore (stack-agnostic bases — add your stack's commands after).
 cp "$TPL/settings.base.json" "$TARGET/.claude/settings.json"
