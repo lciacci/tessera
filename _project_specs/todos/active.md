@@ -60,6 +60,86 @@ declarative gates → the 91%/61% miss rates are **floors, not ceilings**).
 
 ---
 
+## [FOCUS-004] Skill audit — and the session that finally tests compaction
+
+**Status:** queued (prepped 2026-07-11, not started)
+**Priority:** high — overdue by our own doctrine, and it is the compaction test vehicle
+**Estimate:** L (it is *meant* to be large — that is the point)
+
+### Why this is two things at once
+
+**1. It is overdue.** `CLAUDE.md` says the skill set is "a starting point per principle #15 —
+trim or expand based on evidence in subsequent sessions." That never happened. We are at **56
+skills**; watcher **P5** fires at 60. Nobody has ever evaluated whether they earn their slots.
+Candidates for the chop on sight: `posthog-analytics`, `supabase-python`, `web-content`,
+`user-journeys`, `build-in-public` — none of which have been touched in any dogfood session.
+
+**2. It is the only honest way to reach compaction.** Measured 2026-07-11:
+
+| Corpus | ~Tokens |
+|---|---|
+| **All 56 `SKILL.md` files** | **~208,000** |
+| design-principles + observatory + ADRs + specs + contracts | ~82,000 |
+| *Context window (Opus)* | *~200,000* |
+| *Auto-compaction fires at ~83%* | *~166,000* |
+| *Longest session ever recorded (token_util 0.51)* | *~102,000* |
+
+**The skills alone exceed the entire context window.** Reading them blows through the
+compaction threshold by ~25% with no padding and no artifice — the work is *genuinely*
+read-heavy. Expect **1–2 auto-compactions**, which is exactly what the Mnemos trial needs
+(P3 requires ≥3 *real* compaction_fired events; the counter is currently **0**).
+
+**Do not pad a session to force compaction.** Pick work whose nature is token-heavy. This is
+that work, and it is cheap to lose: reading and doc edits, no builds, no spend, nothing
+irreversible. If the restore layer fails mid-audit, the cost is re-reading.
+
+### Preconditions (do these first, in order)
+
+1. **Manual `/compact` machinery check must pass first** (see below). The three-layer restore
+   has **never executed**. Discovering it is broken 160k tokens into an audit is the expensive
+   way to learn it. Last time we assumed Mnemos plumbing worked, it was broken three separate
+   ways, silently — see observatory "Mnemos kill/keep test was confounded."
+2. Trigger-tagging is **done** (`22f06b9`) — manual `/compact` is now safe and will not
+   pollute P3.
+
+### What "done" looks like
+
+- Every skill: keep / trim / cut, with a one-line evidence-based reason (used in a real
+  session? covered by another skill? never once loaded?).
+- Cuts recorded in `docs/design-principles.md` (the framework-evaluation section is where
+  skill-set changes get their reasoning, per CLAUDE.md).
+- **Secondary payload — the docs↔code consistency audit.** On 2026-07-11 two docs were found
+  silently lying (the ADR index omitted 0005; `gate-event.md` still claimed the recorder rode
+  model recall) — and both were found *by luck*, when Lorenzo asked "all docs updated?" Nobody
+  has ever checked the rest. Fold it in; it is the same read-heavy shape.
+
+---
+
+## Compaction test protocol (run at the START of the next session)
+
+The compaction-recovery layer is Mnemos' largest untested surface: **`.mnemos/compaction-log.jsonl`
+does not exist — compaction has never fired, once.** 171 fatigue samples, max token_utilization
+**0.51**, state=`flow` in **171/171**. Every band above 0.4 (COMPRESS / PRE-SLEEP / REM /
+EMERGENCY) and every action it gates is dead code by observation.
+
+**Step 1 — machinery (cheap, ~30 seconds).** Type `/compact` by hand. Then verify:
+
+```bash
+cat .mnemos/compaction-log.jsonl          # expect: trigger "manual" (excluded from P3 ✓)
+ls .mnemos/just-compacted                 # marker: written by PreCompact, consumed by restore
+python3 -c "import json;print(json.load(open('.mnemos/checkpoint-latest.json'))['id'])"
+tessera-watch                             # P3 must still read 0 real — a test is not evidence
+```
+Pass = a `CONTEXT RESTORED AFTER COMPACTION` block appears, the marker is consumed, and P3
+still reads **0 real**. Fail = fix the restore layer *before* spending a long session on it.
+
+**Step 2 — value (needs the real thing).** Only a genuine auto-compaction answers the question
+the trial actually asks: *did the restored checkpoint let work resume without re-deriving?*
+That is what FOCUS-004 above is for. It cannot be faked — a padded session produces a restore
+judgment about work you were not really doing.
+
+---
+
 ## Next session — pick up here
 
 **Nothing is due cold.** Every open item is signal-gated; the watcher is green. Check
