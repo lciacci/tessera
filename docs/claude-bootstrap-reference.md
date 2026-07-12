@@ -1,4 +1,18 @@
-# Claude Bootstrap — Full Reference
+# Skills & Hooks — Full Reference
+
+The skill, rule, and hook system Tessera runs on: TDD loops via Stop hooks, `@include`
+directives, conditional rules, PreCompact recovery, Mnemos, iCPG, and agent teams.
+
+> **Provenance.** This system — and this document — came from
+> [Maggy](https://github.com/alinaqi/maggy), which Tessera was forked from; it was titled
+> "Claude Bootstrap — Full Reference" there, after Maggy's installer. See [NOTICE](../NOTICE).
+> The machinery it describes is live in Tessera and this document is maintained here, so it
+> is kept and corrected rather than deleted. Two sections that described *Maggy the product*
+> rather than the shared machinery — its P2P mesh, and its release history — have been removed;
+> no mesh code exists in this repo.
+>
+> **The skills catalog below is inherited and not yet audited** (FOCUS-004). Treat its counts
+> and entries as Maggy's, pending that pass.
 
 ## TDD Loops via Stop Hooks
 
@@ -202,19 +216,6 @@ Stop hook order:
 | 4-8 files | Asks user, then delegates or handles |
 | 9+ files | Handles directly (needs full context) |
 
-## P2P Mesh Network
-
-Multi-node session sync and handoff across machines. Each Maggy instance is a mesh peer.
-
-| Component | What it does |
-|-----------|-------------|
-| **Peer Discovery** | Registry of known peers |
-| **Git Discovery** | Auto-discovers peers from shared git remotes |
-| **WebSocket Server/Client** | Bidirectional real-time communication |
-| **Mesh Protocol** | 7 message types: hello, share, request, response, quarantine, promote, heartbeat |
-| **Quarantine** | Untrusted data quarantined until reviewed |
-| **Org Scoping** | Peers filtered by org key |
-
 ## Pre-configured Permissions
 
 `.claude/settings.json` includes permission rules:
@@ -302,13 +303,8 @@ your-project/
 
 ## Evolution
 
-| Version | Date | What Changed |
-|---------|------|-------------|
-| **v1.0** | Jan 2026 | 30+ skills, `/initialize-project`, TDD via Ralph Wiggum loops |
-| **v2.0** | Jan 2026 | Skills restructured, YAML frontmatter, 60+ skills |
-| **v3.0** | Mar 2026 | Stop hooks, `@include`, conditional rules, agent teams |
-| **v3.3** | Apr 2026 | Mnemos, iCPG, Maggy dashboard MVP |
-| **v3.5** | Apr 2026 | PreCompact hook, fatigue model, hook resilience |
-| **v3.6** | May 2026 | Cross-tool compatibility (Claude + Kimi + Codex) |
-| **v4.0** | May 2026 | Polyphony — container-isolated multi-agent orchestration |
-| **v5.0** | May 2026 | Autonomous command center — Chat, P2P Mesh, process intelligence |
+This system's history belongs to Maggy, not to Tessera — Tessera's own decisions are in
+[`docs/adr/`](adr/) and its design rationale in
+[`docs/design-principles.md`](design-principles.md). Maggy's release history lives in
+[Maggy's repo](https://github.com/alinaqi/maggy); it is not restated here, because a version
+table for someone else's product, sitting in this repo, reads as if it were ours.

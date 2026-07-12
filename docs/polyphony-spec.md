@@ -2,7 +2,9 @@
 
 ## Overview
 
-Polyphony is a container-isolated multi-agent orchestration system for Maggy. Each agent session runs in its own Docker container with a full git clone on its own branch, enabling true parallel execution without conflicts.
+Polyphony is a container-isolated multi-agent orchestration system. Each agent session runs in its own Docker container with a full git clone on its own branch, enabling true parallel execution without conflicts.
+
+> Polyphony originated in [Maggy](https://github.com/alinaqi/maggy), which Tessera was forked from (see [NOTICE](../NOTICE)). Tessera vendors its own copy at `scripts/polyphony/`. This spec describes it as it exists **here**.
 
 ## Architecture
 

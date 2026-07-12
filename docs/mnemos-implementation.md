@@ -1,6 +1,8 @@
 # Mnemos Implementation Addendum
 
-Implementation details for the Mnemos RFC (Task-Scoped Memory Lifecycle for Autonomous Agents) as deployed in Maggy.
+Implementation details for the Mnemos RFC (Task-Scoped Memory Lifecycle for Autonomous Agents) as deployed in Tessera.
+
+> Mnemos originated in [Maggy](https://github.com/alinaqi/maggy), which Tessera was forked from (see [NOTICE](../NOTICE)). Tessera vendors its own copy at `scripts/mnemos/` and runs it live — the hooks in `.claude/settings.json` and the eager-loaded `mnemos` skill both depend on it. This document describes **Tessera's** deployment; where it once said "in Maggy", it now means this repo.
 
 ## 1. Signal Access in Claude Code
 
