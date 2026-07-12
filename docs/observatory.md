@@ -29,6 +29,79 @@ When an Observatory entry is closed (via ADR or explicit rejection), update its 
 
 ## Entries
 
+### Fail-open everywhere — Tessera cannot tell you when it is broken
+
+- **Status:** Investigating. **This is the most consequential entry in this file.** It is a claim about the framework as a whole, not about any component, and it should be promoted to an ADR once its remedy is designed.
+- **Source:** The 2026-07-12 F-001/venv session. Not one bug in it was found by the framework announcing a problem. Every one was found by a human getting suspicious, or by an adversarial verifier in a clean context. Three rounds of "it's fixed" were refuted by independent verification, each time correctly.
+
+#### The evidence — eight bugs in one session, and **not one of them announced itself**
+
+| Bug | How it presented |
+|---|---|
+| **F-001** (original) | Mnemos checkpoints silently no-op'd for **weeks**. Read as *"the graph is unused"* when it meant *"the graph is unreachable."* Confounded the entire Mnemos kill/keep trial. |
+| **Hook toolchain fallback** | Fell back to `python3 -m mnemos`, and with `PYTHONPATH=scripts` bare python3 **imports mnemos from source**. So it did not fail — it silently **succeeded on an unmanaged interpreter**. `mnemos status` looked healthy. |
+| **Spend guard on py3.9** | PEP-604 annotations raise `TypeError` at definition time → `guard.py` exits 1 → the wrapper passes that through as "not 2" → **Claude Code reads it as ALLOW**. *An unauthorized GPU boot proceeds.* The guard failed **open**. |
+| **Spend backstop fire-counter** | `.tessera/.spend-backstop-fires` was committed holding **5**, against a `MAX_FIRES` of **3**. Every clone inherited a backstop **already past its cap — born disabled**, silently. |
+| **tess-dashboard hook** | `settings.json` exec'd `.claache/scripts/…` — a typo. The hook had **never once run**, and nothing said so. |
+| **`hooks/plugin-trigger`** | `import yaml` under `except Exception: pass` on an interpreter without yaml → **silently discovers zero plugins**, forever. |
+| **The test suite** | Wrote **real** `spend_denied` events to the production audit log. 26 of one session's 31 denials were manufactured by pytest — an 84%-polluted friction journal. |
+| **`doccheck` itself** | Reported *"12 checks, 0 false claims"* while **three live, wired hooks** ran the toolchain on a bare interpreter. The detector was green over the exact bug it exists to find. |
+
+#### The pattern
+
+Tessera fails open **everywhere** — hooks, wrappers, guards, detectors. Each instance is individually defensible, and most were deliberate:
+
+> *"A backstop that can wedge a session gets ripped out, and then it protects nothing."*
+> *"A hook that wedges every Bash call is its own outage."*
+
+Both true. But the **cumulative** property is not a design choice anyone made:
+
+> **Tessera is indistinguishable from healthy when it is broken.**
+
+And the layer meant to catch that — the detectors — **fail open too**, because *a green detector looks exactly like a working one*. There is no signal anywhere in the stack that distinguishes "nothing is wrong" from "the thing that would tell you is also broken."
+
+That is why the session became a rathole. It was never about Python. It was that **nothing in the system reports its own death**, so every fix needed a fresh adversarial read to find the next silent thing.
+
+#### The sharper finding: **mechanized rules held. Prose rules did not.**
+
+This is principle #17 getting its strongest evidence yet, and the evidence is *at the model's expense*. Sorted by whether the rule was a **channel** or a **sentence**:
+
+| Rule | Form | Held? |
+|---|---|---|
+| doc-drift bug → assertion in `doccheck.py` | **mechanized** | ✅ grew 5 → 13 checks, caught real bugs |
+| pre-commit gate blocks a lying commit | **mechanized** | ✅ |
+| `tessera-watch` P9 / G-a nags until the venv lands | **mechanized** | ✅ escalated, forced the fix |
+| gate-scan Stop hook | **mechanized** | ✅ caught unlogged gates the model forgot |
+| *"verify by invoking, not inspecting"* | **prose** (handoff) | ❌ violated repeatedly |
+| *"ship both halves or neither"* | **prose** (a comment the model itself wrote) | ❌ violated one layer up — the spend guard shipped downstream **without** doccheck |
+| *"existence is local, reachable is shared"* | **prose** | ❌ violated (templates/ updated, `~/.claude/templates/` not) |
+
+**Every rule with a channel held. Every rule that was only a sentence failed.** Including sentences the model had written itself, in the same session, and re-read.
+
+#### Two new rules, earned the hard way
+
+1. **A mechanism that fails OPEN needs a paired detector that fails LOUD.** Fail-open is correct for hooks. It is only *safe* when something else is watching. Today, nothing was. This is the general form of the fix that closed F-001: the venv was the mechanism, `no-bare-python3-with-toolchain-import` was the guardrail, and the venv alone would have been worthless.
+
+2. **A carve-out from a safety invariant must ship with a check that the carve-out holds.** The worst bug of the day was *built by an exception the model wrote*: "the gate/spend hooks may use bare `python3`, because they are stdlib-only and must survive a broken venv." That sentence is the bug — **stdlib-only is not version-independent**; when the interpreter NAME drifts, the VERSION drifts with it. The carve-out was reasonable, undocumented as a risk, and unchecked. It is now checked (`safety-scripts-run-on-system-python`, which *executes* the safety scripts on `/usr/bin/python3` — `ast.parse` passes, because PEP-604 is syntactically valid and only explodes when evaluated. **Compiling is not running.**)
+
+#### The consequence for autonomy — read this before trusting ADR-0005
+
+ADR-0005 named three preconditions for unsupervised operation. On 2026-07-12 all three were declared **met**. Then:
+
+- The **spend guard** — *the* precondition for unsupervised spend — was found to **fail open**.
+- The **escalation backstop** shipped with its fire-counter committed **past its cap**, disabled in every clone.
+
+Both were found by adversarial verification, **not** by the framework. **The readiness claim was wrong, and nothing in Tessera could have told us.** Autonomy is further off than ADR-0005 implies, and the blocker is not any single bug — it is that *the framework cannot yet report its own failure*.
+
+#### When to revisit / what would close this
+
+- **Design the paired-detector rule into the framework**, not into prose. Candidate shape: every fail-open path emits a `degraded` event, and a watcher predicate fires on any degraded event in the last N sessions. A hook that silently did nothing should be *loud in the log* even when it is *quiet in the session*.
+- **Promote to an ADR** once that shape is decided. This entry is the evidence base.
+- **Re-open ADR-0005's readiness assessment** in light of the two broken preconditions.
+- **Close when:** a deliberately-broken component (venv removed, guard corrupted, hook typo'd) is detected by the framework *within one session, without a human asking*. That is the bar. Nothing today would have met it.
+
+---
+
 ### Two-stage hierarchical skill routing (namespace meta-skills)
 
 - **Source:** Open GSD — `gsd-core` v1.40, [#2792](https://github.com/open-gsd/gsd-core/issues/2792)

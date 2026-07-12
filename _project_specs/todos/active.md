@@ -6,7 +6,79 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-07-12)
+## Handoff — pick up here (2026-07-12, end of the F-001 session)
+
+**Read `docs/observatory.md` → "Fail-open everywhere" FIRST. It is the finding. Everything
+below is downstream of it.**
+
+### What actually happened
+
+A venv fix became a 90-minute rathole of fixes-on-fixes. Three rounds of "it's closed" were
+each refuted by an **independent session** verifying from a clean context. Every refutation was
+correct.
+
+**The rathole was not about Python.** It was that *nothing in Tessera reports its own failure*,
+so every fix required a fresh adversarial read to find the next silent thing. Eight bugs in one
+session; **not one announced itself.** See the observatory table.
+
+### The two that actually mattered
+
+1. **THE SPEND GUARD WAS FAILING OPEN.** On a `/usr/bin`-first PATH, `python3` is macOS 3.9;
+   PEP-604 annotations raise `TypeError` at definition time; `guard.py` exits 1; the wrapper
+   passes that through as "not 2" — which Claude Code reads as **ALLOW**. *An unauthorized GPU
+   boot proceeded.* This is **the** precondition for unsupervised spend, and it was broken.
+   Fixed (`from __future__ import annotations`) + checked (`safety-scripts-run-on-system-python`,
+   which **executes** on 3.9 — `ast.parse` passes, PEP-604 only explodes when *evaluated*).
+2. **The spend backstop shipped DISABLED to every clone.** `.spend-backstop-fires` was committed
+   holding **5** against a `MAX_FIRES` of **3**. It would never have fired, anywhere, ever.
+
+**Both were caused by me, both were invisible to the framework, and both were found only because
+Lorenzo asked for independent verification.**
+
+### The rule that broke, and the one that replaced it
+
+The worst bug was **built by a carve-out I wrote**: *"the gate/spend hooks may use bare `python3`
+— they're stdlib-only and must survive a broken venv."* That sentence is the bug. **Stdlib-only
+is NOT version-independent:** when the interpreter NAME drifts, the VERSION drifts with it.
+
+> **New standing rule: a carve-out from a safety invariant must ship with a check that the
+> carve-out holds.** And: **a mechanism that fails OPEN needs a paired detector that fails LOUD.**
+
+### Where to pick up — in this order, in SEPARATE sessions
+
+1. **The paired-detector design** (observatory → "Fail-open everywhere" → *When to revisit*).
+   This is the real work. Candidate shape: every fail-open path emits a `degraded` event; a
+   watcher predicate fires on any degraded event. A hook that silently does nothing should be
+   **loud in the log** even when it is **quiet in the session**. Promote to an ADR once decided.
+   **Bar for "done": a deliberately-broken component (venv removed, guard corrupted, hook
+   typo'd) is caught by the framework within one session, with no human asking.** Nothing today
+   would have met that bar.
+
+2. **Ship the portable doccheck core downstream.** 7 of 13 checks are portable
+   (`no-bare-python3-with-toolchain-import`, `safety-scripts-run-on-system-python`,
+   `runtime-state-is-not-tracked`, `test-command-is-not-a-bare-interpreter`,
+   `ignored-test-suites-are-run`, `spend-guard-is-wired`, `spend-backstop-is-wired`); 6 are
+   Tessera-only. **`bin/tessera-new-project` mentions doccheck zero times**, so conclave, howler
+   and tess-dashboard have the spend guard and the backstop but **not the checker that verifies
+   either is wired**. That violates the "ship both halves or neither" rule written in
+   `tessera-new-project`'s own comment. Bounded: ~one session.
+
+3. **Re-open ADR-0005's readiness claim.** It named three preconditions for unsupervised
+   operation. All three were declared met on 2026-07-12. Two were then found broken by
+   adversarial verification, not by the framework. **The readiness claim was wrong and Tessera
+   could not have told us.**
+
+4. **FOCUS-004 — still untouched.** 56 skills, zero evaluated, and still the only honest path to
+   a real `auto` compaction. **The Mnemos trial counter is STILL 0** after all of this.
+
+### What NOT to do next
+
+**Do not keep fixing.** The rathole instinct was right. Everything is committed, pushed, green,
+and the one live safety hole is closed. The next move is *design*, not repair.
+
+---
+
+## Handoff — 2026-07-12 (spec 06 / escalation backstop / venv, chronological)
 
 **Spec 06 shipped — but not the spec that was written. It was retargeted first, and that was
 the whole job.**
