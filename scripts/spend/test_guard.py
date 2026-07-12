@@ -259,26 +259,76 @@ def test_harmless_script_is_neutral(tmp_path, monkeypatch):
     assert classify("./build.sh") == "neutral"
 
 
-# ── no evasion by quoting ─────────────────────────────────────────────────────
-# The guard deliberately does NOT strip quoted strings before classifying. Stripping them
-# would silence the false positive below — and would open `bash -c "terraform apply"` as a
-# clean bypass. On a spend boundary an evasion hole is a far worse trade than a noisy block.
+def test_env_prefixed_invocation_is_still_read(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _script(tmp_path, "sweep.sh", "#!/bin/bash\nterraform apply -auto-approve\n")
+    assert classify("TF_LOG=DEBUG AWS_PROFILE=x ./sweep.sh") == "committing"
+
+
+@pytest.mark.parametrize("cmd", [
+    "cp sweep.sh /tmp/sweep.sh",
+    "git add sweep.sh",
+    "cat sweep.sh",
+    "vim sweep.sh",
+    "wc -l sweep.sh",
+])
+def test_naming_a_script_is_not_invoking_it(tmp_path, monkeypatch, cmd):
+    """Found live: `cp guard.py test_guard.py` was BLOCKED, because the reader opened the test
+    file and found a boot command quoted in a fixture. Copying, staging, or reading a script
+    does not run it. The script must be in COMMAND POSITION or it is just a filename."""
+    monkeypatch.chdir(tmp_path)
+    _script(tmp_path, "sweep.sh", "#!/bin/bash\nterraform apply -auto-approve\n")
+    assert classify(cmd) == "neutral"
+
+
+# ── mention vs invocation ─────────────────────────────────────────────────────
+# Quoted strings and heredoc bodies are DATA — unless a wrapper executes them. Drawing that
+# line is what separates "the agent boots a GPU" from "the agent writes about booting a GPU".
+#
+# The four below are the real false positives this guard produced against its own author on
+# 2026-07-12, in one session: a test heredoc, the command that installed it into conclave, the
+# commit message describing it, and the gate-log call describing the false positive. Each one
+# blocked work that committed no spend whatsoever.
+
+def test_mention_in_a_quoted_argument_is_not_an_invocation():
+    assert classify('grep -r "terraform apply" .') == "neutral"
+    assert classify('git commit -m "feat(gpu): wrap terraform apply"') == "neutral"
+    assert classify('python3 emit.py --note "blocked on terraform apply"') == "neutral"
+
+
+def test_heredoc_body_fed_to_a_non_executing_command_is_data(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert classify("cat >> test_x.py <<'PY'\n# terraform apply -var enable_gpu=true\nPY") == "neutral"
+    assert classify("git commit -F - <<'MSG'\nfeat: gate terraform apply\nMSG") == "neutral"
+
+
+# ── the wrapper bypasses stay closed ──────────────────────────────────────────
+# Softening the classifier is only safe because these still fire. A segment that EXECUTES its
+# own literal text is not stripped: there, the quotes hold code, not prose.
 
 @pytest.mark.parametrize("cmd", [
     'bash -c "terraform apply -var enable_gpu=true"',
-    "eval 'terraform apply'",
     'sh -c "terraform apply"',
+    "eval 'terraform apply'",
+    'python3 -c "import os; os.system(\'terraform apply\')"',
+    "bash <<'EOF'\nterraform apply -var enable_gpu=true\nEOF",
+    "python3 - <<'PY'\nsubprocess.run('terraform apply', shell=True)\nPY",
 ])
-def test_quoted_invocation_is_still_committing(cmd):
+def test_wrapper_executing_its_own_literal_is_still_committing(cmd):
     assert classify(cmd) == "committing"
 
 
-def test_known_false_positive_a_mere_mention_is_blocked():
-    """ACCEPTED, not a bug — and it bit the author twice while building this guard.
+def test_unquoted_invocation_is_unaffected_by_the_softening():
+    assert classify("terraform apply -var enable_gpu=true") == "committing"
+    assert classify("cd infra && terraform apply") == "committing"
 
-    Grepping for the string, or writing a test that quotes it, reads as invoking it and gets
-    blocked. Distinguishing a mention from an invocation in untyped shell text is not
-    reliably possible, so the guard errs toward denial: a false block is an annoyance with an
-    escape hatch, a false allow boots a GPU.
-    """
-    assert classify('grep -r "terraform apply" .') == "committing"
+
+def test_softening_never_narrows_the_reducing_check(tmp_path, monkeypatch):
+    """THE INVARIANT under the new rule. REDUCING is matched on the RAW segment, so a quoted
+    `enable_gpu=false` still reads as teardown. If quote-stripping were applied to BOTH checks,
+    `terraform apply -var="enable_gpu=false"` would strip to `terraform apply -var=` and the
+    guard would block a teardown — reintroducing the exact flaw this spec was retargeted to
+    kill."""
+    monkeypatch.chdir(tmp_path)
+    assert classify('terraform apply -var="enable_gpu=false"') == "reducing"
+    assert decide('terraform apply -var="enable_gpu=false"', None, NOW)[0] is True

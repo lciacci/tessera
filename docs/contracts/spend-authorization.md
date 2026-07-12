@@ -76,20 +76,45 @@ So: if a segment invokes a local `.sh`/`.py`/`.bash` file that exists, the guard
 > than the CLI. Layer 3 is what bounds the misses. A miss is a finding *about the list*, and
 > the fix is a pattern plus a regression test — same standing rule as `doccheck.py`.
 
-### Mentions read as invocations. This is accepted.
+### A mention is not an invocation
 
-The guard does **not** strip quoted strings before classifying, so `grep -r "terraform apply" .`
-is blocked, and so is a heredoc that merely quotes the command. Both bit the author while
-building this.
+Quoted strings and heredoc bodies are **data** and are stripped before the committing check.
+`grep -r "terraform apply" .`, a commit message describing a GPU change, and a heredoc writing
+a test file all pass — they commit no spend.
 
-Stripping quotes would silence that — and would open `bash -c "terraform apply"` as a clean
-bypass. Distinguishing a mention from an invocation in untyped shell text is not reliably
-possible. **On a spend boundary, an evasion hole is a far worse trade than a noisy block:** a
-false block is an annoyance with an escape hatch, a false allow boots a GPU.
+**Unless the command is wrapper-led**, in which case that text is *code*, and nothing is
+stripped:
 
-If a false positive blocks you and no spend is involved, **use a non-Bash tool** (Write/Edit
-commit no external spend and are not gated). Do **not** grant yourself a spend envelope you do
-not need, and do not reword the command to slip past the pattern.
+```
+bash -c "terraform apply"        BLOCKED    the quotes hold code
+python3 -c "os.system('…')"      BLOCKED
+eval 'terraform apply'           BLOCKED
+bash <<'EOF' … EOF               BLOCKED    heredoc fed to a shell runs
+cat >> t.py <<'PY' … PY          allowed    heredoc fed to cat is a file being written
+git commit -m "… terraform …"    allowed    git does not exec its message
+```
+
+**Wrapper-ness is decided on the WHOLE command, never per segment.** `python3 -c "a; b"` splits
+on the `;` *inside its own quotes*, and the resulting fragment no longer looks like a wrapper —
+judging fragments in isolation reopens the exact bypass the stripping is only safe without.
+Global, and conservative: if any part of the command can execute its own literals, none of it
+is stripped.
+
+> The first version of this guard stripped nothing and blocked every mention. It produced four
+> false positives against its own author in one session — a test heredoc, the command that
+> installed it into conclave, the commit message describing it, and the gate-log entry
+> describing the false positive. The reason it was safe to soften: the "no evasion" property
+> was already only partly true (`echo … | bash` splits to a bare, neutral `bash` segment either
+> way), so the noise was buying less than it appeared to.
+
+**Residual, known:** `echo "terraform apply" | bash` is not caught, and never was. Nor is a
+cloud SDK (boto3 `run_instances`), nor a script calling a script. Layer 3 bounds all of them.
+This guard stops an agent that boots a GPU **by mistake or without authorization** — it is not
+built to defeat one actively trying to evade it, and an agent doing that has easier routes.
+
+If a false positive still blocks non-spend work, **use a non-Bash tool** (Write/Edit commit no
+external spend and are not gated). Do **not** grant yourself a spend envelope you do not need,
+and do not reword a genuine spend command to slip past the pattern.
 
 ## The grant
 

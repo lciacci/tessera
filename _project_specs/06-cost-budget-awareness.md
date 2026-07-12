@@ -126,9 +126,30 @@ was predicted.
   anything using a cloud SDK (boto3 `run_instances`) instead of the CLI, still slips through.
   Layer 3 bounds that. A miss is a finding *about the list* — fix is a pattern plus a
   regression test.
-- **Mentions read as invocations** — `grep -r "terraform apply" .` is blocked. Accepted, not a
-  bug: stripping quotes would open `bash -c "..."` as a bypass. Safe direction. Use a non-Bash
-  tool when a false positive blocks non-spend work; never reword to slip past the pattern.
+- **`echo "terraform apply" | bash` is not caught, and never was** — the pipe splits to a bare,
+  neutral `bash` segment. Nor is a cloud SDK call, nor a script calling a script. This guard
+  stops an agent that boots a GPU *by mistake or without authorization*; it is **not** built to
+  defeat one actively trying to evade it, and such an agent has easier routes. Layer 3 bounds
+  all of it.
+
+## The false-positive posture, and why it changed
+
+v1 stripped nothing and blocked every *mention* of a boot command. It produced **four false
+positives against its own author in one session**: a test heredoc, the command that installed
+it into conclave, the commit message describing it, and the gate-log entry describing the false
+positive. Each blocked work that committed no spend at all.
+
+The original argument for the noise was that stripping quotes opens `bash -c "…"` as a bypass.
+Checking that argument rather than trusting it: **the "no evasion" property was already only
+partly true** — `echo "…" | bash` splits to a bare, neutral `bash` segment either way. The noise
+was buying less than it appeared to.
+
+So quoted text and heredoc bodies are now treated as **data**, *unless the command is
+wrapper-led* (`bash -c`, `python3 -c`, `eval`, a heredoc fed to a shell), in which case they are
+code and nothing is stripped. Wrapper-ness is decided on the **whole command, never per
+segment** — `python3 -c "a; b"` splits on the `;` inside its own quotes, and judging the
+fragment in isolation reopens the very bypass this is only safe without. That mistake was made
+and caught by the tests before it shipped.
 - **The hook wrapper fails open** (no `jq`/`python3`/guard) — a hook that wedges every Bash
   call is its own outage. `guard.py` itself fails closed.
 - **`tessera-authorize` is human-invoked, by design.** The agent cannot self-authorize. If a
