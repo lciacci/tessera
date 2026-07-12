@@ -50,10 +50,33 @@ def p1_hook_drift(root: Path) -> tuple[bool, str]:
 
 
 def p3_compaction(root: Path) -> tuple[bool, str]:
-    """compaction_fired count — the Mnemos kill/keep trial's event trigger."""
+    """Real (auto) compaction_fired count — the Mnemos kill/keep trial's event trigger.
+
+    Excludes `trigger: manual` — a hand-run `/compact` is a *test* of the recovery layer,
+    not evidence about it. Counting tests as evidence would let three deliberate test
+    compactions deliver the trial's verdict on manufactured data: the P2 failure exactly
+    (a predicate firing correctly on a proxy that tracks no real pain).
+
+    A missing trigger field is counted as real — pre-2026-07-11 entries predate the tagging,
+    and any compaction from back then was necessarily an auto one.
+    """
     log = root / ".mnemos" / "compaction-log.jsonl"
-    n = _count_event(log, "compaction_fired")
-    return n >= COMPACTION_MIN, f"{n} compaction_fired (≥{COMPACTION_MIN} → judge the Mnemos trial)"
+    real = manual = 0
+    if log.exists():
+        for line in log.read_text().splitlines():
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if event.get("event") != "compaction_fired":
+                continue
+            if event.get("trigger") == "manual":
+                manual += 1
+            else:
+                real += 1
+    note = f" ({manual} manual test(s) excluded)" if manual else ""
+    return real >= COMPACTION_MIN, (f"{real} real compaction_fired{note} "
+                                    f"(≥{COMPACTION_MIN} → judge the Mnemos trial)")
 
 
 def p4_downstream(root: Path) -> tuple[bool, str]:

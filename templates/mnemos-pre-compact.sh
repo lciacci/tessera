@@ -20,6 +20,15 @@
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# ─── 0. Capture the compaction trigger (manual `/compact` vs auto context-full) ───
+# Claude Code sends {session_id, transcript_path, trigger, custom_instructions} on stdin.
+# This MUST be recorded: the Mnemos trial's verdict predicate (tessera-watch P3) counts
+# compaction_fired events, and a hand-run `/compact` used to *test* the recovery layer would
+# otherwise be indistinguishable from a real context-full compaction — so three test
+# compactions would trip the trial's verdict on evidence we manufactured. That is the P2
+# failure exactly: a predicate firing correctly on a proxy that tracks no real pain.
+HOOK_INPUT=$(cat 2>/dev/null || true)
+
 # ─── 1. Write emergency checkpoint with task narrative ───
 
 MNEMOS_CMD=""
@@ -39,14 +48,24 @@ fi
 # compaction-recovery trial falsifiable. Without it, "never aided a recovery"
 # is unanswerable rather than false. See docs/observatory.md.
 
-python3 -c "
-import json, time, os
+HOOK_INPUT="$HOOK_INPUT" python3 -c "
+import json, time, os, sys
 os.makedirs('.mnemos', exist_ok=True)
 ts = time.time()
+
+# 'auto' = context filled up (the real event the recovery layer exists for).
+# 'manual' = a hand-run /compact, i.e. a TEST of that layer. Never let a test count
+# as evidence: P3 (the Mnemos trial verdict) must only ever see real compactions.
+trigger = 'unknown'
+try:
+    trigger = json.loads(os.environ.get('HOOK_INPUT') or '{}').get('trigger') or 'unknown'
+except ValueError:
+    pass
+
 with open('.mnemos/just-compacted', 'w') as f:
-    json.dump({'timestamp': ts, 'reason': 'pre_compact_hook'}, f)
+    json.dump({'timestamp': ts, 'reason': 'pre_compact_hook', 'trigger': trigger}, f)
 with open('.mnemos/compaction-log.jsonl', 'a') as f:
-    f.write(json.dumps({'ts': ts, 'event': 'compaction_fired'}) + '\n')
+    f.write(json.dumps({'ts': ts, 'event': 'compaction_fired', 'trigger': trigger}) + '\n')
 "
 
 # ─── 3. Build inline checkpoint content for summarizer ───

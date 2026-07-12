@@ -53,7 +53,7 @@ def test_p3_counts_only_compaction_fired_events(tmp_path):
     ]
     log.write_text("\n".join(json.dumps(x) for x in lines) + "\nNOT JSON\n")
     fired, detail = tw.p3_compaction(root)
-    assert fired is True and "3 compaction_fired" in detail  # ≥3, malformed line ignored
+    assert fired is True and "3 real compaction_fired" in detail  # ≥3, malformed line ignored
 
 
 def test_p3_absent_log_is_zero_not_error(tmp_path):
@@ -143,3 +143,39 @@ def test_p7_ignores_already_labeled_gates(tmp_path):
     )
     fired, _ = tw.p7_gate_labels(tmp_path)
     assert fired is False
+
+
+def _compaction(trigger=None):
+    e = {"ts": 1.0, "event": "compaction_fired"}
+    if trigger:
+        e["trigger"] = trigger
+    return json.dumps(e)
+
+
+def test_p3_excludes_manual_test_compactions(tmp_path):
+    """A hand-run /compact TESTS the recovery layer; it is not evidence about it.
+
+    Without this, three deliberate test compactions would deliver the Mnemos trial's
+    verdict on manufactured data — the P2 failure exactly.
+    """
+    m = tmp_path / ".mnemos"
+    m.mkdir()
+    (m / "compaction-log.jsonl").write_text("\n".join(_compaction("manual") for _ in range(5)))
+    fired, detail = tw.p3_compaction(tmp_path)
+    assert fired is False
+    assert "0 real" in detail and "5 manual" in detail
+
+
+def test_p3_counts_auto_compactions(tmp_path):
+    m = tmp_path / ".mnemos"
+    m.mkdir()
+    (m / "compaction-log.jsonl").write_text("\n".join(_compaction("auto") for _ in range(3)))
+    assert tw.p3_compaction(tmp_path)[0] is True
+
+
+def test_p3_counts_untagged_legacy_entries_as_real(tmp_path):
+    """Entries predating the tagging (2026-07-11) were necessarily auto compactions."""
+    m = tmp_path / ".mnemos"
+    m.mkdir()
+    (m / "compaction-log.jsonl").write_text("\n".join(_compaction() for _ in range(3)))
+    assert tw.p3_compaction(tmp_path)[0] is True
