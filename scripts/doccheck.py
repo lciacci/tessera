@@ -330,6 +330,43 @@ def check_no_bare_python3_with_toolchain_import() -> list[str]:
     return bad
 
 
+# A `test:` command that resolves its interpreter by NAME. `python3`, `python3.13`, `python` —
+# all lookups through a mutable, ordered PATH. A repo-relative path (.venv/bin/python) is not.
+NAMED_INTERPRETER = re.compile(r"^\s*(?:python3?(?:\.\d+)?)\s")
+
+
+def check_test_command_is_not_a_bare_interpreter() -> list[str]:
+    """`.tessera/config.yml`'s `test:` must not resolve an interpreter by NAME.
+
+    FOUND BY LORENZO, NOT BY THIS CHECKER (2026-07-12) — which makes it a finding about the
+    checker. `no-bare-python3-with-toolchain-import` scanned only `.claude/scripts/*.sh`, so it
+    was blind to the one place the bug actually shipped: the `test:` command. conclave carried
+    `test: python3.13 -m pytest scripts/`, and when `uv python install` shimmed that name into
+    ~/.local/bin ahead of Homebrew, it silently became an interpreter with no pytest. The suite
+    broke. doccheck stayed green.
+
+    Worse, `templates/tessera/config.yml.template` *advised* the broken form — it recommended
+    "PATH-relative" `python3.13 -m pytest` over an absolute path. The warning against
+    machine-absolute paths was right; the recommendation was the bug, and it would have handed
+    the same broken command to every future project.
+
+    The correct form is neither a bare name NOR a machine-absolute path: a **repo-relative
+    path**, `.venv/bin/python -m pytest`. One interpreter, forever, on every machine.
+    """
+    config = ROOT / ".tessera" / "config.yml"
+    if not config.exists():
+        return []
+    for line in config.read_text().splitlines():
+        if not line.startswith("test:"):
+            continue
+        cmd = line[len("test:"):].strip()
+        if cmd and NAMED_INTERPRETER.match(cmd):
+            return [f".tessera/config.yml: `test: {cmd}` resolves its interpreter by NAME. A "
+                    f"name is a lookup through a mutable PATH that several package managers "
+                    f"write to (F-001). Use a repo-relative path: `.venv/bin/python -m pytest`."]
+    return []
+
+
 def _bare_python_target(line: str, script: Path) -> str:
     """What the bare `python3` on this line will actually execute: an inline -c, or a file."""
     inline = re.search(r"""python3\s+-c\s+(['"])(.*?)\1""", line, re.DOTALL)
@@ -436,6 +473,7 @@ CHECKS = {
     "spend-backstop-is-wired": check_spend_backstop_is_wired,
     "runtime-state-is-not-tracked": check_runtime_state_is_not_tracked,
     "no-bare-python3-with-toolchain-import": check_no_bare_python3_with_toolchain_import,
+    "test-command-is-not-a-bare-interpreter": check_test_command_is_not_a_bare_interpreter,
 }
 
 

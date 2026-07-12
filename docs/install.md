@@ -7,10 +7,12 @@ This is what it takes to get Tessera running on a fresh machine. Follow in order
 You need:
 
 - macOS or Linux (the framework assumes Unix shell conventions)
-- Python 3.10+ on PATH (Homebrew Python 3.13 is what the original install used). **On Apple Silicon, use the native arm64 Homebrew at `/opt/homebrew`.** If a stale Intel Homebrew also exists at `/usr/local` and sits earlier on `PATH`, its `pip` builds a `mnemos` whose shebang points into the Intel keg — which breaks the moment that keg is cleaned, silently disabling every Mnemos hook. Confirm before installing: `file "$(command -v python3.13)"` must report `arm64`.
+- `curl` — `install.sh` uses it to fetch [uv](https://docs.astral.sh/uv/), which brings its own Python
 - Node.js 20.19+ or 22.12+ (for any downstream Tessera projects that scaffold from Vite)
 - Git
 - [Claude Code](https://docs.claude.com/claude-code) CLI installed and authenticated
+
+**You do NOT need to install Python.** This section used to demand "Python 3.10+ on PATH (Homebrew 3.13)" and carried a long warning about arm64 vs Intel Homebrew kegs producing a `mnemos` whose shebang breaks silently. All of that is obsolete, and its obsolescence is the point: **Tessera no longer lets a package manager own its interpreter.** The toolchain lives in a `uv`-managed venv (`.venv/`, pinned by `.python-version`), whose base sits under `~/.local/share/uv/python/` where Homebrew cannot reach it. See F-001 in [the observatory](observatory.md).
 
 You do **not** need a clone of [Maggy](https://github.com/alinaqi/maggy), the project Tessera was forked from. Earlier revisions of this guide told you to clone `maggy-main` because "Mnemos source lives inside it" — that was never true of *this* repo: Tessera vendors its own `scripts/mnemos/`, and that is what a working install actually imports. ADR-0003 decided Tessera owns its distribution; this guide now matches. See [NOTICE](../NOTICE) for provenance.
 
@@ -22,32 +24,34 @@ git clone https://github.com/lciacci/tessera.git
 cd tessera
 ```
 
-## Step 2 — Install Mnemos
-
-The Mnemos Python package backs Tessera hook scripts. Tessera vendors its own copy at `scripts/mnemos/`, but that copy ships a flat-layout `pyproject.toml` that setuptools rejects on modern Python, so it cannot be `pip install`ed in place. Copy the source into a proper package layout in `/tmp` first. Run this from the root of the Tessera clone:
+## Step 2 — Install the toolchain
 
 ```bash
-mkdir -p /tmp/mnemos-install/mnemos
-cp scripts/mnemos/*.py /tmp/mnemos-install/mnemos/
-cp scripts/mnemos/pyproject.toml /tmp/mnemos-install/
-/opt/homebrew/bin/pip3.13 install --break-system-packages /tmp/mnemos-install
+./install.sh
 ```
 
-**On Apple Silicon keep `/opt/homebrew/bin/pip3.13` explicit — do not substitute "whatever pip is on PATH". A stale Intel `/usr/local` pip produces a `mnemos` shebang that later breaks (see Prerequisites).** On Linux or Intel Macs, use your Python 3.10+ pip.
+That is the whole step. It is idempotent — re-run it any time.
 
-> The `/tmp` restructuring is a workaround for the flat layout, not a design. Fixing the layout (and moving the toolchain into a venv) is tracked in the backlog.
+It installs `uv` (via its **standalone installer**, deliberately *not* `brew install uv` — reintroducing a package-manager coupling in the first line of the fix would be absurd), provisions the Python pinned in `.python-version`, builds `.venv/`, installs the toolchain (`mnemos`, `icpg`, `polyphony`, `skill-lint`, `pytest`) into it as editable, and symlinks the console scripts into `~/.local/bin`.
+
+> **Why `~/.local/bin` and not `tessera/bin`?** Because `~/.local/bin` precedes `/opt/homebrew/bin` on PATH and `tessera/bin` does not — it sits far behind it. A symlink in `tessera/bin` would be silently shadowed by any leftover Homebrew copy, and your hooks would keep resolving the old interpreter while everything *looked* fixed.
+
+### What this replaces, and why it matters
+
+This step used to be a ritual: restructure the source into `/tmp`, then `/opt/homebrew/bin/pip3.13 install --break-system-packages`, with warnings about arm64-vs-Intel kegs producing a `mnemos` whose shebang silently dies. **That ritual installed the toolchain into a Python that Homebrew owns and re-points at will** — and Homebrew *did* re-point it (to 3.14, because `ollama` wanted it). Every Mnemos checkpoint write no-op'd for weeks, invisibly. That is **F-001**, and it confounded the whole Mnemos trial: "the graph is empty" read as *unused* when it meant *unreachable*.
+
+**An interpreter is a path, not a name.** A name (`python3`, `python3.13`) is a lookup through a mutable, ordered PATH that several package managers write to; any of them can win, at any time, without telling you. Nothing in Tessera resolves an interpreter by name any more, and there is no fallback to `python3` — a silent fallback to a toolchain-less interpreter is *how F-001 stayed invisible*.
 
 Verify:
 
 ```bash
-which mnemos
-mnemos --help
-# Critical on Apple Silicon — confirm the console-script shebang resolves:
-head -1 "$(command -v mnemos)"   # the path after #! must exist on disk
-mnemos --version                 # must run, NOT "bad interpreter: ... no such file"
+./install.sh                     # its verify() is the machine-known-good check
+bin/tessera-watch                # P9 asserts the toolchain interpreter is reachable
+                                 # AND that its base is not a package manager's
+head -1 "$(command -v mnemos)"   # must point into <tessera>/.venv/bin/python
 ```
 
-If `mnemos --help` prints the subcommand list (init, status, fatigue, checkpoint, resume, etc.) **and `mnemos --version` runs without a `bad interpreter` error**, Mnemos is installed. A dead shebang is the silent-failure mode the hooks' graceful degradation otherwise masks — if `mnemos --version` fails, reinstall with the arm64 `/opt/homebrew/bin/pip3.13` and remove any stale `/usr/local/bin/mnemos`.
+`install.sh` fails loudly if `mnemos` resolves an interpreter that is *not* the venv, or if the venv's base is rooted in Homebrew. "It runs" is not enough — that was exactly the false comfort F-001 hid behind. Check *which* interpreter it runs on.
 
 ## Step 3 — Initialize Mnemos in Tessera
 
@@ -138,11 +142,10 @@ gh auth login  # if not already authenticated
 
 ## Common gotchas
 
-- **`pip: command not found`** — your default `pip` is too old or missing. Use `/opt/homebrew/bin/pip3.13` (or whatever your Homebrew Python ships).
-- **`no such option: --break-system-packages`** — same cause as above. Modern pip needs this flag on macOS due to PEP 668; older pips do not recognize it.
-- **`Multiple top-level modules discovered in a flat-layout`** during Mnemos install — you skipped the `/tmp/mnemos-install/mnemos/` restructuring. The flat layout in `scripts/mnemos/` needs the modules nested one level deeper for setuptools to accept it.
+- **Anything involving `pip`, `--break-system-packages`, or a flat-layout setuptools error** — you are following an old copy of this guide. **There is no `pip` step any more.** `./install.sh` does everything through `uv`. Those three gotchas existed only because the toolchain was being forced into a Homebrew Python it never should have been in; that is F-001, and the whole install was rebuilt to make them impossible.
 - **`/status` shows `cwd:` as a parent directory** — you have a `claude` shell alias that is `cd`ing somewhere before launching. Remove it (see Step 5).
-- **Hooks show in `/hooks` but `.mnemos/` is never created** — Mnemos CLI is not on PATH. Run `which mnemos` to check, reinstall if missing.
+- **Hooks show in `/hooks` but `.mnemos/` is never created** — the Mnemos CLI is not resolving. `./install.sh` and check `head -1 "$(command -v mnemos)"` points into `<tessera>/.venv/bin/python`. **Do not stop at "`mnemos --help` works"** — it worked throughout F-001, on the wrong interpreter, for six weeks. Check *which* interpreter.
+- **`ModuleNotFoundError` from a script that ran fine yesterday** — something re-pointed an interpreter *name* out from under you. This is not hypothetical: `uv python install` shims `python3.13` into `~/.local/bin`, ahead of Homebrew. Never invoke the toolchain by name; use `.venv/bin/python`. `bin/tessera-watch` **P9** exists to catch exactly this.
 - **`tessera-escalate: command not found` — but only for Claude, never for you.** The PATH export is in `~/.zshrc`, which zsh sources **only for interactive shells**. Claude Code's Bash tool runs a *non-interactive* shell, so it never reads it: the tools work perfectly at your terminal and do not exist for the agent — the exact reader `CLAUDE.md` writes those instructions for. Put the export in **`~/.zshenv`** (sourced for *every* zsh invocation) instead:
   ```sh
   # ~/.zshenv

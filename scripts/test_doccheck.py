@@ -379,3 +379,45 @@ def test_real_repo_has_no_f001_landmines():
     """The live hooks must be clean. Green here is the claim that F-001 cannot recur silently."""
     importlib.reload(doccheck)
     assert doccheck.check_no_bare_python3_with_toolchain_import() == []
+
+
+# ── test-command-is-not-a-bare-interpreter ────────────────────────────────────
+# FOUND BY LORENZO, NOT BY THE CHECKER (2026-07-12) — so it is a finding about the checker.
+# no-bare-python3-with-toolchain-import scanned only .claude/scripts/*.sh and was blind to the
+# one place the bug actually shipped: the `test:` command. conclave carried
+# `test: python3.13 -m pytest scripts/`; uv shimmed that name ahead of Homebrew; the suite
+# broke; doccheck stayed green. The template *advised* the broken form.
+
+def _config(repo: Path, test_cmd: str) -> None:
+    (repo / ".tessera").mkdir(exist_ok=True)
+    (repo / ".tessera" / "config.yml").write_text(f"# toolchain\ntest: {test_cmd}\n")
+
+
+@pytest.mark.parametrize("cmd", [
+    "python3.13 -m pytest scripts/",   # conclave's actual broken command
+    "python3 -m pytest",
+    "python -m pytest",
+    "python3.12 -m pytest -q",
+])
+def test_catches_test_command_resolving_interpreter_by_name(fake_repo, cmd):
+    _config(fake_repo, cmd)
+    bad = doccheck.check_test_command_is_not_a_bare_interpreter()
+    assert len(bad) == 1
+    assert "by NAME" in bad[0]
+
+
+@pytest.mark.parametrize("cmd", [
+    ".venv/bin/python -m pytest scripts/",   # the correct form: repo-relative PATH
+    "bash scripts/run-tests.sh",             # tessera's own
+    "npm test",
+    "./gradlew test",
+    "npx vitest run",
+])
+def test_passes_on_path_based_or_non_python_commands(fake_repo, cmd):
+    _config(fake_repo, cmd)
+    assert doccheck.check_test_command_is_not_a_bare_interpreter() == []
+
+
+def test_real_repo_test_command_is_a_path():
+    importlib.reload(doccheck)
+    assert doccheck.check_test_command_is_not_a_bare_interpreter() == []

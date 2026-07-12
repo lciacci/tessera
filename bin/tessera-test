@@ -18,8 +18,15 @@ Exit code is the test command's own, so this drops into a hook or CI unchanged.
 
 `.tessera/config.yml` is COMMITTED, not gitignored — deliberately, and against the original
 template's "gitignored by default". A test command that vanishes on a fresh clone is useless
-to the exact agent this exists for. Keep machine-specific absolute paths OUT of it: prefer
-`python3.13 -m pytest` (PATH-relative) over `/opt/homebrew/bin/python3.13`.
+to the exact agent this exists for.
+
+AN INTERPRETER IS A PATH, NOT A NAME. This docstring used to advise `python3.13 -m pytest`
+"(PATH-relative)" over an absolute path. The warning against machine-absolute paths was
+right; the recommendation was the bug. On 2026-07-12 `uv python install` shimmed the name
+`python3.13` into ~/.local/bin — ahead of Homebrew — and it silently became a different
+interpreter with no pytest. A NAME is a lookup through a mutable, ordered PATH that several
+package managers write to. Prefer a REPO-RELATIVE path: `.venv/bin/python -m pytest`, which
+is neither a bare name nor a machine-absolute path.
 """
 import os
 import subprocess
