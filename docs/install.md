@@ -160,6 +160,6 @@ gh auth login  # if not already authenticated
 Update it when:
 
 - The Mnemos packaging issue gets fixed upstream (will simplify Step 2 to a one-liner)
-- Tessera adds its own setup script (`scripts/install.sh` or similar)
+- Tessera adds its own setup script (`install.sh`, at the repo root)
 - A new platform is added (Linux specifics, Windows WSL, etc.)
 - The plugin install procedure changes

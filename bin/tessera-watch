@@ -18,6 +18,7 @@ that also feeds the kill and graduate decisions. See _project_specs/todos/active
 """
 import argparse
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -145,6 +146,29 @@ def p7_gate_labels(root: Path) -> tuple[bool, str]:
                    f"(≥{GATE_LABEL_MIN} → corpus is honest + big enough; label should_fire)")
 
 
+def p8_doc_drift(root: Path) -> tuple[bool, str]:
+    """Docs asserting things about this repo that are no longer true.
+
+    Six doc-drift bugs were found 2026-07-09..11 — every one by Lorenzo asking "all docs
+    updated?" on a hunch, and every one fixed without leaving a check behind. The human was
+    the detector, and suspicion is a depleting resource: the better the framework gets, the
+    less it gets asked, so drift accumulates fastest exactly when trust is highest. **Trust
+    was the failure mode.** That is a #17 failure one level up — the *verification* rode on
+    recall, not a channel. This is the channel. See scripts/doccheck.py.
+    """
+    sys.path.insert(0, str(root / "scripts"))
+    try:
+        import doccheck
+        doccheck.ROOT = root
+        violations = [v for vs in doccheck.run().values() for v in vs]
+    except Exception:
+        return False, "doccheck unavailable (failing open)"
+    if not violations:
+        return False, f"docs honest ({len(doccheck.CHECKS)} checks, 0 false claims)"
+    head = violations[0] if len(violations) == 1 else f"{violations[0]} (+{len(violations)-1} more)"
+    return True, f"{len(violations)} false doc claim(s) → `python3 scripts/doccheck.py`: {head}"
+
+
 def g_a_consecutive(root: Path) -> tuple[bool, str]:
     """Graduation-a: a core predicate fired in ≥3 consecutive logged runs → needs snooze/ack.
 
@@ -201,6 +225,7 @@ PREDICATES = {
     "P5 skill-routing": p5_skills,
     "P6 escalations": p6_escalations,
     "P7 gate-labels": p7_gate_labels,
+    "P8 doc-drift": p8_doc_drift,
     "G-a graduation:snooze": g_a_consecutive,
 }
 

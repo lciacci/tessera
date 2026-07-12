@@ -353,6 +353,15 @@ with the violation half.
 
 ## Backlog (triggered — do when the condition fires)
 
+- **`design-principles.md` promises three files that were never built.** Surfaced by
+  `doccheck` (2026-07-11), parked in its `PLANNED_PATHS` so the debt stays legible instead
+  of silently allowlisted: `.tessera/config.yml` (described in the **present tense** at
+  :196/:589/:638 as where tuning values live), `.tessera/third-party-scope.yml` (:726/:763),
+  `.tessera/project.yml.template` (:195). None exist. A reader — or a future Claude — goes
+  looking for a file that was never written. **Decide per file: build it, or reword the doc
+  to the conditional.** Not urgent, but it is the same drift class aimed at
+  unbuilt-vs-built rather than changed-vs-stale.
+
 - **Mnemos compaction-recovery verdict.** Fires when `.mnemos/compaction-log.jsonl`
   records **≥3 non-manual `compaction_fired` events** (currently **0 real**; one
   `manual` test on 2026-07-11, correctly excluded). *Detection is automated — the
