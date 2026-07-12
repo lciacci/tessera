@@ -271,3 +271,99 @@ def test_no_backstop_claim_means_nothing_to_check(fake_repo):
     (fake_repo / "docs" / "contracts" / "escalation.md").write_text("Escalation packets.")
     _settings(fake_repo, {"hooks": {}})
     assert doccheck.check_spend_backstop_is_wired() == []
+
+
+# ── no-upstream-clone-instructions ────────────────────────────────────────────
+
+def test_catches_getting_started_telling_you_to_clone_maggy(fake_repo):
+    """The real 2026-07-12 bug: ADR-0003 decoupled in code, the front door still said clone."""
+    (fake_repo / "GETTING_STARTED.md").write_text(
+        "## Install\n\n```bash\ngit clone https://github.com/alinaqi/maggy.git\ncd maggy\n```\n")
+    bad = doccheck.check_no_upstream_clone_instructions()
+    assert len(bad) == 1
+    assert "GETTING_STARTED.md:4" in bad[0]
+    assert "ADR-0003" in bad[0]
+
+
+def test_catches_pipx_install_of_upstream(fake_repo):
+    (fake_repo / "README.md").write_text("```bash\npipx install maggy-harness\n```\n")
+    assert len(doccheck.check_no_upstream_clone_instructions()) == 1
+
+
+def test_attribution_is_not_an_instruction(fake_repo):
+    """MIT REQUIRES naming maggy. The check must never punish the credit it mandates."""
+    (fake_repo / "NOTICE").write_text(
+        "Tessera is a fork of [Maggy](https://github.com/alinaqi/maggy), "
+        "Copyright (c) 2025 Ali Naqi. Credit for the skills architecture belongs there.\n")
+    (fake_repo / "README.md").write_text("Forked from Maggy (MIT). See NOTICE.\n")
+    assert doccheck.check_no_upstream_clone_instructions() == []
+
+
+def test_front_door_docs_are_actually_in_scope(fake_repo):
+    """The meta-bug: README/GETTING_STARTED were outside DOC_GLOBS, so NOTHING checked them.
+
+    Guards the scope, not just the rule — if a future edit narrows DOC_GLOBS back to
+    docs/**, every front-door check silently becomes a no-op and still reports green.
+    """
+    (fake_repo / "README.md").write_text("names `scripts/phantom.py`\n")
+    (fake_repo / "GETTING_STARTED.md").write_text("names `bin/phantom`\n")
+    named = {_p for b in doccheck.check_referenced_paths_exist() for _p in [b.split(":")[0]]}
+    assert "README.md" in named and "GETTING_STARTED.md" in named
+
+
+def test_real_repo_has_no_upstream_clone_instructions():
+    assert doccheck.check_no_upstream_clone_instructions() == []
+
+
+# ── no-bare-python3-with-toolchain-import ─────────────────────────────────────
+# THE F-001 REGRESSION. F-001 was a hook invoking the toolchain through bare `python3` while
+# Homebrew silently re-pointed that name; every checkpoint write no-op'd for weeks, invisibly,
+# and it confounded the whole Mnemos trial. The venv fixes resolution — this stops the NEXT one.
+# Nothing has ever tested for it. This is the first time.
+
+def _hook(repo: Path, name: str, body: str) -> None:
+    (repo / ".claude" / "scripts" / name).write_text(body)
+
+
+def test_catches_f001_bare_python3_running_inline_toolchain_import(fake_repo):
+    _hook(fake_repo, "bad.sh", '#!/bin/bash\npython3 -c "import mnemos; mnemos.checkpoint()"\n')
+    bad = doccheck.check_no_bare_python3_with_toolchain_import()
+    assert len(bad) == 1
+    assert "mnemos" in bad[0] and "silently no-op" in bad[0]
+
+
+def test_catches_f001_bare_python3_running_a_toolchain_script(fake_repo):
+    (fake_repo / "scripts").mkdir(exist_ok=True)
+    (fake_repo / "scripts" / "ingest.py").write_text("import mnemos\nmnemos.go()\n")
+    _hook(fake_repo, "bad.sh", '#!/bin/bash\npython3 "$DIR/scripts/ingest.py"\n')
+    bad = doccheck.check_no_bare_python3_with_toolchain_import()
+    assert len(bad) == 1
+    assert "ingest" in bad[0] or "mnemos" in bad[0]
+
+
+def test_bare_python3_on_stdlib_only_code_is_FINE(fake_repo):
+    """The whole design rests on this split. guard.py, backstop.py, emit.py, scan.py and
+    doccheck itself are deliberately stdlib-only precisely so bare `python3` is safe for them.
+    A checker that forbade all bare python3 would be wrong, and would get ignored."""
+    (fake_repo / "scripts").mkdir(exist_ok=True)
+    (fake_repo / "scripts" / "guard.py").write_text("import json, re, sys\nprint('ok')\n")
+    _hook(fake_repo, "ok.sh", '#!/bin/bash\npython3 "$DIR/scripts/guard.py"\npython3 -c "import json"\n')
+    assert doccheck.check_no_bare_python3_with_toolchain_import() == []
+
+
+def test_commented_out_bare_python3_is_not_a_landmine(fake_repo):
+    _hook(fake_repo, "ok.sh", '#!/bin/bash\n# python3 -c "import mnemos"  (old, do not use)\n')
+    assert doccheck.check_no_bare_python3_with_toolchain_import() == []
+
+
+def test_pathful_interpreter_is_not_bare(fake_repo):
+    """`$ROOT/.venv/bin/python -c "import mnemos"` is the CORRECT form — a path, not a name.
+    The checker must not fire on the fix it is demanding."""
+    _hook(fake_repo, "ok.sh", '#!/bin/bash\n"$ROOT/.venv/bin/python" -c "import mnemos"\n')
+    assert doccheck.check_no_bare_python3_with_toolchain_import() == []
+
+
+def test_real_repo_has_no_f001_landmines():
+    """The live hooks must be clean. Green here is the claim that F-001 cannot recur silently."""
+    importlib.reload(doccheck)
+    assert doccheck.check_no_bare_python3_with_toolchain_import() == []

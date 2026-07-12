@@ -43,8 +43,22 @@ ROOT = Path(__file__).resolve().parent.parent
 #   docs/adr/         immutable record; an ADR describes the world as it was
 # A checker that cries wolf gets ignored, and an ignored checker is worse than none
 # because it looks like coverage. Precision over recall, deliberately.
-DOC_GLOBS = ("docs/**/*.md", "CLAUDE.md")
-DOC_SKIP = ("docs/adr/",)
+#
+# The front-door docs (README, GETTING_STARTED, NOTICE) are IN scope, added 2026-07-12.
+# They were outside it until then — which is why nothing caught README naming a
+# `tess-design-principles.md` that had been renamed six weeks earlier, or GETTING_STARTED
+# instructing a `git clone` of the upstream Tessera had formally decoupled from (ADR-0003).
+# The docs a stranger reads first were the only ones held to no claim at all. That inverts
+# the moment Tessera goes public.
+#
+# docs/maggy-rfc.md is skipped on the same principle as docs/adr/: it makes no claim about
+# THIS repo's disk. It is *Maggy's* product RFC, inherited verbatim in the fork and never
+# rewritten. It is a DELETION CANDIDATE, not a permanent exemption — an unexplained skip is
+# how this checker rots into the theater it was built to prevent. Pruning the inherited Maggy
+# roadmap docs (this, docs/architecture-v5.md, _project_specs/phases/phase-*-maggy-*.md) is a
+# call for Lorenzo, adjacent to FOCUS-004's skill audit. Surfaced 2026-07-12; unresolved.
+DOC_GLOBS = ("docs/**/*.md", "CLAUDE.md", "README.md", "GETTING_STARTED.md", "NOTICE")
+DOC_SKIP = ("docs/adr/", "docs/maggy-rfc.md")
 
 # A backticked token is treated as a repo path only if it starts with one of these.
 REPO_DIRS = ("docs/", "scripts/", "bin/", ".claude/", "templates/", "hooks/",
@@ -90,6 +104,10 @@ PLANNED_PATHS = {
 
 INLINE_CODE = re.compile(r"`([^`\n]+)`")
 FENCE = re.compile(r"```.*?```", re.DOTALL)
+
+# An instruction to ACQUIRE the upstream — not merely to name it. Crediting maggy is required
+# (MIT, and NOTICE does it); telling a user to clone it contradicts ADR-0003.
+UPSTREAM_ACQUIRE = re.compile(r"git\s+clone\s+\S*maggy|pipx?\s+install\s+maggy", re.I)
 
 
 def _docs() -> list[Path]:
@@ -271,6 +289,66 @@ def check_spend_guard_is_wired() -> list[str]:
     return []
 
 
+# Modules that only exist in the toolchain venv. A script that imports one of these AND is
+# invoked by a bare-`python3` consumer is an F-001 landmine: it resolves whatever interpreter
+# owns the `python3` name today, silently finds nothing, and no-ops.
+VENV_ONLY = ("mnemos", "icpg", "polyphony", "skill_lint", "pytest", "yaml", "requests")
+BARE_PYTHON = re.compile(r"(?<![\w./-])python3(?![\w.])")
+
+
+def check_no_bare_python3_with_toolchain_import() -> list[str]:
+    """THE F-001 DETECTOR. The venv fixes resolution; only this stops the next landmine.
+
+    F-001: a hook invoked the toolchain through bare `python3`. Homebrew re-pointed that name
+    (3.13 → 3.14, because *ollama* wanted 3.14), the import silently failed, and every
+    checkpoint write no-op'd for weeks. It was invisible, and it confounded the entire Mnemos
+    kill/keep trial — "the graph is empty" read as "unused" when it meant "unreachable".
+
+    **A venv does not prevent anyone writing `python3` in a new script tomorrow.** The venv is
+    the mechanism; this is the guardrail. It is why `guard.py`, `backstop.py`, `emit.py`,
+    `scan.py` and this file are deliberately stdlib-only — that split has been the de facto
+    design for months and was never once enforced.
+
+    The rule: a hook/script may invoke bare `python3` ONLY if what it runs is stdlib-only.
+    Import a venv-only module, and you must be reached through a path, not a name.
+
+    Proved live on 2026-07-12: `uv python install` shimmed `python3.13` into ~/.local/bin,
+    AHEAD of Homebrew — so `run-tests.sh`'s `python3.13` pin silently became a different
+    interpreter with no pytest. A NAME is a lookup through a mutable PATH that four package
+    managers write to. A path is a path.
+    """
+    bad = []
+    for script in sorted((ROOT / ".claude" / "scripts").glob("*.sh")):
+        text = script.read_text()
+        for i, line in enumerate(text.splitlines(), 1):
+            if line.lstrip().startswith("#") or not BARE_PYTHON.search(line):
+                continue
+            target = _bare_python_target(line, script)
+            hits = sorted({m for m in VENV_ONLY if re.search(rf"\b(import|from)\s+{m}\b", target)})
+            if hits:
+                bad.append(f"{_rel(script)}:{i}: invokes bare `python3` on code importing "
+                           f"{', '.join(hits)} — venv-only. It will silently no-op when the "
+                           f"`python3` name re-points (F-001). Use the venv by PATH.")
+    return bad
+
+
+def _bare_python_target(line: str, script: Path) -> str:
+    """What the bare `python3` on this line will actually execute: an inline -c, or a file."""
+    inline = re.search(r"""python3\s+-c\s+(['"])(.*?)\1""", line, re.DOTALL)
+    if inline:
+        return inline.group(2)
+    ref = re.search(r"python3\s+\"?\$?[\w{}/.-]*?([\w-]+\.py)", line)
+    if not ref:
+        return ""
+    for candidate in ROOT.rglob(ref.group(1)):
+        if ".venv" not in candidate.parts:
+            try:
+                return candidate.read_text()
+            except OSError:
+                return ""
+    return ""
+
+
 def check_spend_backstop_is_wired() -> list[str]:
     """The escalation contract claims a Stop hook catches undispositioned spend denials.
 
@@ -310,8 +388,33 @@ def check_spend_auth_is_not_tracked() -> list[str]:
             "`git rm --cached` it."]
 
 
+def check_no_upstream_clone_instructions() -> list[str]:
+    """No doc may instruct acquiring maggy. ADR-0003 decided Tessera owns its distribution.
+
+    Found 2026-07-12, during the provenance audit before going public. ADR-0003 (accepted
+    2026-06-26) shipped self-sufficiency in *code* — install.sh literally prints "no maggy
+    repo required" — and never reconciled the *docs*. GETTING_STARTED.md still opened with
+    `git clone https://github.com/alinaqi/maggy.git`, for six weeks, in the file a new user
+    reads first. The decision was real; the front door still pointed at the old house.
+
+    This is the narrow, checkable half of that: an *acquisition instruction* (clone, pip
+    install) for the upstream. It deliberately does NOT flag plain links or prose mentions —
+    NOTICE and README must name and credit maggy, and MIT requires exactly that. Attribution
+    is mandatory; a setup step is a lie. Scanned WITH fences intact: the instruction lives
+    inside a code block, which is precisely where _strip_fences would hide it.
+    """
+    bad = []
+    for doc in _docs():
+        for n, line in enumerate(doc.read_text().splitlines(), 1):
+            if UPSTREAM_ACQUIRE.search(line):
+                bad.append(f"{_rel(doc)}:{n}: instructs acquiring maggy (`{line.strip()}`) — "
+                           f"ADR-0003 decided Tessera installs standalone; cite maggy, don't clone it")
+    return sorted(set(bad))
+
+
 CHECKS = {
     "referenced-paths-exist": check_referenced_paths_exist,
+    "no-upstream-clone-instructions": check_no_upstream_clone_instructions,
     "adr-index-complete": check_adr_index_complete,
     "compaction-threshold-qualified": check_compaction_threshold_qualified,
     "gate-recording-not-recall": check_gate_recording_not_claimed_as_recall,
@@ -320,6 +423,7 @@ CHECKS = {
     "spend-guard-is-wired": check_spend_guard_is_wired,
     "spend-backstop-is-wired": check_spend_backstop_is_wired,
     "spend-auth-is-not-tracked": check_spend_auth_is_not_tracked,
+    "no-bare-python3-with-toolchain-import": check_no_bare_python3_with_toolchain_import,
 }
 
 
