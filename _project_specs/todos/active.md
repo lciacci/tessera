@@ -46,7 +46,21 @@ is NOT version-independent:** when the interpreter NAME drifts, the VERSION drif
 
 ### Where to pick up — in this order, in SEPARATE sessions
 
-1. **Fail-open detection — `_project_specs/11-fail-open-detection.md`. SCOPE AND ORDERING ARE
+0. **READ `docs/adr/0006-instrumentation-not-control.md` FIRST.** It retargets the framework:
+   *Tessera does not make the agent reliable — it makes the agent's unreliability visible and
+   bounded.* It ranks the five mechanism tiers by their actual record under a full night of
+   adversarial pressure, withdraws ADR-0005's readiness claim, and sanctions pruning. **Every
+   item below is downstream of it.**
+
+1. **Adversarial verification — `_project_specs/12-adversarial-verification.md`. BUILD THIS FIRST,
+   BEFORE SPEC 11.** The most effective mechanism in this system **is not in this system** — it
+   rides on Lorenzo remembering to say *"verify from another session."* Three runs on 2026-07-12,
+   three refutations of claims the author had already certified. **A 100% author error rate on
+   "it's fixed."** It is tier 3, it is cheap, and it would have caught everything that night on the
+   first pass — including spec 11's own future holes. **Build the adversary, then let it verify
+   spec 11.**
+
+2. **Fail-open detection — `_project_specs/11-fail-open-detection.md`. SCOPE AND ORDERING ARE
    WRITTEN DOWN THERE. Read it before starting.**
    Five components (spend guard, spend backstop, gate-scan, Mnemos hooks, doccheck) — **not** the
    54 bail-out sites. Mechanism is ~35 lines (`tessera-degraded` + watcher P10); the substance is
@@ -58,7 +72,7 @@ is NOT version-independent:** when the interpreter NAME drifts, the VERSION drif
    **Bar for done (binary): break a component on purpose → Tessera says so within one session,
    with no human asking.** Nothing today would have met it.
 
-2. **Ship the portable doccheck core downstream.** 7 of 13 checks are portable
+3. **Ship the portable doccheck core downstream.** 7 of 13 checks are portable
    (`no-bare-python3-with-toolchain-import`, `safety-scripts-run-on-system-python`,
    `runtime-state-is-not-tracked`, `test-command-is-not-a-bare-interpreter`,
    `ignored-test-suites-are-run`, `spend-guard-is-wired`, `spend-backstop-is-wired`); 6 are
@@ -67,13 +81,21 @@ is NOT version-independent:** when the interpreter NAME drifts, the VERSION drif
    either is wired**. That violates the "ship both halves or neither" rule written in
    `tessera-new-project`'s own comment. Bounded: ~one session.
 
-3. **Re-open ADR-0005's readiness claim.** It named three preconditions for unsupervised
-   operation. All three were declared met on 2026-07-12. Two were then found broken by
-   adversarial verification, not by the framework. **The readiness claim was wrong and Tessera
-   could not have told us.**
+4. ~~**Re-open ADR-0005's readiness claim.**~~ **DONE — ADR-0006 withdraws it.** Its Tier-1
+   reordering stands; its *preconditions-met* framing is retracted. Two of three were broken and
+   undetectable.
 
-4. **FOCUS-004 — still untouched.** 56 skills, zero evaluated, and still the only honest path to
-   a real `auto` compaction. **The Mnemos trial counter is STILL 0** after all of this.
+5. **Prune — now sanctioned work, not a distraction (ADR-0006 §5).** The base skill opens with
+   *"complexity is the enemy… every line of code is a liability"* and the framework has stopped
+   taking its own advice: 56 skills, 13 hooks, 54 fail-open bail-outs. Named candidates: the gate
+   apparatus (4 moving parts for *"did Claude ask?"*), **Mnemos** (the kill/keep trial has run for
+   months and has never produced a valid verdict — and until 2026-07-12 its hooks wrote through a
+   drifting interpreter, so any earlier verdict measured broken machinery), and FOCUS-004.
+
+6. **FOCUS-004 — still untouched.** 56 skills, zero evaluated. Still the only honest path to a
+   real `auto` compaction (205,085 tokens measured across the corpus, vs a ~166k threshold — the
+   claim was verified, not repeated). **The Mnemos trial counter is genuinely 0** — and P3 was
+   silently counting an *unclassifiable* compaction as evidence until it was fixed tonight.
 
 ### What NOT to do next
 
