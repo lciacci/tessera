@@ -16,26 +16,39 @@ Returns JSON with approval status. Exit 0 if approved (2+ of 3 agree).
 from __future__ import annotations
 
 import json
-import os
+import shutil
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+# RESOLVE REVIEWERS BY NAME, ON PATH — never by a hardcoded absolute path.
+#
+# These used to read `os.path.expanduser("~/bin/deepseek")`. `~/bin/` does not exist; the
+# working wrappers live in `tessera/bin/`, which IS on PATH. So every reviewer raised
+# FileNotFoundError, was caught below, and scored as `approved: False` — i.e. a missing
+# binary was counted as a reviewer VOTING NO, and the council reported a confident
+# "CHANGES_NEEDED 0/3" that was purely an artifact of its own brokenness. See
+# scripts/test_council.py for the full account. Keep these as bare names.
 REVIEWERS = {
-    "deepseek": {
-        "cmd": [os.path.expanduser("~/bin/deepseek"), "--pro"],
-        "label": "DeepSeek Pro",
-    },
-    "codex": {
-        "cmd": ["codex", "exec"],
-        "label": "Codex",
-    },
-    "gemini": {
-        "cmd": [os.path.expanduser("~/bin/gemini"), "--pro"],
-        "label": "Gemini Pro",
-    },
+    "deepseek": {"cmd": ["deepseek", "--pro"], "label": "DeepSeek Pro"},
+    "codex": {"cmd": ["codex", "exec"], "label": "Codex"},
+    "gemini-cli": {"cmd": ["gemini-cli", "--pro"], "label": "Gemini Pro"},
 }
+
+
+def resolve_panel(reviewers: dict) -> tuple[dict, list]:
+    """Split the roster into reviewers that actually resolve on PATH, and those that don't.
+
+    An unavailable reviewer is EXCLUDED, never counted. It is not a "no" — it is a silence.
+    """
+    available, unavailable = {}, []
+    for name, config in reviewers.items():
+        if shutil.which(config["cmd"][0]):
+            available[name] = config
+        else:
+            unavailable.append(name)
+    return available, unavailable
 
 REVIEW_PROMPT = """Review this implementation plan. Evaluate:
 1. Is the approach sound and complete?
@@ -53,22 +66,41 @@ Plan:
 
 
 def run_reviewer(name: str, config: dict, plan: str) -> dict:
+    """Run one reviewer. A reviewer that CRASHES has not voted — it has broken.
+
+    `voted` is the load-bearing field. Existence on PATH (resolve_panel) proves a binary is
+    installed; it does NOT prove it works. The real `deepseek` exits with
+    `ModuleNotFoundError: httpx` and the real `gemini-cli` with "Gemini CLI not found" —
+    both were previously scored `approved: False`, i.e. as reviewers voting NO. A broken
+    instrument is a SILENCE, never a dissent. Scoring it as dissent is how a council returns a
+    confident verdict manufactured out of its own brokenness (ADR-0006).
+    """
     prompt = REVIEW_PROMPT + plan[:8000]
     try:
-        result = subprocess.run(
-            config["cmd"] + [prompt],
-            capture_output=True, text=True, timeout=120,
-        )
-        output = result.stdout.strip() if result.returncode == 0 else result.stderr.strip()
-        approved = "APPROVED" in output.upper()[:20]
-        return {
-            "reviewer": name,
-            "label": config["label"],
-            "approved": approved,
-            "output": output[:500],
-        }
+        r = subprocess.run(config["cmd"] + [prompt], capture_output=True, text=True, timeout=120)
     except Exception as e:
-        return {"reviewer": name, "label": config["label"], "approved": False, "output": str(e)[:200]}
+        return _broken(name, config, str(e)[:300])
+
+    if r.returncode != 0:
+        return _broken(name, config, (r.stderr or r.stdout).strip()[:300])
+
+    out = r.stdout.strip()
+    head = out.upper()[:40]
+    if "APPROVED" not in head and "CHANGES_NEEDED" not in head:
+        # Ran clean but said nothing we can read. That is not a vote either.
+        return _broken(name, config, f"unparseable verdict: {out[:200]!r}")
+
+    return {
+        "reviewer": name, "label": config["label"], "voted": True,
+        "approved": "APPROVED" in head, "output": out[:500],
+    }
+
+
+def _broken(name: str, config: dict, reason: str) -> dict:
+    return {
+        "reviewer": name, "label": config["label"], "voted": False,
+        "approved": False, "output": reason,
+    }
 
 
 def main():
@@ -99,44 +131,77 @@ def main():
         print(json.dumps({"error": "no plan provided"}, indent=2))
         sys.exit(1)
 
-    print(f"[validate-plan] {len(REVIEWERS)} reviewers, threshold={threshold}", file=sys.stderr)
+    panel, unavailable = resolve_panel(REVIEWERS)
+
+    # LOUD, not silent. A quietly-shrunk panel is just a slower fail-open.
+    if unavailable:
+        print(f"[validate-plan] UNAVAILABLE (not installed, NOT counted as a vote): "
+              f"{', '.join(unavailable)}", file=sys.stderr)
+
+    # A council with no reviewers must REFUSE TO ANSWER. Returning "CHANGES_NEEDED" here
+    # would be a verdict manufactured entirely out of our own brokenness — the exact bug
+    # this file was rewritten to kill. Never emit a verdict we did not earn.
+    if not panel:
+        print("[validate-plan] FATAL: no reviewers available — refusing to return a verdict.",
+              file=sys.stderr)
+        print(json.dumps({"error": "no reviewers available", "unavailable": unavailable},
+                         indent=2))
+        sys.exit(2)
+
+    print(f"[validate-plan] {len(panel)} reviewers resolved", file=sys.stderr)
 
     results = {}
-    with ThreadPoolExecutor(max_workers=len(REVIEWERS)) as executor:
+    with ThreadPoolExecutor(max_workers=len(panel)) as executor:
         futures = {
             executor.submit(run_reviewer, name, config, plan): name
-            for name, config in REVIEWERS.items()
+            for name, config in panel.items()
         }
         for future in as_completed(futures):
             r = future.result()
             results[r["reviewer"]] = r
-            status = "APPROVED" if r["approved"] else "CHANGES_NEEDED"
-            print(f"[validate-plan] {r['label']}: {status}", file=sys.stderr)
+            if not r["voted"]:
+                # Name the BINARY, not just the label — the reader has to know what to fix.
+                print(f"[validate-plan] BROKEN — {r['label']} ({r['reviewer']}) ran and failed; "
+                      f"NOT counted as a vote: {r['output'][:120]}", file=sys.stderr)
+            else:
+                status = "APPROVED" if r["approved"] else "CHANGES_NEEDED"
+                print(f"[validate-plan] {r['label']}: {status}", file=sys.stderr)
 
-    approvals = sum(1 for r in results.values() if r["approved"])
-    total = len(results)
+    votes = {n: r for n, r in results.items() if r["voted"]}
+    broken = [n for n, r in results.items() if not r["voted"]]
+
+    # Every instrument is broken. REFUSE. Reporting "CHANGES_NEEDED 0/2" here would be a
+    # verdict made of nothing but our own failure — the bug this file exists to kill.
+    if not votes:
+        print("[validate-plan] FATAL: no reviewers returned a usable verdict "
+              "(broken: %s) — refusing to answer." % ", ".join(broken), file=sys.stderr)
+        print(json.dumps({"error": "no reviewers voted", "broken": broken,
+                          "unavailable": unavailable}, indent=2))
+        sys.exit(2)
+
+    # Clamp to reviewers that actually VOTED — not to those that merely resolved. A threshold
+    # above the real vote count is unsatisfiable by construction and reads as unanimous dissent.
+    threshold = max(1, min(threshold, len(votes)))
+
+    approvals = sum(1 for r in votes.values() if r["approved"])
     verdict = "APPROVED" if approvals >= threshold else "CHANGES_NEEDED"
 
     output = {
         "verdict": verdict,
-        "approvals": f"{approvals}/{total}",
+        "approvals": f"{approvals}/{len(votes)}",
         "threshold": threshold,
+        "unavailable": unavailable,
+        "broken": broken,
         "reviews": {
-            name: {
-                "label": r["label"],
-                "approved": r["approved"],
-                "reason": r["output"][:300],
-            }
+            name: {"label": r["label"], "voted": r["voted"],
+                   "approved": r["approved"], "reason": r["output"][:300]}
             for name, r in results.items()
         },
     }
 
     print(json.dumps(output, indent=2))
 
-    if verdict == "APPROVED":
-        sys.exit(0)
-    else:
-        sys.exit(1)
+    sys.exit(0 if verdict == "APPROVED" else 1)
 
 
 if __name__ == "__main__":

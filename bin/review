@@ -18,20 +18,26 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
+# RESOLVE BY NAME, ON PATH — never by a hardcoded absolute path. These read
+# `~/bin/deepseek` and `~/bin/kimi` until 2026-07-13; `~/bin/` does not exist, while the
+# working wrappers sit in `tessera/bin/` on PATH. Every reviewer therefore raised
+# FileNotFoundError and was rendered as a reviewer that ran and FAILED — rather than one
+# that was never installed. Same root cause as bin/validate-plan; see scripts/test_council.py.
 REVIEWERS = {
     "deepseek": {
-        "cmd": [os.path.expanduser("~/bin/deepseek"), "--pro"],
+        "cmd": ["deepseek", "--pro"],
         "label": "DeepSeek Pro",
         "cost_est": 0.0004,
         "enabled": True,
     },
     "kimi": {
-        "cmd": [os.path.expanduser("~/bin/kimi"), "--quiet", "-p"],
+        "cmd": ["kimi", "--quiet", "-p"],
         "label": "Kimi K2.6",
         "cost_est": 0.0006,
         "enabled": True,
@@ -94,13 +100,20 @@ def main():
         print("Usage: review [--deepseek] [--kimi] [--codex] [--all] <prompt>", file=sys.stderr)
         sys.exit(1)
 
-    # Determine active reviewers
+    # Determine active reviewers. A backend that is NOT INSTALLED is excluded and named —
+    # it must never be rendered as a reviewer that ran and FAILED. Silence is not a finding.
     active = specific_backends or ["deepseek", "kimi"]
-    reviewers = {k: v for k, v in REVIEWERS.items() if k in active and v["enabled"]}
+    requested = {k: v for k, v in REVIEWERS.items() if k in active and v["enabled"]}
+    reviewers = {k: v for k, v in requested.items() if shutil.which(v["cmd"][0])}
+    unavailable = [k for k in requested if k not in reviewers]
+
+    if unavailable:
+        print(f"[review] UNAVAILABLE (not installed, excluded): {', '.join(unavailable)}",
+              file=sys.stderr)
 
     if not reviewers:
-        print("[review] No reviewers available.", file=sys.stderr)
-        sys.exit(1)
+        print("[review] FATAL: no reviewers available — nothing was reviewed.", file=sys.stderr)
+        sys.exit(2)
 
     ts = datetime.now(timezone.utc).isoformat()
     print(f"[review] Running {len(reviewers)} reviewers in parallel...", file=sys.stderr)
