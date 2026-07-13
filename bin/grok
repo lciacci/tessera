@@ -14,10 +14,23 @@ Env: XAI_API_KEY required.
 # `from __future__ import annotations` makes them lazy strings. Do not remove.
 from __future__ import annotations
 
+import json
 import os
 import sys
-import httpx
+import urllib.error
+import urllib.request
 
+# STDLIB ONLY — on purpose, and enforced by doccheck `bin-scripts-are-stdlib-only`.
+#
+# This file used to `import httpx`. httpx is installed NOWHERE on this machine — not in the
+# venv, not in any Homebrew python — so `grok` had never run, ever, on any interpreter.
+# It failed with ModuleNotFoundError, `bin/validate-plan` caught that and scored it as a
+# reviewer VOTING NO, and Tessera's council reported a confident `CHANGES_NEEDED 0/3` built
+# entirely out of this. (2026-07-13, FOCUS-004.)
+#
+# The fix is NOT to add httpx to the venv. `bin/` is reached through a bare interpreter NAME,
+# and a name resolves through a PATH four package managers write to — so bin/ must import only
+# what the oldest interpreter that PATH can hand it already has. urllib does this POST fine.
 API_KEY = os.environ.get("XAI_API_KEY", "")
 BASE_URL = "https://api.x.ai/v1"
 
@@ -43,32 +56,38 @@ def main():
         print("Usage: grok <prompt>", file=sys.stderr)
         sys.exit(1)
 
+    result = call_grok(prompt)
+    print(result)
+
+
+def call_grok(prompt: str) -> str:
+    payload = {
+        "model": "grok-4.3",
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 16000,
+    }
+    req = urllib.request.Request(
+        f"{BASE_URL}/chat/completions",
+        data=json.dumps(payload).encode(),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {API_KEY}",
+            "Content-Type": "application/json",
+        },
+    )
     try:
-        with httpx.Client(timeout=120) as client:
-            resp = client.post(
-                f"{BASE_URL}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": "grok-4.3",
-                    "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": 16000,
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            choices = data.get("choices", [])
-            if choices:
-                content = choices[0].get("message", {}).get("content", "")
-                print(content)
-                return
-            print("[grok: no content in response]")
-    except httpx.HTTPError as e:
-        print(f"[Grok API error: {e}]", file=sys.stderr)
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            data = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        return f"[Grok API error: {e.code} {e.reason}]"
     except Exception as e:
-        print(f"[Grok error: {e}]", file=sys.stderr)
+        return f"[Grok error: {e}]"
+
+    choices = data.get("choices", [])
+    if choices:
+        content = choices[0].get("message", {}).get("content", "")
+        return content or "[grok: no content in response]"
+    return "[grok: no choices in response]"
 
 
 if __name__ == "__main__":

@@ -21,15 +21,23 @@ if _venv.exists() and _Path(_sys.executable).resolve() != _venv.resolve():
     _os.execv(str(_venv), [str(_venv), *_sys.argv])
 # ──────────────────────────────────────────────────────────────────────────────────────────
 
-# Runs on ANY python3 — including macOS's /usr/bin/python3 (3.9), which a PATH can hand
-# you at any time. `#!/usr/bin/env python3` resolves a NAME, and the name's VERSION drifts
-# with it. PEP-604 annotations (`str | None`) raise TypeError at definition time on 3.9.
-# `from __future__ import annotations` makes them lazy strings. Do not remove.
-from __future__ import annotations
+# NO `from __future__ import annotations` HERE, on purpose.
+#
+# It used to sit right below, and it made this file UNCOMPILABLE — a future-import must be the
+# first statement, and the re-exec preamble above necessarily precedes it. Python refused to
+# run this script: "from __future__ imports must occur at the beginning of the file". It had
+# never executed, once, on any interpreter. The two patterns are mutually exclusive.
+#
+# It is not needed: the preamble re-execs onto .venv/bin/python (3.13), where PEP-604
+# annotations are native. The stale comment claiming this "runs on ANY python3 including 3.9"
+# was left over from the bare-interpreter idiom and directly contradicted the preamble above
+# it. (Found 2026-07-13 by doccheck `bin-scripts-are-stdlib-only`.)
 
 import json
 import os
 import sys
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -52,17 +60,25 @@ def get_buffer_posts():
     """Fetch live scheduled posts from Buffer GraphQL API."""
     token = os.environ.get("BUFFER_ACCESS_TOKEN", "")
     if not token: return []
+    # stdlib urllib, not httpx: httpx is installed nowhere — not even in the venv this file
+    # re-execs onto — so this call could never have run. See doccheck bin-scripts-are-stdlib-only.
+    payload = {
+        "query": "query($input: PostsInput!) { posts(input: $input) { edges { node { id status dueAt channelService text } } } }",
+        "variables": {"input": {"organizationId": "68133a1399360c9330545cdb"}},
+    }
+    req = urllib.request.Request(
+        "https://api.buffer.com",
+        data=json.dumps(payload).encode(),
+        method="POST",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+    )
     try:
-        import httpx
-        resp = httpx.post("https://api.buffer.com",
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            json={"query": "query($input: PostsInput!) { posts(input: $input) { edges { node { id status dueAt channelService text } } } }",
-                  "variables": {"input": {"organizationId": "68133a1399360c9330545cdb"}}},
-            timeout=10)
-        if resp.status_code != 200: return []
-        edges = resp.json().get("data",{}).get("posts",{}).get("edges",[])
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body = json.loads(resp.read().decode())
+        edges = body.get("data", {}).get("posts", {}).get("edges", [])
         return [e["node"] for e in edges]
-    except: return []
+    except (urllib.error.URLError, ValueError, KeyError):
+        return []
 
 
 def status_for(project: str, live=False):

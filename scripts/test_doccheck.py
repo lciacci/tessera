@@ -15,6 +15,7 @@ that no test covers, that is a finding about the checker, not just the doc.
 import importlib
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -686,3 +687,92 @@ def test_safety_scripts_run_on_the_system_python():
     only explodes when evaluated. Compiling is not running."""
     importlib.reload(doccheck)
     assert doccheck.check_safety_scripts_run_on_the_system_python() == []
+
+
+# ── bin-scripts-are-stdlib-only ──────────────────────────────────────────────
+
+def _bin(repo, name, body):
+    d = repo / "bin"
+    d.mkdir(exist_ok=True)
+    (d / name).write_text(body)
+    return d / name
+
+
+REEXEC_PREAMBLE = (
+    "#!/usr/bin/env python3\n"
+    "import os as _os, sys as _sys\n"
+    "from pathlib import Path as _Path\n"
+    "_venv = _Path(__file__).resolve().parent.parent / '.venv' / 'bin' / 'python'\n"
+    "if _venv.exists() and _Path(_sys.executable).resolve() != _venv.resolve():\n"
+    "    _os.execv(str(_venv), [str(_venv), *_sys.argv])\n"
+)
+
+
+def test_bare_shebang_plus_third_party_import_is_CAUGHT(fake_repo):
+    """THE BUG. bin/deepseek, bin/grok, bin/gemini-api were `#!/usr/bin/env python3` + `import
+    httpx`. httpx is installed NOWHERE — not the venv, not any Homebrew python. All three had
+    never run, ever. bin/validate-plan called them, caught the ModuleNotFoundError, and scored
+    it as a reviewer VOTING NO — so Tessera's council returned a confident `CHANGES_NEEDED 0/3`
+    manufactured entirely out of this."""
+    _bin(fake_repo, "wrapper", "#!/usr/bin/env python3\nimport httpx\n")
+    hits = doccheck.check_bin_scripts_are_stdlib_only()
+    assert any("wrapper" in h and "httpx" in h for h in hits), hits
+
+
+def test_the_OLD_detector_would_have_MISSED_it(fake_repo):
+    """WHY THE OLD CHECK LET IT THROUGH — the finding, not just the bug.
+
+    `no-bare-python3-with-toolchain-import` matched against a HARDCODED SET of module names:
+    {mnemos, icpg, polyphony, skill_lint, pytest, yaml, requests}. `httpx` was simply not on
+    the list. A blacklist of names someone must remember to extend is not a detector; it is a
+    to-do list that fails open. Adding "httpx" to it would have fixed this one escape and
+    guaranteed the next dependency escapes identically. This pins that the old check is still
+    blind, so nobody "fixes" the new one by folding it back into the list."""
+    _bin(fake_repo, "wrapper", "#!/usr/bin/env python3\nimport httpx\n")
+    assert doccheck.check_no_bare_python3_with_toolchain_import() == []
+
+
+def test_local_sibling_modules_are_NOT_flagged(fake_repo):
+    """FALSE POSITIVE the first version shipped with. bin/tessera-watch imports `doccheck`,
+    bin/tessera-test imports `tessera_config` — local .py siblings reached via sys.path.insert.
+    They are stdlib-only and travel with the repo. A checker that cannot tell those from a
+    missing httpx is a checker that gets switched off."""
+    (fake_repo / "scripts").mkdir(exist_ok=True)
+    (fake_repo / "scripts" / "tessera_config.py").write_text("X = 1\n")
+    _bin(fake_repo, "tessera-thing", "#!/usr/bin/env python3\nimport tessera_config\n")
+    assert doccheck.check_bin_scripts_are_stdlib_only() == []
+
+
+def test_venv_reexec_is_PROBED_not_TRUSTED(fake_repo):
+    """THE HOLE IN v1 OF THIS VERY CHECK. v1 treated a venv re-exec as proof of correctness and
+    SKIPPED such scripts. Same mistake one level up: re-execing on the venv proves the script
+    REACHES the venv, not that the venv HAS the module. bin/build-in-public-status re-execs and
+    imports httpx — and the venv does not have httpx either. v1 called it clean.
+
+    The fake repo gets a REAL venv interpreter (the one running pytest, which genuinely lacks
+    httpx) — probing a stub would prove nothing."""
+    venv_bin = fake_repo / ".venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    (venv_bin / "python").symlink_to(sys.executable)
+
+    _bin(fake_repo, "poster", REEXEC_PREAMBLE + "import httpx\n")
+    hits = doccheck.check_bin_scripts_are_stdlib_only()
+    assert any("poster" in h and "httpx" in h for h in hits), hits
+
+
+def test_no_venv_yet_does_not_invent_a_failure(fake_repo):
+    """Before install.sh builds the venv there is nothing to probe. Inventing a failure there
+    would make a fresh clone red for a reason the user cannot act on."""
+    _bin(fake_repo, "poster", REEXEC_PREAMBLE + "import httpx\n")
+    assert doccheck.check_bin_scripts_are_stdlib_only() == []
+
+
+def test_a_script_that_will_not_COMPILE_is_caught(fake_repo):
+    """`ast.parse` ACCEPTS a misplaced `from __future__` (PyCF_ONLY_AST skips the future check);
+    python then refuses to run it. bin/build-in-public-status had exactly that — its re-exec
+    preamble necessarily precedes the future-import — so it could not have executed on ANY
+    interpreter, ever, and an ast.parse guard reported it clean. Only compile() is the real gate.
+    The weaker gate is the one that lets the corpse through."""
+    _bin(fake_repo, "corpse", REEXEC_PREAMBLE + "from __future__ import annotations\n")
+    hits = doccheck.check_bin_scripts_are_stdlib_only()
+    assert any("corpse" in h and "compile" in h for h in hits), hits

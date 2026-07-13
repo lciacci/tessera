@@ -399,6 +399,140 @@ def _python_venv_imports(raw: str) -> list[str]:
     return sorted(found & venv)
 
 
+def _is_local_module(module: str, _cache: dict = {}) -> bool:
+    """A module that SHIPS IN THIS REPO is not a third-party dependency.
+
+    `bin/tessera-watch` imports `doccheck`, `bin/tessera-test` imports `tessera_config`,
+    `bin/tessera-authorize` imports `authorize` — all local .py siblings reached by
+    `sys.path.insert`. They are stdlib-only themselves and travel with the repo, so bare
+    `python3` finds them fine. A checker that cannot tell those from a missing `httpx` is a
+    checker that gets switched off. (It flagged all three on its first run. This is the fix.)
+    """
+    if module not in _cache:
+        hits = [p for p in ROOT.rglob(module + ".py") if ".venv" not in p.parts]
+        _cache[module] = bool(hits)
+    return _cache[module]
+
+
+def _findable_by(interp: str, module: str, _cache: dict = {}) -> bool:
+    """Can THIS interpreter even FIND this module?
+
+    `find_spec`, not `import` — locating a module does not execute it.
+    """
+    key = (interp, module)
+    if key not in _cache:
+        probe = ("import importlib.util as u, sys; "
+                 "sys.exit(0 if u.find_spec(%r) else 1)" % module)
+        try:
+            r = subprocess.run([interp, "-c", probe], capture_output=True, timeout=20)
+            _cache[key] = r.returncode == 0
+        except Exception:
+            _cache[key] = True  # cannot probe => do not invent a failure
+    return _cache[key]
+
+
+def _toplevel_imports(raw: str) -> list[str]:
+    try:
+        tree = ast.parse(raw)
+    except SyntaxError:
+        return []
+    found = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            found |= {a.name.split(".")[0] for a in node.names}
+        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+            found.add(node.module.split(".")[0])
+    return sorted(found - {"__future__"})
+
+
+def check_bin_scripts_are_stdlib_only() -> list[str]:
+    """`bin/` runs on bare `python3`. So `bin/` must import only what bare `python3` can find.
+
+    ── WHY THIS EXISTS (2026-07-13, FOCUS-004) ──────────────────────────────────────────────
+
+    `bin/deepseek`, `bin/grok` and `bin/gemini-api` are `#!/usr/bin/env python3` and
+    `import httpx`. **httpx is installed nowhere** — not in the venv, not in any Homebrew
+    python. All three had never run, on any machine, ever. `bin/validate-plan` called them,
+    caught the ModuleNotFoundError, and scored it as a reviewer VOTING NO — so Tessera's
+    council returned a confident `CHANGES_NEEDED 0/3` built entirely out of this.
+
+    The F-001 detector (`no-bare-python3-with-toolchain-import`) did not catch it, and the
+    reason is the finding: it matched against a HARDCODED SET of module names —
+    `{mnemos, icpg, polyphony, skill_lint, pytest, yaml, requests}`. `httpx` was simply not
+    on the list. **A blacklist of names someone has to remember to extend is not a detector;
+    it is a to-do list that fails open.** Adding "httpx" to it would have fixed this one
+    escape and guaranteed the next dependency escapes the same way.
+
+    So this check does not name anything. It states the invariant literally and tests it by
+    EXECUTION: bin/ is reached through a bare interpreter name, a name resolves through a
+    mutable PATH, and the floor that PATH can drop to is /usr/bin/python3. Therefore every
+    module bin/ imports must be findable BY THAT INTERPRETER. Anything else is F-001 waiting.
+
+    ── THE HATCH IS PROBED, NOT TRUSTED (and this closes a hole in v1 of this check) ────────
+
+    The documented escape is to re-exec on the venv (`_reexecs_on_venv`). v1 of this check
+    treated that as proof of correctness and SKIPPED such scripts. That is the same mistake
+    one level up: re-execing on the venv proves the script REACHES the venv, not that the venv
+    HAS the module. `bin/build-in-public-status` re-execs on the venv and imports `httpx` —
+    and **the venv does not have httpx either.** It was skipped, and it is broken.
+
+    So there is no skip. Each script is probed against the interpreter it ACTUALLY runs on:
+    a bare shebang is probed against /usr/bin/python3 (the floor a PATH can drop to); a
+    venv re-exec is probed against .venv/bin/python. Same invariant, honestly applied:
+    **a script must be able to find its imports on the interpreter it actually uses.**
+
+    A script that does not even PARSE is also a failure. v1 let those through: `_toplevel_imports`
+    swallows SyntaxError and returns [], so a syntactically dead file reported zero bad imports
+    and looked clean. `bin/build-in-public-status` has an illegal `from __future__` after its
+    re-exec preamble — it cannot have run, ever, on any interpreter — and v1 called it fine.
+    """
+    venv_python = str(ROOT / ".venv" / "bin" / "python")
+    failures = []
+    for script in sorted((ROOT / "bin").glob("*")):
+        if not script.is_file():
+            continue
+        try:
+            raw = script.read_text()
+        except (UnicodeDecodeError, OSError):
+            continue
+        if not _is_python(script, raw):
+            continue
+
+        # A bin/ script that will not COMPILE has never run. Silence here is not cleanliness.
+        #
+        # `compile()`, NOT `ast.parse()`. ast.parse uses PyCF_ONLY_AST and happily ACCEPTS a
+        # misplaced `from __future__ import annotations` — which python then refuses to run
+        # ("must occur at the beginning of the file"). bin/build-in-public-status has exactly
+        # that (its re-exec preamble precedes the __future__ line), and an ast.parse guard
+        # called it clean. The weaker gate is the one that lets the corpse through.
+        try:
+            compile(raw, str(script), "exec")
+        except SyntaxError as e:
+            failures.append(f"bin/{script.name}: will not compile ({e.msg}, line {e.lineno}) — "
+                            f"it cannot have run on ANY interpreter, ever.")
+            continue
+
+        on_venv = _reexecs_on_venv(raw)
+        first = raw.splitlines()[0]
+        if not on_venv and not BARE_INTERP.search(first):
+            continue
+        interp = venv_python if on_venv else OLDEST_PYTHON
+        if on_venv and not Path(interp).exists():
+            continue  # no venv built yet; install.sh's job, not ours to invent a failure
+
+        for mod in _toplevel_imports(raw):
+            if _is_local_module(mod) or _findable_by(interp, mod):
+                continue
+            where = ".venv/bin/python (the interpreter it re-execs onto)" if on_venv else \
+                    f"{OLDEST_PYTHON} (the floor a drifting PATH can drop to)"
+            failures.append(
+                f"bin/{script.name}: imports `{mod}`, which {where} cannot find. "
+                f"bin/ must import only what the interpreter it actually runs on already has "
+                f"(CLAUDE.md). This is F-001."
+            )
+    return failures
+
+
 def _referenced_py_sources(text: str) -> str:
     """The REAL imports of every .py this shell invokes — parsed, not grepped.
 
@@ -781,6 +915,7 @@ CHECKS = {
     "verify-scan-is-wired": check_verify_scan_is_wired,
     "runtime-state-is-not-tracked": check_runtime_state_is_not_tracked,
     "no-bare-python3-with-toolchain-import": check_no_bare_python3_with_toolchain_import,
+    "bin-scripts-are-stdlib-only": check_bin_scripts_are_stdlib_only,
     "safety-scripts-run-on-system-python": check_safety_scripts_run_on_the_system_python,
     "test-command-is-not-a-bare-interpreter": check_test_command_is_not_a_bare_interpreter,
 }
