@@ -404,6 +404,7 @@
       <li><a class="navlink" href="#profiles">Profiles</a></li>
       <li><a class="navlink" href="#adr">Decisions</a></li>
       <li><a class="navlink" href="#dogfood">Dogfood</a></li>
+      <li><a class="navlink" href="https://github.com/lciacci/tessera" target="_blank" rel="noopener">GitHub</a></li>
     </ul>
   </div>
 </nav>
@@ -414,11 +415,12 @@
     <h1 class="title">Each skill is a tessera.<br>The whole framework is the mosaic.</h1>
     <p class="tagline">Tessera is a personal agentic coding framework for <em>Claude Code</em> — forked, pruned, and rebuilt around what survives real dogfooding instead of what looks good in a README. Verification gates, a YAGNI discipline, and an honest record of every decision, including the ones that turned out wrong.</p>
     <div class="cta-row">
-      <a class="btn btn-primary" href="#principles">See the 16 principles</a>
+      <a class="btn btn-primary" href="#principles">See the 17 principles</a>
       <a class="btn btn-ghost" href="#dogfood">Read the dogfood findings</a>
+      <a class="btn btn-ghost" href="https://github.com/lciacci/tessera" target="_blank" rel="noopener">View on GitHub</a>
     </div>
     <div class="clone-box">
-      <span id="cloneText">git clone &lt;tessera-repo&gt; && ./install.sh</span>
+      <span id="cloneText">git clone https://github.com/lciacci/tessera.git && ./install.sh</span>
       <button onclick="copyClone()">Copy</button>
     </div>
   </div>
@@ -481,7 +483,7 @@
 
 <section id="principles">
   <div class="wrap">
-    <h2 class="section-title">16 compounding principles</h2>
+    <h2 class="section-title">17 compounding principles</h2>
     <p class="section-sub">The rules that outlive any specific implementation choice. Numbered and referenced throughout the design doc — never reordered, only appended to as the dogfood teaches new ones.</p>
     <div class="accordion-controls">
       <button onclick="setAllAccordion(true)">Expand all</button>
@@ -597,6 +599,7 @@
     ["Once a pipeline is invoked, no internal skipping", "Heavy machinery is opt-in, but once opted in, the pipeline runs all stages as defined. The human can abort mid-pipeline; the agent cannot."],
     ["Skill defaults are starting points, not prescriptions", "Stack and tooling choices follow the project's needs first; skills inform but don't decide."],
     ["Evaluate the ecosystem on a cadence; document the verdict", "A framework-evaluation skill and ADR convention turn ad-hoc “should we use this?” questions into structured decisions with named re-evaluate triggers."],
+    ["Channel, not convention, for user-facing signals", "Anything whose value depends on a human seeing it — advisories, friction logs, backlogs — must ride a non-model channel: a statusline, a hook, a harness-rendered tool. A CLAUDE.md instruction to “surface X” relies on model memory, which drifts silently. Confirmed repeatedly, most sharply in the 2026-07-12 postmortem: every rule enforced by a channel held; every rule that was only a sentence failed at least once."],
   ];
 
   const accList = document.getElementById("accordionList");
@@ -678,9 +681,12 @@
 
   // ---------- ADR timeline ----------
   const ADRS = [
-    ["ADR-0001", "2026-06", "Accepted", "Open GSD evaluation", "Adopt patterns (thin-orchestrator isolation, package legitimacy gate, plan drift guard concept) while keeping Tessera as the host framework. First worked example of the framework-evaluation methodology.", "accepted"],
+    ["ADR-0001", "2026-06-22", "Accepted", "Open GSD evaluation", "Adopt patterns (thin-orchestrator isolation, package legitimacy gate, plan drift guard concept) while keeping Tessera as the host framework. First worked example of the framework-evaluation methodology.", "accepted"],
     ["ADR-0002", "2026-06-26", "Accepted", "Model effort-tier routing via dispatch-time hooks", "Rejected a running daemon that watches and switches models. The model binds at fixed dispatch points only — a hook can rewrite a subagent's model at spawn time, but nothing can hot-swap the main thread mid-turn. Routing is computed at the prompt boundary; application happens only at dispatch gates.", "accepted"],
     ["ADR-0003", "2026-06-26", "Accepted", "Tessera owns its distribution", "Inverts the dependency on the upstream maggy repo rather than severing it. git clone tessera && ./install.sh now scaffolds projects with zero maggy dependency; maggy, as the superset, embeds Tessera — not the other way around.", "accepted"],
+    ["ADR-0004", "2026-06-30", "Accepted", "Per-project hook distribution — global default, freeze for ship-critical", "Hooks distribute through the global ~/.claude/ install by default, syncing every downstream automatically; a project can freeze its own copy when it needs to be immune to upstream changes. Closes a drift bug where a statusline fix landed in Tessera but not in three downstream repos.", "accepted"],
+    ["ADR-0005", "2026-07-11", "Accepted", "The autonomy inflection — Tier 1 reordered, spend promoted to Tier 1", "Reorders the autonomy roadmap (escalation → verifiable contracts → observability) against three months of dogfood evidence, and promotes cost/spend awareness from an optional frontier concern to a Tier-1 precondition — spend gates were already the largest category of real decision points logged downstream.", "accepted"],
+    ["ADR-0006", "2026-07-12", "Accepted", "Tessera is instrumentation, not control", "Amends ADR-0005's readiness claim after a single session surfaced eight silent failures in Tessera's own safety machinery, including a spend guard that failed open. Retargets Tessera's goal: make the agent's unreliability visible and bounded, not the agent reliable. Prioritizes adversarial verification and pruning the unaudited skill corpus over building more in-band gates.", "accepted"],
   ];
   const tl = document.getElementById("adrTimeline");
   ADRS.forEach(a => {
@@ -701,6 +707,7 @@
     ["\u{1F4DD}", "The suggestion-gate convention had ~85% miss rate in real use", "CLAUDE.md said “when you surface a gate, log it.” Across a real session, ~6 decision points surfaced, 1 got logged. Model-memory is a lossy, drifting trigger — anything that depends on the model remembering to tell the user needs a non-model channel (statusline, hook), not a written convention."],
     ["\u{1F300}", "A shell alias silently broke every project-local hook for a full session", "alias claude='cd ~/Claude; command claude' forced the cwd to the parent directory before every launch, so .claude/settings.json in the actual project was never loaded. The fix was visible in /status the whole time — “Setting sources” showed project-local config missing. Diagnostic discipline: check the shell first when behavior repeats across what should be different invocations."],
     ["⚖️", "Hard quality gates from upstream got reframed as targets, not stop conditions", "20 lines/function, 200 lines/file, 80% coverage — the numbers survived, the “STOP and split immediately” enforcement language didn't. An honest override mechanism (inline annotations, audit-logged, periodically reviewed) replaced silent exceptions hidden in PR discussions."],
+    ["\u{1F6A8}", "Three separate “it’s fixed” claims were checked by an independent adversarial pass — all three were wrong", "A routine venv migration meant to close one interpreter bug surfaced eight silent failures, including a spend guard that failed OPEN on Python 3.9 (an unauthorized spend could have proceeded) and a spend backstop shipped disabled in every clone. None of the eight announced itself — every one was found by a human getting suspicious or by a clean-context adversary. Mechanized checks held under pressure; anything resting on the model remembering a rule in prose did not. Full account: docs/postmortem-2026-07-12.md, formalized in ADR-0006."],
   ];
   const fl = document.getElementById("findingsList");
   FINDINGS.forEach(f => {
