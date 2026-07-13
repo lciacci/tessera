@@ -6,6 +6,75 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
+## Handoff — 2026-07-13 (FOCUS-004 / the skill audit, and what it actually found)
+
+**`docs/adr/0007-skill-corpus-prune.md` (Proposed) is the record. Read it before touching skills.**
+Per-skill ledger with evidence: `_project_specs/todos/focus-004-audit.md`.
+
+### The audit did its job, but the findings were NOT in the skills
+
+- **6 skill invocations from the 56-skill corpus, ever** (171 transcripts, 34,636 events) — all
+  `code-review`. The other 4 invocations machine-wide are skills *Anthropic ships*. **The
+  inherited corpus has contributed exactly one skill, ever.** 22 skills declare `paths:` globs
+  that match 0 files here and cannot fire.
+- **Two byte-identical registries both load** (`tessera/skills/` + `~/.claude/skills/`), so every
+  skill is listed twice. **Tessera is the only project with a local skills dir**; all 20+ others
+  use the global one — which means *cutting `tessera/skills/` would not reduce Tessera's context
+  at all.*
+
+### What was actually broken — and it was NOT skill debt
+
+1. **`bin/validate-plan` manufactured verdicts out of its own brokenness.** FIXED (`7a725f7`).
+   It returned a confident `CHANGES_NEEDED 0/3` because a **missing backend was counted as a
+   reviewer voting NO**. Three states now: voted / unavailable / **broken**. Zero usable
+   reviewers → **exit 2, no verdict**. `scripts/test_council.py`.
+2. **The entire multi-model stack had never run.** FIXED (`ec041d3`). Five `bin/` scripts
+   `import httpx`; **httpx is installed nowhere**. `build-in-public-status` would not even
+   *compile*. Ported to stdlib `urllib`.
+3. **The F-001 detector was a blacklist** — `{mnemos, icpg, polyphony, skill_lint, pytest, yaml,
+   requests}`. `httpx` simply was not on it. New check `bin-scripts-are-stdlib-only` names
+   nothing and tests by execution: *every module `bin/` imports must be findable by the
+   interpreter it actually runs on.* **15 doccheck checks.**
+
+### THE LESSON — and it cost three wrong conclusions
+
+> **I audited whether files sat at the paths the docs claimed, and never once RAN the thing I was
+> condemning.** `~/bin/deepseek` was absent, so I called the subsystem dead. It meant the *path*
+> was wrong — `deepseek` was on PATH the whole time. **That is F-001's exact confusion:
+> `unreachable` misread as `unused`,** which `CLAUDE.md` warns about in those words. Then I said
+> "the stack works" because `command -v` found the files — **existence is not function.**
+>
+> **Every correction came from outside me:** the spec-12 adversary refuted 2 of 4 claims; Lorenzo
+> caught the deletion momentum ("what are we short-shrifting?") and stopped me deleting a
+> subsystem over a path typo; the *real run* caught a half-fix the tests called green.
+> **`tessera-verify stats`: author error rate 38%.**
+
+### Where to pick up
+
+1. **The Tessera ↔ conclave design session.** *(ADR-0007, "NOT decided".)* The stack is a
+   **directional keep** — more local models coming, Tailscale + AWS-hosted, **council/ensemble
+   review is the path**. conclave is itself a multi-model stack. Shared council / isolated /
+   one fronts the other = **ADR-weight, and deliberately not decided in a prune ADR.**
+   *Now unblocked: the stack RUNS and FAILS HONESTLY, so this can be designed against a working
+   mechanism instead of a phantom.*
+2. **The `paths:`-match scan across all 20 repos.** The measurement that decides the **22
+   deferred stack skills** (`flutter`, `supabase*`, `react-*`, `android-*`, …). They are dead
+   *in Tessera* and **unmeasured elsewhere** — an invocation count is structurally blind to a
+   `paths:` auto-load. **Cutting them without this scan is drift; challenge it.**
+3. **Execute the 22 authorized cuts** — the Maggy corpses and stale/superseded skills. Safe,
+   mechanical, evidence in the ledger.
+4. **`bin/kimi` is broken** — it `exec`s `~/.local/bin/kimi`, which does not exist. Recorded,
+   not fixed; it matters to item 1.
+5. **`supabase-python` is misfiring** — its `**/*.py` glob matches 123 Python files here. It
+   surfaced itself, live, during this very session when a `.py` file was written.
+
+### What NOT to do
+
+**Do not cut the multi-model stack.** It was condemned in the first draft of ADR-0007 and that was
+wrong. It is kept on purpose. **Do not re-litigate it without the design session.**
+
+---
+
 ## Handoff — pick up here (2026-07-12, end of the F-001 session)
 
 **Full accounting: `docs/postmortem-2026-07-12.md`.** One document, the whole story — what

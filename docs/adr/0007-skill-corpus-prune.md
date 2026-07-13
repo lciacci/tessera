@@ -148,12 +148,18 @@ trigger can match, and overlap with Tessera's own machinery.
 
 | Verdict | Count |
 |---|---|
-| **CUT** | 47 |
-| **TRIM** | 5 — `base`, `security`, `code-review`, `icpg`, `python` |
+| **CUT** | 44 |
+| **TRIM** | 7 — `base`, `security`, `code-review`, `icpg`, `python`, `council-review`, `cross-agent-delegation` |
 | **KEEP** | 2 — `framework-evaluation`, `polyphony` |
-| **DEFER** | 2 — `mnemos` (pending its own trial), `code-graph` (backend live, doc wrong) |
+| **DEFER** | 3 — `mnemos` (pending its own trial), `code-graph` (backend live, doc wrong), `gemini-review` (names the wrong wrapper) |
+
+*(Revised from 47/5/2/2 by the second correction below. `council-review`, `cross-agent-delegation`
+and `gemini-review` were wrongly cut — their backends are real and merely misnamed.)*
 
 Full per-skill ledger with evidence: `_project_specs/todos/focus-004-audit.md`.
+
+**Of the 44 cuts, 22 are the stack/infra skills, and those are DEFERRED, not decided — see
+"NOT decided" below. The count of skills this ADR actually authorizes cutting today is 22.**
 
 ---
 
@@ -181,38 +187,109 @@ The recommendation was "cut 47, ship none." Two facts kill it:
 
 ---
 
+## ⚠️ THE SECOND CORRECTION — the multi-model stack was BROKEN, not DEAD, and I nearly deleted it
+
+**This ADR originally condemned Tessera's multi-model stack as a Maggy corpse. That was wrong,
+it was the most consequential error in the audit, and it was caught by Lorenzo asking *"what are
+we short-shrifting in your sprint to carve things out?"* — not by any check.**
+
+The stack is real. `deepseek`, `kimi`, `grok`, `qwen3`, `gemini-api`, `gemini-cli`, `research`,
+`validate-plan`, `review` all live in `tessera/bin/`, which **is on PATH**. Every caller,
+however, hardcoded **`~/bin/X`** — a directory that **does not exist**. So the council raised
+`FileNotFoundError` on every reviewer.
+
+**And I made the audit's own error twice more, in the same hour:**
+
+1. I read `file not found` as *"dead subsystem."* It meant *"wrong path."* **This is F-001's exact
+   confusion — `unreachable` misread as `unused`** — and `CLAUDE.md` warns about it in those very
+   words. I had quoted that warning earlier in the same session.
+2. Then I announced "the stack works" on the strength of `command -v` finding the files. **It did
+   not work.** `deepseek`, `grok` and `gemini-api` `import httpx`, and **httpx is installed
+   nowhere** — not in the venv, not in any Homebrew python. They had never executed, ever.
+   `build-in-public-status` would not even *compile*. **Existence is not function** — the precise
+   distinction I was, at that moment, writing into `validate-plan`.
+
+> **The lesson, and it is the whole session's lesson: I kept auditing whether files were at the
+> paths the docs claimed, and never once RAN the thing I was condemning. The one time I executed
+> something, it told me the truth immediately.**
+
+**Direction (Lorenzo, 2026-07-13): the stack is KEPT.** It is a directional bet — more local
+models are coming (beyond qwen/ollama), possibly Tailscale-fronted and AWS-hosted, and **council
+/ ensemble review across them is the path forward.** conclave is itself a multi-model stack.
+**How Tessera and conclave interoperate — shared council, isolated, or something else — is a
+DESIGN SESSION, not a prune decision, and it is deliberately not made here.**
+
+---
+
 ## Decision
 
-### Decided — cut, on evidence that holds machine-wide
+### DONE — the council no longer manufactures verdicts (`7a725f7`)
 
-These are dead in *every* project, because their backends do not exist anywhere:
+`bin/validate-plan` returned a confident `CHANGES_NEEDED 0/3` on every invocation, every part of
+it an artifact of its own brokenness. Two bugs; the second is the ADR-0006 one:
 
-- **`council-review`** — cut the skill: it misdescribes its own machinery (points at `~/bin/`,
-  documents a `council.yaml` that is never read) and instructs the agent into an unbounded
-  revise-revalidate loop against a council that cannot approve. **But cutting the skill does not
-  fix the defect — see below.**
-- **`agent-teams`**, **`autonomous-testing`** — Maggy infrastructure; `maggy`, `~/bin/deepseek`,
-  `~/bin/gemini` all absent.
+1. **Path.** Reviewers resolved as `~/bin/deepseek`. Now resolved by NAME on PATH.
+2. **Fail-wrong.** The resulting `FileNotFoundError` was caught and scored `approved: False` —
+   **a missing backend became DISSENT**, and the council gated on it.
+
+*Fixing only (1) would have HIDDEN (2)*: the council would have started returning 2/3, looked
+healthy, and kept miscounting absent reviewers as "no".
+
+There are **three** states, not two — and the third was found only by **driving the real council**,
+after the tests were green:
+
+| state | before | now |
+|---|---|---|
+| ran, answered | a vote | **a vote** |
+| not installed | counted as **NO** | `unavailable` — excluded, named in JSON + stderr |
+| **installed, ran, crashed** | counted as **NO** | `broken` — excluded, named in JSON + stderr |
+
+Thresholds clamp to reviewers that actually **voted**. **Zero usable reviewers → exit 2, no
+verdict.** A council that could not ask anyone must never answer `CHANGES_NEEDED`.
+Pinned by `scripts/test_council.py` (7 tests).
+
+### DONE — `bin/` is stdlib-only again, and the F-001 detector was a blacklist (`ec041d3`)
+
+Five `bin/` scripts imported `httpx`, which exists nowhere. **Ported to `urllib.request`** — *not*
+by adding httpx to the venv: `bin/` is reached by a bare interpreter **name**, so it must import
+only what a bare interpreter already has. They now run, and fail *honestly*
+(`DEEPSEEK_API_KEY not set`) — which the fixed council correctly reads as `broken`, not as a NO.
+
+**Why the existing F-001 detector missed it, and this is the real finding:**
+`no-bare-python3-with-toolchain-import` matched a **hardcoded set of module names** —
+`{mnemos, icpg, polyphony, skill_lint, pytest, yaml, requests}`. `httpx` was not on the list.
+**A blacklist of names someone must remember to extend is not a detector; it is a to-do list that
+fails open.** Adding `"httpx"` would have closed this escape and guaranteed the next one.
+
+New check **`bin-scripts-are-stdlib-only`** names nothing. It states the invariant and tests it by
+**execution**: *every module `bin/` imports must be findable by the interpreter it actually runs
+on.* It was wrong twice before it was right, and both are pinned as regression tests: it flagged
+local `sys.path` siblings (false positive), and it **skipped venv-re-exec scripts — trusting the
+hatch instead of probing it**, which is the same "reaching ≠ having" error one level up.
+
+### Decided — the skill cuts that SURVIVE the correction
+
+Backend genuinely absent **everywhere**, so dead in every project:
+
+- **`agent-teams`**, **`autonomous-testing`** — the `maggy` CLI is absent; both are Maggy's.
 - **`cpg-analysis`** — `joern`, `codeql`, both MCP servers absent.
-- **`cross-agent-delegation`** — `codex` absent; orchestrates three hooks that are wired nowhere;
-  its complexity table duplicates `polyphony`'s verbatim.
-- **`codex-review`**, **`gemini-review`** — CLIs absent, Node absent.
+- **`codex-review`** — `codex` absent; needs Node, which Tessera does not have.
 - **`ai-models`** — stale to the point of misleading; superseded by the native `claude-api` skill.
 - **`iterative-development`** — its sole mechanism (`scripts/tdd-loop-check.sh`) does not exist;
   duplicated inside `base`. *(Eagerly loaded, so this cut is pure win.)*
 - **`build-in-public`** — no frontmatter; superseded by a live plugin of the same name.
 
-### Decided — `bin/validate-plan` and `bin/review` are broken Tessera tooling, not skill debt
+### REVERSED by the correction — these were wrongly cut
 
-**These are git-tracked binaries in Tessera's own `bin/`. They run on every invocation and can
-never return an approval.** Deleting the `council-review` skill removes the *instruction* to call
-them; it does not remove the *binaries*, which remain on PATH for any agent or human who runs
-them and will keep emitting authoritative-looking `CHANGES_NEEDED 0/3` verdicts forever.
-
-**Either delete them, or make them fail LOUD** (ADR-0006: *a mechanism that fails open needs a
-paired detector that fails loud*). A reviewer whose backend is missing must not be counted as a
-reviewer who declined — that is the exact confusion `0/3` currently encodes. **This is now the
-highest-priority item in this ADR, and it is a code change, not a doc change.**
+- **`council-review`** — **CUT → TRIM.** The council is *real* and now *honest*. The skill is
+  wrong about it: it points at `~/bin/`, and documents a `~/.claude/council.yaml` that the
+  binaries **never read** (`grep -c council` → 0). Fix the skill's paths and drop the phantom
+  config; keep the mechanism.
+- **`cross-agent-delegation`** — **CUT → TRIM.** `codex` is genuinely absent, but the Kimi path is
+  directional. (`bin/kimi` is itself broken — it `exec`s `~/.local/bin/kimi`, which does not
+  exist. Recorded, not fixed.)
+- **`gemini-review`** — **CUT → DEFER.** It names `gemini`; the working wrapper is `gemini-api`.
+  A naming bug, not a dead skill.
 
 ### Decided — fix the active misfire
 
@@ -242,6 +319,17 @@ highest-priority item in this ADR, and it is a code change, not a doc change.**
 - **What the skill set is FOR.** `tessera-new-project` ships none. Either skills are Tessera-local
   (and the stack skills belong only in the global registry), or Tessera should ship a curated
   subset downstream. **Unresolved. It is the structural question under the whole prune.**
+
+- **HOW TESSERA AND CONCLAVE INTEROPERATE — its own design session, explicitly not decided here.**
+  The multi-model stack is kept as a **directional bet**: more local models are coming beyond
+  qwen/ollama, likely Tailscale-fronted with an AWS environment hosting them, and **council /
+  ensemble review across them is the intended path.** conclave *is* a multi-model stack. Whether
+  Tessera and conclave share a council, run isolated, or one fronts the other is a **design
+  question with ADR weight**, and answering it inside a prune ADR would be exactly the accretion
+  this document was written to catch. **Do not let a future prune session quietly decide it by
+  deleting things.**
+  *Prerequisite now satisfied:* the stack RUNS and FAILS HONESTLY, so the design session can be
+  had against a working mechanism rather than a phantom one. That was not true this morning.
 
 ---
 
