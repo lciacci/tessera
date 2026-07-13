@@ -690,6 +690,30 @@ def check_spend_backstop_is_wired() -> list[str]:
     return []
 
 
+def check_verify_scan_is_wired() -> list[str]:
+    """Spec 12's verification contract claims a fail-LOUD Stop hook triggers the falsifier.
+
+    The mechanism existed before the spec — it rode on a human remembering to ask. The Stop
+    hook is what makes it a channel; unwired, the adversary is invocable-but-forgotten, which
+    is a sentence again. And this is the ONE hook that must not fail open, so its own wiring
+    is exactly the kind of claim that needs a checker.
+    """
+    contract = ROOT / "docs" / "contracts" / "verification-event.md"
+    if not contract.exists() or "tessera-verify-scan" not in contract.read_text():
+        return []  # no claim, nothing to check
+    settings = ROOT / ".claude" / "settings.json"
+    try:
+        stop = json.loads(settings.read_text()).get("hooks", {}).get("Stop", [])
+    except (OSError, json.JSONDecodeError):
+        return [".claude/settings.json unreadable — cannot verify the verify-scan backstop"]
+    if "tessera-verify-scan" not in json.dumps(stop):
+        return ["docs/contracts/verification-event.md claims a fail-LOUD Stop-hook backstop "
+                "(tessera-verify-scan), but no such hook is wired in .claude/settings.json — "
+                "the one hook that must not fail open is not wired at all, and the adversary "
+                "is back to riding human recall"]
+    return []
+
+
 # Per-session runtime state. Tracking any of these ships one machine's live state to every
 # clone. `tessera-yml-is-tracked` asserts config MUST be tracked; this asserts the opposite,
 # for the opposite reason. Both directions of "tracked" are claims about every clone.
@@ -754,6 +778,7 @@ CHECKS = {
     "ignored-test-suites-are-run": check_ignored_test_suites_are_run,
     "spend-guard-is-wired": check_spend_guard_is_wired,
     "spend-backstop-is-wired": check_spend_backstop_is_wired,
+    "verify-scan-is-wired": check_verify_scan_is_wired,
     "runtime-state-is-not-tracked": check_runtime_state_is_not_tracked,
     "no-bare-python3-with-toolchain-import": check_no_bare_python3_with_toolchain_import,
     "safety-scripts-run-on-system-python": check_safety_scripts_run_on_the_system_python,

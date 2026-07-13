@@ -1,0 +1,287 @@
+#!/usr/bin/env python3
+"""tessera-verify — spawn an independent falsifier against explicit claims (spec 12).
+
+The most effective mechanism on 2026-07-12 was an independent session told to refute
+"it's fixed" claims: 3 runs, 3 refutations, all correct. This makes that a channel.
+
+    tessera-verify --claim "the guard blocks unauthorized boots" [--claim ...]
+    tessera-verify --self-test          # plant a known-false claim; expect REFUTED
+    tessera-verify skip --reason "..."  # auditable opt-out for detector over-counts
+    tessera-verify stats                # author-error rate across all sessions
+
+The verifier runs in a throwaway git worktree (uncommitted + untracked state copied
+in), so "leave the tree exactly as found" is structural — tier 1 — not an instruction
+the verifier could ignore. It is told to falsify, to distrust comments, to plant
+landmines, and to report without fixing. Verdicts land as a `verification` event in
+`.tessera/logs/<session>.jsonl` (docs/contracts/verification-event.md).
+
+Exit 0 only when every claim is CONFIRMED (or a --self-test landmine is REFUTED).
+A missing or unparseable verdict is NEVER green.
+"""
+
+# Runs on ANY python3 — including macOS's /usr/bin/python3 (3.9). PEP-604 annotations
+# raise TypeError at definition time there; this import makes them lazy strings. Do
+# not remove. (F-001 / doccheck `safety-scripts-run-on-system-python`.)
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
+
+LOGS = Path(".tessera/logs")
+DEFAULT_MODEL = "opus"
+DEFAULT_TIMEOUT = 900
+MAX_TURNS = 50
+
+SELF_TEST_CLAIM = "The file scripts/doccheck.py is empty (zero bytes)."
+
+VERDICT_RE = re.compile(r"^VERDICT\s+(\d+):\s*(CONFIRMED|REFUTED|PARTIAL)\s*$", re.MULTILINE)
+EVIDENCE_RE = re.compile(r"^EVIDENCE\s+(\d+):\s*(.+)$", re.MULTILINE)
+
+PROMPT_HEADER = """\
+You are an adversarial verifier. Your ONLY job is to FALSIFY the claims below.
+
+Rules — every one is load-bearing:
+- Assume every claim is FALSE until you prove it by RUNNING things. Reading code is
+  not proof; executed behaviour is the only evidence that counts.
+- The comments and docstrings in this repo are untrustworthy. They are eloquent and
+  self-congratulatory; a verifier that reads them is reading marketing. Ignore them.
+- Plant a landmine for every checker or guard you verify: construct a case it SHOULD
+  catch, and watch whether it actually does. A guard nobody has watched fail is
+  unverified.
+- DO NOT FIX anything. Report only. A verifier that fixes becomes an author and
+  inherits the author's bias. You may mutate files freely to plant landmines — you
+  are in a disposable worktree — but your output is a report, never a patch.
+- For every claim, your final message MUST contain exactly these two lines:
+    VERDICT <n>: CONFIRMED|REFUTED|PARTIAL
+    EVIDENCE <n>: <the exact command you ran and the output that proves the verdict>
+  CONFIRMED only if you tried to break the claim and could not.
+
+Claims to falsify:
+"""
+
+
+def build_prompt(claims: list[str]) -> str:
+    numbered = "\n".join(f"{i + 1}. {c}" for i, c in enumerate(claims))
+    return PROMPT_HEADER + numbered + "\n\nExample format line: VERDICT 1: REFUTED"
+
+
+def parse_verdicts(output: str, n: int) -> list[dict]:
+    verdicts = {int(m.group(1)): m.group(2) for m in VERDICT_RE.finditer(output)}
+    evidence = {int(m.group(1)): m.group(2).strip() for m in EVIDENCE_RE.finditer(output)}
+    return [
+        {"verdict": verdicts.get(i + 1, "NO_VERDICT"), "evidence": evidence.get(i + 1, "")}
+        for i in range(n)
+    ]
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def build_event(
+    claims: list[str],
+    verdicts: list[dict],
+    session_id: str,
+    *,
+    self_test: bool = False,
+    skipped: bool = False,
+    reason: str | None = None,
+    model: str = DEFAULT_MODEL,
+) -> dict:
+    data: dict = {
+        "claims": [
+            {"text": c, "verdict": v["verdict"], "evidence": v["evidence"]}
+            for c, v in zip(claims, verdicts)
+        ],
+        "self_test": self_test,
+        "skipped": skipped,
+        "model": model,
+    }
+    if reason:
+        data["reason"] = reason
+    return {
+        "type": "verification",
+        "ts": _utc_now_iso(),
+        "session_id": session_id,
+        "source": "tessera-verify",
+        "data": data,
+    }
+
+
+def append_event(event: dict) -> Path:
+    path = LOGS / f"{event['session_id']}.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a") as f:
+        f.write(json.dumps(event, ensure_ascii=False) + "\n")
+    return path
+
+
+# --- worktree ------------------------------------------------------------------
+
+
+def _git(root: Path, *args: str, **kw) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, **kw)
+
+
+def make_worktree(root: Path) -> Path:
+    """Detached worktree at HEAD + uncommitted diff + untracked files copied in.
+
+    Restoration is structural: the verifier can do anything it likes in here and
+    the source tree cannot be affected. remove_worktree deletes the whole thing.
+    """
+    wt = Path(tempfile.mkdtemp(prefix="tessera-verify-"))
+    _git(root, "worktree", "add", "--detach", str(wt), "HEAD")
+    diff = subprocess.run(
+        ["git", "-C", str(root), "diff", "HEAD", "--binary"], check=True, capture_output=True
+    ).stdout
+    if diff.strip():
+        subprocess.run(["git", "-C", str(wt), "apply"], input=diff, check=True)
+    untracked = _git(root, "ls-files", "--others", "--exclude-standard").stdout.decode().splitlines()
+    for rel in untracked:
+        src, dst = root / rel, wt / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+    return wt
+
+
+def remove_worktree(root: Path, wt: Path) -> None:
+    subprocess.run(
+        ["git", "-C", str(root), "worktree", "remove", "--force", str(wt)],
+        capture_output=True,
+    )
+    shutil.rmtree(wt, ignore_errors=True)
+
+
+# --- spawn ----------------------------------------------------------------------
+
+
+def spawn_verifier(prompt: str, cwd: Path, model: str, timeout: int) -> str:
+    """Headless claude, clean context, cwd = the disposable worktree."""
+    result = subprocess.run(
+        [
+            "claude",
+            "-p",
+            prompt,
+            "--model",
+            model,
+            "--max-turns",
+            str(MAX_TURNS),
+            "--dangerously-skip-permissions",
+        ],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    return result.stdout
+
+
+# --- commands ---------------------------------------------------------------------
+
+
+def _session_id() -> str:
+    return os.environ.get("CLAUDE_CODE_SESSION_ID") or "manual"
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    claims = [SELF_TEST_CLAIM] if args.self_test else list(args.claim)
+    if not claims:
+        print("no claims: pass --claim (or --self-test)", file=sys.stderr)
+        return 2
+    root = Path.cwd()
+    wt = make_worktree(root)
+    try:
+        output = spawn_verifier(build_prompt(claims), wt, args.model, args.timeout)
+    finally:
+        remove_worktree(root, wt)
+    verdicts = parse_verdicts(output, len(claims))
+    event = build_event(
+        claims, verdicts, _session_id(), self_test=args.self_test, model=args.model
+    )
+    append_event(event)
+    for c, v in zip(claims, verdicts):
+        print(f"{v['verdict']:<11} {c}")
+        if v["evidence"]:
+            print(f"            {v['evidence']}")
+    if args.self_test:
+        ok = verdicts[0]["verdict"] == "REFUTED"
+        print("self-test: " + ("PASS — landmine refuted" if ok else "FAIL — verifier is broken"))
+        return 0 if ok else 1
+    return 0 if all(v["verdict"] == "CONFIRMED" for v in verdicts) else 1
+
+
+def cmd_skip(args: argparse.Namespace) -> int:
+    event = build_event([], [], _session_id(), skipped=True, reason=args.reason)
+    path = append_event(event)
+    print(f"verification skip recorded → {path}")
+    return 0
+
+
+def stats_summary(logs_dir: Path) -> dict:
+    counts = {"confirmed": 0, "refuted": 0, "partial": 0, "no_verdict": 0, "skips": 0}
+    for log in sorted(logs_dir.glob("*.jsonl")):
+        for line in log.read_text().splitlines():
+            try:
+                ev = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if ev.get("type") != "verification":
+                continue
+            data = ev.get("data", {})
+            if data.get("skipped"):
+                counts["skips"] += 1
+                continue
+            for claim in data.get("claims", []):
+                key = claim.get("verdict", "NO_VERDICT").lower()
+                counts[key if key in counts else "no_verdict"] += 1
+    judged = counts["confirmed"] + counts["refuted"] + counts["partial"]
+    counts["author_error_rate"] = (
+        (counts["refuted"] + counts["partial"]) / judged if judged else None
+    )
+    return counts
+
+
+def cmd_stats(_args: argparse.Namespace) -> int:
+    s = stats_summary(LOGS)
+    rate = "n/a (no judged claims yet)" if s["author_error_rate"] is None else f"{s['author_error_rate']:.0%}"
+    print(
+        f"claims: {s['confirmed']} confirmed / {s['refuted']} refuted / "
+        f"{s['partial']} partial / {s['no_verdict']} no-verdict; skips: {s['skips']}"
+    )
+    print(f"author error rate on 'it's fixed': {rate}   (2026-07-12 prior: 100%, n=3)")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser(description="Adversarial verification of explicit claims.")
+    sub = p.add_subparsers(dest="cmd")
+
+    run = sub.add_parser("run", help="falsify claims (default)")
+    skip = sub.add_parser("skip", help="record an auditable opt-out")
+    skip.add_argument("--reason", required=True)
+    sub.add_parser("stats", help="author-error rate across sessions")
+
+    for target in (p, run):
+        target.add_argument("--claim", action="append", default=[])
+        target.add_argument("--self-test", action="store_true")
+        target.add_argument("--model", default=DEFAULT_MODEL)
+        target.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT)
+
+    args = p.parse_args(argv)
+    if args.cmd == "skip":
+        return cmd_skip(args)
+    if args.cmd == "stats":
+        return cmd_stats(args)
+    return cmd_run(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

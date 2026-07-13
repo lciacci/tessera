@@ -54,13 +54,14 @@ is NOT version-independent:** when the interpreter NAME drifts, the VERSION drif
    adversarial pressure, withdraws ADR-0005's readiness claim, and sanctions pruning. **Every
    item below is downstream of it.**
 
-1. **Adversarial verification — `_project_specs/12-adversarial-verification.md`. BUILD THIS FIRST,
-   BEFORE SPEC 11.** The most effective mechanism in this system **is not in this system** — it
-   rides on Lorenzo remembering to say *"verify from another session."* Three runs on 2026-07-12,
-   three refutations of claims the author had already certified. **A 100% author error rate on
-   "it's fixed."** It is tier 3, it is cheap, and it would have caught everything that night on the
-   first pass — including spec 11's own future holes. **Build the adversary, then let it verify
-   spec 11.**
+1. ~~**Adversarial verification — `_project_specs/12-adversarial-verification.md`. BUILD THIS
+   FIRST, BEFORE SPEC 11.**~~ **SHIPPED 2026-07-13** — `bin/tessera-verify` + fail-LOUD Stop-hook
+   trigger + `verification` event contract + doccheck `verify-scan-is-wired`. The hook fired
+   unprompted on the session that built it (criterion 2, live); the falsifier confirmed 4/4
+   claims with landmines walked; `--self-test` refuted its planted landmine (criterion 5).
+   **Remaining: criterion 1 — Lorenzo's manual acceptance replay of the three 2026-07-12
+   refutations, deliberately human-witnessed (ADR-0006: watch a channel fail before trusting
+   it).** Spec's "Shipped" section has the full evidence.
 
 2. **PRUNE — and FOCUS-004 *is* the prune. One item, not two.** *(ADR-0006 §5, sanctioned work.)*
 

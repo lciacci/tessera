@@ -1,6 +1,7 @@
 # Spec 12: Adversarial verification — make the falsifier a channel
 
-**Status:** pending — **build this BEFORE spec 11**
+**Status:** shipped 2026-07-13 — criteria 2–5 evidenced live (see Shipped, below); criterion 1
+(manual acceptance replay of the 2026-07-12 refutations) pending Lorenzo
 **Priority:** Tier 1. Highest value-per-line in the framework.
 **Effort:** Small. The mechanism already exists; it is simply not wired.
 **Source:** ADR-0006 → decision 4
@@ -117,3 +118,22 @@ future holes.
 ## Depends on
 
 - Nothing. Subagents, the event channel, and the Stop-hook surface all already exist.
+
+---
+
+## Shipped (2026-07-13)
+
+- `bin/tessera-verify` — run / `skip --reason` / `stats` / `--self-test`. Verifier runs in a
+  disposable git worktree (uncommitted + untracked state copied in), so tree restoration is
+  **structural**, not an instruction. `NO_VERDICT` is never green.
+- `scripts/verify/scan.py` + `.claude/scripts/tessera-verify-scan.sh` — Stop-hook trigger,
+  **fail-LOUD** (the only Tessera hook that does), capped at 3 fires/session.
+- Contract: `docs/contracts/verification-event.md`. Wiring checked by doccheck
+  `verify-scan-is-wired`. Suite: 18 verify tests + 15 CLI tests, all API-free.
+- **Criterion 2 evidence, unplanned and better than designed:** the hook fired unprompted on
+  the very session that built it — mid-build, before wiring was announced — and the falsifier
+  ran 4 claims: **4/4 CONFIRMED**, with landmines walked (scan.py moved aside → wrapper exit 2;
+  `__future__` import stripped → reproduced the 3.9 TypeError; jq-less PATH → loud).
+- **Criterion 5 evidence:** live `--self-test` REFUTED the planted zero-byte claim. PASS.
+- Criterion 1 (replay the three 07-12 refutations) is deliberately manual: watch the channel
+  fail/catch once before trusting it (ADR-0006). Not yet run.

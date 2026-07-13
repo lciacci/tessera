@@ -156,6 +156,16 @@
             "statusMessage": "Checking spend denials were dispositioned..."
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \".claude/scripts/tessera-verify-scan.sh\" ]; then exec \".claude/scripts/tessera-verify-scan.sh\"; fi; echo 'VERIFY-SCAN BROKEN: hook script missing or not executable' >&2; exit 2",
+            "timeout": 10,
+            "statusMessage": "Checking safety-path changes were verified..."
+          }
+        ]
       }
     ],
     "SessionStart": [

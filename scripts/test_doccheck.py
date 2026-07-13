@@ -285,6 +285,36 @@ def test_no_backstop_claim_means_nothing_to_check(fake_repo):
     assert doccheck.check_spend_backstop_is_wired() == []
 
 
+# ── verify-scan-is-wired ──────────────────────────────────────────────────────
+
+def _verification_contract(repo: Path) -> None:
+    (repo / "docs" / "contracts" / "verification-event.md").write_text(
+        "The Stop hook (`.claude/scripts/tessera-verify-scan.sh` → `scripts/verify/scan.py`) "
+        "fires on unverified safety-path changes. This hook fails LOUD, not open.")
+
+
+def test_catches_verify_scan_claimed_but_not_wired(fake_repo):
+    """Spec 12's whole point is the trigger. An unwired verify-scan is the verifier
+    demoted back to a sentence — invocable-but-forgotten, the exact state it replaced."""
+    _verification_contract(fake_repo)
+    _settings(fake_repo, {"hooks": {"Stop": [{"hooks": [{"command": "mnemos-stop.sh"}]}]}})
+    bad = doccheck.check_verify_scan_is_wired()
+    assert len(bad) == 1
+    assert "must not fail open" in bad[0]
+
+
+def test_passes_when_verify_scan_is_wired(fake_repo):
+    _verification_contract(fake_repo)
+    _settings(fake_repo, {"hooks": {"Stop": [{"hooks": [
+        {"command": ".claude/scripts/tessera-verify-scan.sh"}]}]}})
+    assert doccheck.check_verify_scan_is_wired() == []
+
+
+def test_no_verification_contract_means_nothing_to_check(fake_repo):
+    _settings(fake_repo, {"hooks": {}})
+    assert doccheck.check_verify_scan_is_wired() == []
+
+
 # ── no-upstream-clone-instructions ────────────────────────────────────────────
 
 def test_catches_getting_started_telling_you_to_clone_maggy(fake_repo):
