@@ -32,6 +32,7 @@ When an Observatory entry is closed (via ADR or explicit rejection), update its 
 ### Fail-open everywhere — Tessera cannot tell you when it is broken
 
 - **Status:** Investigating. **This is the most consequential entry in this file.** It is a claim about the framework as a whole, not about any component, and it should be promoted to an ADR once its remedy is designed.
+- **Full narrative accounting: `docs/postmortem-2026-07-12.md`.**
 - **Source:** The 2026-07-12 F-001/venv session. Not one bug in it was found by the framework announcing a problem. Every one was found by a human getting suspicious, or by an adversarial verifier in a clean context. Three rounds of "it's fixed" were refuted by independent verification, each time correctly.
 
 #### The evidence — eight bugs in one session, and **not one of them announced itself**

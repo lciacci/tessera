@@ -8,8 +8,10 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ## Handoff — pick up here (2026-07-12, end of the F-001 session)
 
-**Read `docs/observatory.md` → "Fail-open everywhere" FIRST. It is the finding. Everything
-below is downstream of it.**
+**Full accounting: `docs/postmortem-2026-07-12.md`.** One document, the whole story — what
+happened, the ten bugs, why each rule failed, the mechanism ranking, the numbers, and the
+direction. Start there. The formal decision is `docs/adr/0006-instrumentation-not-control.md`;
+the evidence base is `docs/observatory.md` → "Fail-open everywhere".
 
 ### What actually happened
 
