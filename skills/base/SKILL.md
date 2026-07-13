@@ -94,7 +94,14 @@ Splitting into:
 - ❌ Deep nesting - flatten or extract
 - ❌ Long parameter lists - use objects
 - ❌ Comments explaining "what" - code should be self-documenting
-- ❌ Dead code - delete it, git remembers
+- ❌ Dead code - delete it, git remembers. **This licence is for CODE ONLY.** For code the
+  safeguards hold: you would grep the symbol to find it again, and a test fails if you were
+  wrong. **For knowledge — docs, skills, specs, prose, ideas — every one of those safeguards is
+  absent.** Nobody greps deleted prose for an idea, and no test fails when you delete a good one.
+  **So: never subtract from a knowledge artifact you have not read, and HARVEST BEFORE YOU CUT.**
+  A cut that loses an idea is a loss, not a saving. *(Written 2026-07-13: this unqualified line
+  is eagerly loaded into every session, and it is what made deleting 47 unread skills feel free.
+  See ADR-0007.)*
 - ❌ Copy-paste duplication - extract to shared function
 - ❌ God objects/files - split by responsibility
 - ❌ Circular dependencies

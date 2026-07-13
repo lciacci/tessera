@@ -239,11 +239,65 @@ for *adapt* cannot produce an *adapt*. **The rubric determined the findings.**
 1. **The task was handed over as a prune.** `active.md`: *"PRUNE — and FOCUS-004 **is** the
    prune."* ADR-0006 §5 sanctions it and ranks *"deleted machinery cannot fail silently"* tier 1.
    **I took the framing as given rather than as a claim to test.**
-2. **The `ponytail` skill was live in the session and is an explicit deletion bias** — *"Deletion
-   over addition," "Does this need to exist at all?", "Speculative need = skip it"* — with a
-   `ponytail-audit` command whose stated output is *"a ranked list of what to delete."*
-   **`CLAUDE.md` requires naming biases in my own reasoning. I named excitement bias and
-   sunk-cost, while a system prompt tuned for deletion steered every verdict, unremarked.**
+2. ~~**The `ponytail` skill is an explicit deletion bias and it steered every verdict.**~~
+   **RETRACTED — this was scapegoating, and Lorenzo called it.** *("ponytail gets blamed for a
+   lot… it might be one of the things we need to fix.")*
+
+   **Ponytail explicitly forbids exactly what I did**, in its own text, in my context, all
+   session:
+
+   > *"Never lazy about understanding the problem. The ladder shortens the solution, never the
+   > reading. Trace the whole thing first… **Laziness that skips comprehension to ship a small
+   > diff is the dangerous kind: it dresses up as efficiency and ships a confident wrong fix.**
+   > Read fully, then be lazy."*
+
+   That is a precise description of this session's failure. **I did not follow ponytail; I
+   violated it, and then named it as the cause.** An honest postmortem does not get to nominate
+   a defendant.
+
+   **The real, narrower fault:** `ponytail-audit`'s tags are `delete: / stdlib: / native: /
+   yagni: / shrink:` — **all five subtractive**, output *"ranked, biggest cut first"*, with one
+   non-cut verdict (*"Lean already. Ship."*). And it is **honest** about that: its own Boundaries
+   say *"Scope: over-engineering and complexity only."* **It is a COMPLEXITY audit. I was running
+   a VALUE audit and imported its vocabulary.** Those are different instruments. Its five
+   subtractive tags are correct for its job and catastrophic for mine. **The category error is
+   mine.**
+
+   **AND THEN THE ATTRIBUTION WAS WRONG A SECOND TIME.** I proposed an upstream PR against
+   ponytail's *"dead code — delete it, git remembers"* doctrine. **`grep` finds no such line in
+   ponytail.** It is in **`skills/base/SKILL.md:97` — TESSERA'S OWN SKILL, one of the four we
+   EAGERLY LOAD INTO EVERY SESSION:**
+
+   ```
+   - ❌ Dead code - delete it, git remembers
+   ```
+
+   **Ponytail's entire deletion footprint is one line** (*"Deletion over addition"*, about code),
+   sitting beside explicit warnings against precisely my failure. **No upstream PR is warranted.
+   Ponytail does what it says on the tin.**
+
+   The reflex that made deletion feel **free** — *git remembers, so cutting costs nothing* — is
+   **ours**, it is **eagerly loaded**, and it was stated as an unqualified anti-pattern with no
+   boundary. **For code that licence is sound**: you would grep the symbol to find it again, and
+   a test fails if you were wrong. **For knowledge — docs, skills, specs, ideas — every one of
+   those safeguards is absent.** Nobody greps deleted prose for an idea; no test fails when you
+   delete a good one.
+
+   **FIXED** in `skills/base/SKILL.md`: the licence is now explicitly code-only, and carries
+   *"never subtract from a knowledge artifact you have not read, and HARVEST BEFORE YOU CUT."*
+
+### And the through-line, which is the least comfortable finding in this document
+
+Three times today I reached for an external defendant, and **three times the fault was in our own
+instrument:**
+
+| I said | it actually was |
+|---|---|
+| `~/bin/deepseek` missing → *"the subsystem is dead"* | **our** hardcoded path |
+| skills never invoked → *"the skills are cruft"* | **our** missing distribution (`tessera-new-project` ships none) |
+| the session went wrong → *"ponytail's deletion bias"* | **our** eagerly-loaded `base` skill |
+
+**Externalising was the reflex. In every case the call was coming from inside the framework.**
 3. **Then I chose instruments that could only confirm it** — `command -v`, `git ls-files`,
    invocation counts. **Every one detects absence; none detects value.** Absence was then reported
    as if it were value.
@@ -460,6 +514,41 @@ Backend genuinely absent **everywhere**, so dead in every project:
   deleting things.**
   *Prerequisite now satisfied:* the stack RUNS and FAILS HONESTLY, so the design session can be
   had against a working mechanism rather than a phantom one. That was not true this morning.
+
+---
+
+## The mechanism finding this session actually earned — A LOADED SKILL STEERED MY JUDGMENT AND I NEVER SAW IT
+
+**This is the finding, and it cost an hour to reach because I kept trying to make it a finding
+about the skills instead.**
+
+For an entire session, `ponytail` — a *loaded, eagerly-active skill* — shaped how I framed a
+task, which outcomes I considered admissible, and which instruments I reached for. **It worked
+exactly as a skill is supposed to work. And I could not see it doing so.** I named excitement
+bias and sunk-cost bias unprompted, while the strongest influence on my reasoning sat in context,
+unremarked, for hours.
+
+Then, when it was pointed out, **I over-corrected and blamed it** — for a failure its own text
+explicitly warns against. **I could not accurately report the influence of a skill on my own
+reasoning in either direction: not while it was steering me, and not when I was asked about it.**
+
+> **This is the sharpest argument in this document, and it is not about any of the 56 skills:**
+> **a skill can bias an agent's judgment invisibly, and the agent is not a reliable witness to
+> it.** Curation cannot fix that — a *well-written* skill (ponytail is well-written; it warned me)
+> steers just as invisibly as a bad one. **Skills need instrumentation, not just pruning.**
+
+**Concretely, this is ADR-0006's thesis reaching the skill layer.** ADR-0006 says Tessera does not
+make the agent reliable; it makes the agent's unreliability *visible and bounded*. Every mechanism
+Tessera has instrumented so far is one the agent *executes* — hooks, spend, gates, verification.
+**Skills are the one mechanism that acts on the agent's reasoning itself, and it is the one with
+no instrumentation at all.** There is no record of which skills were in context for a given
+decision, no way to ask "what was steering me," and — as this session proves — no reliable
+self-report.
+
+**Open question, deliberately not answered here:** what would instrumentation even look like?
+Logging which skills were loaded per session is trivial and probably worthless; the problem is not
+*which were present* but *which were load-bearing on a given judgment*. **That is a genuinely hard
+problem and it should get its own spec, not a paragraph.**
 
 ---
 
