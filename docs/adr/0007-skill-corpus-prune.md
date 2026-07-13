@@ -221,6 +221,56 @@ DESIGN SESSION, not a prune decision, and it is deliberately not made here.**
 
 ---
 
+## ⚠️ THE FOURTH CORRECTION — the VERDICT VOCABULARY was the bug, and I wrote it before reading anything
+
+*(Lorenzo: "an audit in my mind isn't just keep or cut, there could be ideas that are worthy that
+we want to ADAPT or merge and keep… I don't know how or why you started on this whole everything
+is cruft and delete it all thing.")*
+
+**He is right, and the answer to "how did it start" is method, not judgment.**
+
+I authored the verdict vocabulary — **KEEP / TRIM / CUT / DEFER** — **in the first ten minutes,
+before reading a single skill.** Three destructive outcomes and a holding pen. **There was no
+verdict meaning *"this idea is good, take it somewhere better."*** An instrument with no setting
+for *adapt* cannot produce an *adapt*. **The rubric determined the findings.**
+
+**Why it came out that way — three causes, and the second went unnamed all session:**
+
+1. **The task was handed over as a prune.** `active.md`: *"PRUNE — and FOCUS-004 **is** the
+   prune."* ADR-0006 §5 sanctions it and ranks *"deleted machinery cannot fail silently"* tier 1.
+   **I took the framing as given rather than as a claim to test.**
+2. **The `ponytail` skill was live in the session and is an explicit deletion bias** — *"Deletion
+   over addition," "Does this need to exist at all?", "Speculative need = skip it"* — with a
+   `ponytail-audit` command whose stated output is *"a ranked list of what to delete."*
+   **`CLAUDE.md` requires naming biases in my own reasoning. I named excitement bias and
+   sunk-cost, while a system prompt tuned for deletion steered every verdict, unremarked.**
+3. **Then I chose instruments that could only confirm it** — `command -v`, `git ls-files`,
+   invocation counts. **Every one detects absence; none detects value.** Absence was then reported
+   as if it were value.
+
+**Not one bad call. A frame accepted, a vocabulary that encoded it, and instruments that could
+only agree with it.**
+
+### The corpus is a fossil record, and mining it is part of the job
+
+Tessera's own machinery already descends from these skills: `session-management`'s tiered
+summarization is what **Mnemos** automates; `code-deduplication`'s capability index is what
+**`icpg query prior`** does; `agent-teams`' RED/GREEN-verify pipeline is the shape of the
+**Stop-hook loop**. **A keep/cut sweep destroys that evidence without reading it.** *This is why
+FOCUS-004 was held back so long — and a chainsaw is the one thing it must not be.*
+
+### The vocabulary is replaced
+
+**KEEP · FIX · ADAPT · MERGE · HARVEST→CUT · CUT** — full definitions in
+`_project_specs/todos/focus-004-audit.md`. Three things it now enforces:
+
+- **FIX** — good content, broken trigger. *A skill nothing could reach is a **distribution bug**.*
+- **HARVEST→CUT** — **extract the ideas FIRST, then cut. A cut that loses an idea is a loss, not
+  a saving.** A plain CUT must state what was considered for harvest and rejected.
+- **No DEFER, and no usage-based verdict of any kind.**
+
+---
+
 ## ⚠️ THE THIRD CORRECTION — I measured REACHABILITY and called it VALUE. The audit was never run.
 
 **Caught by Lorenzo, 2026-07-13: *"rather than reading through the skills there was a leap to

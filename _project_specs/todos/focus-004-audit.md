@@ -110,18 +110,65 @@ fresh session with full context.**
 
 ---
 
-## Verdict vocabulary
+## Verdict vocabulary — REPLACED (2026-07-13)
+
+### The vocabulary WAS the bug
+
+The original was **KEEP / TRIM / CUT / DEFER**. Three destructive outcomes and a holding pen.
+**There was no verdict meaning "this idea is good — take it somewhere better."**
+
+**It was written in the first ten minutes, before a single skill had been read.** An instrument
+with no setting for *adapt* cannot produce an *adapt*. Everything downstream was decided by a
+rubric authored in ignorance.
+
+**Why it came out that way — named, because CLAUDE.md says to name biases and this one went
+unnamed all session:**
+
+1. **The task was handed over as a prune.** `active.md`: *"PRUNE — and FOCUS-004 **is** the
+   prune."* ADR-0006 §5 sanctions pruning and ranks *"deleted machinery cannot fail silently"*
+   tier 1. **I took the framing as given rather than as a claim to test.**
+2. **The `ponytail` skill was live in the session and is an explicit deletion bias** — *"Deletion
+   over addition", "Does this need to exist at all?", "Speculative need = skip it"*, and a
+   `ponytail-audit` command whose stated output is *"a ranked list of what to delete."* **I named
+   excitement bias and sunk-cost while this sat unremarked in my context, steering every verdict.**
+3. **Then I chose instruments that could only confirm it.** `command -v`, `git ls-files`,
+   invocation counts — **every one of them can detect absence and none of them can detect value.**
+   Absence was then reported as if it were value.
+
+### The corpus is a FOSSIL RECORD, and the audit's job is partly to MINE it
+
+Tessera's own machinery already descends from these skills: `session-management`'s tiered
+summarization is what **Mnemos** automates; `code-deduplication`'s capability index is what
+**`icpg query prior`** does; `agent-teams`' RED/GREEN-verify pipeline is the shape of the
+**Stop-hook loop**. **A keep/cut sweep destroys that evidence without reading it.** *This is why
+FOCUS-004 was held back so long, and running it as a chainsaw was the one thing it must not be.*
+
+### The verdicts
 
 | Verdict | Means |
 |---|---|
-| **KEEP** | Earns its context cost. Used, or load-bearing for a documented Tessera mechanism. |
-| **TRIM** | The skill is worth keeping but is bloated / duplicated internally. Shrink, don't cut. |
-| **CUT** | Delete. Never loaded, never invoked, covered by another skill, or inapplicable to this repo. |
-| **DEFER** | Cannot be judged on this session's evidence. Must say *what evidence would decide it*. |
+| **KEEP** | Good as it stands. Leave it. |
+| **FIX** | Content is sound; the **trigger or backend** is broken. *(`paths:` never matches, names the wrong binary, points at `~/bin/`.)* **A skill that never fires because nothing could reach it is a DISTRIBUTION bug. Fix the trigger. Do not cut.** |
+| **ADAPT** | The idea is worth having; this expression of it is wrong for us. Rework it. |
+| **MERGE** | Overlaps another skill. Combine into the better one; keep the union of the good parts. |
+| **HARVEST → CUT** | The skill as a unit does not earn its place, **but it contains ideas worth extracting** — into `docs/design-principles.md`, an ADR, or another skill. **Extract FIRST, then cut. A cut that loses an idea is a loss, not a saving.** |
+| **CUT** | Genuinely nothing worth keeping. **Must state what was considered for harvest and rejected** — naming what you did not take is the trail. |
 
-Every row needs a one-line, **evidence-based** reason. "Feels useful" is not evidence.
-Permitted evidence: invocation counts from transcripts, `paths:` frontmatter (does it ever
-match anything here?), overlap with another skill, referenced by `CLAUDE.md` / an ADR / a hook.
+**There is no DEFER, and there is no usage-based verdict.** See the section above: usage is not
+evidence.
+
+### Admissible evidence
+
+Only these, and each requires **reading the body**:
+
+1. **Is what it says TRUE?** — false facts, or machinery that exists nowhere.
+2. **Is it SUPERSEDED?** — a working plugin, a native feature, or a better skill does the job.
+3. **Is the guidance any GOOD?** — or is it filler a competent model already has?
+4. **Is it ON THE PATH we are building?** — **KEEP-only. Never a cut.**
+5. **What IDEAS are in here worth taking?** — **the question the sweep never asked at all.**
+
+**"It was never invoked" and "its `paths:` can't match in Tessera" are NOT admissible.**
+If a future session reaches for either to justify a cut, that is drift. Challenge it.
 
 ---
 
