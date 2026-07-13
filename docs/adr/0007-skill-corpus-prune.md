@@ -258,6 +258,31 @@ Cuts that survive as genuine **content** judgments: `ai-models` (its facts are w
 (they document a `maggy` CLI that exists nowhere), `build-in-public` (a working plugin of the same
 name supersedes it). Everything else needs its content read.
 
+### The floor of the error: USAGE IS NOT EVIDENCE — not a CUT, not even a DEFER
+
+*(Lorenzo, closing the loop: "we're building a framework, we may not have gotten there yet, isn't
+that true?" **It is true, and it is the bottom of this.**)*
+
+An earlier draft downgraded the unread skills to **DEFER**. **That still smuggled the signal in.**
+DEFER is suspicion, and suspicion is a verdict. Zero usage carries **zero information**, because
+**this ADR already found what fully explains it — and then spent the number anyway:**
+
+1. **`tessera-new-project` ships ZERO skills** (finding #8). The downstream repos that *have*
+   `.tsx`, `.dart`, `supabase/` have **no delivery path**. These skills could not have fired there.
+2. **6 invocations machine-wide across *every* skill, including Anthropic's own.** Discovery is
+   barely functioning at all.
+
+**Once a cause fully explains an observation, the observation stops being evidence for anything
+else.** Both causes are written down above, in this document, and the zero-usage number was still
+spent as a verdict on 55 skills.
+
+**And it is the identical argument that saved the multi-model stack one hour earlier**: *it has
+never run, it is directional, the framework has not got there yet — keep it.* That reasoning was
+accepted for `bin/` and refused for `skills/`. **That is not a principle, it is a mood.**
+
+> **The 6-invocation finding is a finding about the FRAMEWORK — its distribution and discovery —
+> not about the skills. It was the audit's headline, and it was pointed at the wrong target.**
+
 ### Therefore: the `paths:`-match scan is the WRONG next step
 
 It would tell me, in more detail, which skills *could* fire in which repo. **That is more

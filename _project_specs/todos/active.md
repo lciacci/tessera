@@ -69,9 +69,25 @@ measure **reachability**. Those verdicts are **VOID** (ADR-0007, "The third corr
 205k read") — but only because I'd swapped a cheap proxy for the real judgment. **The real content
 audit IS read-heavy, exactly as the spec said. FOCUS-004 is still the P3 compaction vehicle.**
 
-**The rubric for the real audit is in `_project_specs/todos/focus-004-audit.md`.** Only "is it
-true / is it superseded / is the guidance good" can produce a CUT. **"It never fires" produces a
-DEFER — and if the content is good, it is a TRIGGER BUG: fix `paths:`, do not delete.**
+**AND THE FLOOR OF IT: USAGE IS NOT EVIDENCE — not a CUT, not even a DEFER.** An earlier draft
+said "never fires → DEFER". That still smuggled the signal in; **DEFER is suspicion, and suspicion
+is a verdict.** Zero usage carries **zero information**, because the audit *already found what
+fully explains it*: **`tessera-new-project` ships ZERO skills** (no delivery path downstream) and
+**6 invocations machine-wide across every skill including Anthropic's own** (discovery barely
+works). *Once a cause fully explains an observation, the observation is not evidence for anything
+else.* The audit wrote both causes down and spent the number anyway.
+
+**It is the same argument that saved the multi-model stack an hour earlier** — *never ran,
+directional, framework hasn't got there yet, KEEP*. Accepted for `bin/`, refused for `skills/`.
+**That is not a principle, it is a mood.**
+
+> **The 6-invocation finding indicts the FRAMEWORK's distribution and discovery — not the skills.
+> It was the audit's headline and it was aimed at the wrong target.**
+
+**The rubric is in `_project_specs/todos/focus-004-audit.md`.** Only *is it true / is it superseded
+/ is the guidance good* can CUT. A fourth question — *is it on the path we are building?* — can
+only **KEEP**. **If a future session reaches for an invocation count to justify a cut, that is
+drift. Challenge it.**
 
 ### Where to pick up
 

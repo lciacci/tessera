@@ -54,20 +54,54 @@ a question reachability cannot answer.
 
 ## THE RUBRIC FOR THE REAL AUDIT — judge the CONTENT
 
-For each skill, **read the body** and answer:
+### First: USAGE IS NOT EVIDENCE. Not a CUT, not even a DEFER. Strike it.
 
-| # | Question | This is a CUT if… |
+*(Corrected again 2026-07-13, Lorenzo: "we're building a framework, we may not have gotten there
+yet, isn't that true?" — **it is true, and it is the floor of this whole error.**)*
+
+An earlier rubric said *"never fires → DEFER."* **That was still smuggling the signal in.** DEFER
+is suspicion, and suspicion is a verdict. The honest position is that zero usage carries **zero
+information**, because **the audit already found what fully explains it:**
+
+1. **`bin/tessera-new-project` ships ZERO skills.** The downstream repos — the ones that *have*
+   `.tsx`, `.dart`, `supabase/` — have **no delivery path** for these skills. They could not have
+   fired there.
+2. **6 invocations machine-wide, across *every* skill, including the ones Anthropic ships.**
+   Discovery is barely functioning at all.
+
+**Once a cause fully explains an observation, the observation stops being evidence for anything
+else.** The audit wrote down both causes and then kept spending the zero-usage number as a verdict
+on 55 skills. That is the error, stated exactly.
+
+**And it is the same argument that saved the multi-model stack**, one hour earlier in the same
+session: *it has never run, it is directional, the framework has not got there yet — KEEP it.*
+That reasoning was accepted for `bin/` and refused for `skills/`. **That is not a principle, it is
+a mood.**
+
+### The discriminator is not "did it fire." It is:
+
+> **Has the framework built the thing that would make this fire?**
+>
+> - **NO** → never-firing is **exactly what you would expect. Zero information. Not a mark against
+>   the skill.** The gap is in the **framework** (ship skills downstream), not the skill.
+> - **YES**, it is reachable, and it *still* never fires → *now* there is a question. And even
+>   then it is ambiguous between "the model does not find it useful" and "discovery is broken" —
+>   and at **6 invocations machine-wide, discovery is the odds-on explanation.**
+
+**Therefore: usage is uninformative FULL STOP, until discovery is shown to work.** It does not
+appear below. If a future session reaches for an invocation count to justify a cut, **that is
+drift — point at this section.**
+
+### The questions that CAN decide a skill — all require reading the body
+
+| # | Question | CUT if… |
 |---|---|---|
-| 1 | **Is what it says TRUE?** | It asserts facts that are false, or describes machinery that exists nowhere. *(e.g. `ai-models` names `claude-opus-4-5` as flagship in July 2026; `iterative-development`'s sole hook exists in no repo.)* |
-| 2 | **Is it SUPERSEDED?** | A working plugin, a native Claude Code feature, or another skill does the same job better. *(e.g. `build-in-public` vs the live plugin; `credentials` is inlined in `base`.)* |
-| 3 | **Is the guidance any GOOD?** | Generic filler, or advice a competent model already has. **This is the question the sweep never asked, and the only one that requires reading.** |
-| 4 | **Would it HELP if it fired?** | If yes → **it is a TRIGGER bug, not a value problem. FIX THE TRIGGER. DO NOT CUT.** |
+| 1 | **Is what it says TRUE?** | It asserts false facts, or describes machinery that exists nowhere. *(`ai-models` names `claude-opus-4-5` as flagship in July 2026; `iterative-development`'s sole hook exists in no repo.)* |
+| 2 | **Is it SUPERSEDED?** | A working plugin, a native Claude Code feature, or a better skill already does the job. *(`build-in-public` vs the live plugin; `credentials` is inlined in `base`.)* |
+| 3 | **Is the guidance any GOOD?** | Generic filler, or advice a competent model already has without being told. **The question the sweep never asked, and the only one that cannot be answered without reading.** |
+| 4 | **Is it ON THE PATH we are building?** | **This is a KEEP question, not a cut question.** If the framework intends to reach where this skill applies — it stays, however cold. *(This is the multi-model-stack call, applied consistently.)* |
 
-**Question 4 is the one the sweep inverted.** "It never fires" was treated as grounds to delete.
-It is grounds to ask **why it never fires** — and if the content is good, the answer is to fix
-`paths:`/discovery, not to delete the skill.
-
-**Only questions 1–3 can produce a CUT. Reachability alone can produce only a DEFER.**
+**Only 1–3 can produce a CUT. 4 can only produce a KEEP. Nothing else is admissible.**
 
 **And this is the read-heavy work FOCUS-004 specified.** Reading 56 bodies is ~205k tokens. The
 compaction premise — which an earlier draft of this ledger wrongly declared *falsified* — **stands**,
