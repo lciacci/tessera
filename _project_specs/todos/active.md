@@ -49,7 +49,34 @@ Per-skill ledger with evidence: `_project_specs/todos/focus-004-audit.md`.
 > subsystem over a path typo; the *real run* caught a half-fix the tests called green.
 > **`tessera-verify stats`: author error rate 38%.**
 
+### ⚠️ THE AUDIT WAS NOT RUN. What ran was a reachability sweep.
+
+**Caught by Lorenzo at the end of the session** — *"rather than reading through the skills there
+was a leap to unnecessary and deletion."* **Correct, and it is the same error a fourth time.**
+
+~31 of the 56 verdicts were reached **without reading the skill's body**, on two signals: *its
+`paths:` can't match in Tessera* and *it was never invoked*. **Neither judges the skill.** Both
+measure **reachability**. Those verdicts are **VOID** (ADR-0007, "The third correction").
+
+- **The invocation argument is circular:** there are **6 invocations machine-wide across ALL
+  skills, including Anthropic's own.** That indicts the *discovery mechanism*, not any skill.
+- **The frame was wrong:** these live in the **global** `~/.claude/skills/`, serving **20+ repos**.
+  **`flutter` SHOULD be inert in Tessera.** That says nothing about its worth to the Flutter repos.
+- **So the `paths:`-match scan is the WRONG next step** — more reachability evidence for a
+  question reachability cannot answer. **It was previously listed here as item 2. It is not.**
+
+**And this restores the compaction premise.** I declared it falsified ("the audit didn't need the
+205k read") — but only because I'd swapped a cheap proxy for the real judgment. **The real content
+audit IS read-heavy, exactly as the spec said. FOCUS-004 is still the P3 compaction vehicle.**
+
+**The rubric for the real audit is in `_project_specs/todos/focus-004-audit.md`.** Only "is it
+true / is it superseded / is the guidance good" can produce a CUT. **"It never fires" produces a
+DEFER — and if the content is good, it is a TRIGGER BUG: fix `paths:`, do not delete.**
+
 ### Where to pick up
+
+0. **RUN THE ACTUAL AUDIT.** Fresh session, full context, read the 56 bodies, apply the rubric.
+   This is the read-heavy work FOCUS-004 always specified, and the compaction test rides on it.
 
 1. **The Tessera ↔ conclave design session.** *(ADR-0007, "NOT decided".)* The stack is a
    **directional keep** — more local models coming, Tailscale + AWS-hosted, **council/ensemble

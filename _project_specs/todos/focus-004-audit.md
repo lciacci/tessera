@@ -27,6 +27,55 @@ checkpoint let work resume without re-deriving?"* — becomes observable instead
 
 ---
 
+## ⚠️ STOP — THE AUDIT BELOW WAS NOT AN AUDIT. READ THIS FIRST. (2026-07-13)
+
+**What is recorded below is a REACHABILITY SWEEP mislabelled as a content audit.** ~31 of the 56
+verdicts were reached without ever reading the skill's body, on two signals — *"its `paths:` glob
+can't match in Tessera"* and *"it has never been invoked"*. **Neither is a judgment about the
+skill.** Those verdicts are **VOID**. See ADR-0007, "The third correction".
+
+Three things make the reachability signals unusable as value evidence:
+
+1. **The invocation argument is circular.** There are **6 skill invocations machine-wide, across
+   every skill including the ones Anthropic ships.** That says the *discovery mechanism* is
+   barely used — not that any skill is bad. **A good skill that never fires is a distribution
+   bug, not a bad skill.**
+2. **The frame was wrong.** These skills live in `~/.claude/skills/` — the **global** registry
+   serving **all 20+ repos**. Judging them by whether they fire *in Tessera* judges a
+   general-purpose library against one atypical consumer. **`flutter` SHOULD be inert here.** That
+   says nothing about its worth to the Flutter projects.
+3. **`paths:` inert ≠ worthless.** It means *not applicable to this repo*, which is the expected
+   state for most of a global library.
+
+**The `paths:`-match scan across all repos is NOT the fix.** It is more reachability evidence for
+a question reachability cannot answer.
+
+---
+
+## THE RUBRIC FOR THE REAL AUDIT — judge the CONTENT
+
+For each skill, **read the body** and answer:
+
+| # | Question | This is a CUT if… |
+|---|---|---|
+| 1 | **Is what it says TRUE?** | It asserts facts that are false, or describes machinery that exists nowhere. *(e.g. `ai-models` names `claude-opus-4-5` as flagship in July 2026; `iterative-development`'s sole hook exists in no repo.)* |
+| 2 | **Is it SUPERSEDED?** | A working plugin, a native Claude Code feature, or another skill does the same job better. *(e.g. `build-in-public` vs the live plugin; `credentials` is inlined in `base`.)* |
+| 3 | **Is the guidance any GOOD?** | Generic filler, or advice a competent model already has. **This is the question the sweep never asked, and the only one that requires reading.** |
+| 4 | **Would it HELP if it fired?** | If yes → **it is a TRIGGER bug, not a value problem. FIX THE TRIGGER. DO NOT CUT.** |
+
+**Question 4 is the one the sweep inverted.** "It never fires" was treated as grounds to delete.
+It is grounds to ask **why it never fires** — and if the content is good, the answer is to fix
+`paths:`/discovery, not to delete the skill.
+
+**Only questions 1–3 can produce a CUT. Reachability alone can produce only a DEFER.**
+
+**And this is the read-heavy work FOCUS-004 specified.** Reading 56 bodies is ~205k tokens. The
+compaction premise — which an earlier draft of this ledger wrongly declared *falsified* — **stands**,
+because the sweep that "falsified" it was not the audit. **P3 is still reachable. Do this in a
+fresh session with full context.**
+
+---
+
 ## Verdict vocabulary
 
 | Verdict | Means |

@@ -221,6 +221,61 @@ DESIGN SESSION, not a prune decision, and it is deliberately not made here.**
 
 ---
 
+## ⚠️ THE THIRD CORRECTION — I measured REACHABILITY and called it VALUE. The audit was never run.
+
+**Caught by Lorenzo, 2026-07-13: *"rather than reading through the skills there was a leap to
+unnecessary and deletion."* He is right. This is the same error a fourth time.**
+
+Every "CUT" verdict on the stack and product skills rests on two signals:
+
+1. its `paths:` glob cannot match anything **in this repo**, and
+2. it has never been **invoked**.
+
+**Neither is a judgment about the skill.** Both are proxies for *reachability*. I substituted
+reachability for value — exactly as I substituted `~/bin/X is absent` for *"the subsystem is
+dead"*, and `command -v found it` for *"the stack works."*
+
+**And the invocation argument is circular.** This ADR's own headline finding is that there have
+been **6 skill invocations machine-wide across every skill, including the ones Anthropic ships.**
+That is evidence the **discovery mechanism is barely used at all** — not evidence that any
+particular skill is bad. *A skill with excellent content that never fires is a distribution bug,
+not a value verdict.*
+
+**Worse, the frame was wrong.** The 56 skills live in `~/.claude/skills/` — the **global** registry
+serving **all 20+ repos**. Judging them by whether they can fire **in Tessera** is judging a
+general-purpose library against one atypical consumer. `flutter` *should* be inert here. That says
+nothing about whether it earns its place in the registry that serves the Flutter projects.
+
+### What this invalidates
+
+| verdict basis | count | status |
+|---|---|---|
+| **Content actually judged** (stale, false about its own machinery, superseded by a working duplicate) | ~6 | **stands** |
+| **Reachability only** (`paths:` inert here + 0 invocations) — *content never read* | **~31** | **NOT JUDGED. Downgrade to DEFER.** |
+
+Cuts that survive as genuine **content** judgments: `ai-models` (its facts are wrong),
+`iterative-development` (its sole mechanism exists nowhere), `autonomous-testing` and `agent-teams`
+(they document a `maggy` CLI that exists nowhere), `build-in-public` (a working plugin of the same
+name supersedes it). Everything else needs its content read.
+
+### Therefore: the `paths:`-match scan is the WRONG next step
+
+It would tell me, in more detail, which skills *could* fire in which repo. **That is more
+reachability evidence for a question reachability cannot answer.** It would let me delete 22
+skills with more *confidence* and no more *justification*. **Do not run it as a prune input.**
+
+### And this restores FOCUS-004's compaction premise
+
+I declared it *"falsified — the audit didn't need the 205k-token read."* **That was only true
+because I had substituted a cheap proxy for the actual judgment.** The real audit — read 56
+skills, assess whether the content is any good — **is** genuinely read-heavy, exactly as the spec
+said. **I falsified the premise by not doing the work the premise described.**
+
+> **The premise stands. FOCUS-004 is still the compaction vehicle. P3's counter is still 0, and
+> still reachable.**
+
+---
+
 ## Decision
 
 ### DONE — the council no longer manufactures verdicts (`7a725f7`)
