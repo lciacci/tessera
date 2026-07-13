@@ -78,9 +78,25 @@ it arrives post-hoc (user accepted/dismissed the suggestion, or a later annotati
 - In **production**, `should_fire` likely moves **out of `data`** and becomes a separate
   outcome/annotation joined to the event by `session_id` + `ts`.
 
-This is undecided. When real events flow and the outcome source exists, resolve it — and if the
-resolution is a genuine fork (inline field vs. join), that is the point at which this earns an
-ADR. Until then it lives here, next to the shape it qualifies.
+**Dogfood resolution (2026-07-13, P7 first labeling pass):** labels are written **inline**, with
+provenance riding along so a labeled value is never mistakable for an emit-time one:
+
+- `should_fire` — the label (bool), or `null` when evidence is genuinely absent (a null is
+  honest, not lazy — 4 of the first 44 stayed null).
+- `should_fire_basis` — one line of evidence: the user's disposition quote from the session
+  transcript, or the observable outcome. **Ground truth is the user's recorded disposition,
+  never the labeler's opinion of the gate** (the labeler is usually the gate's author — the
+  2026-07-12 lesson applies). Labels are adversary-sample-checked via `tessera-verify`.
+  **Quotes are verbatim, typos included, one message per quote** — the first sample-check
+  (2026-07-13) caught a basis that silently typo-corrected and composited two user messages;
+  a "cleaned" quote is unfindable in the transcript and reads as fabricated to any verifier.
+- `labeled_ts` — when the label was applied.
+
+Inline is lossless (a join file could be generated from these fields mechanically), the logs are
+gitignored per-machine runtime state, and a join would add a moving part to an apparatus
+ADR-0006 already flags for pruning. The **production join question stays open**: if a live
+outcome source ever ships (accept/dismiss captured at disposition time), that producer's shape
+is decided then — and that is the point at which this earns an ADR.
 
 ## Consumers
 
