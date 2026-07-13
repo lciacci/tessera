@@ -60,19 +60,45 @@ is NOT version-independent:** when the interpreter NAME drifts, the VERSION drif
    first pass — including spec 11's own future holes. **Build the adversary, then let it verify
    spec 11.**
 
-2. **Fail-open detection — `_project_specs/11-fail-open-detection.md`. SCOPE AND ORDERING ARE
-   WRITTEN DOWN THERE. Read it before starting.**
+2. **PRUNE — and FOCUS-004 *is* the prune. One item, not two.** *(ADR-0006 §5, sanctioned work.)*
+
+   **Why this outranks spec 11, by ADR-0006's own ranking:** pruning is **tier 1** (make the bad
+   state unrepresentable — *deleted machinery cannot fail silently*). Spec 11 is **tier 4**
+   (detect the failure of machinery we chose to keep). **Prevention beats detection, and the ADR
+   says so.** Practical consequence: spec 11 scopes five components — **if the prune kills one,
+   you will have instrumented a corpse.** Prune first, and it tells spec 11 what is actually
+   worth watching.
+
+   - **FOCUS-004 — 56 skills, zero ever evaluated**, overdue by principle #15. Still the only
+     honest path to a real `auto` compaction: **205,085 tokens measured** across the corpus vs a
+     ~166k threshold (verified, not repeated). **The Mnemos trial counter is genuinely 0** — and
+     P3 was silently counting an *unclassifiable* compaction as evidence until it was fixed on
+     2026-07-12.
+   - **The gate apparatus** — recorder + Stop-hook scanner + ratio + `should_fire` labeling is
+     four moving parts to answer *"did Claude ask before deciding."* At least one too many.
+   - **Mnemos itself.** The kill/keep trial has run for **months** and has **never produced a
+     valid verdict**. Until 2026-07-12 its hooks wrote through a *drifting interpreter*, so any
+     earlier verdict would have measured broken machinery. *"We cannot judge it"* is itself a
+     finding, and the trial is long overdue.
+
+   **Two disciplines, both learned the hard way:** (a) **audit, do not repair** — recording a
+   broken skill is the job; fixing it is how tonight became a rathole. (b) **I must not certify
+   the compaction restore myself** — that is the "verify with the instrument under test" failure,
+   three times over. The verdict comes from the compaction log + P3, or from spec 12's adversary.
+
+3. **Fail-open detection — `_project_specs/11-fail-open-detection.md`. SCOPE AND ORDERING ARE
+   WRITTEN DOWN THERE. Read it before starting.** *And scope it to what SURVIVES the prune.*
    Five components (spend guard, spend backstop, gate-scan, Mnemos hooks, doccheck) — **not** the
    54 bail-out sites. Mechanism is ~35 lines (`tessera-degraded` + watcher P10); the substance is
    the chaos tests and the classification.
    **THE ORDERING IS THE POINT: write the break-it-on-purpose tests FIRST and watch them all
-   fail.** Today's session built a detector and then verified the fix *with the detector that had
-   the hole* — three times, reporting green each time. If a future session proposes building the
-   mechanism first, **push back and point at spec 11.**
+   fail.** The 2026-07-12 session built a detector and then verified the fix *with the detector
+   that had the hole* — three times, reporting green each time. If a future session proposes
+   building the mechanism first, **push back and point at spec 11.**
    **Bar for done (binary): break a component on purpose → Tessera says so within one session,
-   with no human asking.** Nothing today would have met it.
+   with no human asking.** Nothing on 2026-07-12 would have met it.
 
-3. **Ship the portable doccheck core downstream.** 7 of 13 checks are portable
+4. **Ship the portable doccheck core downstream.** 7 of 13 checks are portable
    (`no-bare-python3-with-toolchain-import`, `safety-scripts-run-on-system-python`,
    `runtime-state-is-not-tracked`, `test-command-is-not-a-bare-interpreter`,
    `ignored-test-suites-are-run`, `spend-guard-is-wired`, `spend-backstop-is-wired`); 6 are
@@ -81,21 +107,16 @@ is NOT version-independent:** when the interpreter NAME drifts, the VERSION drif
    either is wired**. That violates the "ship both halves or neither" rule written in
    `tessera-new-project`'s own comment. Bounded: ~one session.
 
-4. ~~**Re-open ADR-0005's readiness claim.**~~ **DONE — ADR-0006 withdraws it.** Its Tier-1
+5. ~~**Re-open ADR-0005's readiness claim.**~~ **DONE — ADR-0006 withdraws it.** Its Tier-1
    reordering stands; its *preconditions-met* framing is retracted. Two of three were broken and
    undetectable.
 
-5. **Prune — now sanctioned work, not a distraction (ADR-0006 §5).** The base skill opens with
-   *"complexity is the enemy… every line of code is a liability"* and the framework has stopped
-   taking its own advice: 56 skills, 13 hooks, 54 fail-open bail-outs. Named candidates: the gate
-   apparatus (4 moving parts for *"did Claude ask?"*), **Mnemos** (the kill/keep trial has run for
-   months and has never produced a valid verdict — and until 2026-07-12 its hooks wrote through a
-   drifting interpreter, so any earlier verdict measured broken machinery), and FOCUS-004.
-
-6. **FOCUS-004 — still untouched.** 56 skills, zero evaluated. Still the only honest path to a
-   real `auto` compaction (205,085 tokens measured across the corpus, vs a ~166k threshold — the
-   claim was verified, not repeated). **The Mnemos trial counter is genuinely 0** — and P3 was
-   silently counting an *unclassifiable* compaction as evidence until it was fixed tonight.
+> **Ordering note, recorded because it drifted once already.** FOCUS-004 sat at #4, was argued up
+> to "defensibly second", then **sank to last by accretion** when ADR-0006 added three items above
+> it — with no decision and no announcement. Lorenzo caught it. It is now #2 **on principle, not
+> position**: pruning is tier 1, spec 11 is tier 4, and ADR-0006 ranks prevention over detection.
+> **If a future session finds FOCUS-004 drifting down the list again, that is drift, not a
+> decision — challenge it.**
 
 ### What NOT to do next
 
