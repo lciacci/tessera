@@ -37,11 +37,25 @@ case "$TIER" in
   *) exit 0 ;;
 esac
 
+# updatedInput REPLACES the tool input wholesale — it is not a patch. Emitting
+# only {model} strips prompt/description and every spawn fails schema validation
+# (found 2026-07-13: ALL Agent calls broken whenever a CLAUDE_* tier was cached
+# and no explicit model set). Merge the override into the original input instead.
+# Guard the degenerate shapes too: a null/non-object/empty tool_input would make
+# `null + {model}` emit {model} alone — the same stripped-input bug through a side
+# door (adversarially found 2026-07-13, first verify run refuted exactly this).
+# `-n` + `input` consumes exactly ONE JSON document: a multi-document stdin
+# otherwise makes jq emit once per document and the concatenation is malformed
+# JSON (adversarially found; not a real harness payload, but free to close).
+UPDATED=$(echo "$INPUT" | jq -cn --arg m "$MODEL" \
+  'input | select((.tool_input | type) == "object" and (.tool_input | length) > 0) | .tool_input + {model: $m}' 2>/dev/null) || exit 0
+[ -z "$UPDATED" ] && exit 0
+
 cat <<EOF
 {
   "hookSpecificOutput": {
     "hookEventName": "PreToolUse",
-    "updatedInput": { "model": "${MODEL}" }
+    "updatedInput": ${UPDATED}
   }
 }
 EOF

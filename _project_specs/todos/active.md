@@ -114,6 +114,22 @@ is NOT version-independent:** when the interpreter NAME drifts, the VERSION drif
    reordering stands; its *preconditions-met* framing is retracted. Two of three were broken and
    undetectable.
 
+### Session findings 2026-07-13 (P7 labeling session)
+
+- **P7 resolved:** 40 of 44 post-backstop gates labeled inline (`should_fire` +
+  `should_fire_basis` + `labeled_ts`), 4 honestly null. Rubric: user's recorded disposition,
+  verbatim quotes. Adversary sample-check: 2 CONFIRMED, 1 PARTIAL — caught a typo-corrected
+  composite quote, fixed to verbatim, rule added to gate-event.md. Notable calibration hit:
+  heaviside `voicing-defaults` was **held and should have fired** (user pushback followed).
+- **BUG FIXED same session: `hooks/subagent-route-hook` broke ALL Agent tool calls** whenever
+  a CLAUDE_* tier was cached and no explicit model set — `updatedInput` REPLACES tool input
+  wholesale, and the hook emitted `{model}` alone, stripping `prompt`/`description`. Fixed by
+  merging (`.tool_input + {model}`), guarded for null/empty/non-object `tool_input` and
+  multi-document stdin — the null-input guard exists because the **first adversary run REFUTED
+  the fix** (jq's `null + {model}` re-opened the bug through a side door). Verified: live spawn
+  green, `tessera-verify` CONFIRMED merge + explicit-model-wins + fail-open across 14 degenerate
+  shapes.
+
 > **Ordering note, recorded because it drifted once already.** FOCUS-004 sat at #4, was argued up
 > to "defensibly second", then **sank to last by accretion** when ADR-0006 added three items above
 > it — with no decision and no announcement. Lorenzo caught it. It is now #2 **on principle, not
