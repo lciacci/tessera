@@ -12,8 +12,8 @@ effort: high
 
 **Purpose:** Enforce automated code reviews as a mandatory guardrail before every commit and deployment. Choose between Claude, OpenAI Codex, Google Gemini, or multiple engines for comprehensive analysis.
 
-**Sub-skills:**
-- [adr-gate.md](./adr-gate.md) — Pre-review ADR and spec enforcement
+**Related skill:**
+- `adr-gate` — Pre-review ADR and spec enforcement (split out to its own skill per ADR-0008; runs before any review engine)
 
 ---
 
@@ -44,7 +44,7 @@ Added to the standard 7 review categories:
 | ADR exists but is outdated/stale | Medium |
 | Minor drift from ADR intent | Low |
 
-See [adr-gate.md](./adr-gate.md) for full protocol, reverse-engineering rules, and configuration.
+See the `adr-gate` skill for the full protocol, reverse-engineering rules, and configuration.
 
 ---
 
