@@ -165,6 +165,29 @@ something we need in two months."
 replaced it), old #3 "22 authorized cuts" (audit says keep most), old #5 supabase-python (FIXed).
 **Still live:** old #1 conclave = E above; old #4 `bin/kimi` broken.)*
 
+---
+
+## ═══ MNEMOS TRIAL — side-mission result (2026-07-15) ═══
+
+**This FOCUS-004 session was deliberately run long (side mission) to overfill context and test Mnemos's
+compaction-recovery. RESULT: auto-compaction did NOT fire — a ~200k-token overfill produced zero
+Mnemos-visible `compaction_fired` events dated this session.** Full finding + hypothesis + next-session
+checks: **`docs/observatory.md` → "Mnemos compaction vehicle — does Claude Code auto-`/compact` even
+happen in this harness?"**
+
+- **Likely cause:** this harness manages context via its *own summarization* (system-prompt-stated), a
+  different mechanism from Claude Code `/compact` — the only thing Mnemos's PreCompact hook instruments.
+  So Mnemos may be watching a door this harness never opens. **Filling more won't help** — we already
+  massively overfilled.
+- **Second gap:** `fatigue.json` is all `None` — the statusline isn't writing token metrics, so Mnemos's
+  fatigue model + auto-checkpoint-at-0.60 are dark this session.
+- **What worked:** SessionStart restore (loaded at startup) + Stop-hook checkpoint (`941b43b7` today).
+  Resume-across-*sessions* works; recovery-across-*compaction* stays untested (trigger never occurred).
+- **NEXT SESSION — pick up:** (1) confirm whether this harness ever invokes `/compact`, or point Mnemos
+  at the signal that *does* fire (or evaluate the recovery layer on a real Claude Code CLI session);
+  (2) fix why `fatigue.json` isn't being written; (3) P3 consequence — if auto-compaction can't fire
+  here structurally, the compaction-half of the Mnemos verdict needs a different venue.
+
 1. **The Tessera ↔ conclave design session.** *(ADR-0007, "NOT decided".)* The stack is a
    **directional keep** — more local models coming, Tailscale + AWS-hosted, **council/ensemble
    review is the path**. conclave is itself a multi-model stack. Shared council / isolated /
