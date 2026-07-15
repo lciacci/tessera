@@ -71,7 +71,8 @@ produced **zero** `compaction_fired` events — the likely cause is that this ha
 *itself* rather than invoking Claude Code `/compact` (the only trigger this PreCompact layer sees), so
 the compaction-recovery layer may be structurally un-exercisable here. See `docs/observatory.md` →
 "Mnemos compaction vehicle". (Separately, `fatigue.json` read all-`None` that session — statusline not
-writing token metrics — so the fatigue model was dark too.)
+writing token metrics — so fatigue ran *degraded*: the token-util dimension (0.40 weight) was blind,
+though the behavioral dims still computed, e.g. a forced checkpoint scored 0.29.)
 
 ### Is the compaction-recovery layer actually working?
 `.mnemos/compaction-log.jsonl` is the durable record — the marker is deleted on

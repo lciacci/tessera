@@ -179,8 +179,9 @@ happen in this harness?"**
   different mechanism from Claude Code `/compact` — the only thing Mnemos's PreCompact hook instruments.
   So Mnemos may be watching a door this harness never opens. **Filling more won't help** — we already
   massively overfilled.
-- **Second gap:** `fatigue.json` is all `None` — the statusline isn't writing token metrics, so Mnemos's
-  fatigue model + auto-checkpoint-at-0.60 are dark this session.
+- **Second gap:** `fatigue.json` is all `None` — fatigue runs *degraded*, not dark. The statusline isn't
+  writing token metrics, so the token-util dimension (0.40 weight) is blind; the behavioral dims still
+  compute (a forced checkpoint scored **0.29**). Narrow fix: the statusline→`fatigue.json` token write.
 - **What worked:** SessionStart restore (loaded at startup) + Stop-hook checkpoint (`941b43b7` today).
   Resume-across-*sessions* works; recovery-across-*compaction* stays untested (trigger never occurred).
 - **NEXT SESSION — pick up:** (1) confirm whether this harness ever invokes `/compact`, or point Mnemos
