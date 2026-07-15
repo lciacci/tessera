@@ -91,8 +91,22 @@ drift. Challenge it.**
 
 ### Where to pick up
 
-0. **RUN THE ACTUAL AUDIT.** Fresh session, full context, read the 56 bodies, apply the rubric.
-   This is the read-heavy work FOCUS-004 always specified, and the compaction test rides on it.
+0. ~~**RUN THE ACTUAL AUDIT.**~~ **DONE (2026-07-14).** All 56 bodies read in the main thread, judged
+   on the 5 admissible questions only. **Record: `focus-004-audit.md` → "═══ FINAL TALLY — REAL AUDIT ═══".**
+   Headline: it **near-inverts the void table** — ~44 keep-in-some-form, **10 removals**, every one on
+   stale/superseded/foreign-product/vendor-manual grounds, **zero on reachability**. Three verdicts flipped
+   from reading current state (council-review CUT→FIX, iterative-development CUT→KEEP, cpg-analysis CUT→KEEP).
+   **The real finding stands and is now content-confirmed:** the corpus is mostly *good, current,
+   downstream-applicable* — but undeliverable, because `bin/tessera-new-project` ships **zero** skills.
+   **NEXT ACTIONABLE (was not run — audit-only discipline held, no skill was edited):**
+   1. **HARVEST before any cut** — work the "HARVEST manifest" in the ledger. The base-skill licence
+      requires harvest-first. **✅ #8 DONE (2026-07-14): `adr-gate` split out of `code-review` into its
+      own skill** (`skills/adr-gate/SKILL.md`, Tessera-corrected) — so `code-review` is now safe to
+      cut-the-bulk. Remaining harvests: the fossils (`session-management`/`code-deduplication`/`agent-teams`)
+      → design-doc; `ai-models` pointers; `build-in-public` → plugin docs; vendor-review patterns → conclave note.
+   2. **Then execute the 10 removals** (1 CUT + 9 HARVEST→CUT) once their harvests have landed.
+   3. **Build the delivery path** — make `bin/tessera-new-project` ship the KEEP set. *This is the fix the
+      whole audit points at.*
 
 1. **The Tessera ↔ conclave design session.** *(ADR-0007, "NOT decided".)* The stack is a
    **directional keep** — more local models coming, Tailscale + AWS-hosted, **council/ensemble

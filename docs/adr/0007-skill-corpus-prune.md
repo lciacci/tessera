@@ -1,7 +1,8 @@
 # ADR-0007: The skill corpus — an unpruned inherited baseline, and what the evidence can and cannot authorize
 
 - **Date:** 2026-07-13
-- **Status:** Proposed
+- **Status:** Superseded by ADR-0008
+- **Superseded because:** this ADR's own closing correction admitted the audit had never been *run* — what ran was a reachability sweep. FOCUS-004 (2026-07-14) read all 56 bodies; the content result inverts this ADR's tally (10 removals, not 44) and vindicates the compaction premise this ADR declared falsified. **This document is preserved intact as the record of the reachability error and the corrections that followed — its lessons stand; its cut-list and counts are superseded.** See ADR-0008.
 - **Decision driver:** FOCUS-004 executed. Principle #15 ("skill defaults are a starting point — trim or expand based on evidence in subsequent sessions") was written at Tessera's founding and **never executed**. 56 skills, zero ever evaluated. ADR-0006 §5 sanctioned the prune as tier-1 work (*deleted machinery cannot fail silently*).
 
 ---
