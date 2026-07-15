@@ -573,6 +573,21 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   anyone run it *as the agent* — `zsh -c 'command -v X'`, not `which X`? A candidate `doccheck`
   assertion if it recurs: every bare command named in a CLAUDE.md must resolve non-interactively.
 
+### Skill registry — which copy is the source of truth (blocks the de-dup, entangled with delivery)
+
+- **Status:** Watching. **Condition to re-open:** the delivery-mechanism design session (ADR-0008 "NOT decided").
+- **Source:** ADR-0007 finding #7 + FOCUS-004 execution (2026-07-15).
+- **The finding.** `tessera/skills/` and the global `~/.claude/skills/` were byte-identical 56/56 — a duplicate that doubles the session's skill-list cost. ADR-0007 said "kill the duplicate." But FOCUS-004 **diverged them**: this session added `adr-gate` + the `code-review`/`supabase-python`/`council-review`/`code-graph` edits to the *tessera* copy only (now 57 vs 56). So the de-dup is no longer "delete the identical copy" — it *is* the question **which registry is authoritative for downstream delivery**, and that is the delivery design (ADR-0008). Cutting either copy now would either lose this session's work (delete tessera's) or strand it out of the global library (delete global's).
+- **When to revisit:** the delivery session. Decide: does Tessera ship skills via `bin/tessera-new-project` (profile-gated), and is the source the tessera-local dir or the global registry? Until then, **do not delete either copy.**
+
+### Fail-open skill lint — the check `council-review` earns, and the trap it must avoid
+
+- **Status:** Pending eval. **This is a design task, not a doccheck one-liner** — implementing it naively re-commits the reachability error the whole skill audit was about.
+- **Source:** ADR-0007 "standing rule → skills" + FOCUS-004 (2026-07-15). `council-review` ordered the agent to gate on backends (`~/bin/validate-plan`, absent reviewers) and reported failure only inside a JSON field nothing reads — a fail-open living in a skill, of exactly the shape [Fail-open everywhere](#fail-open-everywhere--tessera-cannot-tell-you-when-it-is-broken) names.
+- **The trap.** The obvious check — *"every binary a skill names must exist here"* — is **wrong**: it flags every legitimate downstream stack skill (`vercel`, `gh`, `supabase`, `flutter`…) for naming tools absent-in-Tessera, which is the precise reachability error ADR-0007/0008 spent the whole audit un-learning. A binary-existence check on a global skill library judged against one atypical consumer.
+- **The correct shape (candidate).** Lint the **fail-open *pattern*, not the binary**: a skill that couples hard-gating imperative language (`do not skip`, `mandatory`, `0 of 3 → revise`, `must not proceed`) to an *external* backend, repo-local, no existence check. That catches council-review's actual defect (ordering a gate whose backend can silently be unreachable) without touching reachability. Needs its pattern set designed + a regression corpus.
+- **When to revisit:** when building the skill-instrumentation spec (ADR-0007's open mechanism finding), or the next time a skill orders a gate on an absent backend.
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.

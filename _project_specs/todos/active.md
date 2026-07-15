@@ -98,15 +98,72 @@ drift. Challenge it.**
    from reading current state (council-review CUT→FIX, iterative-development CUT→KEEP, cpg-analysis CUT→KEEP).
    **The real finding stands and is now content-confirmed:** the corpus is mostly *good, current,
    downstream-applicable* — but undeliverable, because `bin/tessera-new-project` ships **zero** skills.
-   **NEXT ACTIONABLE (was not run — audit-only discipline held, no skill was edited):**
-   1. **HARVEST before any cut** — work the "HARVEST manifest" in the ledger. The base-skill licence
-      requires harvest-first. **✅ #8 DONE (2026-07-14): `adr-gate` split out of `code-review` into its
-      own skill** (`skills/adr-gate/SKILL.md`, Tessera-corrected) — so `code-review` is now safe to
-      cut-the-bulk. Remaining harvests: the fossils (`session-management`/`code-deduplication`/`agent-teams`)
-      → design-doc; `ai-models` pointers; `build-in-public` → plugin docs; vendor-review patterns → conclave note.
-   2. **Then execute the 10 removals** (1 CUT + 9 HARVEST→CUT) once their harvests have landed.
-   3. **Build the delivery path** — make `bin/tessera-new-project` ship the KEEP set. *This is the fix the
-      whole audit points at.*
+---
+
+## ═══ FOCUS-004 EXECUTION STATUS + POSTURE (2026-07-15) — read this to resume ═══
+
+**Record of decisions:** ADR-0008 (supersedes 0007). **Per-skill ledger + harvest manifest:**
+`focus-004-audit.md` → "REAL AUDIT" + "FINAL TALLY". **Verdict: keep 46, remove 10** (all removals
+on stale/superseded/foreign-product grounds — **never** on reachability).
+
+### The working method (agreed with Lorenzo 2026-07-15)
+
+The 56-body audit already answered *"is each skill good"* (in the ledger). What execution adds is the
+**forward-posture pass** — every destructive item resolves to ONE of three, and **the design note is
+written BEFORE the cut, not after**:
+
+1. **CUT CLEAN** — genuinely don't need the capability. *(e.g. `ai-models` — native `claude-api` covers it.)*
+2. **ROLL OUR OWN → write the design-note/spec stub FIRST, then cut.** We want the capability, this
+   version is wrong. *(e.g. `agent-teams`' step-enforcement → capture as Stop-hook kin before deleting;
+   `code-review` multi-engine → conclave note before the bulk goes.)*
+3. **LOG TO OBSERVATORY** — might want it later, not now. *(e.g. `autonomous-testing`'s pipeline shape.)*
+
+This is *harvest-before-cut* **plus** *replacement-posture-before-cut*. It is the antidote to "cut
+something we need in two months."
+
+### Buckets (by risk, not by phase)
+
+- **Mechanical, zero corpus risk (do anytime):** the FIXes + the *safe half* of D.
+- **Low-stakes judgment (nothing leaves the corpus):** TRIM `base`/`python`/`icpg`, ADAPT `security`,
+  MERGE `ui-testing` → decide *what within* survives; wrong = re-add, not lost.
+- **Judgment-heavy, forward-posture protocol, don't rush:** the harvests + the 10 removals (A/B).
+- **Design sessions (need Lorenzo):** delivery mechanism, skill instrumentation, Tessera↔conclave.
+
+### DONE
+
+- ✅ Audit + ADR-0008 + `adr-gate` split (#8) + `supabase-python` glob FIX → **PR #4** (10 commits).
+- ✅ **FIX `council-review`** (2026-07-15): paths `~/bin/`→`bin/`; dropped the Maggy-dashboard ref;
+  flagged the design-blocked parts (absent `council.yaml`, no `claude-fable-5` wrapper, `codex` absent)
+  as *illustrative pending the conclave design* — **not rewritten** (conclave session reshapes it).
+- ✅ **FIX `code-graph`** (2026-07-15): corrected the config claims — backend is live (MCP tools exposed)
+  but configured **globally**, not via a committed `.mcp.json`; `install-graph-tools.sh` absent.
+
+### DEFERRED / NEEDS-DESIGN — and WHY (this is the "don't lose it" part)
+
+- ⏸ **D · de-dup the skill registry → BLOCKED on the delivery-source decision (E).** The two copies
+  (`tessera/skills/` 57, global `~/.claude/skills/` 56) **have now DIVERGED** — this session added
+  `adr-gate` + FIXes to the tessera copy only. So de-dup is no longer "delete the identical copy"; it
+  *is* the question "which registry is authoritative for downstream delivery." **Do not delete either
+  until delivery is designed.** → Observatory: "Skill registry — which copy is source-of-truth."
+- 🎨 **D · the `skill-declared-backends-exist` doccheck check → NEEDS DESIGN, do not implement naively.**
+  A literal "every binary a skill names must exist here" check **re-commits the exact reachability error
+  the audit was about** — it would flag every downstream stack skill (`vercel`, `gh`, `supabase`…). The
+  *correct* check lints the **fail-open PATTERN** (imperative "do not skip / mandatory / 0-of-3 → revise"
+  gating language tied to an external backend), repo-local, no binary-existence. That's a design task.
+  → Observatory: "Fail-open skill lint (the check council-review earns)."
+
+### NEXT (in order)
+
+1. **Low-stakes judgment bucket** — TRIM/ADAPT/MERGE (safe, nothing leaves).
+2. **Harvests** (fossils→design-doc, `ai-models` pointers, `build-in-public`→plugin, vendor→conclave note)
+   via the posture protocol.
+3. **Then the 10 removals** — each already has its posture in the ledger's harvest manifest.
+4. **Build the delivery path** — `bin/tessera-new-project` ships the KEEP set, profile-gated. **The fix
+   the whole audit points at, and the gate on de-dup.** *(Design session — needs Lorenzo.)*
+
+*(The numbered items below predate ADR-0008. **Superseded/done:** old #2 paths-scan (the content audit
+replaced it), old #3 "22 authorized cuts" (audit says keep most), old #5 supabase-python (FIXed).
+**Still live:** old #1 conclave = E above; old #4 `bin/kimi` broken.)*
 
 1. **The Tessera ↔ conclave design session.** *(ADR-0007, "NOT decided".)* The stack is a
    **directional keep** — more local models coming, Tailscale + AWS-hosted, **council/ensemble

@@ -547,6 +547,13 @@ All read in full. **All current, additive, none superseded — zero cuts:**
 
 **Reading 56 bodies in the main thread was ~200k tokens of genuine, un-padded content-judgment** — exactly the read-heavy work FOCUS-004 always specified, and the opposite of the void session's ~15 shell commands. **This restores the P3 compaction premise the void draft wrongly declared falsified:** the real audit *is* read-heavy. Whether `auto` compaction actually fired this session is recorded by the Mnemos log, not asserted here — but the work was the real thing, incrementally journaled so it survives regardless.
 
+> **Execution status + the forward-posture protocol (cut-clean / roll-own+design-note / log-later)
+> live in `_project_specs/todos/active.md` → "FOCUS-004 EXECUTION STATUS + POSTURE".** This ledger is
+> the *audit* record (what each skill is); active.md is the *execution* record (what's done/deferred
+> and why). Done so far: FIXes to `council-review` + `code-graph` (2026-07-15); `adr-gate` split (#8);
+> `supabase-python` glob. Deferred-with-reason: registry de-dup (blocked on delivery-source) and the
+> fail-open skill-lint (needs design) — both in `docs/observatory.md`.
+
 ## HARVEST manifest (do these BEFORE any cut — the base-skill licence demands it)
 
 1. `ai-models` → keep the provider **doc-URL pointer list** (live links, not hardcoded IDs) if a multi-provider reference is still wanted.

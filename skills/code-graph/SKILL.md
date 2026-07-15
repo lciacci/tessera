@@ -131,6 +131,13 @@ from changes to shared code.
 
 ## Graph Data & Freshness
 
+> **⚠️ Config note (2026-07-15, ADR-0008 FIX).** The backend is **live** — the
+> `mcp__codebase-memory-mcp__*` tools are exposed — but it is configured **globally**
+> (`~/.claude/`), **not** via a committed project `.mcp.json` (there is none in Tessera), and
+> `~/.claude/install-graph-tools.sh` is **absent**. The committed-`.mcp.json` + 3-layer
+> auto-freshness described below is a *project-local* setup Tessera does not use; treat it as
+> the downstream pattern, not the current state. The MCP tools work regardless.
+
 The graph stays fresh automatically through 3 layers — no manual rebuild needed:
 
 | Layer | Trigger | What Happens |
@@ -144,13 +151,13 @@ The graph stays fresh automatically through 3 layers — no manual rebuild neede
 case: `index_repository` once, then the 3 layers keep it fresh.
 
 - **Storage**: `.code-graph/` directory (auto-created, gitignored)
-- **MCP config**: `.mcp.json` at project root (committed, shared with team)
+- **MCP config**: global (`~/.claude/`) in Tessera; downstream projects may commit a `.mcp.json` at project root instead (see note above)
 
 ---
 
 ## MCP Configuration
 
-The code graph MCP server is configured in `.mcp.json` at project root:
+The code graph MCP server is configured globally in Tessera (`~/.claude/`). Downstream projects may instead commit a project-root `.mcp.json`:
 
 ```json
 {
@@ -163,7 +170,7 @@ The code graph MCP server is configured in `.mcp.json` at project root:
 }
 ```
 
-**Installation:** `~/.claude/install-graph-tools.sh`
+**Installation:** the MCP server is already provisioned globally here. *(An earlier `~/.claude/install-graph-tools.sh` installer is absent; if re-provisioning is needed, wire the `codebase-memory-mcp` server into the global MCP config directly.)*
 
 ---
 
