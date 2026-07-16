@@ -776,3 +776,30 @@ def test_a_script_that_will_not_COMPILE_is_caught(fake_repo):
     _bin(fake_repo, "corpse", REEXEC_PREAMBLE + "from __future__ import annotations\n")
     hits = doccheck.check_bin_scripts_are_stdlib_only()
     assert any("corpse" in h and "compile" in h for h in hits), hits
+
+
+# ── hooks-match-templates (found 2026-07-16: #7's hook fix skipped its template copy) ──
+
+def _hook_pair(repo, name, live, template):
+    """Write a live .claude/scripts hook and its templates/ copy (or None to omit)."""
+    (repo / ".claude" / "scripts" / name).write_text(live)
+    if template is not None:
+        (repo / "templates").mkdir(exist_ok=True)
+        (repo / "templates" / name).write_text(template)
+
+
+def test_catches_hook_template_drift(fake_repo):
+    _hook_pair(fake_repo, "h.sh", "echo new\n", "echo old\n")
+    hits = doccheck.check_hooks_match_templates()
+    assert any("h.sh" in h and "differs" in h for h in hits), hits
+
+
+def test_catches_missing_template(fake_repo):
+    _hook_pair(fake_repo, "h.sh", "echo hi\n", None)  # live hook, no template copy
+    hits = doccheck.check_hooks_match_templates()
+    assert any("h.sh" in h and "missing" in h for h in hits), hits
+
+
+def test_passes_when_hook_matches_template(fake_repo):
+    _hook_pair(fake_repo, "h.sh", "echo same\n", "echo same\n")
+    assert doccheck.check_hooks_match_templates() == []

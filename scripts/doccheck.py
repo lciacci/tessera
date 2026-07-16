@@ -902,8 +902,33 @@ def check_no_upstream_clone_instructions() -> list[str]:
     return sorted(set(bad))
 
 
+def check_hooks_match_templates() -> list[str]:
+    """Every live hook in .claude/scripts/ must be byte-identical to its templates/ copy.
+
+    templates/ IS the install payload `tessera-new-project` ships and the global-fallback
+    source (ADR-0004). A live hook that drifts from its template silently ships the OLD
+    behavior downstream. This is `tessera-watch` P1 as a COMMIT-TIME BLOCK, and the two are
+    not redundant: P1 is a SessionStart advisory with no enforcement, so an edit to a live
+    hook that forgot its template copy commits clean and is only flagged next session — the
+    "green is only meaningful if failing it stops something" gap, one level up from P8/doc-drift.
+
+    FOUND 2026-07-16: the `mnemos-pre-compact.sh` payload_probe fix (#7) landed in
+    .claude/scripts/ but not templates/. tessera-watch caught it a session later; nothing
+    caught it at commit. Same class as the doc-drift bugs — so, same remedy: a pre-commit check.
+    """
+    bad = []
+    for hook in sorted((ROOT / ".claude" / "scripts").glob("*.sh")):
+        template = ROOT / "templates" / hook.name
+        if not template.exists():
+            bad.append(f"templates/{hook.name}: missing — live .claude/scripts/{hook.name} has no install-payload copy")
+        elif template.read_bytes() != hook.read_bytes():
+            bad.append(f"templates/{hook.name}: differs from live .claude/scripts/{hook.name} — sync it, or the edit ships stale downstream")
+    return bad
+
+
 CHECKS = {
     "referenced-paths-exist": check_referenced_paths_exist,
+    "hooks-match-templates": check_hooks_match_templates,
     "no-upstream-clone-instructions": check_no_upstream_clone_instructions,
     "adr-index-complete": check_adr_index_complete,
     "compaction-threshold-qualified": check_compaction_threshold_qualified,
