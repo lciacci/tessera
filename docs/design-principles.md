@@ -1138,6 +1138,43 @@ For solo dogfood, the lightweight harness is enough. The full Maggy harness (inb
 
 ---
 
+## Fossil lineage — skills Tessera's machinery descends from *(harvested 2026-07-16, ADR-0008)*
+
+The inherited skill corpus is partly a **fossil record**: three skills prescribe, in manual
+markdown, capabilities that Tessera's own machinery later automated. Per the audit's
+harvest-before-cut rule (ADR-0007), the *ideas* are extracted here before the skill bodies are
+cut. This section is that harvest; it is why the removals are not losses.
+
+- **`session-management` → Mnemos.** The skill's model was **tiered summarization**: Tier 1 a quick
+  live-state update, Tier 2 a full checkpoint (+ append-only decision log), Tier 3 a session
+  archive — with a decision heuristic ("*>10 tool calls → full checkpoint*", "*major feature done →
+  archive*") and checkpoint-at-natural-breakpoints. It was hand-driven markdown under
+  `_project_specs/session/`. **Mnemos is this idea, automated and typed:** per-node-type eviction
+  replaces the flat tiers, fatigue-triggered auto-checkpointing replaces the manual heuristic, and
+  SessionStart/PreCompact hooks replace the human remembering to write the file. The tiers survive
+  as Mnemos's eviction policy; the heuristic survives as the fatigue thresholds.
+
+- **`agent-teams` → the Stop-hook gates.** Stripped of its Maggy roster, the skill's load-bearing
+  idea is **structural step-enforcement**: an immutable pipeline where *step N+1 is invisible until
+  step N is marked complete **and independently verified*** — ordering enforced by task
+  dependencies, not by asking the agent to comply, with a separate verifier confirming the RED→GREEN
+  transition. That is exactly the shape of Tessera's Stop-hook gates: a hook exiting 2 **blocks
+  completion until the check passes** (`tessera-gate-scan`, `tessera-verify-scan`, the doccheck
+  pre-commit hook). The insight carried forward: *enforcement that rides on model compliance is not
+  enforcement — make the next step structurally unreachable until the current one is verified.* It
+  is principle #12's friction-journal and #17's backstop expressed as a pipeline invariant.
+
+- **`code-deduplication` → `icpg query prior`.** The skill's sharpest framing — "**the problem
+  isn't duplicate code, it's duplicate *purpose***; know what exists before writing something new"
+  via a maintained capability index — is precisely what `icpg query prior` answers from the
+  ReasonNode graph, structurally, instead of from a hand-maintained `CODE_INDEX.md`. The framing is
+  harvested into the `icpg` skill itself (the canonical home of the capability).
+
+*These three cuts are cleanup on the way to profile-gated delivery (ADR-0008), not the work. The
+lineage above is what makes them safe to make.*
+
+---
+
 ## Sources Consulted
 
 - [alinaqi/maggy](https://github.com/alinaqi/maggy) — base
