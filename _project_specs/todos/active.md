@@ -88,7 +88,7 @@ Per-skill ledger with evidence: `_project_specs/todos/focus-004-audit.md`.
 3. **The F-001 detector was a blacklist** — `{mnemos, icpg, polyphony, skill_lint, pytest, yaml,
    requests}`. `httpx` simply was not on it. New check `bin-scripts-are-stdlib-only` names
    nothing and tests by execution: *every module `bin/` imports must be findable by the
-   interpreter it actually runs on.* **15 doccheck checks.**
+   interpreter it actually runs on.* **15 doccheck checks** *(16 as of 2026-07-16 — added `hooks-match-templates`).*
 
 ### THE LESSON — and it cost three wrong conclusions
 
