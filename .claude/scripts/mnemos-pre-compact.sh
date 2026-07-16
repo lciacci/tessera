@@ -78,8 +78,8 @@ trigger = 'unknown'
 raw = os.environ.get('HOOK_INPUT') or ''
 try:
     trigger = json.loads(raw or '{}').get('trigger') or 'unknown'
-except ValueError:
-    pass
+except (ValueError, AttributeError):
+    pass  # AttributeError: payload is valid JSON but not an object ([], 5, "x")
 
 # When trigger is 'unknown' the classifier ran but the payload carried no `.trigger`.
 # We cannot tell WHY without seeing what the harness actually sends — is stdin empty,
@@ -92,6 +92,8 @@ try:
     payload_probe['keys'] = sorted(json.loads(raw or '{}').keys())
 except ValueError:
     payload_probe['keys'] = 'not-json'
+except AttributeError:
+    payload_probe['keys'] = 'not-object'  # valid JSON but not a dict ([], 5, "x")
 
 with open('.mnemos/just-compacted', 'w') as f:
     json.dump({'timestamp': ts, 'reason': 'pre_compact_hook', 'trigger': trigger}, f)
