@@ -1,0 +1,44 @@
+{
+  "_readme": "STARTER MAP (ADR-0009). profile→skill curation for scripts/skill_overrides.py. selected = universal ∪ profiles[profile] ∪ extensions_added − extensions_removed; everything installed-but-unselected is set skillOverrides:'off' in the downstream .claude/settings.json. An 'extension' is a stack tag → skill list; an unknown tag is treated as a bare skill name, so extensions_added can also name a single skill directly. Editable data — refine against _project_specs/todos/focus-004-audit.md. Skills NOT in any list here (e.g. the ADR-0008 removals: ai-models, autonomous-testing, build-in-public, codex-review, gemini-review, cross-agent-delegation, session-management, code-deduplication, agent-teams, workspace, team-coordination) are off everywhere by default — correct until they are actually uninstalled.",
+
+  "universal": [
+    "base",
+    "mnemos",
+    "icpg",
+    "framework-evaluation",
+    "adr-gate",
+    "code-graph",
+    "commit-hygiene",
+    "iterative-development",
+    "security",
+    "database-schema"
+  ],
+
+  "profiles": {
+    "standard": []
+  },
+
+  "extensions": {
+    "python": ["python"],
+    "typescript": ["typescript"],
+    "react-web": ["react-web", "ui-web", "ui-testing", "playwright-testing", "pwa-development"],
+    "react-native": ["react-native", "ui-mobile", "ui-testing"],
+    "flutter": ["flutter", "ui-mobile"],
+    "android-kotlin": ["android-kotlin", "ui-mobile"],
+    "android-java": ["android-java", "ui-mobile"],
+    "node-backend": ["nodejs-backend"],
+    "supabase": ["supabase", "supabase-node", "supabase-nextjs"],
+    "supabase-python": ["supabase-python"],
+    "firebase": ["firebase"],
+    "aws": ["aws-aurora", "aws-dynamodb"],
+    "azure": ["azure-cosmosdb"],
+    "cloudflare": ["cloudflare-d1"],
+    "web": ["web-content", "site-architecture", "user-journeys"],
+    "analytics": ["posthog-analytics"],
+    "ai-app": ["llm-patterns", "agentic-development"],
+    "tickets": ["ticket-craft"],
+    "credentials": ["credentials"],
+    "deep-analysis": ["cpg-analysis"],
+    "orchestration": ["polyphony", "council-review"]
+  }
+}

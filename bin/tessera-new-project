@@ -29,7 +29,7 @@ PROFILE="${3:-standard}"
 [ -e "$TARGET" ] && { echo "refuse: $TARGET already exists" >&2; exit 1; }
 for f in "$TPL/CLAUDE.md.template" "$TPL/settings.base.json" "$TPL/gitignore.base" \
          "$TPL/project.yml.template" "$TPL/security-exceptions.yml.template" \
-         "$TPL/config.yml.template"; do
+         "$TPL/config.yml.template" "$TPL/skill-profiles.json"; do
   [ -f "$f" ] || { echo "missing template: $f" >&2; exit 1; }
 done
 
@@ -94,6 +94,19 @@ EOF
 # CLAUDE.md — fill scalar placeholders; description/commands left for the owner.
 sed -e "s|{{PROJECT_NAME}}|$NAME|g" -e "s|{{PROFILE}}|$PROFILE|g" \
     "$TPL/CLAUDE.md.template" > "$TARGET/CLAUDE.md"
+
+# Skill curation (ADR-0009). Claude Code unions ALL global ~/.claude/skills into every
+# project, so skills cannot be scoped by placement — only by settings. Turn "off" every
+# installed skill outside this project's profile. The helper is stdlib-only, but this script
+# also `cp`s toolchain test files, so doccheck's coarse F-001 detector (correctly) demands a
+# PATH-resolved interpreter here — an interpreter is a PATH, not a name. Non-fatal: a project
+# with no skillOverrides just sees the full corpus (pre-ADR-0009 status quo), so a failure —
+# including a missing venv — warns and never aborts the scaffold.
+"$TESSERA_ROOT/.venv/bin/python" "$TESSERA_ROOT/scripts/skill_overrides.py" \
+  --project-yml "$TARGET/.tessera/project.yml" \
+  --settings "$TARGET/.claude/settings.json" \
+  --map "$TPL/skill-profiles.json" \
+  || echo "warn: skill curation skipped (skillOverrides not written)" >&2
 
 ( cd "$TARGET" && git init -q && git symbolic-ref HEAD refs/heads/main )
 
