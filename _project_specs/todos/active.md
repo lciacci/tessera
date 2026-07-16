@@ -6,43 +6,57 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## ═══ SESSION 2026-07-16 — the delivery reframe landed + shipped ═══
+## ═══ SESSION 2026-07-16 — the delivery reframe shipped + MERGED ═══
 
-**Three PRs open, stacked. All green (suite + doccheck 15/15). Nothing merged yet.**
+**ALL MERGED to `main`. Suite green (163), doccheck 15/15. No branches in flight.**
 
-- **PR #4 → MERGED** (`191a912`): the audit + ADR-0008 + adr-gate split + council/code-graph FIXes.
-- **PR #5** (`focus-004-safe-bucket`): the safe bucket — fossil harvests → `design-principles.md`
-  ("Fossil lineage"), `base` TRIM 532→122, `icpg` TRIM 327→246. Nothing left the corpus.
-- **PR #6** (`focus-004-delivery`, **stacked on #5**): **ADR-0009 + the scaffold build.**
+- **#4 → MERGED** (`191a912`): the audit + ADR-0008 + adr-gate split + council/code-graph FIXes.
+- **#5 → MERGED** (`3a36bc4`): safe bucket — fossil harvests → `design-principles.md` ("Fossil
+  lineage"), `base` TRIM 532→122, `icpg` TRIM 327→246. Nothing left the corpus.
+- **#9 → MERGED** (`a2042e6`, *was #6* — auto-closed when #5's base branch was deleted, reopened):
+  **ADR-0009 + the scaffold build.**
+- **#7 → MERGED** (`b9d1440`): Mnemos trial sorted — instrument compaction, correct the record.
+- **#8 → MERGED** (`dc8af44`): `security` ADAPT — de-eager the OWASP skill, keep the secrets floor.
 
-**ADR-0009 is the headline — it refines ADR-0008's mechanism.** Verified the actual Claude Code
-skill-load semantics: global + project skills **union**, so every downstream *already sees every
-skill*. The corpus was never *undelivered* — it's **un-curated**. So the fix is a **selector**
-(`skillOverrides` turning off-profile skills off), NOT a copier. `bin/tessera-new-project` now writes
-a profile-gated `skillOverrides` block into the downstream `settings.json` (composable universal +
-stack-tags; map in `templates/tessera/skill-profiles.json`; resolver `scripts/skill_overrides.py`).
-Adversarially verified end-to-end (full scaffold → 47 off/9 on, base keys retained).
+**ADR-0009 is the headline — it refines ADR-0008's mechanism.** Claude Code unions global + project
+skills, so every downstream *already sees every skill* — the corpus was never *undelivered*, it's
+*un-curated*. The fix is a **selector** (`skillOverrides` turning off-profile skills off), NOT a copier.
+`bin/tessera-new-project` writes a profile-gated `skillOverrides` block into the downstream
+`settings.json` (composable universal + stack-tags; map `templates/tessera/skill-profiles.json`;
+resolver `scripts/skill_overrides.py`). Adversarially verified end-to-end (47 off/9 on, base keys kept).
 
-### NEXT (in order)
-1. **Merge #5 → #6** (review; #6 rebases onto main after #5 lands).
-2. **The 10 removals** — now *cleaner*: a removed skill just leaves every tag's set in
-   `skill-profiles.json`, and is `"off"` everywhere by default already. Still HARVEST-first for the
-   ones with un-harvested ideas (`code-review` multi-engine→conclave note, `codex/gemini-review`→same,
+**All 4 PRs were adversarially reviewed; findings fixed** (universal-inviolable guard, fail-loud config
+parsing, the non-object-payload probe crash, two stale skill pointers). No 🔴 survived.
+
+### NEXT (in order) — nothing here is started
+1. **The 10 removals** — *cleaner now*: a removed skill just leaves every tag's set in
+   `skill-profiles.json`, and is `"off"` everywhere by default already. HARVEST-first for the ones with
+   un-harvested ideas (`code-review` multi-engine→conclave note, `codex/gemini-review`→same,
    `ai-models`→provider URL pointers, `autonomous-testing`→pipeline-shape note, `build-in-public`→plugin
-   docs). The 3 fossils are already harvested (PR #5).
-3. **The delivery-entangled trims** (`python` TRIM, `security` ADAPT, `ui-testing` MERGE) — deferred
-   at the gate this session. Now that ADR-0009 exists, revisit: `security` ADAPT needed "the downstream
-   template" which is now `skill-profiles.json` + the scaffold, so it may be unblocked.
-4. **Refine `skill-profiles.json`** against the full KEEP set (it's a *starter* map — reasonable, not
-   exhaustive). Editable data; low-stakes.
+   docs). The 3 fossils are already harvested (#5).
+2. **`iterative-development` de-eager** — same KEEP-but-relocate-off-eager verdict as `security` (#8);
+   flagged in the #8 CLAUDE.md note, not done. The last eager-load audit cleanup.
+3. **The remaining delivery-entangled trims** — `python` TRIM, `ui-testing` MERGE. (`security` ADAPT is
+   DONE, #8.)
+4. **Refine `skill-profiles.json`** against the full KEEP set (it's a *starter* map). Editable, low-stakes.
+5. **Conclave design session** — the `code-review`/`codex`/`gemini` removals need the conclave design
+   note first (harvest-before-cut). Needs Lorenzo. This is old handoff item 1 / ADR-0008's open thread.
 
 ### Still deferred (unchanged)
 - **De-dup the registry (D)** — ADR-0009 *further* deferred it (global stays authoritative for the
   union; the scaffold only writes settings). Observatory: "Skill registry — which copy is source-of-truth."
 - **Listing-budget floor ("Goal B", ADR-0009)** — settings can't zero a skill's listing *name*; only
   uninstalling can. Measure with `/doctor` before any physical partitioning. YAGNI.
-- **Mnemos `fatigue.json` all-None + does-this-harness-`/compact`** — orthogonal, separate venue.
 - **P7 gate-labels** (~45 unlabeled) — maintenance; snooze.
+
+### Mnemos trial — RESOLVED this session (#7), was the "sort out" ask
+- **Fatigue is LIVE, not degraded** — token-util 0.27 (wt 0.40), all dims compute. The 07-15 "all-None"
+  was transient, no fix needed.
+- **Compaction DOES fire here** — but on the harness-summarization path with no `{trigger}` (→ `unknown`).
+  Instrumented with a key-only `payload_probe` so the next event reveals what the harness sends.
+- **DECISION:** compaction-recovery verdict → real Claude Code CLI venue (P3 can't reach 3 real `auto`
+  events here); fatigue verdict stays here. Full record: `docs/observatory.md` → "Mnemos compaction
+  vehicle" (07-16 update). *(This supersedes the 07-15 side-mission section further down.)*
 
 ---
 
@@ -208,6 +222,11 @@ replaced it), old #3 "22 authorized cuts" (audit says keep most), old #5 supabas
 ---
 
 ## ═══ MNEMOS TRIAL — side-mission result (2026-07-15) ═══
+
+> **⚠️ SUPERSEDED 2026-07-16 (#7) — kept for the trail.** Both gaps below were re-checked and the
+> reading corrected: fatigue is LIVE (not degraded); compaction DOES fire here (via the no-`{trigger}`
+> harness path). See the "Mnemos trial — RESOLVED this session" block at the top and `docs/observatory.md`
+> → "Mnemos compaction vehicle" (07-16 update). The "NEXT SESSION" items below are done.
 
 **This FOCUS-004 session was deliberately run long (side mission) to overfill context and test Mnemos's
 compaction-recovery. RESULT: auto-compaction did NOT fire — a ~200k-token overfill produced zero
