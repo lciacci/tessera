@@ -162,7 +162,7 @@ Per-project, gitignored, zero infrastructure:
   .gitignore      Contains: *
   chroma/         ChromaDB vectors (if chromadb installed)
   tfidf_cache.json  TF-IDF fallback cache
-  .current-intent   Marker file for active intent (used by Stop hook)
+  .current-intent   Marker file for active intent
 ```
 
 Install options:

@@ -114,9 +114,10 @@ Splitting into:
 *TRIM 2026-07-16 (ADR-0008, FOCUS-004): this skill is eagerly loaded every session. ~60% of its
 prior body was either a verbatim copy of another skill or a downstream-app prescription with no
 surface in a framework repo, so it was cut here. **Nothing was lost — every cut section still lives
-at its canonical home:** the TDD RED/GREEN/VALIDATE workflow + Stop-hook loop → `iterative-development`;
-credentials parsing → `credentials`; OWASP/security → `security`; tiered checkpointing → `mnemos`
-(and its `session-management` fossil, see `docs/design-principles.md` → "Fossil lineage"). The
-atomic-todo `[TODO-xxx]` format, the `_project_specs/` doc tree, and the CI quality-gate prescriptions
-are downstream-app scaffolding; they survive in the GLOBAL `~/.claude/skills/base` copy, which serves
-downstream app repos and retains the full body those repos actually use.*
+at its canonical home:** the Stop-hook TDD loop → `iterative-development`; credentials parsing →
+`credentials`; OWASP/security → `security`; tiered checkpointing → `mnemos` (and its
+`session-management` fossil, see `docs/design-principles.md` → "Fossil lineage"). The atomic-todo
+`[TODO-xxx]` format, the phased RED/GREEN/VALIDATE Todo-Execution and Bug-Fix workflows, the
+coverage-gate prescriptions, and the `_project_specs/` doc tree are downstream-app scaffolding; they
+survive in the GLOBAL `~/.claude/skills/base` copy, which serves downstream app repos and retains the
+full body those repos actually use.*
