@@ -6,6 +6,46 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
+## ═══ SESSION 2026-07-16 — the delivery reframe landed + shipped ═══
+
+**Three PRs open, stacked. All green (suite + doccheck 15/15). Nothing merged yet.**
+
+- **PR #4 → MERGED** (`191a912`): the audit + ADR-0008 + adr-gate split + council/code-graph FIXes.
+- **PR #5** (`focus-004-safe-bucket`): the safe bucket — fossil harvests → `design-principles.md`
+  ("Fossil lineage"), `base` TRIM 532→122, `icpg` TRIM 327→246. Nothing left the corpus.
+- **PR #6** (`focus-004-delivery`, **stacked on #5**): **ADR-0009 + the scaffold build.**
+
+**ADR-0009 is the headline — it refines ADR-0008's mechanism.** Verified the actual Claude Code
+skill-load semantics: global + project skills **union**, so every downstream *already sees every
+skill*. The corpus was never *undelivered* — it's **un-curated**. So the fix is a **selector**
+(`skillOverrides` turning off-profile skills off), NOT a copier. `bin/tessera-new-project` now writes
+a profile-gated `skillOverrides` block into the downstream `settings.json` (composable universal +
+stack-tags; map in `templates/tessera/skill-profiles.json`; resolver `scripts/skill_overrides.py`).
+Adversarially verified end-to-end (full scaffold → 47 off/9 on, base keys retained).
+
+### NEXT (in order)
+1. **Merge #5 → #6** (review; #6 rebases onto main after #5 lands).
+2. **The 10 removals** — now *cleaner*: a removed skill just leaves every tag's set in
+   `skill-profiles.json`, and is `"off"` everywhere by default already. Still HARVEST-first for the
+   ones with un-harvested ideas (`code-review` multi-engine→conclave note, `codex/gemini-review`→same,
+   `ai-models`→provider URL pointers, `autonomous-testing`→pipeline-shape note, `build-in-public`→plugin
+   docs). The 3 fossils are already harvested (PR #5).
+3. **The delivery-entangled trims** (`python` TRIM, `security` ADAPT, `ui-testing` MERGE) — deferred
+   at the gate this session. Now that ADR-0009 exists, revisit: `security` ADAPT needed "the downstream
+   template" which is now `skill-profiles.json` + the scaffold, so it may be unblocked.
+4. **Refine `skill-profiles.json`** against the full KEEP set (it's a *starter* map — reasonable, not
+   exhaustive). Editable data; low-stakes.
+
+### Still deferred (unchanged)
+- **De-dup the registry (D)** — ADR-0009 *further* deferred it (global stays authoritative for the
+  union; the scaffold only writes settings). Observatory: "Skill registry — which copy is source-of-truth."
+- **Listing-budget floor ("Goal B", ADR-0009)** — settings can't zero a skill's listing *name*; only
+  uninstalling can. Measure with `/doctor` before any physical partitioning. YAGNI.
+- **Mnemos `fatigue.json` all-None + does-this-harness-`/compact`** — orthogonal, separate venue.
+- **P7 gate-labels** (~45 unlabeled) — maintenance; snooze.
+
+---
+
 ## Handoff — 2026-07-13 (FOCUS-004 / the skill audit, and what it actually found)
 
 **`docs/adr/0007-skill-corpus-prune.md` (Proposed) is the record. Read it before touching skills.**
