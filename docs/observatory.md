@@ -625,6 +625,49 @@ Both were found by adversarial verification, **not** by the framework. **The rea
     `/compact` recovery — the P2 anti-pattern (a predicate on a proxy that tracks no real pain), which P3 already
     guards against. Instrument now; if the probe shows the harness sends nothing usable, the CLI is the only venue.
 
+### Tessera ↔ Conclave ↔ pr-arbiter — the review/model cluster is converging *(seed for ADR-0008's deferred conclave design note)*
+
+- **Status:** Converging, **not decided** — Lorenzo's call to keep updating as the two sibling repos'
+  findings refine. This is the ADR-0008 "Tessera ↔ conclave interoperation" thread actually starting,
+  and the home the `codex-review`/`gemini-review` removal harvests land in (their findings-schema /
+  headless-CI / 1M-context patterns feed here). Not an ADR yet.
+- **Source:** 2026-07-16 session — read `~/Claude/conclave` and `~/Claude/pr-arbiter` against the open thread.
+- **The three pieces, and how they fit:**
+  - **conclave** (`~/Claude/conclave`) — a self-hosted multi-model inference lab: open-weight fleet
+    (Qwen3-32B / Gemma3-27B / Mistral-24B, one per L40S) behind an OpenAI-compatible gateway, private
+    over Tailscale, on RunPod (AWS fallback). Cost controls built before any GPU boots. **Its research
+    finding: "route, don't judge"** — on *answer-quality, select-best* (Q&A), a fan-out judge scores
+    *below* the best single model and pays N× for a saturated gap; the instrument `orchestrator/divergence.py`
+    measures `headroom = oracle − best_single` offline for $0 before you build anything.
+  - **pr-arbiter** (`~/Claude/pr-arbiter`) — a POC measuring reviewer + independent arbiter vs single-agent.
+    **On code review (Phase 1) fan-out+arbiter PAYS: it catches a critical security bug the best single-agent
+    misses across every prompt variant** (critical recall 88% vs 75%, fewer false positives). On code
+    *generation* (Phase 2) the effect is real but weak under 3-seed variance (87% vs 82%). Ships a typed-finding
+    schema (0 contaminated / 551). Meant to graduate into the tool backing Tessera's `/arbiter`
+    (design-principles → "Pr-arbiter ↔ /arbiter integration").
+  - **Tessera** — the framework that operationalizes both: its `council-review` / `validate-plan` / `bin/review`
+    layer, and eventually the models behind it.
+- **The load-bearing insight — why "route, don't judge" does NOT kill Tessera's fan-out:**
+  conclave measured **select-best** (pick one best answer; saturates as models converge → route). **Review is
+  union-recall** — you want *every distinct true bug* N reviewers find, not one selected answer; that headroom
+  **does not saturate** the same way, because models converge on quality yet still find *different* bugs.
+  pr-arbiter is the evidence: the fan-out win shows up exactly on the **critical-recall tail** select-best can't see.
+  So conclave's disproof is real *and* scope-limited; the two results are consistent, not contradictory.
+- **Consequence for `divergence.py` on the review question: the FRAME helps, the current METRIC pollutes.**
+  "Measure headroom offline before building the aggregator" is the right discipline — keep it. But its oracle
+  (best single *answer*, quality-graded) would falsely condemn review fan-out; review needs a variant whose
+  oracle is **union of true findings, scored on bug-recall + false-positive rate** vs a labeled defect set.
+  Same instrument shape, different scoring function.
+- **The converging design (evidence-backed, still refining):** Tessera → conclave as the **default backend**
+  (self-hosted fleet for most work; frontier models reserved for occasional/investigation). **Conclave carries
+  both a judge and a router**, switched per task by headroom: **fan-out+judge where headroom is real (review /
+  recall — pr-arbiter validates), route-to-specialist where it saturates (most Q&A — conclave validates).**
+  pr-arbiter graduates to back `/arbiter`, running on conclave's fleet.
+- **What would firm this into an ADR:** (1) a review-flavored divergence measurement (union-recall metric)
+  showing the review headroom is real and how big; (2) pr-arbiter Phase 3 + a stable conclave fleet;
+  (3) the concrete interop shape (does Tessera call conclave's gateway directly; do `bin/` wrappers collapse
+  into conclave calls; where does the router live). Until then: **noted here so it is not lost.**
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.
