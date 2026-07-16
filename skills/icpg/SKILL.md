@@ -41,6 +41,12 @@ the reason graph to understand WHY existing code was written, WHAT
 constraints it must preserve, and WHETHER your change duplicates prior
 work.
 
+**The problem isn't duplicate *code*, it's duplicate *purpose*.** Knowing
+what already exists before writing something new is a capability-index
+problem, and `icpg query prior` is that index — answered structurally from
+the ReasonNode graph, not from a hand-maintained code index that rots.
+*(Harvested from the retired `code-deduplication` skill, ADR-0008.)*
+
 ---
 
 ## The 3 Canonical Pre-Task Queries
@@ -176,7 +182,7 @@ pip install "./scripts/icpg[all]"      # + ChromaDB + scikit-learn + openai
 2. CONSTRAINTS  → icpg query constraints (understand invariants)
 3. RISK         → icpg query risk (check fragile symbols)
 4. LOCATE       → search_graph to find symbols (code-graph skill)
-5. CHANGE       → Make the edit (PreToolUse hook shows context)
+5. CHANGE       → Make the edit
 6. RECORD       → icpg record (link symbols to intent)
 7. DRIFT CHECK  → icpg drift check (verify no unintended drift)
 8. VERIFY       → Run tests, lint, typecheck
@@ -185,93 +191,6 @@ pip install "./scripts/icpg[all]"      # + ChromaDB + scikit-learn + openai
 **Step 0 is non-negotiable for autonomous agents.** Every change must
 be linked to a stated purpose. Without an intent, there's nothing to
 measure drift against.
-
----
-
-## Hook Integration
-
-### PreToolUse Hook (automatic context injection)
-
-Add to `.claude/settings.json`:
-```json
-{
-  "hooks": {
-    "PreToolUse": [{
-      "matcher": "Edit|Write",
-      "hooks": [{
-        "type": "command",
-        "command": "scripts/icpg-pre-edit.sh",
-        "timeout": 3,
-        "statusMessage": "Checking intent context..."
-      }]
-    }]
-  }
-}
-```
-
-Before every file edit, agents see:
-```
-═══ iCPG CONTEXT ═══
-INTENTS for src/auth/service.ts:
-  [>] a1b2c3d4 — User authentication with JWT tokens
-      Owner: feature-auth | Status: executing
-      Invariants: 2
-CONSTRAINTS for src/auth/service.ts:
-  From intent: User authentication with JWT tokens
-    INV: file_exists("src/auth/middleware.ts")
-    POST: test_exists("src/auth/__tests__/service.test.ts")
-PRESERVE function signatures unless your task requires changing them.
-═══════════════════
-```
-
-### Stop Hook (automatic symbol recording)
-
-After implementation passes tests, auto-records symbols:
-```json
-{
-  "hooks": {
-    "Stop": [{
-      "hooks": [
-        {"type": "command", "command": "scripts/tdd-loop-check.sh", "timeout": 60},
-        {"type": "command", "command": "scripts/icpg-stop-record.sh", "timeout": 5}
-      ]
-    }]
-  }
-}
-```
-
----
-
-## Agent Teams Integration
-
-### Updated Pipeline (agent-teams + iCPG)
-
-```
- 0. INTENT       Team lead creates ReasonNode from feature spec
- 0b. DEDUP       icpg query prior — check for duplicate intents
- 1. SPEC         Feature agent writes spec
- 2. SPEC-REVIEW  Quality agent reviews spec + intent alignment
- 3. TESTS (RED)  Feature agent writes tests
- 4. RED-VERIFY   Quality agent verifies tests fail
- 5. IMPLEMENT    Feature agent codes (PreEdit hook shows context)
- 5b. RECORD      Auto-record symbols → intent (Stop hook)
- 5c. DRIFT-CHECK Quality agent verifies no scope drift
- 6. GREEN-VERIFY Quality agent verifies tests pass + coverage
- 7. VALIDATE     Lint + typecheck + full suite
- 8. CODE-REVIEW  Review agent (sees intent context per file)
- 9. SECURITY     Security agent
-10. BRANCH-PR    Merger agent (PR includes intent traceability)
-```
-
-### Agent Responsibilities
-
-| Agent | iCPG Action |
-|-------|-------------|
-| **Team Lead** | `icpg create` when creating task chains. `icpg query prior` to check duplicates. |
-| **Feature Agent** | `icpg query constraints` before implementing. Writes `.icpg/.current-intent` for auto-recording. |
-| **Quality Agent** | `icpg drift check` during GREEN verify. Verifies scope alignment. |
-| **Review Agent** | Sees intent context via PreToolUse hook when reviewing files. |
-| **Merger Agent** | Includes intent traceability in PR description. |
 
 ---
 
