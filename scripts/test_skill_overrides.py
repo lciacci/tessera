@@ -28,24 +28,41 @@ def test_parse_defaults_when_fields_absent():
     assert so.parse_project_yml("hook_distro: global\n") == ("standard", [], [])
 
 
+def test_parse_strips_quotes_and_inline_comments():
+    # A quoted scalar and a commented list must not leak quotes/comment text (fail-loud review).
+    text = 'profile: "web"  # chosen\nextensions_added: [python]  # just python\n'
+    assert so.parse_project_yml(text) == ("web", ["python"], [])
+
+
+def test_parse_warns_on_block_style_instead_of_silently_dropping(capsys):
+    # Block-style YAML lists are not parsed — but must WARN, never silently → [].
+    so.parse_project_yml("extensions_added:\n  - python\n  - supabase\n")
+    assert "inline" in capsys.readouterr().err.lower()
+
+
 def test_resolve_universal_only_for_standard():
-    assert so.resolve_selected(MAP, "standard", [], []) == {"base", "mnemos", "security"}
+    assert so.resolve_selected(MAP, ("standard", [], [])) == {"base", "mnemos", "security"}
 
 
 def test_resolve_expands_profile_and_added_tags():
-    selected = so.resolve_selected(MAP, "web", ["python"], [])
+    selected = so.resolve_selected(MAP, ("web", ["python"], []))
     assert selected == {"base", "mnemos", "security", "react-web", "ui-web", "python"}
 
 
 def test_removed_subtracts_expanded_tag():
-    selected = so.resolve_selected(MAP, "web", [], ["react-web"])
+    selected = so.resolve_selected(MAP, ("web", [], ["react-web"]))
     assert "react-web" not in selected and "ui-web" not in selected
     assert "base" in selected
 
 
+def test_removed_cannot_turn_off_a_universal_skill():
+    # extensions_removed naming a core skill must NOT disable it — universal is inviolable.
+    assert "base" in so.resolve_selected(MAP, ("standard", [], ["base"]))
+
+
 def test_unknown_tag_is_treated_as_bare_skill():
     # extensions_added naming a skill with no tag entry still selects that skill.
-    assert "flutter" in so.resolve_selected(MAP, "standard", ["flutter"], [])
+    assert "flutter" in so.resolve_selected(MAP, ("standard", ["flutter"], []))
 
 
 def test_compute_overrides_turns_off_only_unselected_installed():

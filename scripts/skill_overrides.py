@@ -9,15 +9,17 @@ Composable model (matches the existing `.tessera/project.yml` fields):
     selected = universal  ∪  profile-bundle  ∪  extensions_added  −  extensions_removed
 An "extension" is a named skill-group (stack tag) defined in `skill-profiles.json`;
 an unknown tag is treated as a bare skill name. Everything installed but unselected → "off".
+The `universal` set is inviolable — `extensions_removed` cannot turn off a core skill.
 A skill turned "off" is hidden from Claude, the / menu, and SDK callers — its *listing*
-name still costs budget (only uninstalling removes that; see ADR-0009's deferred "Goal B").
+name still costs budget (only uninstalling removes that; ADR-0009's deferred "Goal B").
 
-STDLIB ONLY (json, pathlib, argparse) — no PyYAML, per the F-001 interpreter split: this
-runs under whatever bare `python3` the scaffold invokes. The project.yml list fields are
-read by a 3-line parser, not a YAML lib.
+STDLIB ONLY (json, sys, pathlib, argparse) — no PyYAML, per the F-001 interpreter split.
+The project.yml scalar/list fields are read by a small parser, INLINE style (`[a, b]`) only;
+block-style YAML (`- a`) is not parsed and is warned about, never silently dropped.
 """
 import argparse
 import json
+import sys
 from pathlib import Path
 
 
@@ -26,24 +28,35 @@ def load_profile_map(path):
     return json.loads(Path(path).read_text())
 
 
-def _inline_list(line):
-    """Parse `key: [a, b, c]` (or `[]`) → ['a','b','c']."""
-    inner = line.split(":", 1)[1].strip().strip("[]").strip()
-    return [x.strip() for x in inner.split(",") if x.strip()] if inner else []
+def _clean(val):
+    """Strip an inline `# comment`, surrounding quotes, and whitespace from a scalar."""
+    return val.split("#", 1)[0].strip().strip('"').strip("'").strip()
+
+
+def _inline_list(val):
+    """Parse `[a, b, c]` (or `[]`) → ['a','b','c'], tolerating a trailing comment/quotes."""
+    inner = val.split("#", 1)[0].strip().strip("[]").strip()
+    return [_clean(x) for x in inner.split(",") if x.strip()]
 
 
 def parse_project_yml(text):
-    """Extract (profile, extensions_added, extensions_removed) — no YAML lib."""
-    profile, added, removed = "standard", [], []
-    for line in text.splitlines():
-        s = line.strip()
+    """Extract (profile, extensions_added, extensions_removed) — inline lists only, no YAML lib."""
+    profile = "standard"
+    fields = {"extensions_added": [], "extensions_removed": []}
+    for raw in text.splitlines():
+        s = raw.strip()
         if s.startswith("profile:"):
-            profile = s.split(":", 1)[1].strip()
-        elif s.startswith("extensions_added:"):
-            added = _inline_list(s)
-        elif s.startswith("extensions_removed:"):
-            removed = _inline_list(s)
-    return profile, added, removed
+            profile = _clean(s.split(":", 1)[1])
+        elif any(s.startswith(k + ":") for k in fields):
+            key, _, val = s.partition(":")
+            v = _clean(val)
+            if val.split("#", 1)[0].strip().startswith("["):
+                fields[key.strip()] = _inline_list(val)
+            elif v:
+                print(f"warn: {key.strip()} must be inline [a, b], got {v!r} — ignored", file=sys.stderr)
+    if not any(fields.values()) and any(l.lstrip().startswith("- ") for l in text.splitlines()):
+        print("warn: found '- ' items but no inline [..] extensions — use inline style", file=sys.stderr)
+    return profile, fields["extensions_added"], fields["extensions_removed"]
 
 
 def _expand(tags, extensions):
@@ -54,13 +67,13 @@ def _expand(tags, extensions):
     return skills
 
 
-def resolve_selected(pmap, profile, added, removed):
-    """The set of skill names this project keeps ON."""
+def resolve_selected(pmap, parsed):
+    """The set of skill names this project keeps ON. `universal` is inviolable."""
+    profile, added, removed = parsed
     ext = pmap.get("extensions", {})
-    selected = set(pmap.get("universal", []))
-    selected |= _expand(pmap.get("profiles", {}).get(profile, []), ext)
-    selected |= _expand(added, ext)
-    return selected - _expand(removed, ext)
+    universal = set(pmap.get("universal", []))
+    selected = universal | _expand(pmap.get("profiles", {}).get(profile, []), ext) | _expand(added, ext)
+    return selected - (_expand(removed, ext) - universal)
 
 
 def compute_overrides(selected, installed):
@@ -69,7 +82,7 @@ def compute_overrides(selected, installed):
 
 
 def installed_skills(skills_dir):
-    """Names of skills actually installed (a dir with a SKILL.md)."""
+    """Names of skills actually installed (a dir with a SKILL.md; follows symlinks)."""
     d = Path(skills_dir)
     return {p.name for p in d.iterdir() if (p / "SKILL.md").exists()} if d.exists() else set()
 
@@ -90,12 +103,16 @@ def main(argv=None):
     ap.add_argument("--skills-dir", default=str(Path.home() / ".claude" / "skills"))
     a = ap.parse_args(argv)
     pmap = load_profile_map(a.map)
-    profile, added, removed = parse_project_yml(Path(a.project_yml).read_text())
-    selected = resolve_selected(pmap, profile, added, removed)
+    parsed = parse_project_yml(Path(a.project_yml).read_text())
+    selected = resolve_selected(pmap, parsed)
     installed = installed_skills(a.skills_dir)
+    missing = sorted(s for s in selected if s not in installed)
+    if missing:
+        print(f"warn: {len(missing)} selected skill(s) not installed (typo or cross-machine?): "
+              f"{', '.join(missing)}", file=sys.stderr)
     inject(a.settings, compute_overrides(selected, installed))
     print(f"skillOverrides: {len(installed - selected)} off, "
-          f"{len(selected & installed)} on (profile: {profile})")
+          f"{len(selected & installed)} on (profile: {parsed[0]})")
 
 
 if __name__ == "__main__":
