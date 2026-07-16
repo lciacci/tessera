@@ -66,13 +66,22 @@ summarizer honored the PreCompact preservation block. Layer 3 logged `restore_in
 the marker, but its injected text was never *seen* reaching the model: the plumbing is confirmed, the
 injection is not. Treat Layer 2 as the load-bearing one.
 
-**Update (2026-07-15):** a session deliberately overfilled to ~200k tokens to force auto-compaction
-produced **zero** `compaction_fired` events — the likely cause is that this harness summarizes context
-*itself* rather than invoking Claude Code `/compact` (the only trigger this PreCompact layer sees), so
-the compaction-recovery layer may be structurally un-exercisable here. See `docs/observatory.md` →
-"Mnemos compaction vehicle". (Separately, `fatigue.json` read all-`None` that session — statusline not
-writing token metrics — so fatigue ran *degraded*: the token-util dimension (0.40 weight) was blind,
-though the behavioral dims still computed, e.g. a forced checkpoint scored 0.29.)
+**Update (2026-07-16, supersedes the 07-15 reading below):** both gaps re-checked.
+- **Fatigue is LIVE, not degraded.** `fatigue.json` carries real token metrics (`source: statusline`);
+  `mnemos fatigue` computes all four dims — token-util 0.27 (wt 0.40), composite 0.11 FLOW. The 07-15
+  all-`None` reading was **transient** (statusline JSON not received that session), not a real defect.
+- **Compaction DOES fire here — without a `trigger`.** The 07-12 `trigger: unknown` event was a *non-manual*
+  PreCompact firing (a `restore_injected` followed 23 s later), so the "harness never opens this door"
+  read below was too strong. The harness fires PreCompact via its own summarization path, which sends no
+  Claude Code `{trigger}` — hence `unknown`. An `auto` (context-full) event has still never been seen, and
+  a ~200k overfill produced none, so P3 can't complete here. **DECISION: judge the compaction-recovery half
+  on a real Claude Code CLI session; the fatigue half is judged here (it works).** PreCompact now logs a
+  key-only `payload_probe` on `unknown` events to learn what the harness sends. See `docs/observatory.md`
+  → "Mnemos compaction vehicle" (2026-07-16 update).
+
+**Original 07-15 reading (kept for the trail, now corrected above):** a session deliberately overfilled to
+~200k tokens produced **zero** `compaction_fired` events, and `fatigue.json` read all-`None` (fatigue
+*degraded*, token-util blind). Both were session-local artifacts, not standing defects.
 
 ### Is the compaction-recovery layer actually working?
 `.mnemos/compaction-log.jsonl` is the durable record — the marker is deleted on
