@@ -18,9 +18,10 @@ Source-of-truth references:
 @.claude/skills/base/SKILL.md
 @.claude/skills/iterative-development/SKILL.md
 @.claude/skills/mnemos/SKILL.md
-@.claude/skills/security/SKILL.md
 
-Four skills are eagerly loaded. Everything else lives in `.claude/skills/` and loads on-demand when relevant — either by path matching (skill frontmatter `paths:`), explicit invocation, or contextual discovery. The `framework-evaluation` skill specifically activates when evaluating external tools/frameworks (`/evaluate-framework` command).
+Three skills are eagerly loaded. Everything else lives in `.claude/skills/` and loads on-demand when relevant — either by path matching (skill frontmatter `paths:`), explicit invocation, or contextual discovery. The `framework-evaluation` skill specifically activates when evaluating external tools/frameworks (`/evaluate-framework` command).
+
+**`security` was de-eagered (2026-07-16, ADR-0008 ADAPT).** Its ~580 lines are OWASP web/auth/SQL/XSS/JWT patterns with **no surface in this framework repo** — no web server, no auth, no SQL, no user input, no Node. The content is sound and on-path *downstream* (the apps Tessera builds), so the skill stays in the registry, `user-invocable`, activating on its `when-to-use` (auth/input/API-keys/security-review) and via downstream profile curation (ADR-0009). What Tessera actually needs — *never commit secrets* — is the **live subset that already lives outside the skill**: the "Don't" rules below (`.env*`, no secrets in tracked files), the `settings.json` deny list, and `.githooks/pre-commit`. Eager-loading the OWASP bulk every session bought nothing those three don't already enforce. *(Sibling still pending: `iterative-development` has the same audit verdict — KEEP-but-relocate-off-eager — not done here.)*
 
 This set is a starting point per principle #15 (skill defaults as starting points). Trim or expand based on evidence in subsequent sessions; the design doc's framework-evaluation section is where the reasoning for changes gets recorded.
 
