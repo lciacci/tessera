@@ -692,7 +692,7 @@ This is *typical web-app security*, not *healthcare data handling*. Healthcare l
 - **7-category review framework:** Security, Performance, Architecture, Code Quality, Best Practices, Testing, Documentation
 - **5-level severity** (Critical/High/Medium/Low/Info) with "can commit?" semantics matches industry conventions
 - **Multi-engine as first-class:** Claude/Codex/Gemini/dual/all. This is Maggy's implementation of the `/arbiter` pattern we'd designed.
-- **ADR gate** (`adr-gate.md` sub-skill) — forces architectural traceability by injecting linked ADRs into review context, drafting new ones for undocumented decisions. Genuinely valuable for healthcare audit trails.
+- **ADR gate** (the `adr-gate` skill, split out of `code-review` per ADR-0008) — forces architectural traceability by injecting linked ADRs into review context, drafting new ones for undocumented decisions. Genuinely valuable for healthcare audit trails.
 - **Decision extraction:** review findings auto-create ADRs or log to `decisions.md`. Connects to iCPG ReasonNodes.
 
 **Concerns matching the pattern from earlier passes:**
@@ -727,8 +727,8 @@ Several pass-4 takeaways are genuinely good practice regardless of project type.
 - Code review's Data Handling category flags code that introduces a new third-party dependency without updating the scope file.
 - `standard` profile uses lightweight version (just track services and what data they receive). `healthcare` profile specializes this as BAA scope tracking.
 
-**ADR gate as recommended baseline** (in `code-review` skill):
-- The existing `adr-gate.md` sub-skill is genuinely valuable for any project — forces architectural traceability by injecting linked ADRs into review context.
+**ADR gate as recommended baseline** (the standalone `adr-gate` skill, split out of `code-review` per ADR-0008):
+- The `adr-gate` skill is genuinely valuable for any project — forces architectural traceability by injecting linked ADRs into review context.
 - Recommended baseline behavior (not enforced): trivial changes skip the gate; non-trivial changes get an ADR drafted from git history for user confirmation.
 - `healthcare` profile makes the gate stricter (mandatory for PHI boundaries; cannot proceed without ADR).
 
@@ -753,7 +753,7 @@ These extensions activate only when `.tessera/project.yml` declares `profile: he
 **ADR gate strict mode for PHI boundaries:**
 - ADRs become mandatory (not suggested) for any code that introduces or modifies a PHI-handling boundary.
 - ADRs include compliance fields: HIPAA implications, BAA scope, data classification.
-- The `adr-gate.md` sub-skill runs in its strict mode for PHI-touching changes.
+- The `adr-gate` skill runs in its strict mode for PHI-touching changes.
 
 **Multi-engine review auto-suggestion for PHI-touching code:**
 - The "consequential code" pattern from the code-review skill's engine comparison table is exactly where multi-engine review earns its weight. Healthcare PHI code is consequential by definition.

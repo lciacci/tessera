@@ -9,12 +9,21 @@ effort: high
 
 # Council of Experts — Multi-Model Validation
 
+> **⚠️ Status (2026-07-15, ADR-0008 FIX).** Command paths corrected `~/bin/` → `bin/`
+> (`bin/validate-plan` and `bin/review` are real and on PATH; `~/bin/` is empty).
+> **Not yet provisioned here, and deliberately not rewritten:** `~/.claude/council.yaml`
+> (absent — the binaries do not read it), a `claude-fable-5` wrapper (absent — Claude is the
+> host), and the **Codex** reviewer (`codex` absent). The real roster + config mechanism is a
+> **conclave/council design decision** (ADR-0008, handoff item 1), not a prune edit — until then,
+> treat the roster and `council.yaml` references below as *illustrative*, and rely on
+> `bin/validate-plan`'s own honest exit codes (voted / unavailable / broken → exit 2, no verdict).
+
 ## When to Auto-Trigger
 
 ### Plans (auto_validate_plans)
 When you write a plan to `~/.claude/plans/`, automatically validate it:
 ```bash
-~/bin/validate-plan --threshold 2 ~/.claude/plans/<plan-file>.md
+bin/validate-plan --threshold 2 ~/.claude/plans/<plan-file>.md
 ```
 - 2+ of 3 approve → execute immediately
 - 1 of 3 → surface reviewer feedback to user before proceeding
@@ -23,25 +32,24 @@ When you write a plan to `~/.claude/plans/`, automatically validate it:
 ### Architecture Decisions (auto_review_architecture)
 When making architectural changes (new services, API redesigns, database schema changes), run:
 ```bash
-~/bin/review --all "Review this architecture: <summary>"
+bin/review --all "Review this architecture: <summary>"
 ```
 
 ### PR Review (auto_review_prs)
 Before marking a PR as done, run:
 ```bash
-~/bin/review --all --file <changed-files>
+bin/review --all --file <changed-files>
 ```
 
 ## Configuration
 
-Council behavior is configured in `~/.claude/council.yaml`. The Maggy dashboard (Settings > Council) also manages this config.
+Council behavior is *intended* to be configured in `~/.claude/council.yaml` — **not present here, and not read by the binaries yet** (see Status banner). The config mechanism is pending the conclave design.
 
 ### Chief of the Council
 
 `chief: claude-fable-5` — Claude Fable 5 (Anthropic's most capable widely-released
 model, GA 2026-06-09) leads every panel as the chief: it reviews first and casts
-the deciding synthesis. Invoked via `~/bin/claude-fable-5`. Override the chief in
-`~/.claude/council.yaml`.
+the deciding synthesis. Claude is the host model (no `bin/` wrapper). Chief-override config is pending the conclave design.
 
 ### Reviewer Contexts
 
@@ -71,6 +79,6 @@ Use `POST /api/models/health` to verify all models are responding.
 
 ## How This Skill is Used
 
-This skill is loaded by Claude Code on session start. It provides the behavioral rules for when to invoke multi-model validation. The actual execution happens via `~/bin/validate-plan` and `~/bin/review` which are already installed.
+This skill is loaded by Claude Code on session start. It provides the behavioral rules for when to invoke multi-model validation. The actual execution happens via `bin/validate-plan` and `bin/review` (real, on PATH).
 
 **Do not skip council validation for CLAUDE-tier tasks.** The whole point is that architecture and security decisions get independent verification before execution.

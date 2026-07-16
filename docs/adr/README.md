@@ -34,6 +34,8 @@ Auto-generated below as ADRs are created. Update when adding a new ADR.
 | 0004 | 2026-06-30 | Per-project hook distribution — global default, freeze for ship-critical | Accepted |
 | 0005 | 2026-07-11 | The autonomy inflection — Tier 1 reordered, spend promoted to Tier 1 | Accepted |
 | 0006 | Tessera is instrumentation, not control — retarget, prune, add an adversary | 2026-07-12 | Accepted |
+| 0007 | 2026-07-13 | The skill corpus — an unpruned inherited baseline, and what the evidence can and cannot authorize | Superseded by ADR-0008 |
+| 0008 | 2026-07-14 | The skill corpus, read at last — the content audit inverts the prune, and the fix is delivery, not deletion | Accepted |
 
 ---
 

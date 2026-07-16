@@ -3,7 +3,7 @@ name: supabase-python
 description: FastAPI with Supabase and SQLAlchemy/SQLModel
 when-to-use: When building a Python/FastAPI app with Supabase backend
 user-invocable: false
-paths: ["**/*.py", "supabase/**"]
+paths: ["src/api/**", "src/db/**", "supabase/**"]
 effort: medium
 ---
 

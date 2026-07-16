@@ -15,11 +15,23 @@ Usage:
 # `from __future__ import annotations` makes them lazy strings. Do not remove.
 from __future__ import annotations
 
+import json
 import os
 import sys
+import urllib.error
+import urllib.request
 
-import httpx
-
+# STDLIB ONLY — on purpose, and enforced by doccheck `bin-scripts-are-stdlib-only`.
+#
+# This file used to `import httpx`. httpx is installed NOWHERE on this machine — not in the
+# venv, not in any Homebrew python — so `deepseek` had never run, ever, on any interpreter.
+# It failed with ModuleNotFoundError, `bin/validate-plan` caught that and scored it as a
+# reviewer VOTING NO, and Tessera's council reported a confident `CHANGES_NEEDED 0/3` built
+# entirely out of this. (2026-07-13, FOCUS-004.)
+#
+# The fix is NOT to add httpx to the venv. `bin/` is reached through a bare interpreter NAME,
+# and a name resolves through a PATH four package managers write to — so bin/ must import only
+# what the oldest interpreter that PATH can hand it already has. urllib does this POST fine.
 API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 BASE_URL = "https://api.deepseek.com/anthropic"
 
@@ -65,34 +77,33 @@ def main():
 
 
 def call_deepseek(prompt: str, model: str) -> str:
+    payload = {
+        "model": model,
+        "max_tokens": 16000,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    req = urllib.request.Request(
+        f"{BASE_URL}/v1/messages",
+        data=json.dumps(payload).encode(),
+        method="POST",
+        headers={
+            "x-api-key": API_KEY,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        },
+    )
     try:
-        with httpx.Client(timeout=300) as client:
-            resp = client.post(
-                f"{BASE_URL}/v1/messages",
-                headers={
-                    "x-api-key": API_KEY,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                },
-                json={
-                    "model": model,
-                    "max_tokens": 16000,
-                    "messages": [
-                        {"role": "user", "content": prompt},
-                    ],
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            blocks = data.get("content", [])
-            for block in blocks:
-                if block.get("type") == "text":
-                    return block["text"]
-            return "[no text in response]"
-    except httpx.HTTPError as e:
-        return f"[DeepSeek API error: {e}]"
+        with urllib.request.urlopen(req, timeout=300) as resp:
+            data = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        return f"[DeepSeek API error: {e.code} {e.reason}]"
     except Exception as e:
         return f"[DeepSeek error: {e}]"
+
+    for block in data.get("content", []):
+        if block.get("type") == "text":
+            return block["text"]
+    return "[no text in response]"
 
 
 if __name__ == "__main__":

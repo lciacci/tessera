@@ -17,7 +17,16 @@ import os
 import sys
 import urllib.parse
 import webbrowser
-import httpx
+import base64
+import json
+import urllib.error
+import urllib.parse
+import urllib.request
+
+# STDLIB ONLY — enforced by doccheck `bin-scripts-are-stdlib-only`. This imported `httpx`,
+# which is installed nowhere, so it had never run. See bin/deepseek for the full account.
+# NOTE: this script is UNREFERENCED by anything in the repo and is a prune candidate
+# (ADR-0007). It was ported rather than deleted so the decision stays yours.
 
 CLIENT_ID = os.environ.get("REDDIT_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("REDDIT_CLIENT_SECRET", "")
@@ -73,17 +82,29 @@ except Exception:
 # Step 3: Exchange code for refresh token
 print("\n  Exchanging authorization code for refresh token...")
 try:
-    resp = httpx.post(
+    body = urllib.parse.urlencode({
+        "grant_type": "authorization_code", "code": code, "redirect_uri": REDIRECT_URI,
+    }).encode()
+    basic = base64.b64encode(f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode()
+    req = urllib.request.Request(
         "https://www.reddit.com/api/v1/access_token",
-        auth=(CLIENT_ID, CLIENT_SECRET),
-        data={"grant_type": "authorization_code", "code": code, "redirect_uri": REDIRECT_URI},
-        timeout=15,
+        data=body,
+        method="POST",
+        headers={
+            "Authorization": f"Basic {basic}",
+            "Content-Type": "application/x-www-form-urlencoded",
+            # Reddit 429s the default `Python-urllib/x.y` agent. httpx sent its own; urllib
+            # does not. Omitting this would trade a ModuleNotFoundError for a rate-limit.
+            "User-Agent": "tessera-reddit-auth/1.0",
+        },
     )
-    if resp.status_code != 200:
-        print(f"\n  ERROR: Token exchange failed: {resp.text[:300]}")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        print(f"\n  ERROR: Token exchange failed: {e.code} {e.read()[:300]}")
         sys.exit(1)
 
-    data = resp.json()
     refresh_token = data.get("refresh_token", "")
     if not refresh_token:
         print(f"\n  ERROR: No refresh token in response: {data}")

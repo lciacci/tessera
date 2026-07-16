@@ -6,6 +6,222 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
+## Handoff — 2026-07-13 (FOCUS-004 / the skill audit, and what it actually found)
+
+**`docs/adr/0007-skill-corpus-prune.md` (Proposed) is the record. Read it before touching skills.**
+Per-skill ledger with evidence: `_project_specs/todos/focus-004-audit.md`.
+
+### The audit did its job, but the findings were NOT in the skills
+
+- **6 skill invocations from the 56-skill corpus, ever** (171 transcripts, 34,636 events) — all
+  `code-review`. The other 4 invocations machine-wide are skills *Anthropic ships*. **The
+  inherited corpus has contributed exactly one skill, ever.** 22 skills declare `paths:` globs
+  that match 0 files here and cannot fire.
+- **Two byte-identical registries both load** (`tessera/skills/` + `~/.claude/skills/`), so every
+  skill is listed twice. **Tessera is the only project with a local skills dir**; all 20+ others
+  use the global one — which means *cutting `tessera/skills/` would not reduce Tessera's context
+  at all.*
+
+### What was actually broken — and it was NOT skill debt
+
+1. **`bin/validate-plan` manufactured verdicts out of its own brokenness.** FIXED (`7a725f7`).
+   It returned a confident `CHANGES_NEEDED 0/3` because a **missing backend was counted as a
+   reviewer voting NO**. Three states now: voted / unavailable / **broken**. Zero usable
+   reviewers → **exit 2, no verdict**. `scripts/test_council.py`.
+2. **The entire multi-model stack had never run.** FIXED (`ec041d3`). Five `bin/` scripts
+   `import httpx`; **httpx is installed nowhere**. `build-in-public-status` would not even
+   *compile*. Ported to stdlib `urllib`.
+3. **The F-001 detector was a blacklist** — `{mnemos, icpg, polyphony, skill_lint, pytest, yaml,
+   requests}`. `httpx` simply was not on it. New check `bin-scripts-are-stdlib-only` names
+   nothing and tests by execution: *every module `bin/` imports must be findable by the
+   interpreter it actually runs on.* **15 doccheck checks.**
+
+### THE LESSON — and it cost three wrong conclusions
+
+> **I audited whether files sat at the paths the docs claimed, and never once RAN the thing I was
+> condemning.** `~/bin/deepseek` was absent, so I called the subsystem dead. It meant the *path*
+> was wrong — `deepseek` was on PATH the whole time. **That is F-001's exact confusion:
+> `unreachable` misread as `unused`,** which `CLAUDE.md` warns about in those words. Then I said
+> "the stack works" because `command -v` found the files — **existence is not function.**
+>
+> **Every correction came from outside me:** the spec-12 adversary refuted 2 of 4 claims; Lorenzo
+> caught the deletion momentum ("what are we short-shrifting?") and stopped me deleting a
+> subsystem over a path typo; the *real run* caught a half-fix the tests called green.
+> **`tessera-verify stats`: author error rate 38%.**
+
+### ⚠️ THE AUDIT WAS NOT RUN. What ran was a reachability sweep.
+
+**Caught by Lorenzo at the end of the session** — *"rather than reading through the skills there
+was a leap to unnecessary and deletion."* **Correct, and it is the same error a fourth time.**
+
+~31 of the 56 verdicts were reached **without reading the skill's body**, on two signals: *its
+`paths:` can't match in Tessera* and *it was never invoked*. **Neither judges the skill.** Both
+measure **reachability**. Those verdicts are **VOID** (ADR-0007, "The third correction").
+
+- **The invocation argument is circular:** there are **6 invocations machine-wide across ALL
+  skills, including Anthropic's own.** That indicts the *discovery mechanism*, not any skill.
+- **The frame was wrong:** these live in the **global** `~/.claude/skills/`, serving **20+ repos**.
+  **`flutter` SHOULD be inert in Tessera.** That says nothing about its worth to the Flutter repos.
+- **So the `paths:`-match scan is the WRONG next step** — more reachability evidence for a
+  question reachability cannot answer. **It was previously listed here as item 2. It is not.**
+
+**And this restores the compaction premise.** I declared it falsified ("the audit didn't need the
+205k read") — but only because I'd swapped a cheap proxy for the real judgment. **The real content
+audit IS read-heavy, exactly as the spec said. FOCUS-004 is still the P3 compaction vehicle.**
+
+**AND THE FLOOR OF IT: USAGE IS NOT EVIDENCE — not a CUT, not even a DEFER.** An earlier draft
+said "never fires → DEFER". That still smuggled the signal in; **DEFER is suspicion, and suspicion
+is a verdict.** Zero usage carries **zero information**, because the audit *already found what
+fully explains it*: **`tessera-new-project` ships ZERO skills** (no delivery path downstream) and
+**6 invocations machine-wide across every skill including Anthropic's own** (discovery barely
+works). *Once a cause fully explains an observation, the observation is not evidence for anything
+else.* The audit wrote both causes down and spent the number anyway.
+
+**It is the same argument that saved the multi-model stack an hour earlier** — *never ran,
+directional, framework hasn't got there yet, KEEP*. Accepted for `bin/`, refused for `skills/`.
+**That is not a principle, it is a mood.**
+
+> **The 6-invocation finding indicts the FRAMEWORK's distribution and discovery — not the skills.
+> It was the audit's headline and it was aimed at the wrong target.**
+
+**The rubric is in `_project_specs/todos/focus-004-audit.md`.** Only *is it true / is it superseded
+/ is the guidance good* can CUT. A fourth question — *is it on the path we are building?* — can
+only **KEEP**. **If a future session reaches for an invocation count to justify a cut, that is
+drift. Challenge it.**
+
+### Where to pick up
+
+0. ~~**RUN THE ACTUAL AUDIT.**~~ **DONE (2026-07-14).** All 56 bodies read in the main thread, judged
+   on the 5 admissible questions only. **Record: `focus-004-audit.md` → "═══ FINAL TALLY — REAL AUDIT ═══".**
+   Headline: it **near-inverts the void table** — ~44 keep-in-some-form, **10 removals**, every one on
+   stale/superseded/foreign-product/vendor-manual grounds, **zero on reachability**. Three verdicts flipped
+   from reading current state (council-review CUT→FIX, iterative-development CUT→KEEP, cpg-analysis CUT→KEEP).
+   **The real finding stands and is now content-confirmed:** the corpus is mostly *good, current,
+   downstream-applicable* — but undeliverable, because `bin/tessera-new-project` ships **zero** skills.
+---
+
+## ═══ FOCUS-004 EXECUTION STATUS + POSTURE (2026-07-15) — read this to resume ═══
+
+**Record of decisions:** ADR-0008 (supersedes 0007). **Per-skill ledger + harvest manifest:**
+`focus-004-audit.md` → "REAL AUDIT" + "FINAL TALLY". **Verdict: keep 46, remove 10** (all removals
+on stale/superseded/foreign-product grounds — **never** on reachability).
+
+### The working method (agreed with Lorenzo 2026-07-15)
+
+The 56-body audit already answered *"is each skill good"* (in the ledger). What execution adds is the
+**forward-posture pass** — every destructive item resolves to ONE of three, and **the design note is
+written BEFORE the cut, not after**:
+
+1. **CUT CLEAN** — genuinely don't need the capability. *(e.g. `ai-models` — native `claude-api` covers it.)*
+2. **ROLL OUR OWN → write the design-note/spec stub FIRST, then cut.** We want the capability, this
+   version is wrong. *(e.g. `agent-teams`' step-enforcement → capture as Stop-hook kin before deleting;
+   `code-review` multi-engine → conclave note before the bulk goes.)*
+3. **LOG TO OBSERVATORY** — might want it later, not now. *(e.g. `autonomous-testing`'s pipeline shape.)*
+
+This is *harvest-before-cut* **plus** *replacement-posture-before-cut*. It is the antidote to "cut
+something we need in two months."
+
+### Buckets (by risk, not by phase)
+
+- **Mechanical, zero corpus risk (do anytime):** the FIXes + the *safe half* of D.
+- **Low-stakes judgment (nothing leaves the corpus):** TRIM `base`/`python`/`icpg`, ADAPT `security`,
+  MERGE `ui-testing` → decide *what within* survives; wrong = re-add, not lost.
+- **Judgment-heavy, forward-posture protocol, don't rush:** the harvests + the 10 removals (A/B).
+- **Design sessions (need Lorenzo):** delivery mechanism, skill instrumentation, Tessera↔conclave.
+
+### DONE
+
+- ✅ Audit + ADR-0008 + `adr-gate` split (#8) + `supabase-python` glob FIX → **PR #4** (10 commits).
+- ✅ **FIX `council-review`** (2026-07-15): paths `~/bin/`→`bin/`; dropped the Maggy-dashboard ref;
+  flagged the design-blocked parts (absent `council.yaml`, no `claude-fable-5` wrapper, `codex` absent)
+  as *illustrative pending the conclave design* — **not rewritten** (conclave session reshapes it).
+- ✅ **FIX `code-graph`** (2026-07-15): corrected the config claims — backend is live (MCP tools exposed)
+  but configured **globally**, not via a committed `.mcp.json`; `install-graph-tools.sh` absent.
+
+### DEFERRED / NEEDS-DESIGN — and WHY (this is the "don't lose it" part)
+
+- ⏸ **D · de-dup the skill registry → BLOCKED on the delivery-source decision (E).** The two copies
+  (`tessera/skills/` 57, global `~/.claude/skills/` 56) **have now DIVERGED** — this session added
+  `adr-gate` + FIXes to the tessera copy only. So de-dup is no longer "delete the identical copy"; it
+  *is* the question "which registry is authoritative for downstream delivery." **Do not delete either
+  until delivery is designed.** → Observatory: "Skill registry — which copy is source-of-truth."
+- 🎨 **D · the `skill-declared-backends-exist` doccheck check → NEEDS DESIGN, do not implement naively.**
+  A literal "every binary a skill names must exist here" check **re-commits the exact reachability error
+  the audit was about** — it would flag every downstream stack skill (`vercel`, `gh`, `supabase`…). The
+  *correct* check lints the **fail-open PATTERN** (imperative "do not skip / mandatory / 0-of-3 → revise"
+  gating language tied to an external backend), repo-local, no binary-existence. That's a design task.
+  → Observatory: "Fail-open skill lint (the check council-review earns)."
+
+### NEXT (in order)
+
+1. **Low-stakes judgment bucket** — TRIM/ADAPT/MERGE (safe, nothing leaves).
+2. **Harvests** (fossils→design-doc, `ai-models` pointers, `build-in-public`→plugin, vendor→conclave note)
+   via the posture protocol.
+3. **Then the 10 removals** — each already has its posture in the ledger's harvest manifest.
+4. **Build the delivery path** — `bin/tessera-new-project` ships the KEEP set, profile-gated. **The fix
+   the whole audit points at, and the gate on de-dup.** *(Design session — needs Lorenzo.)*
+
+*(The numbered items below predate ADR-0008. **Superseded/done:** old #2 paths-scan (the content audit
+replaced it), old #3 "22 authorized cuts" (audit says keep most), old #5 supabase-python (FIXed).
+**Still live:** old #1 conclave = E above; old #4 `bin/kimi` broken.)*
+
+---
+
+## ═══ MNEMOS TRIAL — side-mission result (2026-07-15) ═══
+
+**This FOCUS-004 session was deliberately run long (side mission) to overfill context and test Mnemos's
+compaction-recovery. RESULT: auto-compaction did NOT fire — a ~200k-token overfill produced zero
+Mnemos-visible `compaction_fired` events dated this session.** Full finding + hypothesis + next-session
+checks: **`docs/observatory.md` → "Mnemos compaction vehicle — does Claude Code auto-`/compact` even
+happen in this harness?"**
+
+- **Likely cause:** this harness manages context via its *own summarization* (system-prompt-stated), a
+  different mechanism from Claude Code `/compact` — the only thing Mnemos's PreCompact hook instruments.
+  So Mnemos may be watching a door this harness never opens. **Filling more won't help** — we already
+  massively overfilled.
+- **Second gap:** `fatigue.json` is all `None` — fatigue runs *degraded*, not dark. The statusline isn't
+  writing token metrics, so the token-util dimension (0.40 weight) is blind; the behavioral dims still
+  compute (a forced checkpoint scored **0.29**). Narrow fix: the statusline→`fatigue.json` token write.
+- **What worked:** SessionStart restore (loaded at startup) + Stop-hook checkpoint (`941b43b7` today).
+  Resume-across-*sessions* works; recovery-across-*compaction* stays untested (trigger never occurred).
+- **NEXT SESSION — pick up:** (1) confirm whether this harness ever invokes `/compact`, or point Mnemos
+  at the signal that *does* fire (or evaluate the recovery layer on a real Claude Code CLI session);
+  (2) fix why `fatigue.json` isn't being written; (3) P3 consequence — if auto-compaction can't fire
+  here structurally, the compaction-half of the Mnemos verdict needs a different venue.
+
+---
+
+## Housekeeping — deferred to next session (2026-07-15, context too full to do now)
+
+- **P7 gate-labels: ~45 unlabeled post-backstop gates.** `tessera-watch` flags it (≥20 threshold).
+  Byproduct of a heavy-decision session (9 gates logged). The friction-journal review that tunes the
+  #17 backstop precision — label each `should_fire` true/false (genuine gate vs noise). Distinct
+  maintenance pass; nothing else depends on it. Resolve or snooze via the dashboard / observatory.
+
+1. **The Tessera ↔ conclave design session.** *(ADR-0007, "NOT decided".)* The stack is a
+   **directional keep** — more local models coming, Tailscale + AWS-hosted, **council/ensemble
+   review is the path**. conclave is itself a multi-model stack. Shared council / isolated /
+   one fronts the other = **ADR-weight, and deliberately not decided in a prune ADR.**
+   *Now unblocked: the stack RUNS and FAILS HONESTLY, so this can be designed against a working
+   mechanism instead of a phantom.*
+2. **The `paths:`-match scan across all 20 repos.** The measurement that decides the **22
+   deferred stack skills** (`flutter`, `supabase*`, `react-*`, `android-*`, …). They are dead
+   *in Tessera* and **unmeasured elsewhere** — an invocation count is structurally blind to a
+   `paths:` auto-load. **Cutting them without this scan is drift; challenge it.**
+3. **Execute the 22 authorized cuts** — the Maggy corpses and stale/superseded skills. Safe,
+   mechanical, evidence in the ledger.
+4. **`bin/kimi` is broken** — it `exec`s `~/.local/bin/kimi`, which does not exist. Recorded,
+   not fixed; it matters to item 1.
+5. **`supabase-python` is misfiring** — its `**/*.py` glob matches 123 Python files here. It
+   surfaced itself, live, during this very session when a `.py` file was written.
+
+### What NOT to do
+
+**Do not cut the multi-model stack.** It was condemned in the first draft of ADR-0007 and that was
+wrong. It is kept on purpose. **Do not re-litigate it without the design session.**
+
+---
+
 ## Handoff — pick up here (2026-07-12, end of the F-001 session)
 
 **Full accounting: `docs/postmortem-2026-07-12.md`.** One document, the whole story — what
