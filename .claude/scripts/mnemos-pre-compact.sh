@@ -75,15 +75,31 @@ ts = time.time()
 # 'manual' = a hand-run /compact, i.e. a TEST of that layer. Never let a test count
 # as evidence: P3 (the Mnemos trial verdict) must only ever see real compactions.
 trigger = 'unknown'
+raw = os.environ.get('HOOK_INPUT') or ''
 try:
-    trigger = json.loads(os.environ.get('HOOK_INPUT') or '{}').get('trigger') or 'unknown'
+    trigger = json.loads(raw or '{}').get('trigger') or 'unknown'
 except ValueError:
     pass
+
+# When trigger is 'unknown' the classifier ran but the payload carried no `.trigger`.
+# We cannot tell WHY without seeing what the harness actually sends — is stdin empty,
+# or a payload with no trigger field? Capture a truncated, key-only fingerprint of the
+# raw payload so the NEXT unknown event answers that, instead of staying a mystery.
+# (This harness summarizes context itself and fires PreCompact with no Claude-Code
+# {trigger}; an 'auto' event has never been observed here — see docs/observatory.md.)
+payload_probe = {'len': len(raw)}
+try:
+    payload_probe['keys'] = sorted(json.loads(raw or '{}').keys())
+except ValueError:
+    payload_probe['keys'] = 'not-json'
 
 with open('.mnemos/just-compacted', 'w') as f:
     json.dump({'timestamp': ts, 'reason': 'pre_compact_hook', 'trigger': trigger}, f)
 with open('.mnemos/compaction-log.jsonl', 'a') as f:
-    f.write(json.dumps({'ts': ts, 'event': 'compaction_fired', 'trigger': trigger}) + '\n')
+    event = {'ts': ts, 'event': 'compaction_fired', 'trigger': trigger}
+    if trigger == 'unknown':
+        event['payload_probe'] = payload_probe  # diagnostic only; P3 ignores unknowns
+    f.write(json.dumps(event) + '\n')
 "
 
 # ─── 3. Build inline checkpoint content for summarizer ───

@@ -601,6 +601,29 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   1. **Confirm the mechanism.** Does this harness ever invoke Claude Code `/compact` (→ PreCompact hook), or only its own summarization? If the latter, either (a) point Mnemos at whatever signal *does* fire, or (b) accept the compaction-recovery layer is un-exercisable here and evaluate it on a real Claude Code CLI session instead.
   2. **Fix `fatigue.json`.** Find why the statusline isn't writing token metrics; without it the fatigue model and auto-checkpoint are dead.
   3. **Consequence for P3.** If auto-compaction structurally cannot fire in this harness, P3's counter can never move here — the Mnemos keep/kill verdict for the *compaction* half needs a different venue or a different question.
+- **UPDATE 2026-07-16 — both gaps re-checked; the picture is clearer and partly better.**
+  - **Fatigue is LIVE, not degraded — gap (2) is closed, and needed no code fix.** `.mnemos/fatigue.json`
+    today carries real token metrics (`used_percentage: 27`, `source: statusline`), and `mnemos fatigue`
+    computes **all four** dimensions: token-utilization **0.27** (weight 0.40, no longer blind), composite
+    **0.11 FLOW**. The 07-15 "all `None`" reading was **transient** — the statusline *does* write token metrics;
+    that session simply never received the statusline JSON. So the narrow fix contemplated above is unnecessary;
+    the fatigue half of the trial is **working and judgeable here**.
+  - **Compaction DOES fire in this harness — but on a path that carries no `trigger`.** Re-reading the log:
+    the 2026-07-12 event tagged `trigger: unknown` was a **non-manual** PreCompact firing (a `restore_injected`
+    followed 23 s later). So the recovery layer *is* exercised here — the 07-15 "did not fire / watching a door
+    this harness never opens" was too strong. The refinement: the harness fires PreCompact **without a Claude Code
+    `{trigger}` payload** (the 07-11 `manual` `/compact` captured its trigger fine; the harness-summarization path
+    sends none → `unknown`). An `auto` (context-full) event has **still never** been observed.
+  - **Instrumented (2026-07-16).** `mnemos-pre-compact.sh` now records a **key-only** `payload_probe`
+    (`len` + JSON `keys`, no content/secrets) alongside every `unknown` `compaction_fired`, so the *next* such
+    event answers the remaining unknown: does the harness send an empty stdin, or a payload with no `trigger` key?
+    Diagnostic only — P3 already ignores `unknown` events, so this cannot contaminate the verdict.
+  - **DECISION (Lorenzo, 2026-07-16): the compaction-recovery verdict moves to a real Claude Code CLI venue;
+    the fatigue verdict stays here.** P3 will not reach ≥3 *real* (`auto`) events in this harness — 0 ever, and a
+    ~200k overfill produced none — so the compaction half is **structurally un-completable here**. Counting
+    `unknown` events as evidence was **rejected**: it measures the harness's self-summarization recovery, not
+    `/compact` recovery — the P2 anti-pattern (a predicate on a proxy that tracks no real pain), which P3 already
+    guards against. Instrument now; if the probe shows the harness sends nothing usable, the CLI is the only venue.
 
 ## Closing notes
 
