@@ -1,7 +1,59 @@
 # 13 — Friction-detector upgrade (Mnemos correction recall)
 
-**Status:** Scoped, not built (2026-07-16). Build in a fresh session.
+**Status:** Phase 1 BUILT + backtested (2026-07-17). Phases 2/3 deferred.
 **Motivation:** `docs/observatory.md` → "Haziness's correction-detector has near-zero recall".
+
+---
+
+## Phase 1 — BUILT (2026-07-17)
+
+**Result:** correction recall un-blinded. The heavy-redirection session `b6d7b6f5` went
+`correction_density 0.000 → 0.219` (matches a 27-turn hand-labeled truth of 0.188); a clean
+session (`b4344aae`, 372 turns) stays `0.000`. Old detector scored *every* session 0.00–0.06
+(blind); new spread is 0.00–0.35 across the ~24 dogfood sessions. Backtest = acceptance, met.
+
+**What shipped:**
+- `scripts/mnemos/correction_detect.py` — `regex_match` (the old heuristic, now single-homed here)
+  + `classify`/`CorrectionDetector` (qwen classifier, recall-leaning prompt, wall-clock budget,
+  fail-open to regex). `scripts/model_routing.py:ollama_generate` — the missing Ollama POST
+  (with `think` support). `claude_log.py` runs the classifier over eligible user turns the regex
+  missed, at ingest. `--reclassify` CLI (+ `reclassify_session`) un-blinds history. `tessera-watch`
+  **P10** self-fires the deferred band re-tune. Unit tests mock the boundary; no network in CI.
+
+**Four things the build corrected in the original scope:**
+
+1. **Model: qwen3:8b, NOT the 3B tier-classify model.** The 3B model is useless here — it *parrots
+   whichever polarity the prompt ends on* (constant-yes on a recall prompt, constant-no on a tight
+   one; it never discriminates). qwen3:8b lands prec/rec ~0.5 and a density matching the human count.
+   **qwen3 is a reasoning model — it MUST run with `think=false`** or it spends the token budget on a
+   hidden `<think>` block and returns empty. Override via `MNEMOS_CORRECTION_MODEL`. Fails open to
+   regex if 8b is absent.
+
+2. **Injected user turns were being counted** (a correctness bug independent of the classifier).
+   Hook feedback (`isMeta: true`) and harness content like task-notifications
+   (`promptSource: 'system'`) ride on `role='user'` events but are not the human. They now emit as
+   `event_type='user-meta'`, excluded from BOTH the correction numerator and haziness's eligible
+   denominator (which already filters `event_type=='user'`). See `_is_injected_user`.
+
+3. **Latency/volume — was never a real problem.** (a) The Stop hook is `( … ) & disown` — ingest
+   is backgrounded, so it *never* blocks session exit whatever the classifier costs. (b) Ingest is
+   incremental (`last_line_offset`), so a live Stop classifies only the new turns since last Stop —
+   a handful, not 900. (c) Even a full historical backfill is cheap: `--reclassify --all` over ~26
+   sessions ran in **81s**; the single heaviest (1141 turns) in **~5s**. No pre-filter-for-speed,
+   no batching, no cap needed — the incremental delta *is* the cap. (A pre-filter WAS added, but for
+   *correctness*: a user turn can only correct an action that already happened, so eligibility
+   requires a prior agent turn.)
+
+4. **Precision is ~0.5, and that gates the band re-tune.** The classifier catches ~half the real
+   corrections and ~half its positives are wrong (on the one labeled session). Recall-first (spec's
+   stance) tolerates the false positives; the density still tracks truth in aggregate. But it is too
+   noisy to re-tune haziness thresholds on yet — hence P10 fires a *precision spot-check first*, not
+   an immediate re-tune.
+
+**Deferred with a self-firing trigger (not a note):** the haziness band re-look. `tessera-watch`
+**P10 haze-recalib** fires when ≥40 sessions carry real correction signal (24 at backfill → ~16
+sessions of runway). At fire: spot-check detector precision on a fresh sample, THEN decide the bands
+(clear/cloudy/hazy/lost at 0.25/0.50/0.75) and correction_density's 0.30 weight.
 
 ## The problem
 

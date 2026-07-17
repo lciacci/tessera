@@ -15,11 +15,11 @@ The source JSONL remains the source of truth for `mnemos haze --explain`.
 from __future__ import annotations
 
 import json
-import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .correction_detect import make_detector, regex_match
 from .redact import redact
 
 
@@ -32,21 +32,6 @@ def _utc_now_iso() -> str:
 _INGESTED_TYPES = {
     'user', 'assistant', 'system', 'permission-mode', 'file-history-snapshot'
 }
-
-_CORRECTION_LEAD_RE = re.compile(
-    r"^\s*(no|wait|stop|actually|undo|revert|rollback|wrong|don'?t)\b",
-    re.IGNORECASE,
-)
-# Mid-turn correction markers, checked ONLY in the first chars of the turn:
-# real corrections front-load the objection, content references ("the Don't
-# Hardcode section", "do X instead of Y" as a fresh instruction) sit
-# mid-sentence and must not match. 'don't' lives in LEAD only — too common as
-# plain content to match anywhere in the turn.
-_CORRECTION_PHRASE_RE = re.compile(
-    r"\b(not that|instead)\b",
-    re.IGNORECASE,
-)
-_CORRECTION_PHRASE_WINDOW = 60
 
 _DISABLED_SENTINEL = 'claude-log.disabled'
 
@@ -68,9 +53,10 @@ def ingest_all(store, projects_root: Path | None = None) -> dict:
     sessions = 0
     turns = 0
     skipped = 0
+    detector = make_detector()  # one shared wall-clock budget for the whole walk
     for session_file in sorted(projects_root.glob('*/*.jsonl')):
         files += 1
-        result = ingest_session(store, session_file)
+        result = ingest_session(store, session_file, classifier=detector)
         if result.get('skipped'):
             skipped += 1
             continue
@@ -84,12 +70,16 @@ def ingest_all(store, projects_root: Path | None = None) -> dict:
 
 
 def ingest_session(
-    store, transcript_path: Path | str, *, redact_text: bool = True
+    store, transcript_path: Path | str, *, redact_text: bool = True,
+    classifier=None,
 ) -> dict:
     """Idempotent ingest of one JSONL transcript.
 
     Returns {session_id, turns, new_session, skipped?}.
+    `classifier` is a CorrectionDetector; None builds a fresh one (Ollama-gated).
     """
+    if classifier is None:
+        classifier = make_detector()
     path = Path(transcript_path).expanduser().resolve()
     if not path.exists():
         return {'session_id': None, 'turns': 0, 'new_session': False,
@@ -137,7 +127,7 @@ def ingest_session(
         conn.commit()
 
     # Scan from start_offset; each line yields zero-or-more turn rows.
-    rows, stats = _scan(path, session_id, start_offset, redact_text)
+    rows, stats = _scan(path, session_id, start_offset, redact_text, classifier)
 
     if not rows and stats['lines_read'] == 0:
         return {'session_id': session_id, 'turns': 0,
@@ -192,6 +182,37 @@ def ingest_session(
             'new_session': new_session}
 
 
+def reclassify_session(store, session_id: str, *, detector=None) -> dict:
+    """Wipe a session's turns and re-ingest from offset 0 with the classifier
+    forced on. The un-blinding pass behind --reclassify and the backtest —
+    needed because ingest is incremental, so old turns keep their old (regex)
+    verdict until wiped."""
+    with store._conn() as conn:
+        row = conn.execute(
+            'SELECT source_path FROM claude_sessions WHERE id = ?',
+            (session_id,),
+        ).fetchone()
+        if row is None or not row['source_path']:
+            return {'session_id': session_id, 'turns': 0,
+                    'skipped': True, 'reason': 'unknown'}
+        source_path = row['source_path']
+        # Never wipe turns we can't re-ingest — a stale source_path would
+        # otherwise leave the session empty (data loss).
+        if not Path(source_path).expanduser().exists():
+            return {'session_id': session_id, 'turns': 0,
+                    'skipped': True, 'reason': 'source-missing'}
+        conn.execute('BEGIN IMMEDIATE')
+        conn.execute('DELETE FROM claude_turns WHERE session_id = ?',
+                     (session_id,))
+        conn.execute(
+            'UPDATE claude_sessions SET last_line_offset = 0, turn_count = 0, '
+            'tokens_in = 0, tokens_out = 0 WHERE id = ?', (session_id,))
+        conn.commit()
+    if detector is None:
+        detector = make_detector(force=True)
+    return ingest_session(store, source_path, classifier=detector)
+
+
 # --- internal helpers ---------------------------------------------------
 
 
@@ -236,6 +257,7 @@ def _peek_session_meta(path: Path) -> dict | None:
 
 def _scan(
     path: Path, session_id: str, start_offset: int, redact_text: bool,
+    detector=None,
 ) -> tuple[list[dict], dict]:
     rows: list[dict] = []
     lines_read = 0
@@ -243,6 +265,8 @@ def _scan(
     tokens_out = 0
     model: str | None = None
     last_ts: str | None = None
+    # A user turn can only *correct* an action once one has happened.
+    saw_agent_action = False
 
     with path.open('r', encoding='utf-8', errors='replace') as f:
         for line_no, raw in enumerate(f):
@@ -275,16 +299,28 @@ def _scan(
 
             for block_row in _emit_rows(
                 ev, line_no, session_id, ts, redact_text,
+                detector, saw_agent_action,
             ):
                 rows.append(block_row)
+            if ev_type == 'assistant':
+                saw_agent_action = True
 
     stats = {'lines_read': lines_read, 'tokens_in': tokens_in,
              'tokens_out': tokens_out, 'model': model, 'last_ts': last_ts}
     return rows, stats
 
 
+def _is_injected_user(ev: dict) -> bool:
+    """A user-role event that is NOT a human-typed prompt — hook feedback
+    (`isMeta`) or harness-injected content like task-notifications
+    (`promptSource == 'system'`). These must never count as the user
+    correcting the agent."""
+    return bool(ev.get('isMeta')) or ev.get('promptSource') == 'system'
+
+
 def _emit_rows(
     ev: dict, line_no: int, session_id: str, ts: str, redact_text: bool,
+    detector=None, eligible: bool = False,
 ) -> list[dict]:
     ev_type = ev['type']
     msg = ev.get('message') or {}
@@ -305,6 +341,13 @@ def _emit_rows(
         )]
 
     # User / assistant: walk content blocks. Emit one row per block.
+    # Injected user turns (hook feedback, task-notifications) are tagged
+    # 'user-meta' so haziness's `event_type == 'user'` filter drops them from
+    # the correction denominator — they are not the human.
+    injected = role == 'user' and _is_injected_user(ev)
+    is_human = role == 'user' and not injected
+    text_ev_type = 'user-meta' if injected else ev_type
+
     blocks = _as_blocks(content)
     out: list[dict] = []
     for block_idx, block in enumerate(blocks):
@@ -313,9 +356,15 @@ def _emit_rows(
 
         if btype == 'text':
             text = block.get('text') or ''
-            preview, match = _preview(text, redact_text, is_user=(role == 'user'))
+            preview, match = _preview(text, redact_text, is_user=is_human)
+            # Recall net: only spend a qwen call on eligible human turns the
+            # regex missed. Fail-open — a null verdict leaves match untouched.
+            if is_human and match == 0 and eligible and detector is not None:
+                cleaned = redact(text)[0] if redact_text else text
+                if cleaned and detector.qwen_says_correction(cleaned):
+                    match = 1
             out.append(_make_row(
-                session_id, idx, uuid, parent_uuid, role, ev_type,
+                session_id, idx, uuid, parent_uuid, role, text_ev_type,
                 None, None, None, 0, preview, match, ts,
             ))
         elif btype == 'tool_use':
@@ -404,12 +453,7 @@ def _preview(
         return None, 0
     cleaned = text if not redact_text else redact(text)[0]
     preview = cleaned[:200]
-    match = 0
-    if is_user and len(cleaned) < 500:
-        if _CORRECTION_LEAD_RE.match(cleaned) or _CORRECTION_PHRASE_RE.search(
-            cleaned[:_CORRECTION_PHRASE_WINDOW]
-        ):
-            match = 1
+    match = regex_match(cleaned) if is_user else 0
     return preview, match
 
 

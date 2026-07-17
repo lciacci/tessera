@@ -9,7 +9,8 @@ from pathlib import Path
 
 from . import __version__
 from .checkpoint import load_checkpoint, write_checkpoint
-from .claude_log import ingest_all, ingest_session
+from .claude_log import ingest_all, ingest_session, reclassify_session
+from .correction_detect import make_detector
 from .consolidation import micro_consolidate
 from .fatigue import compute_fatigue, read_fatigue_file
 from .haziness import WEIGHTS, band, compute_haze, dominant_dim
@@ -101,6 +102,11 @@ def main(argv: list[str] | None = None) -> int:
     p_ic.add_argument(
         '--no-redact', action='store_true',
         help='Disable secret redaction (not recommended)',
+    )
+    p_ic.add_argument(
+        '--reclassify', action='store_true',
+        help='Wipe + re-ingest target sessions with the qwen correction '
+             'classifier forced on (un-blinds historical correction_match)',
     )
 
     # --- haze ---
@@ -417,11 +423,49 @@ def cmd_bridge_icpg(store: MnemosStore, args) -> int:
     return 0
 
 
+def _reclassify_targets(store, args) -> list[str]:
+    """Full session ids to reclassify: one --session (id or prefix), or all."""
+    session = getattr(args, 'session', None)
+    with store._conn() as conn:
+        if session:
+            rows = conn.execute(
+                "SELECT id FROM claude_sessions WHERE id LIKE ?",
+                (session + '%',)).fetchall()
+            return [r['id'] for r in rows]  # empty if no match; caller reports
+        if getattr(args, 'all', False):
+            return [r['id'] for r in conn.execute(
+                'SELECT id FROM claude_sessions').fetchall()]
+    return []
+
+
+def _cmd_reclassify(store: MnemosStore, args) -> int:
+    if not store.exists():
+        print('No mnemos db. Run `mnemos ingest-claude --all` first.')
+        return 1
+    targets = _reclassify_targets(store, args)
+    if not targets:
+        print('Provide --session <id> or --all with --reclassify')
+        return 1
+    detector = make_detector(force=True)  # one shared budget across the run
+    for sid in targets:
+        r = reclassify_session(store, sid, detector=detector)
+        if r.get('skipped'):
+            print(f'Session {sid[:8]}: skipped ({r.get("reason")})')
+            continue
+        haze = compute_haze(store, r['session_id'])
+        print(f'Session {sid[:8]}: reclassified +{r["turns"]} turns  '
+              f'correction_density={haze["correction_density"]:.3f}')
+    return 0
+
+
 def cmd_ingest_claude(store: MnemosStore, args) -> int:
     if not store.exists():
         store.init_db()
     else:
         store.ensure_schema()  # migrate pre-feature dbs to add claude_* tables
+
+    if getattr(args, 'reclassify', False):
+        return _cmd_reclassify(store, args)
 
     redact_text = not getattr(args, 'no_redact', False)
     projects_root = getattr(args, 'projects_root', None)
