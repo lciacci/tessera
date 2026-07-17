@@ -667,6 +667,10 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   showing the review headroom is real and how big; (2) pr-arbiter Phase 3 + a stable conclave fleet;
   (3) the concrete interop shape (does Tessera call conclave's gateway directly; do `bin/` wrappers collapse
   into conclave calls; where does the router live). Until then: **noted here so it is not lost.**
+- **CANONICAL MAP (2026-07-17):** the cohesion contract is now authored — `docs/contracts/three-project-cohesion.md`
+  (layering / owns-must-not, seams with owners, sequence, the 4 anti-conflation guards, and Open decisions
+  D1–D4). It is a coordination map, **not** the ADR; the ADR above is still what firms it. This observatory
+  entry stays the live scratchpad; the contract is the source of truth for who-owns-what.
 
 ### Haziness's correction-detector has near-zero recall — it has been silently blind
 
