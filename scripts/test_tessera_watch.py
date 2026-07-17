@@ -211,3 +211,70 @@ def test_p3_counts_auto_and_pre_tagging_entries_as_real(tmp_path):
     )
     fired, note = tw.p3_compaction(tmp_path)
     assert "2 real" in note
+
+
+# ── snooze: G-a-earned ack that quiets a predicate for a bounded, auditable window ──
+import datetime as _dt
+from types import SimpleNamespace
+
+
+def test_active_snooze_labels_respects_expiry(tmp_path):
+    root = _root(tmp_path)
+    now = _dt.datetime(2026, 7, 16, tzinfo=_dt.timezone.utc)
+    tw._write_snoozes(root, {
+        "P7 gate-labels": {"until": (now + _dt.timedelta(days=5)).isoformat(), "reason": "x"},
+        "P1 hook-drift": {"until": (now - _dt.timedelta(days=1)).isoformat(), "reason": "old"},
+    })
+    active = tw.active_snooze_labels(root, now)
+    assert "P7 gate-labels" in active       # unexpired
+    assert "P1 hook-drift" not in active     # expired → resurfaces
+
+
+def test_resolve_label_unique_vs_ambiguous():
+    assert tw._resolve_label("P7") == "P7 gate-labels"
+    assert tw._resolve_label("nonexistent-xyz") is None
+
+
+def test_snoozed_fired_predicate_reads_as_not_firing():
+    results = [{"predicate": "P7 gate-labels", "fired": True, "snoozed": True,
+                "detail": "56 unlabeled", "snooze_until": "2026-08-15T00:00:00+00:00",
+                "snooze_reason": "dead backlog"}]
+    out = tw.render(results)
+    assert "💤" in out and "🔴" not in out
+    assert not any(r["fired"] and not r["snoozed"] for r in results)  # exit-0 condition
+
+
+def test_manage_snooze_sets_with_reason(tmp_path):
+    root = _root(tmp_path)
+    now = _dt.datetime(2026, 7, 16, tzinfo=_dt.timezone.utc)
+    args = SimpleNamespace(snooze="P7", days=30, reason="dead backlog", snooze_clear=None, snooze_list=False)
+    msg = tw.manage_snooze(root, args, now)
+    assert "P7 gate-labels" in msg and "P7 gate-labels" in tw._load_snoozes(root)
+
+
+def test_manage_snooze_refuses_without_reason(tmp_path):
+    root = _root(tmp_path)
+    args = SimpleNamespace(snooze="P7", days=30, reason="", snooze_clear=None, snooze_list=False)
+    msg = tw.manage_snooze(root, args, _dt.datetime(2026, 7, 16, tzinfo=_dt.timezone.utc))
+    assert "refus" in msg.lower() and tw._load_snoozes(root) == {}   # nothing written
+
+
+def test_manage_snooze_clear(tmp_path):
+    root = _root(tmp_path)
+    tw._write_snoozes(root, {"P7 gate-labels": {"until": "2026-08-15T00:00:00+00:00", "reason": "x"}})
+    args = SimpleNamespace(snooze=None, days=30, reason="", snooze_clear="P7", snooze_list=False)
+    msg = tw.manage_snooze(root, args, _dt.datetime(2026, 7, 16, tzinfo=_dt.timezone.utc))
+    assert "cleared" in msg and tw._load_snoozes(root) == {}
+
+
+def test_g_a_ignores_a_snoozed_predicate(tmp_path):
+    # G-a must not keep nagging about a predicate whose remedy (snooze) is already applied,
+    # even while the historical fire-log still shows it fired.
+    root = _root(tmp_path)
+    log = root / ".tessera" / "logs" / "watch.jsonl"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text("".join(json.dumps({"fired": ["P7 gate-labels"]}) + "\n" for _ in range(3)))
+    assert tw.g_a_consecutive(root)[0] is True   # fires without a snooze
+    future = (_dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(days=30)).isoformat()
+    tw._write_snoozes(root, {"P7 gate-labels": {"until": future, "reason": "acked"}})
+    assert tw.g_a_consecutive(root)[0] is False  # snooze = remedy applied → G-a quiets

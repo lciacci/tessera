@@ -1,0 +1,7 @@
+{
+  "P7 gate-labels": {
+    "reason": "backlog is dead data (52 unlabeled across 19 sessions won't be hand-labeled); real fix is passive detector upgrade, spec 13. Resurface if still unaddressed.",
+    "snoozed_at": "2026-07-17T01:43:12.908690+00:00",
+    "until": "2026-08-31T01:43:12.908690+00:00"
+  }
+}
