@@ -672,9 +672,11 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   D1–D4). It is a coordination map, **not** the ADR; the ADR above is still what firms it. This observatory
   entry stays the live scratchpad; the contract is the source of truth for who-owns-what.
 
-### Haziness's correction-detector has near-zero recall — it has been silently blind
+### Haziness's correction-detector has near-zero recall — it has been silently blind  ✅ RESOLVED (Phase 1, 2026-07-17 — see UPDATE at end)
 
-- **Status:** Finding, confirmed. Actionable (detector upgrade scoped separately).
+- **Status:** RESOLVED by spec 13 Phase 1 (#19). The body below is the original finding, kept for the
+  trail; the "Next" items are superseded by the UPDATE at the end of this entry. Detector is no longer
+  a keyword regex — a qwen3:8b classifier now un-blinds recall (regex retained as the fail-open fallback).
 - **Source:** 2026-07-16 session, while designing capture for gate-disposition (`should_fire`) and,
   more valuably, **action-divergence** friction ("did the agent do the opposite of what was asked").
   Before building anything new, checked what Mnemos *already* captures. It captures almost nothing.
