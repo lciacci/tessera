@@ -80,10 +80,16 @@ class CorrectionDetector:
     (or the classifier is disabled / Ollama is down) it stops calling qwen and
     the regex result stands — never worse than today."""
 
+    # Disable only after this many CONSECUTIVE nulls — one junk/unparseable
+    # answer or a single blip must not silently drop a whole --reclassify --all
+    # run to regex-only; a genuinely-down Ollama still trips it within seconds.
+    _MAX_CONSECUTIVE_FAILS = 3
+
     def __init__(self, *, generate, enabled: bool, budget_s: float = 180.0):
         self.generate = generate
         self.enabled = enabled
         self._deadline = time.monotonic() + budget_s if enabled else 0.0
+        self._fails = 0
 
     def qwen_says_correction(self, cleaned: str) -> bool:
         """True only on a confident yes within budget. Any failure → False, so
@@ -91,9 +97,12 @@ class CorrectionDetector:
         if not self.enabled or time.monotonic() > self._deadline:
             return False
         verdict = classify(cleaned, generate=self.generate)
-        if verdict is None:  # unreachable/junk once → assume down, stop trying
-            self.enabled = False
+        if verdict is None:  # unreachable or junk; tolerate a few, then give up
+            self._fails += 1
+            if self._fails >= self._MAX_CONSECUTIVE_FAILS:
+                self.enabled = False
             return False
+        self._fails = 0
         return verdict
 
 

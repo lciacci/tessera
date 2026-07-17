@@ -41,10 +41,20 @@ def _detector_behavior() -> None:
     d = CorrectionDetector(generate=_gen("no"), enabled=True)
     assert d.qwen_says_correction("ok, go ahead") is False
 
-    # Fail-open: model down → False (regex verdict stands) AND stop trying.
+    # Fail-open: model down → False (regex verdict stands). One blip is
+    # tolerated; only sustained failure disables (protects --reclassify --all).
     d = CorrectionDetector(generate=_gen(""), enabled=True)
     assert d.qwen_says_correction("whatever") is False
-    assert d.enabled is False
+    assert d.enabled is True                       # one failure tolerated
+    for _ in range(CorrectionDetector._MAX_CONSECUTIVE_FAILS):
+        d.qwen_says_correction("whatever")
+    assert d.enabled is False                      # sustained failure disables
+
+    # A success between failures resets the counter.
+    d = CorrectionDetector(generate=lambda p, **kw: "" , enabled=True)
+    d.qwen_says_correction("x"); d.qwen_says_correction("x")
+    d.generate = lambda p, **kw: "yes"
+    assert d.qwen_says_correction("x") is True and d.enabled is True
 
     # Disabled detector never calls the model.
     calls = []
