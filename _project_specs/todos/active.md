@@ -6,57 +6,69 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## ═══ SESSION 2026-07-16 — the delivery reframe shipped + MERGED ═══
+## ═══ SESSION 2026-07-16 — delivery reframe shipped, + a deep friction-instrumentation thread ═══
 
-**ALL MERGED to `main`. Suite green (163), doccheck 15/15. No branches in flight.**
+**ALL MERGED to `main` (12 PRs). Suite green, doccheck 16/16, `tessera-watch` quiet. No branches in flight.**
 
-- **#4 → MERGED** (`191a912`): the audit + ADR-0008 + adr-gate split + council/code-graph FIXes.
-- **#5 → MERGED** (`3a36bc4`): safe bucket — fossil harvests → `design-principles.md` ("Fossil
-  lineage"), `base` TRIM 532→122, `icpg` TRIM 327→246. Nothing left the corpus.
-- **#9 → MERGED** (`a2042e6`, *was #6* — auto-closed when #5's base branch was deleted, reopened):
-  **ADR-0009 + the scaffold build.**
-- **#7 → MERGED** (`b9d1440`): Mnemos trial sorted — instrument compaction, correct the record.
-- **#8 → MERGED** (`dc8af44`): `security` ADAPT — de-eager the OWASP skill, keep the secrets floor.
+### What shipped, by arc
 
-**ADR-0009 is the headline — it refines ADR-0008's mechanism.** Claude Code unions global + project
-skills, so every downstream *already sees every skill* — the corpus was never *undelivered*, it's
-*un-curated*. The fix is a **selector** (`skillOverrides` turning off-profile skills off), NOT a copier.
-`bin/tessera-new-project` writes a profile-gated `skillOverrides` block into the downstream
-`settings.json` (composable universal + stack-tags; map `templates/tessera/skill-profiles.json`;
-resolver `scripts/skill_overrides.py`). Adversarially verified end-to-end (47 off/9 on, base keys kept).
+**A. FOCUS-004 delivery (the headline).** #4 (audit + ADR-0008 + adr-gate), #5 (safe bucket: fossil
+harvests → `design-principles.md`, `base` 532→122, `icpg` 327→246), **#9** (*was #6*; ADR-0009 + scaffold).
+- **ADR-0009 refines ADR-0008's mechanism:** Claude Code unions global+project skills, so downstream
+  *already sees every skill* — never *undelivered*, just *un-curated*. Fix = a **selector**
+  (`skillOverrides` off per profile), NOT a copier. `bin/tessera-new-project` writes it from the
+  composable map `templates/tessera/skill-profiles.json` via `scripts/skill_overrides.py`. Verified
+  end-to-end (47 off/9 on). Reviewed; fail-loud + universal-inviolable hardening applied.
 
-**All 4 PRs were adversarially reviewed; findings fixed** (universal-inviolable guard, fail-loud config
-parsing, the non-object-payload probe crash, two stale skill pointers). No 🔴 survived.
+**B. Eager-load cleanup — DONE.** #8 (`security` ADAPT — de-eager OWASP, keep the secrets floor) + **#11**
+(`iterative-development` de-eager). **Eager set is now just `base` + `mnemos`** — the genuinely-universal,
+framework-native two. The full skills stay in the registry, on-demand, shipped downstream via curation.
+
+**C. Mnemos trial — SORTED.** #7. Fatigue is LIVE (token-util 0.27, not degraded — 07-15 all-None was
+transient). Compaction DOES fire here, but via the harness-summarization path with no `{trigger}` (→
+`unknown`); instrumented with a key-only `payload_probe`. **DECISION: compaction-recovery verdict → real
+Claude Code CLI venue** (P3 can't reach 3 real `auto` events here); fatigue stays here. (`docs/observatory.md`
+→ "Mnemos compaction vehicle", 07-16.)
+
+**D. Infra hygiene.** #13 (P1 hook↔template drift, root-caused: an edit wrote the live hook not the
+template, and P1 was a SessionStart advisory with no commit block — added doccheck `hooks-match-templates`,
+**now uncommittable**). #16 (**`tessera-watch` snooze mechanism** — the G-a-earned remedy; tracked+expiring
++ reason-required; G-a snooze-aware. **Applied to P7, 45d.**).
+
+**E. Design threads SEEDED (noted, not built).** #12 (conclave/pr-arbiter convergence), #14 (haziness
+finding), #15 (spec 13). See the friction thread below.
+
+### The friction-instrumentation thread (P7 → should_fire → action-divergence → haziness)
+Started from P7's nag; went deep and it paid. Conclusions:
+- **should_fire is SOUND** (user-disposition ground truth, real dashboard consumer) — I was wrong to want
+  it retired. But its **backlog is dead data** (52 unlabeled across 19 sessions won't be hand-labeled), so
+  **P7 is snoozed** (#16), not resolved by labeling.
+- **The valuable vector is action-divergence** (did the agent do the *opposite* of what was asked) — the
+  friction the framework keeps admitting only a human catches. Its one instrument, Mnemos
+  `correction_density`, has **near-zero recall** (#14): a keyword regex that missed *this* session's heavy
+  redirection entirely (`correction_density 0.000`). The *pipe* is right (passive, stores evidence); the
+  *detector* is blind.
+- **The fix for both is passive extraction, never manual labeling.** Scoped: **`_project_specs/13-friction-detector-upgrade.md`**
+  (Phase 1 = local-qwen recall detector + backtest; typing/action-linking deferred).
 
 ### NEXT (in order) — nothing here is started
-1. **The 10 removals** — *cleaner now*: a removed skill just leaves every tag's set in
-   `skill-profiles.json`, and is `"off"` everywhere by default already. HARVEST-first for the ones with
-   un-harvested ideas (`code-review` multi-engine→conclave note, `codex/gemini-review`→same,
-   `ai-models`→provider URL pointers, `autonomous-testing`→pipeline-shape note, `build-in-public`→plugin
-   docs). The 3 fossils are already harvested (#5).
-2. **`iterative-development` de-eager** — same KEEP-but-relocate-off-eager verdict as `security` (#8);
-   flagged in the #8 CLAUDE.md note, not done. The last eager-load audit cleanup.
-3. **The remaining delivery-entangled trims** — `python` TRIM, `ui-testing` MERGE. (`security` ADAPT is
-   DONE, #8.)
-4. **Refine `skill-profiles.json`** against the full KEEP set (it's a *starter* map). Editable, low-stakes.
-5. **Conclave design session** — the `code-review`/`codex`/`gemini` removals need the conclave design
-   note first (harvest-before-cut). Needs Lorenzo. This is old handoff item 1 / ADR-0008's open thread.
+1. **Friction-detector Phase 1** (`_project_specs/13`) — the highest-value build; instruments the
+   action-divergence friction. Recalibrates haziness bands as a side effect (flagged in the spec).
+2. **The 10 removals** — HARVEST-first; `codex`/`gemini-review` harvests now have a home (the conclave note,
+   #12). `ai-models`→URL pointers, `autonomous-testing`→pipeline note, `build-in-public`→plugin docs. The 3
+   Maggy skills (`agent-teams`, `autonomous-testing`, `workspace`) all live here → 0 Maggy after.
+3. **Remaining delivery-entangled trims** — `python` TRIM, `ui-testing` MERGE.
+4. **Refine `skill-profiles.json`** vs the full KEEP set (starter map; low-stakes).
+5. **Conclave design session** (needs Lorenzo) — ADR-0008's open thread; seeded in `docs/observatory.md`
+   → "Tessera ↔ Conclave ↔ pr-arbiter". Firms up with a review-flavored divergence measurement + pr-arbiter
+   Phase 3. Gates the `code-review` bulk removal.
 
-### Still deferred (unchanged)
-- **De-dup the registry (D)** — ADR-0009 *further* deferred it (global stays authoritative for the
-  union; the scaffold only writes settings). Observatory: "Skill registry — which copy is source-of-truth."
-- **Listing-budget floor ("Goal B", ADR-0009)** — settings can't zero a skill's listing *name*; only
-  uninstalling can. Measure with `/doctor` before any physical partitioning. YAGNI.
-- **P7 gate-labels** (~45 unlabeled) — maintenance; snooze.
-
-### Mnemos trial — RESOLVED this session (#7), was the "sort out" ask
-- **Fatigue is LIVE, not degraded** — token-util 0.27 (wt 0.40), all dims compute. The 07-15 "all-None"
-  was transient, no fix needed.
-- **Compaction DOES fire here** — but on the harness-summarization path with no `{trigger}` (→ `unknown`).
-  Instrumented with a key-only `payload_probe` so the next event reveals what the harness sends.
-- **DECISION:** compaction-recovery verdict → real Claude Code CLI venue (P3 can't reach 3 real `auto`
-  events here); fatigue verdict stays here. Full record: `docs/observatory.md` → "Mnemos compaction
-  vehicle" (07-16 update). *(This supersedes the 07-15 side-mission section further down.)*
+### Still deferred (own venues)
+- **De-dup the registry (D)** — ADR-0009 further deferred it (global stays authoritative). Observatory.
+- **Listing-budget floor ("Goal B")** — settings can't zero a skill's listing name; `/doctor`-measure
+  before any physical partitioning. YAGNI.
+- **P7 gate-labels — SNOOZED to 2026-08-31** (#16). Resurfaces then if the detector upgrade (spec 13)
+  hasn't superseded the whole should_fire-labeling approach by making it passive.
 
 ---
 
@@ -251,6 +263,9 @@ happen in this harness?"**
 ---
 
 ## Housekeeping — deferred to next session (2026-07-15, context too full to do now)
+
+> **⚠️ SUPERSEDED 2026-07-16 (#16).** P7 is **snoozed to 2026-08-31**, not labeled — the backlog is dead
+> data and the real fix is the passive detector upgrade (spec 13). The note below is kept for the trail.
 
 - **P7 gate-labels: ~45 unlabeled post-backstop gates.** `tessera-watch` flags it (≥20 threshold).
   Byproduct of a heavy-decision session (9 gates logged). The friction-journal review that tunes the
