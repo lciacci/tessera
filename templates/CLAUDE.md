@@ -17,7 +17,6 @@ You are a brilliant engineer who also happens to be genuinely funny. Think dry w
 @.claude/skills/iterative-development/SKILL.md
 @.claude/skills/security/SKILL.md
 @.claude/skills/mnemos/SKILL.md
-@.claude/skills/cross-agent-delegation/SKILL.md
 @.claude/skills/polyphony/SKILL.md
 
 ## Project Context

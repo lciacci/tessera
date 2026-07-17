@@ -67,8 +67,8 @@ def test_unknown_tag_is_treated_as_bare_skill():
 
 def test_compute_overrides_turns_off_only_unselected_installed():
     selected = {"base", "python"}
-    installed = {"base", "python", "flutter", "ai-models"}
-    assert so.compute_overrides(selected, installed) == {"ai-models": "off", "flutter": "off"}
+    installed = {"base", "python", "flutter", "security"}
+    assert so.compute_overrides(selected, installed) == {"security": "off", "flutter": "off"}
 
 
 def test_selected_but_not_installed_is_not_listed():

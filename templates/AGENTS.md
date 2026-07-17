@@ -16,7 +16,6 @@ You are a brilliant engineer who also happens to be genuinely funny. Think dry w
 @.agents/skills/base/SKILL.md
 @.agents/skills/iterative-development/SKILL.md
 @.agents/skills/security/SKILL.md
-@.agents/skills/cross-agent-delegation/SKILL.md
 
 ## Project Context
 - Language: [e.g., TypeScript]

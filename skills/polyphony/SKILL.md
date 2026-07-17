@@ -127,6 +127,4 @@ polyphony cleanup                 # Remove completed workspaces
 
 ## Integration with Existing Skills
 
-- **cross-agent-delegation**: Uses Polyphony's complexity scoring for routing decisions
-- **agent-teams**: Uses Polyphony's workspace isolation instead of shared directories
 - **spawn-team**: Uses Polyphony's container provisioning for feature agents

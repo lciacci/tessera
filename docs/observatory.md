@@ -632,6 +632,20 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   and the home the `codex-review`/`gemini-review` removal harvests land in (their findings-schema /
   headless-CI / 1M-context patterns feed here). Not an ADR yet.
 - **Source:** 2026-07-16 session — read `~/Claude/conclave` and `~/Claude/pr-arbiter` against the open thread.
+- **Harvested from `codex-review` + `gemini-review` before their ADR-0008 cut (2026-07-17)** — three
+  patterns the multi-engine review design should carry, now that the vendor-CLI manuals are gone:
+  - **Structured JSON findings schema.** `codex exec --json "review …"` emits findings as machine-parseable
+    JSON, not prose. This is the SAME shape pr-arbiter independently converged on (its typed-finding schema,
+    0 contaminated / 551) — two separate efforts landing on typed findings is the signal that the review
+    seam (contract S2/S4) should standardize on a typed schema, not free text.
+  - **Headless / CI mode.** `codex exec --full-auto --json --output-last-message out.txt "…"` runs a review
+    with no TUI, for automation. The shape Tessera's own review-fan-out gate would invoke a backend through
+    — one non-interactive call, structured out. (The vendor `codex`/`gemini` CLIs are absent here; the
+    *pattern* is what carries, to be pointed at conclave's gateway per Open decision D1.)
+  - **1M-context whole-repo review.** Gemini 2.5 Pro's 1M window reviews an entire repo in one context, no
+    chunking — the lever for whole-repo / large-diff review where per-file misses cross-file defects.
+    Complements pr-arbiter's union-recall (roles) with a *context-breadth* axis. Tracked as a routing case
+    (`docs/observatory.md` → the 1M-context revisit trigger).
 - **The three pieces, and how they fit:**
   - **conclave** (`~/Claude/conclave`) — a self-hosted multi-model inference lab: open-weight fleet
     (Qwen3-32B / Gemma3-27B / Mistral-24B, one per L40S) behind an OpenAI-compatible gateway, private
@@ -723,6 +737,78 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   the new turns; a full backfill of ~26 sessions is 81s. Precision is ~0.5, which is why the **haziness
   band re-tune is deferred behind `tessera-watch` P10** (fires at ≥40 real-signal sessions → spot-check
   precision first, then decide bands + the 0.30 weight). Phases 2 (typing) / 3 (action-link) still deferred.
+
+### Autonomous test-fix loop — a richer cousin of `iterative-development` *(harvested from `autonomous-testing` before its ADR-0008 cut, 2026-07-17)*
+
+- **The idea worth keeping:** a full closed loop — **Source Scan → Discover coverage Gaps → Generate tests
+  → Execute → Evaluate failures → Fix Loop** — not just "run tests on Stop." `iterative-development`
+  (Tessera's kept TDD-loop skill) is the *narrow* version: a Stop hook re-runs tests and feeds failures
+  back. The harvested shape adds the two ends `iterative-development` lacks: **gap discovery** (scan source,
+  find <80%-covered branches / untested endpoints *before* writing) and **AI-authored test generation**
+  with **tiered-model routing** (simple fns → cheap/fast model; complex or auth/security logic → the
+  thorough tier). The classify-by-stakes routing echoes the tier-classify hook and spec-13's model split.
+- **Why only a note, not a build:** the original skill was malformed (no frontmatter) and hard-wired to
+  Maggy + `~/bin/deepseek` (absent). The *loop shape* is the durable part; a Tessera build would wire it to
+  the real toolchain and the Stop-hook substrate `iterative-development` already documents. Radar until a
+  session wants autonomous coverage-gap filling — deferred, not scoped.
+
+### Team-spawning feature seam — unresolved after the agent-teams cut *(2026-07-17)*
+
+- **The seam:** ADR-0008 cut the `agent-teams` skill (Maggy-mandatory framing) but KEPT `polyphony`
+  (container isolation) and `/spawn-team` (the command that drives it). `spawn-team` depended on
+  `agent-teams`'s 6 role files (`team-lead`/`quality`/`security`/`code-review`/`merger`/`feature`); the cut
+  deleted them and broke the command. They were **restored to `templates/agents/`** (they are spawn-team's
+  dependency, not part of the retired skill) — but the audit never decided the underlying question.
+- **The unresolved question:** does Tessera's downstream template ship a **team-spawning feature** at all?
+  `polyphony` is "kept-but-not-activated"; `spawn-team` is documented as a live downstream feature in
+  `templates/CLAUDE.md` + `initialize-project`; `install.sh` does **not** currently ship `templates/agents/`.
+  Either wire the delivery (install.sh ships the roles, polyphony activates) or retire the whole feature
+  (cut spawn-team + roles + the template references). **Evaluate deliberately; do not let it rot half-wired.**
+- **Related deferral:** `templates/codex-auto-review.sh` (a guarded, dormant downstream Codex Stop-hook wired
+  in `templates/settings.json`) is **deferred to the D1 / `code-review` vendor-review decision** — same
+  vendor-CLI-review-deprecation question, resolved there, not piecemeal. (Cohesion contract, Open decision D1.)
+
+### Downstream template + `initialize-project` are stale vs ADR-0008/0009 *(finding, 2026-07-17 — surfaced by the skill cuts)*
+
+- **Status:** Finding, confirmed. Actionable, **not yet repaired** — flagged rather than fixed mid-cut to
+  keep scope honest. Surfaced when the ADR-0008 skill removals hit dangling references the earlier
+  reference-scans missed (doccheck can't catch them — they are `~/…` and `@…` paths, not repo paths).
+- **Two drifts, both pre-dating the cuts:**
+  1. **`templates/CLAUDE.md` + `templates/AGENTS.md` eager block is stale vs ADR-0008.** The eager set is
+     `base` + `mnemos` only (ADR-0008 de-eagered `iterative-development` and `security`; `polyphony` is
+     kept-but-not-activated). The downstream template still `@`-eager-loads `iterative-development`,
+     `security`, and `polyphony`. (The `cross-agent-delegation` eager line — a *deleted* skill — was removed
+     2026-07-17; the rest of the block was left for this alignment pass.)
+  2. **`commands/initialize-project.md` still teaches the COPY delivery model that ADR-0009 superseded.** It
+     instructs `cp -r ~/.claude/skills/<X>/ .claude/skills/` (including now-deleted `session-management`,
+     `cross-agent-delegation`, `agent-teams`), but ADR-0009 established delivery as a **selector**
+     (`skillOverrides: off` per profile via `bin/tessera-new-project`), no copying. The whole scaffold
+     section is legacy; its cut-skill references are a symptom, not the disease.
+- **The fix (a dedicated pass):** align the template eager block to `base`+`mnemos`; decide whether
+  `initialize-project.md` is retired in favor of `bin/tessera-new-project` or rewritten to the selector
+  model. **Also a checker gap:** doccheck's `referenced-paths-exist` is blind to `~/…` and `@…/skills/…`
+  paths — a template that eager-loads or copies a deleted skill passes green. Worth a check.
+
+### FRICTION (recorded): cut a skill without reading its dependents *(2026-07-17, Lorenzo caught it)*
+
+- **The miss:** the `agent-teams` cut deleted 6 role files that a KEPT command (`spawn-team`, polyphony's)
+  depends on. Restoral was needed; it was clean only because git had the files. The break shipped into
+  PR #22 at phase 1 and was caught later by a broad scan — had the PR merged after phase 1, the downstream
+  template ships broken.
+- **Root cause — not ignorance, dismissal.** The phase-1 reference grep DID surface `spawn-team` referencing
+  `agent-teams`. It was seen, labeled "orphaned Maggy, follow-on," and the dependency was deleted anyway
+  without opening `spawn-team`. This violates the exact rule the whole skill-assessment process was built on
+  (base-skill *"never subtract from a knowledge artifact you have not read"*, ADR-0007's lesson). **Bias:
+  momentum / execution-mode** — an inconvenient dependency signal filed as out-of-scope to keep the cut clean.
+- **Severity of the class:** `referenced-paths-exist` is blind to `~/…` and `@…` skill paths, so the break
+  passed doccheck green. No automated check caught it — a human did. This is precisely the action-divergence
+  friction spec 13 Phase 1 instruments, and a live example that the miss-shaped ones still get through.
+- **Remedy (both landed 2026-07-17):**
+  1. **Mechanical:** doccheck `template-skill-refs-exist` — asserts every `@…/skills/X` load and
+     `cp …skills/X/` recipe in templates/ + commands/ points to a skill that exists in `skills/`. Would have
+     caught this at commit. (17th check.)
+  2. **Process:** before cutting a skill, trace its *inbound dependents* and READ them — a grep hit is a
+     signal to follow, not a ticket to defer.
 
 ## Closing notes
 

@@ -428,18 +428,14 @@ mkdir -p .agents/skills
 cp -r ~/.claude/skills/base/ .claude/skills/
 cp -r ~/.claude/skills/security/ .claude/skills/
 cp -r ~/.claude/skills/project-tooling/ .claude/skills/
-cp -r ~/.claude/skills/session-management/ .claude/skills/
 cp -r ~/.claude/skills/code-graph/ .claude/skills/
-cp -r ~/.claude/skills/cross-agent-delegation/ .claude/skills/
 ```
 
 **Always copy (overwrite with latest):**
 - `base/` → `.claude/skills/base/`
 - `security/` → `.claude/skills/security/`
 - `project-tooling/` → `.claude/skills/project-tooling/`
-- `session-management/` → `.claude/skills/session-management/`
 - `code-graph/` → `.claude/skills/code-graph/`
-- `cross-agent-delegation/` → `.claude/skills/cross-agent-delegation/`
 
 **If deep analysis or security audit selected (question 4b):**
 - `cpg-analysis/` → `.claude/skills/cpg-analysis/`
@@ -930,9 +926,7 @@ Read and follow these skills before writing any code:
 - .claude/skills/base/SKILL.md
 - .claude/skills/security/SKILL.md
 - .claude/skills/project-tooling/SKILL.md
-- .claude/skills/session-management/SKILL.md
 - .claude/skills/code-graph/SKILL.md
-- .claude/skills/cross-agent-delegation/SKILL.md
 - .claude/skills/cpg-analysis/SKILL.md (if deep analysis or security audit)
 - .claude/skills/[language]/SKILL.md
 - .claude/skills/[framework]/SKILL.md (if applicable)
@@ -1691,11 +1685,13 @@ CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
 
 ### Step 2: Copy Agent Definitions
 
-Copy agent definitions from the agent-teams skill to the project:
+Copy agent definitions (preserved at `templates/agents/` after the `agent-teams` skill was retired —
+ADR-0008; the roles are spawn-team + polyphony's dependency. See the team-spawning seam in
+`docs/observatory.md`):
 
 ```bash
 mkdir -p .claude/agents
-cp ~/.claude/skills/agent-teams/agents/*.md .claude/agents/
+cp ~/.claude/templates/agents/*.md .claude/agents/
 ```
 
 This creates:
@@ -1710,11 +1706,6 @@ This creates:
 ```
 
 ### Step 3: Add Agent Teams to CLAUDE.md
-
-Add the agent-teams skill to the Skills section in CLAUDE.md:
-```
-- .claude/skills/agent-teams/SKILL.md
-```
 
 Add a new section to CLAUDE.md:
 ```markdown
