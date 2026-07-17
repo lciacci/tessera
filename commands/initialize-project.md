@@ -419,90 +419,28 @@ fi
 mkdir -p .agents/skills
 ```
 
-### Step 2: Update skill files from ~/.claude/skills/
+### Step 2: Skill delivery is the selector, NOT copying (ADR-0009)
 
-**Skills use folder structure:** Each skill is a folder containing `SKILL.md`.
+**Do NOT copy skills into `.claude/skills/`.** Claude Code loads the global
+`~/.claude/skills/` registry and a project-local `.claude/skills/` as a **union** — every
+project on this machine already sees every global skill. There is nothing to copy and nothing
+to keep in sync (ADR-0009 superseded the copy model; ADR-0008's "downstream is starved" premise
+was wrong — the union already delivers).
 
-```bash
-# Copy skill folders (not flat .md files)
-cp -r ~/.claude/skills/base/ .claude/skills/
-cp -r ~/.claude/skills/security/ .claude/skills/
-cp -r ~/.claude/skills/project-tooling/ .claude/skills/
-cp -r ~/.claude/skills/code-graph/ .claude/skills/
-```
+Delivery is a **selector**: `bin/tessera-new-project` reads the project's profile
+(`.tessera/project.yml`) and writes a `skillOverrides` block into `.claude/settings.json` that
+turns **off** every skill outside the profile's set (leaving the profile's set on). The
+profile → skill map is `templates/tessera/skill-profiles.json`, applied by
+`scripts/skill_overrides.py`. No per-project skill copies exist, so none can drift — the exact
+class of bug the copy model invited.
 
-**Always copy (overwrite with latest):**
-- `base/` → `.claude/skills/base/`
-- `security/` → `.claude/skills/security/`
-- `project-tooling/` → `.claude/skills/project-tooling/`
-- `code-graph/` → `.claude/skills/code-graph/`
-
-**If deep analysis or security audit selected (question 4b):**
-- `cpg-analysis/` → `.claude/skills/cpg-analysis/`
-
-```bash
-# Copy CPG analysis skill if Tier 2 or 3 selected
-if [ "$GRAPH_TIER" != "standard" ]; then
-    cp -r ~/.claude/skills/cpg-analysis/ .claude/skills/
-fi
-```
-
-**For existing codebases (detected in Phase 1b):**
-- `existing-repo/` → `.claude/skills/existing-repo/` - Structure preservation, guardrails setup
-
-**Based on language:**
-- Python → copy `python/`
-- TypeScript/JavaScript → copy `typescript/`
-
-**Based on project type:**
-- React Native → copy `typescript/` AND `react-native/`
-- React Web → copy `typescript/` AND `react-web/`
-- Node Backend → copy `typescript/` AND `nodejs-backend/`
-- Full Stack (Node + React) → copy `typescript/`, `nodejs-backend/`, AND `react-web/`
-
-**For Android/Flutter projects (auto-detect from project structure):**
-
-| Detection | Skills to Copy |
-|-----------|---------------|
-| `pubspec.yaml` exists | `flutter/` |
-| `android/*.java` exists | `android-java/` |
-| `android/*.kt` exists | `android-kotlin/` |
-| Flutter + Java files | `flutter/` + `android-java/` |
-| Flutter + Kotlin files | `flutter/` + `android-kotlin/` |
-| Flutter + Both | `flutter/` + `android-java/` + `android-kotlin/` |
-
-```bash
-# Detect and copy Android/Flutter skills
-if [ -f "pubspec.yaml" ]; then
-  cp -r ~/.claude/skills/flutter/ .claude/skills/
-fi
-
-if find android -name "*.java" -type f 2>/dev/null | head -1 | grep -q .; then
-  cp -r ~/.claude/skills/android-java/ .claude/skills/
-fi
-
-if find android -name "*.kt" -type f 2>/dev/null | head -1 | grep -q .; then
-  cp -r ~/.claude/skills/android-kotlin/ .claude/skills/
-fi
-```
-
-**If AI-first:**
-- Copy `llm-patterns/`
-
-**If container isolation enabled (question 10):**
-- Copy `polyphony/`
-
-```bash
-if [ "$USE_POLYPHONY" = "true" ]; then
-    cp -r ~/.claude/skills/polyphony/ .claude/skills/
-fi
-```
-
-**Note:** Skills are always overwritten with the latest version from ~/.claude/skills/. This ensures updates propagate when user updates their global skills.
+To curate what a project sees: edit its `.tessera/project.yml` profile (or
+`extensions_added` / `extensions_removed`) and re-run the selector. Never copy folders.
 
 ### Step 2b: Cross-tool skill sync (if Kimi or Codex selected)
 
-After copying skills to `.claude/skills/`, sync to other tool directories:
+Claude Code unions the global skill registry automatically (Step 2), but **non-Claude tools
+(Kimi, Codex) do not** — they need their own copies. Sync the global skills to those tool dirs:
 
 ```bash
 # Sync skills to all selected tools
@@ -1622,17 +1560,12 @@ else
 fi
 ```
 
-### Step 4: Add polyphony skill to project
+### Step 4: Activate polyphony for this project
 
-```bash
-# Copy polyphony skill to project
-cp -r ~/.claude/skills/polyphony/ .claude/skills/
-```
-
-Add to CLAUDE.md Skills section:
-```markdown
-- .claude/skills/polyphony/SKILL.md
-```
+Polyphony is already available via the global skill union (ADR-0009) — **do not copy it**. It is
+off by default (not in the universal set). To activate it for this project, add `polyphony` to
+`extensions_added` in `.tessera/project.yml` and re-run the selector (`bin/tessera-new-project`
+rewrites `skillOverrides`). Do NOT `@`-eager-load it — it loads on-demand when container work runs.
 
 Add to CLAUDE.md Cross-Agent Workflow section:
 ```markdown
