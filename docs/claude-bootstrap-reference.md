@@ -11,8 +11,10 @@ directives, conditional rules, PreCompact recovery, Mnemos, iCPG, and agent team
 > rather than the shared machinery — its P2P mesh, and its release history — have been removed;
 > no mesh code exists in this repo.
 >
-> **The skills catalog below is inherited and not yet audited** (FOCUS-004). Treat its counts
-> and entries as Maggy's, pending that pass.
+> **The skills catalog below is Maggy's inherited snapshot** (~62 entries), kept as the provenance
+> record. FOCUS-004 has since executed (ADR-0007, ADR-0008): Tessera's live corpus is now **48
+> curated skills**, and 9 of Maggy's entries here were uninstalled 2026-07-17. For current state, see
+> ADR-0008 and `templates/tessera/skill-profiles.json` — not the counts/entries below.
 
 ## TDD Loops via Stop Hooks
 

@@ -626,22 +626,16 @@
   // ---------- skills mosaic ----------
   const SKILLS = [
     ["base", "Universal coding patterns, TDD workflow, atomic todos", true],
-    ["iterative-development", "Stop-hook TDD loops that feed failures back automatically", true],
     ["mnemos", "Typed memory graph — goals never evicted, survives compaction", true],
-    ["security", "OWASP patterns, secrets hygiene, security testing", true],
+    ["iterative-development", "Stop-hook TDD loops that feed failures back automatically", false],
+    ["security", "OWASP patterns, secrets hygiene, security testing", false],
     ["icpg", "Intent-augmented code graph — tracks WHY code exists, 6-dim drift detection", false],
     ["code-graph", "Sub-millisecond structural queries, 64 languages, auto-fresh", false],
     ["code-review", "Mandatory review pipeline before commits and deploys", false],
-    ["codex-review", "OpenAI Codex CLI review, GPT-class second opinion", false],
-    ["gemini-review", "Gemini CLI review, 1M-token context", false],
+    ["adr-gate", "Enforces an ADR/spec link on non-trivial changes before review", false],
     ["commit-hygiene", "Atomic commits, PR size limits, stacked PRs", false],
-    ["code-deduplication", "Capability index, check-before-write", false],
-    ["agent-teams", "Strict TDD pipeline enforcement for team-based dev", false],
     ["polyphony", "Container-isolated multi-agent orchestration", false],
     ["framework-evaluation", "Six-dimension methodology that produces a decision ADR", false],
-    ["workspace", "Multi-repo and monorepo topology awareness", false],
-    ["session-management", "Tiered summarization, context preservation, resumability", false],
-    ["cross-agent-delegation", "Routes tasks across agents by complexity score", false],
     ["ticket-craft", "AI-native Jira/Asana/Linear ticket writing", false],
   ];
   const mosaic = document.getElementById("skillsMosaic");

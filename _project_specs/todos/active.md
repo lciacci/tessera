@@ -6,9 +6,9 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## ═══ SESSION 2026-07-17 — friction-detector Phase 1 SHIPPED + three-project cohesion contract ═══
+## ═══ SESSION 2026-07-17 — Phase 1 + cohesion contract + skill removals (9/10) + template alignment ═══
 
-**ALL MERGED to `main` (#19, #20). Suite green, doccheck 16/16, `tessera-watch` quiet (P7 snoozed). No branches in flight.**
+**ALL MERGED to `main` (#19–#23). Suite green, doccheck 17/17, `tessera-watch` quiet (P7 snoozed). No branches in flight. Skills 57 → 48.**
 
 ### What shipped
 
@@ -39,19 +39,41 @@ verbatim**, Open decisions **D1–D4**. A coordination MAP, not an ADR — decis
 - Peer stubs point here: `../conclave/docs/INTEGRATION.md` (existed), `../pr-arbiter/docs/INTEGRATION.md`
   (authored this session, committed via a pr-arbiter session).
 
+**C. Skill removals — 9 of 10 (ADR-0008) — #22.** HARVEST-before-CUT. Cut: `session-management`,
+`code-deduplication`, `agent-teams`, `cross-agent-delegation` (ideas in design-principles Fossil lineage /
+polyphony / icpg); `codex-review` + `gemini-review` (patterns → observatory convergence note);
+`autonomous-testing` (→ observatory radar note); `ai-models` (skip-with-rationale); `build-in-public`
+(corpus skill only — live plugin infra kept). **#10 `code-review` bulk still gated on D3.** `build-in-public`
+writing-guidance harvest handed off for the plugin repo.
+
+**D. Template/init alignment (ADR-0008/0009) — #23.** Dropped only `polyphony` from the downstream eager
+block (kept `iterative-development`+`security` eager — they *fit* a downstream app, unlike framework-Tessera;
+`@eager` ≠ "available"). Rewrote `initialize-project.md` Step 2/4 from the copy model → ADR-0009 selector.
+
+**E. A FRICTION lesson, and its remedy — #22.** The `agent-teams` cut deleted 6 role files a KEPT command
+(`spawn-team`, polyphony's) depended on — Lorenzo caught it, no check did. Root cause named: **rule-over-read**
+(apply a documented rule by pattern-match instead of reading the specific artifact + checking its premise
+holds here). Remedies landed: doccheck **`template-skill-refs-exist`** (17th check — catches `@`/`~/` skill
+paths to deleted skills), observatory FRICTION finding, and a widened **`rule-over-read` memory**. The
+eager-block over-application (D) was the same pattern, caught the same way. **Carry forward: skill/knowledge
+decisions get read-first, single-decision, no batching.**
+
+**F. Doc hygiene (end of session).** Promo HTML mosaic (dropped 6 cut skills, fixed eager flags to match
+base+mnemos); `claude-bootstrap-reference` disclaimer (audit done, corpus now 48); this handoff.
+
 ### NEXT (in order) — nothing here is started
 1. **D2 — the union-recall divergence metric** (contract seam S2). **The one genuinely-unblocked
    high-value lever:** needs no prerequisites (not Phase 3, not a standing fleet), and it's what validates
    pr-arbiter's thin headline (guard (d)) so the whole three-project integration can start moving. Design
    + build the scoring variant of `divergence.py` (oracle = union of true findings vs a labeled defect set).
-2. **The 10 skill removals** — HARVEST-first. `code-review` bulk removal still gated on **D3** (`/arbiter`
-   graduation → Phase 3). `codex`/`gemini-review` harvests now land in the cohesion contract/observatory.
-   `ai-models`→URL pointers, `autonomous-testing`→pipeline note, `build-in-public`→plugin docs. 3 Maggy
-   skills (`agent-teams`, `autonomous-testing`, `workspace`) → 0 Maggy after.
-3. **Delivery-entangled trims** — `python` TRIM, `ui-testing` MERGE (small).
-4. **Refine `skill-profiles.json`** vs the full KEEP set (low-stakes).
-5. **Friction-detector Phase 2/3** — type corrections (misunderstood/defied/overreached/wrong), then
+2. **Delivery-entangled trims** — `python` TRIM, `ui-testing` MERGE (small). *(Read-first, per the
+   rule-over-read lesson — these are the same shape that went soupy.)*
+3. **Refine `skill-profiles.json`** vs the full KEEP set (low-stakes).
+4. **Friction-detector Phase 2/3** — type corrections (misunderstood/defied/overreached/wrong), then
    action-link + divergence surface. The natural follow-on once Phase 1's signal is trusted.
+
+*(The "10 removals" are 9-done — #22. Only `code-review` bulk remains, gated on D3. `workspace` +
+`team-coordination` were never in the 10; they're separate removal candidates.)*
 
 ### Deferred with their own triggers (not "next")
 - **Three-project ADR — D1/D3/D4** — evidence-gated: D3 needs pr-arbiter **Phase 3** (8–15h annotator
@@ -59,6 +81,11 @@ verbatim**, Open decisions **D1–D4**. A coordination MAP, not an ADR — decis
   downstreams. D1 (routing home) firms with D2's result. See the contract's Open decisions.
 - **P10 haze-recalib** — self-fires at 40 real-signal sessions → precision spot-check + band re-tune.
 - **`should_fire` passive extraction** — apply spec-13's pattern to retire the dead labeling path.
+- **Team-spawning feature seam** *(needs a call — read-first)* — ship it downstream (wire `install.sh` +
+  activate polyphony) or retire (cut spawn-team + the `templates/agents/` roles). See observatory.
+- **Canonical setup entry point** *(needs a call)* — `/initialize-project` (interactive) vs
+  `bin/tessera-new-project` (greenfield); `install.sh`/`GETTING_STARTED` advertise only the former.
+- **`code-review` bulk removal (#10)** — gated on D3. `templates/codex-auto-review.sh` deferred there too.
 - **De-dup the registry / Listing-budget floor / P7 (snoozed 2026-08-31) / Mnemos compaction-recovery
   (→ real CLI venue)** — carried from prior sessions; own venues.
 
