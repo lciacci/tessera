@@ -369,7 +369,9 @@ codex
 > /review
 ```
 
-See `codex-review.md` skill for full Codex documentation.
+> Codex is a vendor-CLI review backend (needs Node + the `codex` CLI, absent here). The standalone
+> `codex-review` skill was removed (ADR-0008); its findings-schema / headless-CI patterns are harvested to
+> `docs/observatory.md` → "Tessera ↔ Conclave ↔ pr-arbiter".
 
 ---
 
@@ -415,7 +417,9 @@ gemini
 > /code-review
 ```
 
-See `gemini-review.md` skill for full Gemini documentation.
+> Gemini is a vendor-CLI review backend (needs Node + the `gemini` CLI, absent here). The standalone
+> `gemini-review` skill was removed (ADR-0008); its 1M-context whole-repo-review pattern is harvested to
+> `docs/observatory.md` → "Tessera ↔ Conclave ↔ pr-arbiter".
 
 ---
 

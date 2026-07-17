@@ -632,6 +632,20 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   and the home the `codex-review`/`gemini-review` removal harvests land in (their findings-schema /
   headless-CI / 1M-context patterns feed here). Not an ADR yet.
 - **Source:** 2026-07-16 session — read `~/Claude/conclave` and `~/Claude/pr-arbiter` against the open thread.
+- **Harvested from `codex-review` + `gemini-review` before their ADR-0008 cut (2026-07-17)** — three
+  patterns the multi-engine review design should carry, now that the vendor-CLI manuals are gone:
+  - **Structured JSON findings schema.** `codex exec --json "review …"` emits findings as machine-parseable
+    JSON, not prose. This is the SAME shape pr-arbiter independently converged on (its typed-finding schema,
+    0 contaminated / 551) — two separate efforts landing on typed findings is the signal that the review
+    seam (contract S2/S4) should standardize on a typed schema, not free text.
+  - **Headless / CI mode.** `codex exec --full-auto --json --output-last-message out.txt "…"` runs a review
+    with no TUI, for automation. The shape Tessera's own review-fan-out gate would invoke a backend through
+    — one non-interactive call, structured out. (The vendor `codex`/`gemini` CLIs are absent here; the
+    *pattern* is what carries, to be pointed at conclave's gateway per Open decision D1.)
+  - **1M-context whole-repo review.** Gemini 2.5 Pro's 1M window reviews an entire repo in one context, no
+    chunking — the lever for whole-repo / large-diff review where per-file misses cross-file defects.
+    Complements pr-arbiter's union-recall (roles) with a *context-breadth* axis. Tracked as a routing case
+    (`docs/observatory.md` → the 1M-context revisit trigger).
 - **The three pieces, and how they fit:**
   - **conclave** (`~/Claude/conclave`) — a self-hosted multi-model inference lab: open-weight fleet
     (Qwen3-32B / Gemma3-27B / Mistral-24B, one per L40S) behind an OpenAI-compatible gateway, private
@@ -723,6 +737,20 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   the new turns; a full backfill of ~26 sessions is 81s. Precision is ~0.5, which is why the **haziness
   band re-tune is deferred behind `tessera-watch` P10** (fires at ≥40 real-signal sessions → spot-check
   precision first, then decide bands + the 0.30 weight). Phases 2 (typing) / 3 (action-link) still deferred.
+
+### Autonomous test-fix loop — a richer cousin of `iterative-development` *(harvested from `autonomous-testing` before its ADR-0008 cut, 2026-07-17)*
+
+- **The idea worth keeping:** a full closed loop — **Source Scan → Discover coverage Gaps → Generate tests
+  → Execute → Evaluate failures → Fix Loop** — not just "run tests on Stop." `iterative-development`
+  (Tessera's kept TDD-loop skill) is the *narrow* version: a Stop hook re-runs tests and feeds failures
+  back. The harvested shape adds the two ends `iterative-development` lacks: **gap discovery** (scan source,
+  find <80%-covered branches / untested endpoints *before* writing) and **AI-authored test generation**
+  with **tiered-model routing** (simple fns → cheap/fast model; complex or auth/security logic → the
+  thorough tier). The classify-by-stakes routing echoes the tier-classify hook and spec-13's model split.
+- **Why only a note, not a build:** the original skill was malformed (no frontmatter) and hard-wired to
+  Maggy + `~/bin/deepseek` (absent). The *loop shape* is the durable part; a Tessera build would wire it to
+  the real toolchain and the Stop-hook substrate `iterative-development` already documents. Radar until a
+  session wants autonomous coverage-gap filling — deferred, not scoped.
 
 ## Closing notes
 
