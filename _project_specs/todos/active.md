@@ -264,6 +264,9 @@ happen in this harness?"**
 
 ## Housekeeping — deferred to next session (2026-07-15, context too full to do now)
 
+> **⚠️ SUPERSEDED 2026-07-16 (#16).** P7 is **snoozed to 2026-08-31**, not labeled — the backlog is dead
+> data and the real fix is the passive detector upgrade (spec 13). The note below is kept for the trail.
+
 - **P7 gate-labels: ~45 unlabeled post-backstop gates.** `tessera-watch` flags it (≥20 threshold).
   Byproduct of a heavy-decision session (9 gates logged). The friction-journal review that tunes the
   #17 backstop precision — label each `should_fire` true/false (genuine gate vs noise). Distinct
