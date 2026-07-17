@@ -707,6 +707,16 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   hit (misunderstood / defied / overreached / wrong) while there. Recall-first because a false "you corrected me"
   is cheap; a missed one is the current failure. **Scoped in `_project_specs/13-friction-detector-upgrade.md`**
   (Phase 1 = recall fix + backtest; typing and action-linking deferred). Not built here.
+- **UPDATE 2026-07-17 — Phase 1 BUILT.** Recall un-blinded: `b6d7b6f5` went `0.000 → 0.219` (matches a
+  27-turn hand-labeled 0.188); clean sessions stay 0; spread across ~24 dogfood sessions is 0.00–0.35
+  (was 0.00–0.06, blind). Three corrections to the original scope, recorded in the spec: (a) the **3B
+  tier-classify model is useless** — it parrots the prompt's ending polarity; **qwen3:8b + `think=false`**
+  is required (fails open to regex). (b) **Injected user turns** (hook feedback `isMeta`, task-notifications
+  `promptSource=system`) were being counted as human corrections — now excluded. (c) **Latency was never
+  real** — Stop-hook ingest is backgrounded (`& disown`) and incremental, so a live Stop classifies only
+  the new turns; a full backfill of ~26 sessions is 81s. Precision is ~0.5, which is why the **haziness
+  band re-tune is deferred behind `tessera-watch` P10** (fires at ≥40 real-signal sessions → spot-check
+  precision first, then decide bands + the 0.30 weight). Phases 2 (typing) / 3 (action-link) still deferred.
 
 ## Closing notes
 

@@ -83,6 +83,35 @@ def _ollama_up(probe=None) -> bool:
         return False
 
 
+def ollama_generate(prompt: str, *, model: str, num_predict: int = 32,
+                    timeout: float = 5.0, base: str = "http://localhost:11434",
+                    think: bool | None = None) -> str | None:
+    """Call local Ollama for a completion. Returns the text, or None on any
+    failure (unreachable, timeout, junk) so callers can fail open. temp 0 for
+    determinism; mirrors the tier-classify-hook call shape. Pass think=False
+    for qwen3-style reasoning models, else they spend num_predict on a hidden
+    <think> block and return empty content."""
+    import json as _json
+    import urllib.request
+    payload: dict = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "stream": False,
+        "options": {"temperature": 0, "num_predict": num_predict},
+    }
+    if think is not None:
+        payload["think"] = think
+    body = _json.dumps(payload).encode()
+    req = urllib.request.Request(f"{base}/api/chat", data=body,
+                                 headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = _json.loads(resp.read())
+        return (data.get("message") or {}).get("content") or None
+    except Exception:
+        return None
+
+
 def detect_available(env: dict | None = None, which=shutil.which,
                      ollama=None, bin_dir: Path | None = None) -> dict[str, bool]:
     """Return {logical_model: usable} for every known model on this machine."""

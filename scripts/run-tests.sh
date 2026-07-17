@@ -72,7 +72,7 @@ run "verify"    "$PY" -m pytest scripts/verify -q
 
 # mnemos ships assert-based self-checks, not pytest tests — zero `def test_`, run via -m.
 # pytest collects them as zero tests and says "no tests ran", which reads exactly like success.
-for check in test_haziness test_correction test_bridge_goals; do
+for check in test_haziness test_correction test_correction_detect test_bridge_goals; do
     run "mnemos/$check" "$PY" -m "scripts.mnemos.$check"
 done
 

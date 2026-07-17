@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import sqlite3
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
@@ -38,6 +39,7 @@ SKILL_MIN = 60          # two-stage skill routing earns its keep at 60+ skills
 GRADUATION_RUNS = 3     # a core predicate firing this many runs running → graduation-a
 GATE_LABEL_MIN = 20     # unlabeled post-backstop gates before should_fire labeling earns its slot
 BACKSTOP_LIVE = "2026-07-12"  # gate-scan wired everywhere; events from here are an honest sample
+HAZE_RECALIB_MIN = 40   # real-signal sessions before revisiting haziness bands (24 at spec-13 backfill; ~16 runway) (2026-07-17)
 
 
 def p1_hook_drift(root: Path) -> tuple[bool, str]:
@@ -385,6 +387,37 @@ def active_snooze_labels(root: Path, now: datetime) -> set:
     return active
 
 
+def p10_haze_recalib(root: Path) -> tuple[bool, str]:
+    """Enough sessions carry REAL correction signal to re-tune the haziness bands.
+
+    Spec 13 (2026-07-17) upgraded correction detection from a keyword regex (near-zero
+    recall, every session read ~0) to a qwen3:8b classifier. Densities jumped from
+    0.00–0.06 to a real 0.00–0.29 spread. The haziness bands (clear/cloudy/hazy/lost at
+    0.25/0.50/0.75) and correction_density's 0.30 weight were tuned against the BLIND
+    detector, so they want a re-look — but the classifier's precision is only ~0.5 on the one
+    hand-labeled session, so re-tuning thresholds on it now would fit noise. Fires once a real
+    sample has accumulated: the cue to spot-check precision on a FRESH sample first, then decide
+    bands + weight. A predicate, not a note — a note gets dropped on the floor (should_fire, P7).
+    """
+    db = root / ".mnemos" / "mnemo.db"
+    if not db.exists():
+        return False, "no mnemos db"
+    try:
+        conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        try:
+            n = conn.execute(
+                "SELECT count(*) FROM claude_haze WHERE correction_density > 0"
+            ).fetchone()[0]
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return False, "no claude_haze table"
+    return n >= HAZE_RECALIB_MIN, (
+        f"{n} sessions with real correction signal "
+        f"(≥{HAZE_RECALIB_MIN} → spot-check detector precision, then decide "
+        f"haziness bands + 0.30 weight; spec 13)")
+
+
 def _resolve_label(query: str) -> str | None:
     """Unique predicate whose label contains `query` (case-insensitive), or None."""
     matches = [label for label in PREDICATES if query.lower() in label.lower()]
@@ -400,6 +433,7 @@ PREDICATES = {
     "P7 gate-labels": p7_gate_labels,
     "P8 doc-drift": p8_doc_drift,
     "P9 interpreter-drift": p9_interpreter_drift,
+    "P10 haze-recalib": p10_haze_recalib,
     "G-a graduation:snooze": g_a_consecutive,
 }
 
