@@ -705,7 +705,8 @@ Both were found by adversarial verification, **not** by the framework. **The rea
 - **Next:** (1) this entry. (2) **Detector upgrade** — replace the keyword regex with a recall-first classifier
   over the transcript delta (the local-qwen infra from the tier-classify hook already exists), and **type** the
   hit (misunderstood / defied / overreached / wrong) while there. Recall-first because a false "you corrected me"
-  is cheap; a missed one is the current failure. Scoped as its own task, not built here.
+  is cheap; a missed one is the current failure. **Scoped in `_project_specs/13-friction-detector-upgrade.md`**
+  (Phase 1 = recall fix + backtest; typing and action-linking deferred). Not built here.
 
 ## Closing notes
 
