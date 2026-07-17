@@ -17,6 +17,18 @@ effort: high
 > **conclave/council design decision** (ADR-0008, handoff item 1), not a prune edit — until then,
 > treat the roster and `council.yaml` references below as *illustrative*, and rely on
 > `bin/validate-plan`'s own honest exit codes (voted / unavailable / broken → exit 2, no verdict).
+>
+> **Where that decision now lives (2026-07-17):** `docs/contracts/three-project-cohesion.md` — the
+> canonical map of the Conclave·Tessera·pr-arbiter system. The roster/config question is Open
+> decision **D1** (routing home: do these `bin/` wrappers collapse into conclave gateway calls?).
+> **Tension to carry into that decision — this skill is NOT shielded by anti-conflation guard (a).**
+> Guard (a) protects pr-arbiter's *union-recall code review* from conclave's "route, don't judge"
+> null. But council-review's **plan-VALIDATION** path (a panel judging one plan → approve/revise) is
+> **select-best, not union-recall** — the exact regime where conclave's null is a *genuine caution*,
+> not a false blocker. So: a multi-model plan panel must justify itself against the select-best null
+> (does fan-out+judge beat routing the plan to the one strongest reviewer?), whereas the multi-engine
+> **PR-review** path inherits pr-arbiter's union-recall win. Two paths, two verdicts — do not let the
+> code-review win launder the plan-validation panel.
 
 ## When to Auto-Trigger
 
