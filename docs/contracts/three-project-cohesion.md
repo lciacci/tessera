@@ -121,7 +121,7 @@ Three things, from the observatory thread (`docs/observatory.md` → "Tessera �
   is converging"; ADR-0002 (routing via dispatch-time hooks — the routing-decision home);
   ADR-0006 (instrumentation-not-control — why the guards gate builds on instruments, not headlines);
   `.claude/skills/council-review/SKILL.md` (its pending roster/config decision points here — see below);
-  `.claude/skills/cross-agent-delegation`; `bin/validate-plan`, `bin/review`.
+  `bin/validate-plan`, `bin/review`.
 - **Conclave:** `../conclave/docs/INTEGRATION.md` (stub), `../conclave/docs/design.md`
   § "External validation + scope" (the route-don't-judge null + Phase-0 local-30B≈80B result).
 - **pr-arbiter:** `../pr-arbiter/README.md`, `../pr-arbiter/PHASE_2_FINAL.md` (the variance result +
