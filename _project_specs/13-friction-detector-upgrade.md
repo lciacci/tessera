@@ -41,6 +41,31 @@ the 38% `tessera-verify` author-error-rate). Fixing correction recall is what ma
 - **TDD:** the classifier call is a boundary — unit-test the detection logic with fixture turns
   (substantive-redirect → detected; neutral/agreement → not), mock the Ollama call.
 
+## Build notes (sized 2026-07-16)
+
+Estimate: **~1 focused session** (half-day plumbing + half-day prompt/recall tuning). Blast radius is
+small — Mnemos internals, mostly `claude_log.py:409` (one swap point) + a new classifier fn + a backtest
+script. Acceptance = the backtest.
+
+Two things the initial scope under-named:
+
+- **`model_routing.py` has no inference call yet.** It has `_ollama_up()` (probes `localhost:11434`) and
+  model/availability config, but **not** a "call qwen for a completion". The classifier must add a
+  `urllib` POST to Ollama `/api/generate` (stdlib, no deps; `_ollama_up` shows the pattern), with a
+  timeout and fail-open to the existing regex.
+
+- **Per-turn latency/volume — a real design decision, not free.** Classifying *every* user turn at
+  Stop-hook ingest is N sequential Ollama calls (a long session is ~900 turns). That can make ingest slow.
+  Phase 1 must pick a strategy — likely a combination:
+  - **pre-filter** — only classify user turns that follow an agent action (skip standalone questions with
+    no prior agent turn to have diverged from);
+  - **batch** — classify M turns in one prompt instead of one call each;
+  - **cap** — classify only the last K turns, or only the delta since `last_line_offset` (ingest is already
+    incremental/idempotent, so steady-state is a handful of new turns per Stop, not 900 — the 900 is only
+    the one-time backfill).
+  The incremental-ingest point matters: **at steady state the cost is small** (new turns since last Stop);
+  the volume problem is really just the historical backfill, which can be a one-off batched pass.
+
 ## Deferred — Phase 2 / 3
 
 - **Phase 2 — typing:** classify each detected correction (misunderstood / defied / overreached / wrong).
