@@ -27,7 +27,7 @@ import json
 import shutil
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -307,7 +307,10 @@ def g_a_consecutive(root: Path) -> tuple[bool, str]:
     if len(runs) < GRADUATION_RUNS:
         return False, f"{len(runs)} logged runs (<{GRADUATION_RUNS} → not yet judgeable)"
     persistent = set.intersection(*(set(r) for r in runs[-GRADUATION_RUNS:]))
-    core = sorted(p for p in persistent if p.startswith("P"))
+    # A currently-snoozed predicate is a remedy ALREADY APPLIED — G-a must not keep nagging
+    # about it while the historical fire-log still shows it (the log is the tail, not now).
+    snoozed = active_snooze_labels(root, datetime.now(timezone.utc))
+    core = sorted(p for p in persistent if p.startswith("P") and p not in snoozed)
     if not core:
         return False, f"no core predicate fired {GRADUATION_RUNS} runs running"
     return True, f"{', '.join(core)} fired {GRADUATION_RUNS} consecutive runs → build remedy or add snooze"
@@ -345,6 +348,49 @@ def _downstream_projects(root: Path) -> list[Path]:
     return [p for p in projects if p.resolve() != root.resolve()]
 
 
+# ── Snooze: an auditable ack that quiets a predicate for a bounded window. ──────────────
+# EARNED by G-a (graduation-a): the observatory's "NO snooze until a graduation predicate
+# earns it" is satisfied once G-a fires. A snooze is a DECISION, so it is TRACKED (committed
+# .tessera/watch-snooze.json), carries a required --reason, and EXPIRES — a snoozed predicate
+# resurfaces on the `until` date so nothing is buried forever. Snoozed-but-fired counts as
+# NOT firing: quiet exit, and G-a stops counting it (the fire-log excludes it).
+SNOOZE_PATH = ".tessera/watch-snooze.json"
+
+
+def _load_snoozes(root: Path) -> dict:
+    p = root / SNOOZE_PATH
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text())
+    except ValueError:
+        return {}
+
+
+def _write_snoozes(root: Path, snoozes: dict) -> None:
+    p = root / SNOOZE_PATH
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(snoozes, indent=2, sort_keys=True) + "\n")
+
+
+def active_snooze_labels(root: Path, now: datetime) -> set:
+    """Predicate labels with an unexpired snooze (now < until)."""
+    active = set()
+    for label, s in _load_snoozes(root).items():
+        try:
+            if now < datetime.fromisoformat(s["until"]):
+                active.add(label)
+        except (KeyError, ValueError, TypeError):
+            continue
+    return active
+
+
+def _resolve_label(query: str) -> str | None:
+    """Unique predicate whose label contains `query` (case-insensitive), or None."""
+    matches = [label for label in PREDICATES if query.lower() in label.lower()]
+    return matches[0] if len(matches) == 1 else None
+
+
 PREDICATES = {
     "P1 hook-drift": p1_hook_drift,
     "P3 mnemos-trial": p3_compaction,
@@ -359,11 +405,16 @@ PREDICATES = {
 
 
 def evaluate(root: Path) -> list[dict]:
-    """Run every predicate; one result dict each."""
+    """Run every predicate; one result dict each. Mark any with an active snooze."""
+    snoozed = active_snooze_labels(root, datetime.now(timezone.utc))
+    snoozes = _load_snoozes(root)
     out = []
     for label, pred in PREDICATES.items():
         fired, detail = pred(root)
-        out.append({"predicate": label, "fired": fired, "detail": detail})
+        s = snoozes.get(label, {}) if label in snoozed else {}
+        out.append({"predicate": label, "fired": fired, "snoozed": label in snoozed,
+                    "detail": detail, "snooze_until": s.get("until"),
+                    "snooze_reason": s.get("reason")})
     return out
 
 
@@ -373,32 +424,69 @@ def append_log(root: Path, results: list[dict]) -> None:
     log.parent.mkdir(parents=True, exist_ok=True)
     entry = {
         "ts": datetime.now(timezone.utc).isoformat(),
-        "fired": [r["predicate"] for r in results if r["fired"]],
+        "fired": [r["predicate"] for r in results if r["fired"] and not r["snoozed"]],
     }
     with log.open("a") as f:
         f.write(json.dumps(entry) + "\n")
 
 
 def render(results: list[dict]) -> str:
-    fired = [r for r in results if r["fired"]]
-    if not fired:
-        return "✓ no Observatory triggers fired"
-    lines = ["Observatory triggers fired (docs/observatory.md — resolve or snooze):"]
-    lines += [f"  🔴 {r['predicate']}: {r['detail']}" for r in fired]
-    return "\n".join(lines)
+    fired = [r for r in results if r["fired"] and not r["snoozed"]]
+    snoozed = [r for r in results if r["fired"] and r["snoozed"]]
+    lines = []
+    if fired:
+        lines.append("Observatory triggers fired (docs/observatory.md — resolve or snooze):")
+        lines += [f"  🔴 {r['predicate']}: {r['detail']}" for r in fired]
+    for r in snoozed:
+        lines.append(f"  💤 {r['predicate']}: snoozed until {(r['snooze_until'] or '?')[:10]}"
+                     f" — {r['snooze_reason'] or ''}")
+    return "\n".join(lines) if lines else "✓ no Observatory triggers fired"
+
+
+def manage_snooze(root: Path, args, now: datetime) -> str:
+    """Handle --snooze / --snooze-clear / --snooze-list. Returns a status line."""
+    snoozes = _load_snoozes(root)
+    if args.snooze_list:
+        return "\n".join(f"  💤 {k}: until {v.get('until', '?')[:10]} — {v.get('reason', '')}"
+                         for k, v in sorted(snoozes.items())) or "no active snoozes"
+    if args.snooze_clear:
+        label = _resolve_label(args.snooze_clear)
+        if not label or label not in snoozes:
+            return f"no snooze matching '{args.snooze_clear}'"
+        del snoozes[label]
+        _write_snoozes(root, snoozes)
+        return f"cleared snooze on {label}"
+    label = _resolve_label(args.snooze)
+    if not label:
+        return f"no unique predicate matches '{args.snooze}' — of: {', '.join(PREDICATES)}"
+    if not args.reason:
+        return "refusing to snooze without --reason (a snooze is an auditable decision)"
+    until = (now + timedelta(days=args.days)).isoformat()
+    snoozes[label] = {"until": until, "reason": args.reason, "snoozed_at": now.isoformat()}
+    _write_snoozes(root, snoozes)
+    return f"snoozed {label} until {until[:10]} ({args.days}d) — {args.reason}"
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Evaluate Observatory silent+checkable triggers.")
     ap.add_argument("--json", action="store_true", help="machine output")
     ap.add_argument("--log", action="store_true", help="append run to .tessera/logs/watch.jsonl")
+    ap.add_argument("--snooze", metavar="PREDICATE", help="ack+quiet a predicate (substring of its label)")
+    ap.add_argument("--days", type=int, default=30, help="snooze window in days (with --snooze)")
+    ap.add_argument("--reason", default="", help="why — required with --snooze (auditable)")
+    ap.add_argument("--snooze-clear", metavar="PREDICATE", help="remove a snooze")
+    ap.add_argument("--snooze-list", action="store_true", help="show active snoozes")
     args = ap.parse_args()
+
+    if args.snooze or args.snooze_clear or args.snooze_list:
+        print(manage_snooze(ROOT, args, datetime.now(timezone.utc)))
+        return 0
 
     results = evaluate(ROOT)
     if args.log:
         append_log(ROOT, results)
     print(json.dumps(results, indent=2) if args.json else render(results))
-    return 1 if any(r["fired"] for r in results) else 0
+    return 1 if any(r["fired"] and not r["snoozed"] for r in results) else 0
 
 
 if __name__ == "__main__":
