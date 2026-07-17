@@ -668,6 +668,45 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   (3) the concrete interop shape (does Tessera call conclave's gateway directly; do `bin/` wrappers collapse
   into conclave calls; where does the router live). Until then: **noted here so it is not lost.**
 
+### Haziness's correction-detector has near-zero recall — it has been silently blind
+
+- **Status:** Finding, confirmed. Actionable (detector upgrade scoped separately).
+- **Source:** 2026-07-16 session, while designing capture for gate-disposition (`should_fire`) and,
+  more valuably, **action-divergence** friction ("did the agent do the opposite of what was asked").
+  Before building anything new, checked what Mnemos *already* captures. It captures almost nothing.
+- **What was found — the detector reads ~0 everywhere.** `mnemos haze` scores **0.00–0.06 across every
+  session on record** (8 checked); every one bands `clear`. **This is not "every session was clean."**
+  The audit's own `tessera-verify` author-error-rate was **38%** — sessions are demonstrably not friction-free.
+  A metric that always says "clear" is not measuring; it is blind, and blindness reads as health.
+- **The proof is this very session (`b6d7b6f5`).** It contained heavy, repeated *substantive* user
+  redirection — corrected a wrong `tessera-watch` root-cause, challenged `should_fire` twice, reframed the
+  whole design to action-divergence, questioned the labeling burden. The detector's verdict:
+  `correction_density 0.000`, composite `0.00 CLEAR`. **Zero of it registered.**
+- **Root cause — detection is a shallow keyword regex.** `scripts/mnemos/claude_log.py`
+  (`_CORRECTION_LEAD_RE` / `_CORRECTION_PHRASE_RE`) fires only when a turn *opens* with
+  `no | wait | stop | actually | undo | revert | rollback | wrong | don't`. That catches overt "no, undo
+  that" corrections and **misses the friction that matters**: probing questions, reframes, "but that would
+  require X", "what does that give us" — the redirections that actually change the work. Backtrack detection
+  (`git revert` / `reset --hard`) is similarly literal.
+- **What is RIGHT, and worth keeping:** the *pipe*. `claude_log.py` passively ingests every transcript and,
+  per detected correction, stores the **matched phrase + a redacted text preview + timestamp** — not just a
+  count. Zero manual burden, ADR-0006's passive-observation pattern exactly. **The architecture is correct;
+  only the detector is too weak to feed it real signal.**
+- **Why it bears on the whole friction question:** there are two disposition vectors — *asking* calibration
+  (`should_fire`: did I surface the right gates) and *doing* calibration (**action-divergence**: did I do what
+  was asked, or diverge / defy / overreach). The second is the more valuable one — it is what the framework's
+  own postmortems keep admitting only a human catches ("every correction came from outside me", ADR-0007; the
+  deletion-leap; the 38% error rate). **`correction_density` is the one existing instrument that could see it —
+  and it has near-zero recall.** So the valuable friction is not merely un-typed; it is essentially uncaptured.
+- **Consequence for any labeling design:** the fix for both vectors is the same and it is NOT manual labeling
+  (which dies — see the `should_fire` dead backlog: 52 unlabeled gates nobody will ever label). It is **passive
+  extraction from the response the user already produces**, on this existing pipe — upgrade the detector, do not
+  add a labeling chore.
+- **Next:** (1) this entry. (2) **Detector upgrade** — replace the keyword regex with a recall-first classifier
+  over the transcript delta (the local-qwen infra from the tier-classify hook already exists), and **type** the
+  hit (misunderstood / defied / overreached / wrong) while there. Recall-first because a false "you corrected me"
+  is cheap; a missed one is the current failure. Scoped as its own task, not built here.
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.
