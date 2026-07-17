@@ -803,3 +803,31 @@ def test_catches_missing_template(fake_repo):
 def test_passes_when_hook_matches_template(fake_repo):
     _hook_pair(fake_repo, "h.sh", "echo same\n", "echo same\n")
     assert doccheck.check_hooks_match_templates() == []
+
+
+def test_catches_template_load_of_deleted_skill(fake_repo):
+    # A template eager-loads / copies a skill that does not exist in skills/.
+    (fake_repo / "templates").mkdir()
+    (fake_repo / "templates" / "CLAUDE.md").write_text(
+        "@.claude/skills/base/SKILL.md\n@.claude/skills/ghost/SKILL.md\n"
+    )
+    (fake_repo / "skills" / "base").mkdir(parents=True)
+    bad = doccheck.check_template_skill_refs_exist()
+    assert any("ghost" in b for b in bad)
+    assert not any("base" in b for b in bad)
+
+
+def test_catches_cp_recipe_to_deleted_skill_in_fence(fake_repo):
+    # The spawn-team shape: a `cp ~/.claude/skills/X/` recipe inside a fenced block.
+    (fake_repo / "commands").mkdir()
+    (fake_repo / "commands" / "init.md").write_text(
+        "Copy roles:\n```bash\ncp -r ~/.claude/skills/agent-teams/agents/ .claude/agents/\n```\n"
+    )
+    assert any("agent-teams" in b for b in doccheck.check_template_skill_refs_exist())
+
+
+def test_passes_when_referenced_template_skill_exists(fake_repo):
+    (fake_repo / "templates").mkdir()
+    (fake_repo / "templates" / "CLAUDE.md").write_text("@.claude/skills/mnemos/SKILL.md\n")
+    (fake_repo / "skills" / "mnemos").mkdir(parents=True)
+    assert doccheck.check_template_skill_refs_exist() == []

@@ -926,8 +926,41 @@ def check_hooks_match_templates() -> list[str]:
     return bad
 
 
+# Skills a template/command tells you to load or copy, by name. Matches
+# `@.claude/skills/X/…`, `~/.claude/skills/X/…`, `cp … skills/X/`, etc.
+_TEMPLATE_SKILL_REF = re.compile(r"skills/([a-z][a-z0-9-]+)/")
+# Legit references to skills that live only in the global registry, not skills/.
+# Empty today; add a name here (with a reason) if such a case ever appears.
+_TEMPLATE_SKILL_REF_ALLOWLIST: set[str] = set()
+
+
+def check_template_skill_refs_exist() -> list[str]:
+    """Every skill a template or command tells you to eager-load or copy must exist in skills/.
+
+    The blind spot behind the 2026-07-17 spawn-team break: `referenced-paths-exist` only checks
+    repo-relative inline-code paths, so a `@.claude/skills/X/SKILL.md` eager-load or a
+    `cp ~/.claude/skills/X/` recipe (a `~/…` path, often inside a fenced block) pointing at a
+    DELETED skill passed green. A kept command (`spawn-team`) silently lost its dependency and
+    no check caught it — a human did. This closes that class: scan templates/ + commands/ raw
+    text (fences included — the `cp` recipes live there) and assert every `skills/<name>/` it
+    names exists in `skills/`.
+    """
+    bad = []
+    for sub in ("templates", "commands"):
+        base = ROOT / sub
+        if not base.is_dir():
+            continue
+        for path in base.rglob("*.md"):
+            names = set(_TEMPLATE_SKILL_REF.findall(path.read_text()))
+            for name in sorted(names - _TEMPLATE_SKILL_REF_ALLOWLIST):
+                if not (ROOT / "skills" / name).is_dir():
+                    bad.append(f"{_rel(path)}: loads/copies skills/{name}/ — not in skills/")
+    return sorted(set(bad))
+
+
 CHECKS = {
     "referenced-paths-exist": check_referenced_paths_exist,
+    "template-skill-refs-exist": check_template_skill_refs_exist,
     "hooks-match-templates": check_hooks_match_templates,
     "no-upstream-clone-instructions": check_no_upstream_clone_instructions,
     "adr-index-complete": check_adr_index_complete,

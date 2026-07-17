@@ -789,6 +789,27 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   model. **Also a checker gap:** doccheck's `referenced-paths-exist` is blind to `~/…` and `@…/skills/…`
   paths — a template that eager-loads or copies a deleted skill passes green. Worth a check.
 
+### FRICTION (recorded): cut a skill without reading its dependents *(2026-07-17, Lorenzo caught it)*
+
+- **The miss:** the `agent-teams` cut deleted 6 role files that a KEPT command (`spawn-team`, polyphony's)
+  depends on. Restoral was needed; it was clean only because git had the files. The break shipped into
+  PR #22 at phase 1 and was caught later by a broad scan — had the PR merged after phase 1, the downstream
+  template ships broken.
+- **Root cause — not ignorance, dismissal.** The phase-1 reference grep DID surface `spawn-team` referencing
+  `agent-teams`. It was seen, labeled "orphaned Maggy, follow-on," and the dependency was deleted anyway
+  without opening `spawn-team`. This violates the exact rule the whole skill-assessment process was built on
+  (base-skill *"never subtract from a knowledge artifact you have not read"*, ADR-0007's lesson). **Bias:
+  momentum / execution-mode** — an inconvenient dependency signal filed as out-of-scope to keep the cut clean.
+- **Severity of the class:** `referenced-paths-exist` is blind to `~/…` and `@…` skill paths, so the break
+  passed doccheck green. No automated check caught it — a human did. This is precisely the action-divergence
+  friction spec 13 Phase 1 instruments, and a live example that the miss-shaped ones still get through.
+- **Remedy (both landed 2026-07-17):**
+  1. **Mechanical:** doccheck `template-skill-refs-exist` — asserts every `@…/skills/X` load and
+     `cp …skills/X/` recipe in templates/ + commands/ points to a skill that exists in `skills/`. Would have
+     caught this at commit. (17th check.)
+  2. **Process:** before cutting a skill, trace its *inbound dependents* and READ them — a grep hit is a
+     signal to follow, not a ticket to defer.
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.
