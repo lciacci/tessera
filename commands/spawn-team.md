@@ -49,10 +49,14 @@ Required files (with proper frontmatter: name, description, model, tools, disall
 - `merger.md`
 - `feature.md`
 
-If missing, copy from the agent-teams skill:
+If missing, copy the role files (preserved at `templates/agents/` after the `agent-teams` skill was
+retired — ADR-0008; these are spawn-team + polyphony's dependency, not part of the cut skill):
 ```bash
-cp -r ~/.claude/skills/agent-teams/agents/ .claude/agents/
+cp -r ~/.claude/templates/agents/ .claude/agents/   # or repo-relative templates/agents/
 ```
+> **UNRESOLVED SEAM (2026-07-17):** whether Tessera ships this team-spawning feature (spawn-team +
+> polyphony + these roles) downstream, and its delivery wiring (install.sh does not yet ship
+> `templates/agents/`), is deferred — see `docs/observatory.md` → "Team-spawning feature seam".
 
 ### 1.3 Check Feature Specs
 

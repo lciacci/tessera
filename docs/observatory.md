@@ -752,6 +752,43 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   the real toolchain and the Stop-hook substrate `iterative-development` already documents. Radar until a
   session wants autonomous coverage-gap filling — deferred, not scoped.
 
+### Team-spawning feature seam — unresolved after the agent-teams cut *(2026-07-17)*
+
+- **The seam:** ADR-0008 cut the `agent-teams` skill (Maggy-mandatory framing) but KEPT `polyphony`
+  (container isolation) and `/spawn-team` (the command that drives it). `spawn-team` depended on
+  `agent-teams`'s 6 role files (`team-lead`/`quality`/`security`/`code-review`/`merger`/`feature`); the cut
+  deleted them and broke the command. They were **restored to `templates/agents/`** (they are spawn-team's
+  dependency, not part of the retired skill) — but the audit never decided the underlying question.
+- **The unresolved question:** does Tessera's downstream template ship a **team-spawning feature** at all?
+  `polyphony` is "kept-but-not-activated"; `spawn-team` is documented as a live downstream feature in
+  `templates/CLAUDE.md` + `initialize-project`; `install.sh` does **not** currently ship `templates/agents/`.
+  Either wire the delivery (install.sh ships the roles, polyphony activates) or retire the whole feature
+  (cut spawn-team + roles + the template references). **Evaluate deliberately; do not let it rot half-wired.**
+- **Related deferral:** `templates/codex-auto-review.sh` (a guarded, dormant downstream Codex Stop-hook wired
+  in `templates/settings.json`) is **deferred to the D1 / `code-review` vendor-review decision** — same
+  vendor-CLI-review-deprecation question, resolved there, not piecemeal. (Cohesion contract, Open decision D1.)
+
+### Downstream template + `initialize-project` are stale vs ADR-0008/0009 *(finding, 2026-07-17 — surfaced by the skill cuts)*
+
+- **Status:** Finding, confirmed. Actionable, **not yet repaired** — flagged rather than fixed mid-cut to
+  keep scope honest. Surfaced when the ADR-0008 skill removals hit dangling references the earlier
+  reference-scans missed (doccheck can't catch them — they are `~/…` and `@…` paths, not repo paths).
+- **Two drifts, both pre-dating the cuts:**
+  1. **`templates/CLAUDE.md` + `templates/AGENTS.md` eager block is stale vs ADR-0008.** The eager set is
+     `base` + `mnemos` only (ADR-0008 de-eagered `iterative-development` and `security`; `polyphony` is
+     kept-but-not-activated). The downstream template still `@`-eager-loads `iterative-development`,
+     `security`, and `polyphony`. (The `cross-agent-delegation` eager line — a *deleted* skill — was removed
+     2026-07-17; the rest of the block was left for this alignment pass.)
+  2. **`commands/initialize-project.md` still teaches the COPY delivery model that ADR-0009 superseded.** It
+     instructs `cp -r ~/.claude/skills/<X>/ .claude/skills/` (including now-deleted `session-management`,
+     `cross-agent-delegation`, `agent-teams`), but ADR-0009 established delivery as a **selector**
+     (`skillOverrides: off` per profile via `bin/tessera-new-project`), no copying. The whole scaffold
+     section is legacy; its cut-skill references are a symptom, not the disease.
+- **The fix (a dedicated pass):** align the template eager block to `base`+`mnemos`; decide whether
+  `initialize-project.md` is retired in favor of `bin/tessera-new-project` or rewritten to the selector
+  model. **Also a checker gap:** doccheck's `referenced-paths-exist` is blind to `~/…` and `@…/skills/…`
+  paths — a template that eager-loads or copies a deleted skill passes green. Worth a check.
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.
