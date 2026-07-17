@@ -6,6 +6,64 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
+## ═══ SESSION 2026-07-17 — friction-detector Phase 1 SHIPPED + three-project cohesion contract ═══
+
+**ALL MERGED to `main` (#19, #20). Suite green, doccheck 16/16, `tessera-watch` quiet (P7 snoozed). No branches in flight.**
+
+### What shipped
+
+**A. Friction-detector Phase 1 (spec 13) — #19.** correction recall un-blinded: keyword regex →
+local **qwen3:8b** classifier on the passive ingest pipe. Heavy session `b6d7b6f5` went
+`correction_density 0.000 → 0.219` (hand-labeled truth 0.188); clean sessions stay 0; spread across
+~24 dogfood sessions is now 0.00–0.35 (was 0.00–0.06, blind). Three scope corrections found while building:
+- **3B tier-classify model is USELESS here** — it parrots the prompt's ending polarity (constant-yes/no).
+  Needs **qwen3:8b + `think=false`** (reasoning model; without it burns num_predict on a hidden `<think>`).
+  Fails open to regex. Override: `MNEMOS_CORRECTION_MODEL`.
+- **Injected user turns were counted as corrections** — hook feedback (`isMeta`) + task-notifications
+  (`promptSource=system`) now tagged `user-meta`, excluded from numerator AND haziness denominator.
+- **Latency was never real** — Stop hook is backgrounded (`& disown`) + incremental, so a live Stop
+  classifies only new turns; full `--reclassify --all` backfill of ~26 sessions = 81s. No batch/cap needed.
+- Review fix: disable the classifier after **3 consecutive** nulls, not the first (one blip was silently
+  regex-only'ing the rest of a backfill).
+- **`tessera-watch` P10** self-fires the deferred haziness band re-tune at ≥40 real-signal sessions
+  (24 now → ~16 runway) → spot-check precision first, THEN decide bands + the 0.30 weight.
+
+**B. Three-project cohesion contract — #20.** `docs/contracts/three-project-cohesion.md` — canonical
+map of the **substrate/pattern/policy** stack: Conclave (serving + `divergence.py` instrument) /
+pr-arbiter (multi-role union-recall review) / Tessera (governance + routing decisions). Tessera hosts as
+coordinator; **hosting ≠ ownership**; runtime peers; lane-change needs that project's sign-off. Contains
+layering table, 5 seams w/ owners, sequence (live/parked/ADR-gated), the **4 anti-conflation guards
+verbatim**, Open decisions **D1–D4**. A coordination MAP, not an ADR — decisions surfaced, deferred.
+- Resolved `council-review`'s pending roster/config decision → points at the contract (D1), flagged its
+  **plan-validation** path is *select-best* → NOT shielded by guard (a) (unlike union-recall PR-review).
+- Peer stubs point here: `../conclave/docs/INTEGRATION.md` (existed), `../pr-arbiter/docs/INTEGRATION.md`
+  (authored this session, committed via a pr-arbiter session).
+
+### NEXT (in order) — nothing here is started
+1. **D2 — the union-recall divergence metric** (contract seam S2). **The one genuinely-unblocked
+   high-value lever:** needs no prerequisites (not Phase 3, not a standing fleet), and it's what validates
+   pr-arbiter's thin headline (guard (d)) so the whole three-project integration can start moving. Design
+   + build the scoring variant of `divergence.py` (oracle = union of true findings vs a labeled defect set).
+2. **The 10 skill removals** — HARVEST-first. `code-review` bulk removal still gated on **D3** (`/arbiter`
+   graduation → Phase 3). `codex`/`gemini-review` harvests now land in the cohesion contract/observatory.
+   `ai-models`→URL pointers, `autonomous-testing`→pipeline note, `build-in-public`→plugin docs. 3 Maggy
+   skills (`agent-teams`, `autonomous-testing`, `workspace`) → 0 Maggy after.
+3. **Delivery-entangled trims** — `python` TRIM, `ui-testing` MERGE (small).
+4. **Refine `skill-profiles.json`** vs the full KEEP set (low-stakes).
+5. **Friction-detector Phase 2/3** — type corrections (misunderstood/defied/overreached/wrong), then
+   action-link + divergence surface. The natural follow-on once Phase 1's signal is trusted.
+
+### Deferred with their own triggers (not "next")
+- **Three-project ADR — D1/D3/D4** — evidence-gated: D3 needs pr-arbiter **Phase 3** (8–15h annotator
+  pilot) + a **standing conclave fleet**; D4 (pr-arbiter adopts `.tessera/`) trips `tessera-watch` P4 at 5
+  downstreams. D1 (routing home) firms with D2's result. See the contract's Open decisions.
+- **P10 haze-recalib** — self-fires at 40 real-signal sessions → precision spot-check + band re-tune.
+- **`should_fire` passive extraction** — apply spec-13's pattern to retire the dead labeling path.
+- **De-dup the registry / Listing-budget floor / P7 (snoozed 2026-08-31) / Mnemos compaction-recovery
+  (→ real CLI venue)** — carried from prior sessions; own venues.
+
+---
+
 ## ═══ SESSION 2026-07-16 — delivery reframe shipped, + a deep friction-instrumentation thread ═══
 
 **ALL MERGED to `main` (12 PRs). Suite green, doccheck 16/16, `tessera-watch` quiet. No branches in flight.**
@@ -52,6 +110,8 @@ Started from P7's nag; went deep and it paid. Conclusions:
   (Phase 1 = local-qwen recall detector + backtest; typing/action-linking deferred).
 
 ### NEXT (in order) — nothing here is started
+> **SUPERSEDED by the 2026-07-17 section above.** Item 1 (Phase 1) shipped as #19; the queue was
+> re-ordered (D2 is now the unblocked lead). Kept for the trail.
 1. **Friction-detector Phase 1** (`_project_specs/13`) — the highest-value build; instruments the
    action-divergence friction. Recalibrates haziness bands as a side effect (flagged in the spec).
 2. **The 10 removals** — HARVEST-first; `codex`/`gemini-review` harvests now have a home (the conclave note,
