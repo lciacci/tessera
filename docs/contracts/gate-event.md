@@ -98,6 +98,29 @@ ADR-0006 already flags for pruning. The **production join question stays open**:
 outcome source ever ships (accept/dismiss captured at disposition time), that producer's shape
 is decided then — and that is the point at which this earns an ADR.
 
+### Pickup for tess-dashboard — `labeled_by` provenance when `should_fire` goes passive (2026-07-19)
+
+Manual labeling is a dead act (the P7 backlog: 52 unlabeled gates across 19 sessions nobody will
+hand-label; P7 snoozed, not resolved). The planned fix is **passive extraction** — apply spec-13's
+Phase-1 pattern (a local-qwen classifier over the transcript delta at Stop-hook ingest) to fill
+`should_fire` from the user's in-session disposition automatically, the same way friction Phase 3
+(#31) did for corrections. **The metric definition does not change** (`should_fire_ratio` stays
+mean over `fired` × `should_fire`) — only *how the label gets populated*. Two consequences the
+dashboard must handle when that lands:
+
+1. **A new provenance field — `labeled_by: human | classifier`.** Auto-filled labels are ~0.5
+   precision (the spec-13 classifier finding), so they must be **separable** from the trusted
+   hand-labels, never silently pooled. The dashboard should slice/weight by `labeled_by`: human =
+   the trusted anchor, classifier = coverage-filler. This is the same discipline as `tessera-watch`
+   P10 gating the haze band re-tune behind a precision spot-check.
+2. **The ratio will move — coverage un-blinds.** Today the matrix is computed over ~40 hand-labeled
+   gates and excludes nulls; filling the nulls automatically recomputes it over *all* gates. Expect
+   a shift on the number that is **not** a change in gating behavior — it is the denominator
+   un-blinding (exactly like `correction_density` 0.00 → 0.219 when Phase-1 lifted its blindness).
+
+Not built yet — this is the note so the dashboard side is ready. The Tessera-side build is
+"`should_fire` passive extraction" in `_project_specs/todos/active.md`.
+
 ## Consumers
 
 - `tess-dashboard` — gate calibration panel. Computes the confusion matrix / precision / recall
