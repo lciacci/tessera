@@ -863,3 +863,38 @@ def test_passes_when_referenced_template_skill_exists(fake_repo):
     (fake_repo / "templates" / "CLAUDE.md").write_text("@.claude/skills/mnemos/SKILL.md\n")
     (fake_repo / "skills" / "mnemos").mkdir(parents=True)
     assert doccheck.check_template_skill_refs_exist() == []
+
+
+# ─── 2026-07-19 (profiles tidy): the curation map (skill-profiles.json) can name a DELETED
+# skill — dangling curation that silently selects nothing. Sibling of template-skill-refs for
+# the one skill reference that is a bare JSON name, not an `@`/`~/` path.
+def _write_profiles(repo, data):
+    d = repo / "templates" / "tessera"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "skill-profiles.json").write_text(json.dumps(data))
+
+
+def test_catches_profile_naming_deleted_skill(fake_repo):
+    (fake_repo / "skills" / "base").mkdir(parents=True)
+    _write_profiles(fake_repo, {
+        "universal": ["base"], "profiles": {"standard": []},
+        "extensions": {"x": ["deleted-skill"]}})
+    bad = doccheck.check_skill_profiles_names_are_installed()
+    assert any("deleted-skill" in v for v in bad), bad
+
+
+def test_passes_when_all_profile_skills_installed(fake_repo):
+    for s in ("base", "existing-repo"):
+        (fake_repo / "skills" / s).mkdir(parents=True)
+    _write_profiles(fake_repo, {
+        "universal": ["base"], "profiles": {"standard": []},
+        "extensions": {"brownfield": ["existing-repo"]}})
+    assert doccheck.check_skill_profiles_names_are_installed() == []
+
+
+def test_orphan_skill_is_not_a_violation(fake_repo):
+    # Installed but named nowhere = deliberate off-everywhere policy, not an error.
+    for s in ("base", "workspace"):
+        (fake_repo / "skills" / s).mkdir(parents=True)
+    _write_profiles(fake_repo, {"universal": ["base"], "profiles": {}, "extensions": {}})
+    assert doccheck.check_skill_profiles_names_are_installed() == []

@@ -8,6 +8,7 @@
     "framework-evaluation",
     "adr-gate",
     "code-graph",
+    "code-review",
     "commit-hygiene",
     "iterative-development",
     "security",
@@ -39,6 +40,8 @@
     "tickets": ["ticket-craft"],
     "credentials": ["credentials"],
     "deep-analysis": ["cpg-analysis"],
-    "orchestration": ["polyphony", "council-review"]
+    "orchestration": ["polyphony", "council-review"],
+    "brownfield": ["existing-repo"],
+    "deploy": ["project-tooling"]
   }
 }
