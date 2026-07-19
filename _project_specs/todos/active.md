@@ -6,6 +6,55 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
+## ═══ SESSION 2026-07-18 — friction Phase 2 + delivery-entangled trims + branch/doc cleanup ═══
+
+**ALL MERGED to `main` (#25–#29). Suite green, doccheck 17→18, `tessera-watch` quiet (P7 snoozed). No
+branches in flight (2 stale remote branches deleted). Skills 48 → 47.**
+
+### What shipped
+- **A. Friction-detector Phase 2 — typing (#25).** Each detected correction typed
+  (`misunderstood/defied/overreached/wrong`) via a 2nd qwen prompt on already-detected corrections
+  only. New `claude_turns.correction_type` col + idempotent ADD-COLUMN migration; `haze --explain`
+  rollup + `CORRECT:<type>` markers; `--reclassify` backfills. **VIEW-ONLY — does NOT feed the haziness
+  composite** (weight changes stay gated on P10). Verified vs live qwen3:8b: `b6d7b6f5` → 7 typed,
+  density unchanged 0.219. Code-review Low fix folded in (`correction_type` shares the fail-disable).
+  Only **Phase 3 (action-link)** remains — spec 13.
+- **B. python TRIM + a phantom-claim fix (#27).** `python` 222→81 ln (cut toolchain/src-layout/CI/
+  pre-commit/pydantic Tessera doesn't use; kept type-hints/DI/Result/anti-patterns). **Read-first
+  surfaced a real bug:** `base`'s eager note claimed its cut content "survives in the GLOBAL
+  `~/.claude/skills/base` copy… full body" — **FALSE** (`diff -q` identical, no copy mechanism). Fixed +
+  guarded: **doccheck 18th check `no-phantom-global-skill-body-claim`** + 3 regression tests.
+- **C. ui-testing MERGE (#28).** Unique parts → siblings (Pre-Flight Checklist + a11y automation to
+  `ui-web`; checklist to `ui-mobile`); contrast tables dropped as dup; skill cut; `skill-profiles.json`
+  react-web/react-native profiles updated. Harvest in-repo + verifiable.
+- **D. doc-sync + cleanup.** #26 (observatory + mnemos SKILL synced to Phase 2). #29 (design-principles
+  "Skills — keep" list marked **SUPERSEDED by ADR-0008** — was a pre-audit snapshot naming 10+ cut
+  skills). Deleted 2 stale squash-merged remote branches (`feat/distribution-self-sufficiency`,
+  `focus-004-content-audit`).
+
+### The through-line: read-first paid off 3×
+Every delivery-entangled trim was read-first per the rule-over-read lesson, and it caught what
+pattern-matching would have shipped: (1) base's phantom global-copy claim, (2) the python-audit premise
+drift (`pyproject.toml` now exists in sub-packages — TRIM still held), (3) design-principles' stale
+keep-list. **Carry forward: skill/knowledge/delivery decisions stay read-first, single-decision.**
+
+### NEXT (in order) — nothing started
+1. **Friction-detector Phase 3** — action-link + divergence surface (tie each correction to the action
+   it was about). The real remaining build; higher value. Follow-on now Phase 2 signal is trusted.
+2. **Refine `skill-profiles.json`** vs the full KEEP set (low-stakes tidy).
+
+### The open delivery question (blocks further "trim-on-survives-globally" moves)
+**Skill-body delivery has no copy mechanism** (observatory finding, this session). `bin/tessera-new-project`
+curation toggles skills on/off via `skillOverrides` — it never copies bodies; no `install.sh`/script
+writes to `~/.claude/skills`. So "trim here, full body serves downstream" (the TRIM rationale) rests on
+plumbing that doesn't exist. The trims done were still safe (this copy only harms the framework session;
+downstream never received it by copy). **But do NOT trim any further delivery-entangled skill on the
+"survives globally" rationale until the delivery-mechanism design session settles it** — see
+`docs/observatory.md` → "Skill registry — which copy is source of truth" + "Skill-body delivery has no
+copy mechanism".
+
+---
+
 ## ═══ SESSION 2026-07-17 — Phase 1 + cohesion contract + skill removals (9/10) + template alignment ═══
 
 **ALL MERGED to `main` (#19–#23). Suite green, doccheck 17/17, `tessera-watch` quiet (P7 snoozed). No branches in flight. Skills 57 → 48.**
