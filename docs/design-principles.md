@@ -125,6 +125,14 @@ Two distinct concerns that Maggy tangles together — separating them clarifies 
 
 ### Skills — keep
 
+> **SUPERSEDED (2026-07-18) — historical snapshot, do not read as the current corpus.** This keep/cut
+> list is the *pre-audit* dogfood plan. The authoritative skill verdicts are **ADR-0008** (content audit
+> + delivery reframe) and its worksheet `_project_specs/todos/focus-004-audit.md`. Since this list was
+> written, 10+ skills named here as "keep" were **cut or merged** — `codex-review`, `gemini-review`,
+> `agent-teams`, `cross-agent-delegation`, `session-management`, `code-deduplication`, `ai-models`,
+> `autonomous-testing`, `build-in-public`, and `ui-testing` (merged into `ui-web`/`ui-mobile`,
+> 2026-07-18). Kept for the reasoning trail, not as a live index. Corpus is now 47.
+
 - **Core skills** (with Mnemos marked as *on trial for crash/compaction recovery*, iCPG as *on trial as continuously-loaded intent layer*, code-graph as *on trial vs GitNexus for structural knowledge*): `base`, `iterative-development`, `mnemos*`, `icpg*`, `code-review`, `codex-review`, `gemini-review`, `workspace`, `commit-hygiene`, `code-deduplication`, `agent-teams`, `ticket-craft`, `team-coordination`, `code-graph*`, `cpg-analysis`, `security`, `credentials`, `session-management`, `project-tooling`, `existing-repo`, `cross-agent-delegation`, `polyphony` *(kept-but-not-activated — see Polyphony note below)*.
 - **All 8 language/framework skills:** Python, TypeScript, Node backend, React web, React Native, Android Java, Android Kotlin, Flutter. (Android-then-port-to-iOS plan keeps the mobile cluster relevant.)
 - **All 6 UI skills:** `ui-web`, `ui-mobile`, `ui-testing`, `playwright-testing`, `user-journeys`, `pwa-development`.
