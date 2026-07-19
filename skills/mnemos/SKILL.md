@@ -145,6 +145,14 @@ credentials) are redacted before anything touches disk.
 
 The composite maps to a band: `clear` < 0.25 ≤ `cloudy` < 0.50 ≤ `hazy` < 0.75 ≤ `lost`.
 
+**Correction detection + typing (spec 13).** `correction_density` counts user turns that push back on
+the agent — caught by a keyword regex plus a recall-first local-qwen classifier over the turns the regex
+misses (fails open to the regex; `qwen3:8b` + `think=false`, override via `MNEMOS_CORRECTION_MODEL`).
+Each detected correction is then **typed** — `misunderstood / defied / overreached / wrong` — stored in
+`claude_turns.correction_type`. **Typing is a diagnostic view, NOT a sixth dimension**: it never changes
+the composite. See it with `mnemos haze --session <id> --explain` (a `CORRECTION TYPES` rollup + per-turn
+`CORRECT:<type>` markers). `mnemos ingest-claude --reclassify --session <id>` re-runs both on history.
+
 ```bash
 mnemos ingest-claude --all              # ingest every transcript + score
 mnemos ingest-claude --session <id>     # one session by id
