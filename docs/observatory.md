@@ -580,6 +580,31 @@ Both were found by adversarial verification, **not** by the framework. **The rea
 - **The finding.** `tessera/skills/` and the global `~/.claude/skills/` were byte-identical 56/56 — a duplicate that doubles the session's skill-list cost. ADR-0007 said "kill the duplicate." But FOCUS-004 **diverged them**: this session added `adr-gate` + the `code-review`/`supabase-python`/`council-review`/`code-graph` edits to the *tessera* copy only (now 57 vs 56). So the de-dup is no longer "delete the identical copy" — it *is* the question **which registry is authoritative for downstream delivery**, and that is the delivery design (ADR-0008). Cutting either copy now would either lose this session's work (delete tessera's) or strand it out of the global library (delete global's).
 - **When to revisit:** the delivery session. Decide: does Tessera ship skills via `bin/tessera-new-project` (profile-gated), and is the source the tessera-local dir or the global registry? Until then, **do not delete either copy.**
 
+### Skill-body delivery has no copy mechanism — and a skill claimed it did
+
+- **Status:** Open (feeds the delivery-mechanism design session above). **Source:** python-TRIM read-first, 2026-07-18.
+- **The finding.** Applying the `python` TRIM (ADR-0008) surfaced two entangled facts. (1) The eagerly-loaded
+  `base` skill asserted its cut scaffolding was preserved in a full-body GLOBAL `~/.claude/skills/base` copy
+  serving downstream apps. **Verified false:** `diff -q` shows the global copy byte-identical to
+  the trimmed project copy — the full body is in *neither*; it lives in git history (pre-`3a36bc4`) + live sibling
+  overlaps (`iterative-development`, `existing-repo`). (2) **No mechanism copies skill bodies to downstream at
+  all:** no `install.sh`/script writes into `~/.claude/skills`, and `bin/tessera-new-project`'s ADR-0009 curation
+  toggles skills **on/off** via `skillOverrides` — it never copies a body. So "trim here, the full body serves
+  downstream" (the audit's stated rationale for `python`/`base`/`icpg` TRIMs) rests on delivery plumbing that
+  does not exist. The global `~/.claude/skills` is Lorenzo's personal-machine copy, coincidentally identical,
+  serving *his* other repos — not a Tessera-controlled downstream archive.
+- **Why it matters.** The TRIMs are still individually *safe* (a trimmed body only removes framework-session
+  harm; downstream never received this copy by any mechanism). But the reassurance that made them feel free —
+  "the full body survives globally" — is the same deletion-safety illusion `base`'s own HARVEST-BEFORE-CUT line
+  (ADR-0007) exists to prevent, and it was written *into base itself*. Fixed the false claim + guarded it
+  (doccheck `no-phantom-global-skill-body-claim`, test in `test_doccheck.py`).
+- **The real open question (for the delivery session):** if downstream Tessera apps genuinely need full skill
+  bodies (a real Python app *does* use ruff/mypy/FastAPI), what actually delivers them? Curation-on/off does not.
+  Either (a) the global registry is the delivery source and downstream gets whatever body it holds (today: the
+  trimmed one — so downstream is *under*-served), or (b) `tessera-new-project` must copy profile-selected bodies,
+  or (c) framework-vs-downstream skills are genuinely different artifacts. Undecided; **do not TRIM any further
+  delivery-entangled skill on the "survives globally" rationale until this is settled.**
+
 ### Fail-open skill lint — the check `council-review` earns, and the trap it must avoid
 
 - **Status:** Pending eval. **This is a design task, not a doccheck one-liner** — implementing it naively re-commits the reachability error the whole skill audit was about.

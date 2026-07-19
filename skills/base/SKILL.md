@@ -118,6 +118,12 @@ at its canonical home:** the Stop-hook TDD loop → `iterative-development`; cre
 `credentials`; OWASP/security → `security`; tiered checkpointing → `mnemos` (and its
 `session-management` fossil, see `docs/design-principles.md` → "Fossil lineage"). The atomic-todo
 `[TODO-xxx]` format, the phased RED/GREEN/VALIDATE Todo-Execution and Bug-Fix workflows, the
-coverage-gate prescriptions, and the `_project_specs/` doc tree are downstream-app scaffolding; they
-survive in the GLOBAL `~/.claude/skills/base` copy, which serves downstream app repos and retains the
-full body those repos actually use.*
+coverage-gate prescriptions, and the `_project_specs/` doc tree are downstream-app scaffolding.
+**Correction 2026-07-18:** an earlier version of this note claimed that scaffolding was preserved in a
+full-body `~/.claude/skills/base` copy serving downstream apps. That was **false** — the global copy is
+byte-identical to this trimmed one (`diff -q` = identical), and no `install.sh`/script copies skill
+bodies out to it. The scaffolding survives in **git history** (pre-`3a36bc4`) and in live sibling
+overlaps (`iterative-development`, `existing-repo`); it is **not** preserved in any global archive, and
+how downstream apps should actually receive full skill bodies is an open delivery question (ADR-0009
+curation toggles skills on/off — it does not copy bodies). See `docs/observatory.md` → "Skill-body
+delivery has no copy mechanism". (Regression-guarded: doccheck `no-phantom-global-skill-body-claim`.)*
