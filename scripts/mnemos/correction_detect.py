@@ -138,11 +138,21 @@ class CorrectionDetector:
     def correction_type(self, cleaned: str) -> str | None:
         """Type a turn already known to be a correction. One of TYPES, or None
         (Ollama down / over budget / unparseable) — a null type never drops the
-        correction, it just leaves it untyped. Shares the same budget as
-        qwen_says_correction, so typing yields to detection once time is spent."""
+        correction, it just leaves it untyped. Shares the same budget AND the
+        consecutive-fail disable as qwen_says_correction: an all-regex-matched
+        run (which never calls qwen_says_correction) still trips off a dead
+        Ollama within _MAX_CONSECUTIVE_FAILS instead of eating the whole budget
+        in per-call timeouts."""
         if not self.enabled or time.monotonic() > self._deadline:
             return None
-        return classify_type(cleaned, generate=self.generate)
+        verdict = classify_type(cleaned, generate=self.generate)
+        if verdict is None:
+            self._fails += 1
+            if self._fails >= self._MAX_CONSECUTIVE_FAILS:
+                self.enabled = False
+            return None
+        self._fails = 0
+        return verdict
 
 
 def make_detector(*, force: bool = False) -> CorrectionDetector:

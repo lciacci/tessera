@@ -92,6 +92,18 @@ def _detector_type_behavior() -> None:
     d = CorrectionDetector(generate=_gen("wrong"), enabled=True, budget_s=0.0)
     assert d.correction_type("x") is None       # budget already spent
 
+    # Sustained null (dead Ollama on an all-regex-matched run) disables typing
+    # within the fail budget instead of eating the whole wall-clock budget.
+    d = CorrectionDetector(generate=_gen(""), enabled=True)
+    for _ in range(CorrectionDetector._MAX_CONSECUTIVE_FAILS):
+        assert d.correction_type("x") is None
+    assert d.enabled is False
+    # A success resets the counter (junk answer between live ones is tolerated).
+    d = CorrectionDetector(generate=_gen(""), enabled=True)
+    d.correction_type("x"); d.correction_type("x")
+    d.generate = _gen("defied")
+    assert d.correction_type("x") == "defied" and d.enabled is True
+
 
 def demo() -> None:
     _regex_unchanged()
