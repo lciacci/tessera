@@ -985,10 +985,38 @@ def check_no_phantom_global_skill_body_claim() -> list[str]:
     return sorted(set(bad))
 
 
+def check_skill_profiles_names_are_installed() -> list[str]:
+    """Every skill named in templates/tessera/skill-profiles.json must exist in skills/.
+
+    The curation map (ADR-0009) names skills to turn on per downstream profile; a name
+    that points at a DELETED skill is dangling curation — it silently selects nothing.
+    Sibling of `template-skill-refs-exist` for the one skill reference that isn't an
+    `@`/`~/` path but a bare name in a JSON list. Added 2026-07-19 during the profiles
+    tidy: catches the next skill removal that forgets to update the map. (Orphans — a
+    skill installed but named in NO list — are a deliberate off-everywhere policy, not
+    an error, so they are NOT flagged; only dangling names are.)
+    """
+    profiles = ROOT / "templates" / "tessera" / "skill-profiles.json"
+    if not profiles.is_file():
+        return []
+    try:
+        data = json.loads(profiles.read_text())
+    except json.JSONDecodeError as e:
+        return [f"skill-profiles.json: invalid JSON ({e})"]
+    named: set[str] = set(data.get("universal", []))
+    for group in ("profiles", "extensions"):
+        for names in data.get(group, {}).values():
+            named |= set(names)
+    bad = [f"skill-profiles.json: names skills/{name}/ — not in skills/"
+           for name in sorted(named) if not (ROOT / "skills" / name).is_dir()]
+    return bad
+
+
 CHECKS = {
     "referenced-paths-exist": check_referenced_paths_exist,
     "no-phantom-global-skill-body-claim": check_no_phantom_global_skill_body_claim,
     "template-skill-refs-exist": check_template_skill_refs_exist,
+    "skill-profiles-names-are-installed": check_skill_profiles_names_are_installed,
     "hooks-match-templates": check_hooks_match_templates,
     "no-upstream-clone-instructions": check_no_upstream_clone_instructions,
     "adr-index-complete": check_adr_index_complete,
