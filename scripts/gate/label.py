@@ -43,10 +43,6 @@ _MODEL = os.environ.get("MNEMOS_CORRECTION_MODEL", "qwen3:8b")
 _THINK = False if "qwen3" in _MODEL else None
 
 
-def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-
-
 def _parse_ts(s: str | None) -> datetime | None:
     """ISO-8601 → aware datetime. Normalises trailing Z so it parses on 3.7+."""
     if not s:
@@ -71,13 +67,10 @@ def classify_should_fire(note: str | None, reply: str, *, generate) -> bool | No
     return m.group(1).lower() == "yes"
 
 
-def _is_injected(ev: dict) -> bool:
-    return bool(ev.get("isMeta")) or ev.get("promptSource") == "system"
-
-
 def human_turns(transcript_path: str) -> list[tuple[datetime, str]]:
     """[(ts, text)] for real user messages, oldest first. Excludes tool_result
-    carriers (content not str), hook feedback, and harness-injected turns."""
+    carriers (content not str), hook feedback (isMeta), and harness-injected
+    turns (promptSource=system)."""
     out: list[tuple[datetime, str]] = []
     try:
         with open(transcript_path, encoding="utf-8", errors="replace") as f:
@@ -88,7 +81,7 @@ def human_turns(transcript_path: str) -> list[tuple[datetime, str]]:
                     continue
                 if ev.get("type") != "user" or ev.get("isSidechain"):
                     continue
-                if _is_injected(ev):
+                if ev.get("isMeta") or ev.get("promptSource") == "system":
                     continue
                 content = (ev.get("message") or {}).get("content")
                 ts = _parse_ts(ev.get("timestamp"))
@@ -125,8 +118,9 @@ def _label_one(ev: dict, turns: list[tuple[datetime, str]], *, generate) -> bool
     verdict = classify_should_fire(data.get("note"), reply, generate=generate)
     if verdict is None:
         return False
+    now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     data.update({"should_fire": verdict, "should_fire_basis": reply[:200],
-                 "labeled_by": "classifier", "labeled_ts": _utc_now_iso()})
+                 "labeled_by": "classifier", "labeled_ts": now_iso})
     ev["data"] = data
     return True
 
@@ -177,12 +171,6 @@ def label_session(session_id: str, *, generate, projects_root: str | None = None
     return {"session": session_id, "labeled": n}
 
 
-def _target_sessions(args) -> list[str]:
-    if args.session:
-        return [args.session]
-    return sorted(p.stem for p in LOGS.glob("*.jsonl"))
-
-
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Passively label suggestion_gate should_fire.")
     g = p.add_mutually_exclusive_group(required=True)
@@ -195,8 +183,9 @@ def main(argv: list[str] | None = None) -> int:
     if not _ollama_up():
         print("Ollama down — should_fire stays null (fail-open).", file=sys.stderr)
         return 0
+    sessions = [args.session] if args.session else sorted(f.stem for f in LOGS.glob("*.jsonl"))
     total = 0
-    for s in _target_sessions(args):
+    for s in sessions:
         r = label_session(s, generate=ollama_generate, projects_root=args.projects_root)
         total += r["labeled"]
         if r["labeled"] or "skipped" not in r:
