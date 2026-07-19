@@ -887,6 +887,36 @@ const scaledFontSize = (size: number) => size * fontScale;
 </Text>
 ```
 
+## Pre-Ship Verification
+
+*(Merged from the retired `ui-testing` skill, 2026-07-18. Its web tooling (`eslint-plugin-jsx-a11y`,
+`@axe-core/playwright`) is DOM-only and does not apply to React Native, so only the mobile-relevant
+checklist was taken; its contrast tables duplicated §2 Color Contrast above and were dropped.)*
+
+### Pre-Flight Checklist — before shipping ANY screen
+
+```markdown
+## Visibility
+- [ ] All buttons have a visible background OR border
+- [ ] No text is the same color as its background
+- [ ] All text meets 4.5:1 contrast (see §2)
+
+## Touch Targets
+- [ ] All interactive elements ≥ 44×44pt (see §1)
+- [ ] Adequate spacing between tappable elements
+
+## States
+- [ ] Pressed states visible (activeOpacity / ripple)
+- [ ] Disabled states visually distinct (opacity 0.5)
+- [ ] Loading states show an indicator
+
+## Dark Mode (if applicable)
+- [ ] Text readable + borders visible on dark backgrounds
+
+## Accessibility
+- [ ] Every interactive element has an accessibilityLabel (see VoiceOver/TalkBack above)
+```
+
 ## Anti-Patterns
 
 ### Never Do

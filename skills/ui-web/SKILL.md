@@ -577,6 +577,61 @@ const srOnly = "absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap b
 </div>
 ```
 
+## Pre-Ship Verification
+
+*(Merged from the retired `ui-testing` skill, 2026-07-18 — its unique parts; the contrast tables it
+carried duplicated §1 Color Contrast above and were dropped.)*
+
+### Pre-Flight Checklist — before shipping ANY UI
+
+```markdown
+## Visibility
+- [ ] All buttons have visible background OR border
+- [ ] No text is the same color as its background
+- [ ] All text meets 4.5:1 contrast (see §1)
+- [ ] Ghost/text buttons have visible borders
+
+## Touch/Click Targets
+- [ ] All buttons ≥ 44px height; icon buttons ≥ 44×44px
+- [ ] Adequate spacing between clickable elements
+
+## States
+- [ ] Hover states visible; focus rings on keyboard nav
+- [ ] Disabled states visually distinct (opacity 0.5)
+- [ ] Loading states show indicators
+
+## Dark Mode (if applicable)
+- [ ] Text readable + borders visible on dark backgrounds
+- [ ] No gray-400 text on dark backgrounds
+
+## Responsive
+- [ ] No horizontal scroll at 320px
+- [ ] Content readable at all breakpoints
+```
+
+### Automated a11y Checks
+
+```bash
+npm install -D eslint-plugin-jsx-a11y
+```
+
+```json
+// .eslintrc — extends
+{ "extends": ["plugin:jsx-a11y/recommended"] }
+```
+
+```typescript
+// e2e/accessibility.spec.ts — fail the build on any violation
+import { test, expect } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
+
+test('no accessibility violations', async ({ page }) => {
+  await page.goto('/');
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations).toEqual([]);
+});
+```
+
 ## Anti-Patterns
 
 ### Never Do
