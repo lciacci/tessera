@@ -67,10 +67,20 @@ base+mnemos); `claude-bootstrap-reference` disclaimer (audit done, corpus now 48
    corrections; new `claude_turns.correction_type` col + ADD-COLUMN migration; `haze --explain` rollup;
    VIEW-ONLY (composite untouched, verified 0.219 on b6d7b6f5). **Phase 3 (action-link + divergence
    surface) deferred** — see spec 13.
-2. **Delivery-entangled trims** — `python` TRIM, `ui-testing` MERGE (small). *(Read-first, per the
-   rule-over-read lesson — these are the same shape that went soupy.)*
+2. ~~**Delivery-entangled trims** — `python` TRIM, `ui-testing` MERGE~~ **DONE (2026-07-18).**
+   `python` TRIM #27 (222→81 ln); `ui-testing` MERGE this session (Pre-Flight Checklist + a11y
+   automation → `ui-web`; checklist → `ui-mobile`; contrast tables dropped as dup; skill cut;
+   `skill-profiles.json` react-web/react-native profiles updated). **Read-first paid off twice:** it
+   surfaced base's phantom global-copy claim (fixed + guarded, #27) and, here, that
+   `design-principles.md`'s "Skills — keep" list (§128–132) is a **pre-ADR-0008 snapshot** still
+   listing 7 now-cut skills — a holistic drift flagged below, NOT partially edited.
 3. **Refine `skill-profiles.json`** vs the full KEEP set (low-stakes).
 4. **Friction-detector Phase 3** — action-link + divergence surface. Follow-on once Phase 2 signal trusted.
+5. **Doc-hygiene: `design-principles.md` "Skills — keep" list is pre-ADR-0008** — §128–132 lists
+   `codex-review`, `gemini-review`, `agent-teams`, `cross-agent-delegation`, `session-management`,
+   `code-deduplication`, `ui-testing` as KEEP, all since cut. Needs one "superseded by ADR-0008 —
+   see the audit" marker, not per-skill surgery. Also `claude-bootstrap-reference.md:295` +
+   `design-principles.md:910` list `ui-testing.md` (both are dated snapshots w/ disclaimers).
 
 **MOVED OUT — S2 divergence build is NOT Tessera work (drift fix 2026-07-18).** Prior NEXT #1 said
 "design + build the scoring variant of `divergence.py`." Per `docs/contracts/three-project-cohesion.md`

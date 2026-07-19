@@ -21,8 +21,8 @@
   "extensions": {
     "python": ["python"],
     "typescript": ["typescript"],
-    "react-web": ["react-web", "ui-web", "ui-testing", "playwright-testing", "pwa-development"],
-    "react-native": ["react-native", "ui-mobile", "ui-testing"],
+    "react-web": ["react-web", "ui-web", "playwright-testing", "pwa-development"],
+    "react-native": ["react-native", "ui-mobile"],
     "flutter": ["flutter", "ui-mobile"],
     "android-kotlin": ["android-kotlin", "ui-mobile"],
     "android-java": ["android-java", "ui-mobile"],
