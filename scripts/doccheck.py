@@ -999,7 +999,10 @@ def check_skill_profiles_names_are_installed() -> list[str]:
     profiles = ROOT / "templates" / "tessera" / "skill-profiles.json"
     if not profiles.is_file():
         return []
-    data = json.loads(profiles.read_text())
+    try:
+        data = json.loads(profiles.read_text())
+    except json.JSONDecodeError as e:
+        return [f"skill-profiles.json: invalid JSON ({e})"]
     named: set[str] = set(data.get("universal", []))
     for group in ("profiles", "extensions"):
         for names in data.get(group, {}).values():

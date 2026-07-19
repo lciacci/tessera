@@ -898,3 +898,12 @@ def test_orphan_skill_is_not_a_violation(fake_repo):
         (fake_repo / "skills" / s).mkdir(parents=True)
     _write_profiles(fake_repo, {"universal": ["base"], "profiles": {}, "extensions": {}})
     assert doccheck.check_skill_profiles_names_are_installed() == []
+
+
+def test_malformed_profiles_json_fails_clean(fake_repo):
+    # A broken map fails as a clean violation, not an uncaught traceback.
+    d = fake_repo / "templates" / "tessera"
+    d.mkdir(parents=True)
+    (d / "skill-profiles.json").write_text("{not: valid json,")
+    bad = doccheck.check_skill_profiles_names_are_installed()
+    assert any("invalid JSON" in v for v in bad), bad
