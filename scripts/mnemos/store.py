@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS claude_turns (
     is_error INTEGER NOT NULL DEFAULT 0,
     text_preview TEXT,
     correction_match INTEGER NOT NULL DEFAULT 0,
+    correction_type TEXT,
     ts TEXT NOT NULL,
     PRIMARY KEY (session_id, idx),
     FOREIGN KEY (session_id) REFERENCES claude_sessions(id) ON DELETE CASCADE
@@ -115,6 +116,14 @@ CREATE INDEX IF NOT EXISTS idx_claude_turns_session ON claude_turns(session_id);
 CREATE INDEX IF NOT EXISTS idx_claude_turns_tool ON claude_turns(tool_name);
 CREATE INDEX IF NOT EXISTS idx_claude_turns_file ON claude_turns(file_path);
 """
+
+
+def _add_column(conn, table: str, column: str, decl: str) -> None:
+    """Idempotent ADD COLUMN — SQLite has no ADD COLUMN IF NOT EXISTS, so probe
+    PRAGMA table_info first. Migrates DBs created before the column existed."""
+    cols = {r[1] for r in conn.execute(f'PRAGMA table_info({table})')}
+    if column not in cols:
+        conn.execute(f'ALTER TABLE {table} ADD COLUMN {column} {decl}')
 
 
 class MnemosStore:
@@ -143,6 +152,7 @@ class MnemosStore:
         self.mnemos_dir.mkdir(parents=True, exist_ok=True)
         with self._conn() as conn:
             conn.executescript(SCHEMA)
+            _add_column(conn, 'claude_turns', 'correction_type', 'TEXT')
             conn.execute('PRAGMA user_version = 1')
 
     def exists(self) -> bool:

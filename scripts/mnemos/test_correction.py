@@ -7,12 +7,51 @@ Guards the finding #1 regression: a user turn that *references* the word
 correction-of-Claude. Real corrections front-load the objection.
 """
 
-from .claude_log import _preview
+from .claude_log import _emit_rows, _preview
 
 
 def _match(text: str) -> int:
     # is_user=True, no redaction; we only care about the match flag.
     return _preview(text, False, is_user=True)[1]
+
+
+class _FakeDetector:
+    """Stands in for CorrectionDetector: never says a NEW correction (so regex
+    drives match), always returns a fixed type for a known one."""
+
+    def __init__(self, ctype):
+        self.ctype = ctype
+
+    def qwen_says_correction(self, cleaned):
+        return False
+
+    def correction_type(self, cleaned):
+        return self.ctype
+
+
+def _user_ev(text):
+    return {'type': 'user', 'message': {'role': 'user', 'content': text}}
+
+
+def _typing_wiring() -> None:
+    # A regex-matched correction gets typed by the detector.
+    rows = _emit_rows(_user_ev("No, undo that"), 1, 's', 't', False,
+                      detector=_FakeDetector('defied'), eligible=True)
+    row = rows[0]
+    assert row['correction_match'] == 1
+    assert row['correction_type'] == 'defied'
+
+    # A non-correction turn is neither matched nor typed.
+    rows = _emit_rows(_user_ev("Please add a timeout option"), 1, 's', 't',
+                      False, detector=_FakeDetector('wrong'), eligible=True)
+    assert rows[0]['correction_match'] == 0
+    assert rows[0]['correction_type'] is None
+
+    # Null type (Ollama down) never drops the correction.
+    rows = _emit_rows(_user_ev("No, undo that"), 1, 's', 't', False,
+                      detector=_FakeDetector(None), eligible=True)
+    assert rows[0]['correction_match'] == 1
+    assert rows[0]['correction_type'] is None
 
 
 def demo() -> None:
@@ -35,6 +74,8 @@ def demo() -> None:
 
     # --- non-user turns never match ---
     assert _preview("No, don't do that", False, is_user=False)[1] == 0
+
+    _typing_wiring()
 
     print("ok")
 

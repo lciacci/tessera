@@ -141,12 +141,13 @@ def ingest_session(
                 """INSERT OR IGNORE INTO claude_turns
                    (session_id, idx, uuid, parent_uuid, role, event_type,
                     tool_name, tool_use_id, file_path, is_error,
-                    text_preview, correction_match, ts)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    text_preview, correction_match, correction_type, ts)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (r['session_id'], r['idx'], r['uuid'], r['parent_uuid'],
                  r['role'], r['event_type'], r['tool_name'],
                  r['tool_use_id'], r['file_path'], r['is_error'],
-                 r['text_preview'], r['correction_match'], r['ts']),
+                 r['text_preview'], r['correction_match'],
+                 r['correction_type'], r['ts']),
             )
             inserted += cur.rowcount
 
@@ -357,15 +358,23 @@ def _emit_rows(
         if btype == 'text':
             text = block.get('text') or ''
             preview, match = _preview(text, redact_text, is_user=is_human)
+            cleaned = None
             # Recall net: only spend a qwen call on eligible human turns the
             # regex missed. Fail-open — a null verdict leaves match untouched.
             if is_human and match == 0 and eligible and detector is not None:
                 cleaned = redact(text)[0] if redact_text else text
                 if cleaned and detector.qwen_says_correction(cleaned):
                     match = 1
+            # Phase 2: type any correction (regex- or qwen-detected). Null type
+            # (Ollama down / over budget) never drops the correction.
+            ctype = None
+            if match and detector is not None:
+                if cleaned is None:
+                    cleaned = redact(text)[0] if redact_text else text
+                ctype = detector.correction_type(cleaned) if cleaned else None
             out.append(_make_row(
                 session_id, idx, uuid, parent_uuid, role, text_ev_type,
-                None, None, None, 0, preview, match, ts,
+                None, None, None, 0, preview, match, ts, ctype,
             ))
         elif btype == 'tool_use':
             tool_name = block.get('name')
@@ -460,7 +469,7 @@ def _preview(
 def _make_row(
     session_id, idx, uuid, parent_uuid, role, event_type,
     tool_name, tool_use_id, file_path, is_error,
-    text_preview, correction_match, ts,
+    text_preview, correction_match, ts, correction_type=None,
 ) -> dict:
     return {
         'session_id': session_id, 'idx': idx,
@@ -470,6 +479,7 @@ def _make_row(
         'file_path': file_path, 'is_error': is_error,
         'text_preview': text_preview,
         'correction_match': correction_match,
+        'correction_type': correction_type,
         'ts': ts or '',
     }
 
