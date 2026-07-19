@@ -737,6 +737,15 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   the new turns; a full backfill of ~26 sessions is 81s. Precision is ~0.5, which is why the **haziness
   band re-tune is deferred behind `tessera-watch` P10** (fires at ≥40 real-signal sessions → spot-check
   precision first, then decide bands + the 0.30 weight). Phases 2 (typing) / 3 (action-link) still deferred.
+- **UPDATE 2026-07-18 — Phase 2 (typing) BUILT (#25).** Each detected correction is now typed
+  (`misunderstood / defied / overreached / wrong`) by a second qwen prompt run **only on
+  already-detected corrections** (small N, not per-turn), sharing Phase 1's wall-clock budget AND its
+  consecutive-fail disable. Stored in a new nullable `claude_turns.correction_type` (idempotent
+  ADD-COLUMN migration); surfaced in `mnemos haze --session --explain` as a `CORRECTION TYPES` rollup +
+  per-turn `CORRECT:<type>` markers; `--reclassify` backfills. **Typing is a diagnostic view — it does
+  NOT feed the haziness composite** (weight changes stay gated on P10). Verified end-to-end vs live
+  qwen3:8b: `b6d7b6f5` typed 7 corrections (`misunderstood=2, overreached=1, wrong=4`) with
+  `correction_density` unchanged at 0.219. **Only Phase 3 (action-link + divergence surface) remains.**
 
 ### Autonomous test-fix loop — a richer cousin of `iterative-development` *(harvested from `autonomous-testing` before its ADR-0008 cut, 2026-07-17)*
 
