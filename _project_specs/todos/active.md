@@ -8,9 +8,9 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ## ═══ SESSION 2026-07-19 — friction-detector Phase 3 + skill-profiles tidy + should_fire passive extraction ═══
 
-**MERGED: #31 (Phase 3), #32 (skill-profiles tidy), #33 (dashboard provenance note). #34 (should_fire
-extraction) open. Suite green, doccheck 19/19. Both friction-calibration vectors now have their passive
-instrument: *doing* (divergence #31) and *asking* (should_fire #34).**
+**MERGED: #31 (Phase 3), #32 (skill-profiles tidy), #33 (dashboard provenance note), #34 (should_fire
+extraction). #35 (should_fire rubric fix + eval) open. Suite green, doccheck 19/19. Both friction-calibration
+vectors now have their passive instrument: *doing* (divergence #31) and *asking* (should_fire #34+#35).**
 
 ### What shipped — spec 13 is now CLOSED
 **Phase 3 = action-link + divergence surface.** `scripts/mnemos/divergence.py` (new, pure) derives per
@@ -44,11 +44,15 @@ per rule-over-read (found no dangling, only the 3 orphans).
 backlog) from the user's DISPOSITION (first human turn after the gate, **timestamp-joined**) via a balanced
 local-qwen classifier. Writes back in place, idempotent, fail-open, `labeled_by: "classifier"`, **never
 overwrites a human label**. 11 mocked tests (auto-discovered in the gate suite).
-- **Backtest (n=3): plumbing correct, precision ~0.5 EXACTLY as spec-13 predicted** — classifier conflates
-  terse approval ("go ahead") with unnecessary pause; 2/3 disagreed with likely human label. **Validates the
-  `labeled_by` split** (#33) — noisy auto-labels stay separable; dashboard-trust P10-gated on a precision sample.
-- **Deliberately backfill-first** (`--session`/`--all`) — Stop-hook auto-wire is a follow-on, so history gets
-  labelled + eyeballed before it runs live.
+- **Deliberately backfill-first** (`--session`/`--all`) — Stop-hook auto-wire is a follow-on.
+- **Ground-truth eval caught a rubric bug the n=3 backtest missed (the real lesson).** #34 shipped a rubric
+  that scored **recall 0.08** on **n=26 human-labeled gates** (`scripts/gate/eval_should_fire.py`, new,
+  committed) — near-always-No, reading terse option-picks ("commit", "1a 2a", "go with 2") as dismissals
+  when *selecting a surfaced option IS the decision*. **Fixed the rubric** (fix/should-fire-rubric): engagement
+  incl. terse pick = `should_fire=true`; only explicit "you didn't need to ask" = false. **recall 0.08 → 0.76,
+  precision 1.00** on the same 26 (tuned+measured on one set; neg class n=1 → precision under-measured, P10
+  confirms). Residual 6 FN not chased (2 unfair summary-bases, 4 non-option-pick engagements — overfitting risk).
+  *Anecdotes lie, ground-truth evals don't — the eval is now committed as the runnable P10 spot-check.*
 
 ### Decisions surfaced this session (all resolved with Lorenzo, gate logged)
 Phase 3: derive-not-store · both surfaces (aggregate flat) · added ask+error context · no composite.
