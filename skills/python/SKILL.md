@@ -9,14 +9,10 @@ effort: medium
 
 # Python Skill
 
-
----
-
 ## Type Hints
 
 - Use type hints on all function signatures
 - Use `typing` module for complex types
-- Run `mypy --strict` in CI
 
 ```python
 def process_user(user_id: int, options: dict[str, Any] | None = None) -> User:
@@ -25,166 +21,12 @@ def process_user(user_id: int, options: dict[str, Any] | None = None) -> User:
 
 ---
 
-## Project Structure
-
-```
-project/
-├── src/
-│   └── package_name/
-│       ├── __init__.py
-│       ├── core/           # Pure business logic
-│       │   ├── __init__.py
-│       │   ├── models.py   # Pydantic models / dataclasses
-│       │   └── services.py # Pure functions
-│       ├── infra/          # Side effects
-│       │   ├── __init__.py
-│       │   ├── api.py      # FastAPI routes
-│       │   └── db.py       # Database operations
-│       └── utils/          # Shared utilities
-├── tests/
-│   ├── unit/
-│   └── integration/
-├── pyproject.toml
-└── CLAUDE.md
-```
-
----
-
-## Tooling (Required)
-
-```toml
-# pyproject.toml
-[tool.ruff]
-line-length = 100
-select = ["E", "F", "I", "N", "W", "UP"]
-
-[tool.mypy]
-strict = true
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-addopts = "--cov=src --cov-report=term-missing --cov-fail-under=80"
-```
-
----
-
-## Testing with Pytest
-
-```python
-# tests/unit/test_services.py
-import pytest
-from package_name.core.services import calculate_total
-
-class TestCalculateTotal:
-    def test_returns_sum_of_items(self):
-        # Arrange
-        items = [{"price": 10}, {"price": 20}]
-        
-        # Act
-        result = calculate_total(items)
-        
-        # Assert
-        assert result == 30
-
-    def test_returns_zero_for_empty_list(self):
-        assert calculate_total([]) == 0
-
-    def test_raises_on_invalid_item(self):
-        with pytest.raises(ValueError):
-            calculate_total([{"invalid": "item"}])
-```
-
----
-
-## GitHub Actions
-
-```yaml
-name: Python Quality Gate
-
-on: [push, pull_request]
-
-jobs:
-  quality:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          
-      - name: Install dependencies
-        run: |
-          pip install -e ".[dev]"
-          
-      - name: Lint (Ruff)
-        run: ruff check .
-        
-      - name: Format Check (Ruff)
-        run: ruff format --check .
-        
-      - name: Type Check (mypy)
-        run: mypy src/
-        
-      - name: Test with Coverage
-        run: pytest
-```
-
----
-
-## Pre-Commit Hooks
-
-```yaml
-# .pre-commit-config.yaml
-repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.0
-    hooks:
-      - id: ruff
-        args: [--fix]
-      - id: ruff-format
-
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.13.0
-    hooks:
-      - id: mypy
-        additional_dependencies: [pydantic]
-        args: [--strict]
-
-  - repo: local
-    hooks:
-      - id: pytest
-        name: pytest
-        entry: pytest tests/unit -x --tb=short
-        language: system
-        pass_filenames: false
-        always_run: true
-```
-
-Install and setup:
-```bash
-pip install pre-commit
-pre-commit install
-```
-
----
-
 ## Patterns
 
-### Pydantic for Data Validation
-```python
-from pydantic import BaseModel, Field
-
-class CreateUserRequest(BaseModel):
-    email: str = Field(..., min_length=5)
-    name: str = Field(..., max_length=100)
-```
-
 ### Dependency Injection
+
 ```python
-# Don't import dependencies directly in business logic
-# Pass them in
+# Don't import dependencies directly in business logic — pass them in.
 
 # Bad
 from .db import database
@@ -197,6 +39,7 @@ def get_user(user_id: int, db: Database) -> User:
 ```
 
 ### Result Pattern (No Exceptions in Core)
+
 ```python
 from dataclasses import dataclass
 
@@ -204,7 +47,7 @@ from dataclasses import dataclass
 class Result[T]:
     value: T | None
     error: str | None
-    
+
     @property
     def is_ok(self) -> bool:
         return self.error is None
@@ -220,3 +63,19 @@ class Result[T]:
 - ❌ Using `type: ignore` without explanation
 - ❌ Global variables for state
 - ❌ Classes when functions suffice
+
+---
+
+*TRIM 2026-07-18 (ADR-0008, FOCUS-004): this skill auto-fires on every `.py` edit here
+(`paths: **/*.py`, ~123 files), so its defects did real harm. Cut the sections that prescribe a
+toolchain and layout Tessera pointedly does not use: the "Tooling (Required)" block (ruff + `mypy
+--strict` + `pyproject.toml` + `.pre-commit-config.yaml` — Tessera is uv-venv + stdlib-heavy `scripts/`
++ `run-tests.sh`), the `src/package_name/core|infra` + FastAPI project structure (Tessera uses
+`scripts/`, `bin/`), the GitHub-Actions and pre-commit-hook scaffolding, the `package_name`-layout
+pytest example, and the Pydantic pattern (a dependency Tessera doesn't carry). Kept the language core:
+type hints, DI, the Result pattern, and the anti-patterns. **Nothing lost:** the cut scaffolding is
+generic downstream Python-app content (not Tessera-specific) and survives in **git history** (pre this
+commit). This trims the *project* copy only; the global `~/.claude/skills/python` copy is currently
+un-trimmed, but — per the base lesson of 2026-07-18 — a global copy is NOT a guaranteed archive (base's
+was silently trimmed to match). How downstream apps should actually receive the full body is the open
+delivery question — see `docs/observatory.md` → "Skill-body delivery has no copy mechanism".*
