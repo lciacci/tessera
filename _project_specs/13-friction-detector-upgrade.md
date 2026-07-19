@@ -1,7 +1,7 @@
 # 13 — Friction-detector upgrade (Mnemos correction recall)
 
 **Status:** Phase 1 BUILT + backtested (2026-07-17). **Phase 2 (typing) BUILT + verified (2026-07-18).**
-Phase 3 deferred.
+**Phase 3 (action-link + divergence surface) BUILT + verified (2026-07-19).**
 **Motivation:** `docs/observatory.md` → "Haziness's correction-detector has near-zero recall".
 
 ---
@@ -139,10 +139,35 @@ unchanged at 0.219 (composite untouched, as designed). Boundary + wiring unit-te
 no network in CI): `test_correction_detect.py` (type parse + budget/disabled → None),
 `test_correction.py` (`_emit_rows` types a matched correction; null type never drops it).
 
-## Deferred — Phase 3
+## Phase 3 — action link + divergence surface — BUILT (2026-07-19)
 
-- **Phase 3 — action link + view:** tie each correction to the *action* it was about; a "divergence"
-  surface. This is where it fully becomes the doing-calibration instrument.
+**What shipped:** `scripts/mnemos/divergence.py` — pure `link_corrections(turns)` derives, per detected
+correction, the **ASK → DID → CORRECTED(type)** unit: the nearest preceding human prompt (the intent),
+the assistant work since it (files touched, tool counts, whether it errored), and the correction itself
+(Phase 1 match + Phase 2 type). Plus `aggregate(units)` — a flat cross-session rollup by type.
+
+**Derivation, not storage** — the link is cheap structural data reconstructable from `claude_turns` any
+time, so no new column, no migration, no ingest cost (unlike Phase 1/2's qwen verdicts, which are stored
+because they're expensive). Surfaced three ways: `mnemos divergence --session <id>` (per-correction
+triplets), `mnemos divergence --recent N` (flat rollup — per type: count, error count, top tools/files),
+and a new **DIVERGENCE** section in `mnemos haze --session --explain`.
+
+**Design stance (held):** view-only — does **NOT** feed the haziness composite (same as Phase 2; weight
+changes stay gated on P10). The aggregate is deliberately thin (a rollup, not a dashboard; tess-dashboard
+owns anything richer). The link attributes to the **nearest** preceding action window only — honest
+default, marked `ponytail:`; multi-window attribution deferred until the nearest window measurably misfits.
+
+**Verified end-to-end (2026-07-19):** `divergence --session b6d7b6f5-…` renders its 7 corrections as
+triplets (5 `wrong`/`misunderstood` were conversational — `did: (no tool actions)` — vs the action-linked
+`overreached`/`wrong` on `active.md` edits — the surface makes that distinction visible); `haze --explain`
+shows the section with `correction_density` unchanged at 0.219 and composite 0.11 CLEAR (composite
+untouched, as designed). Boundary unit-tested (`test_divergence.py`, in `run-tests.sh`): nearest-window,
+window-reset-on-each-prompt, no-prior-ask, errors-in-window, non-correction-emits-nothing, aggregate rollup.
+
+**Known UX gap (not Phase-3-specific):** `--session` needs the FULL session uuid, but `haze`'s listing
+prints ids truncated to 8 chars — so the id a user sees can't be pasted back into either `haze --session`
+or `divergence --session`. Matches existing `haze` behavior; a prefix-resolve would fix both at once. Left
+as a sibling-consistency call, logged here.
 
 ## Flags for the build session
 

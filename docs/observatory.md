@@ -771,6 +771,17 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   NOT feed the haziness composite** (weight changes stay gated on P10). Verified end-to-end vs live
   qwen3:8b: `b6d7b6f5` typed 7 corrections (`misunderstood=2, overreached=1, wrong=4`) with
   `correction_density` unchanged at 0.219. **Only Phase 3 (action-link + divergence surface) remains.**
+- **UPDATE 2026-07-19 — Phase 3 (action-link + divergence surface) BUILT.** `scripts/mnemos/divergence.py`
+  derives, per detected correction, the **ASK → DID → CORRECTED(type)** unit — the nearest preceding human
+  prompt, the assistant work since it (files/tools/errored?), and the correction (Phase 1 match + Phase 2
+  type). Pure structural derivation over `claude_turns` (no schema, no migration, no ingest cost — the link
+  is reconstructable, unlike the stored qwen verdicts). Surfaced via `mnemos divergence --session <id>`,
+  `divergence --recent N` (flat by-type rollup), and a DIVERGENCE section in `haze --explain`. **View-only —
+  does NOT feed the composite** (verified: `b6d7b6f5` composite unchanged, 0.219 density). The surface makes
+  a real distinction legible: action-divergences (`did:` has edits) vs conversational pushback (`did: (no
+  tool actions)`). This closes spec 13 — the friction-detector is now the doing-calibration instrument the
+  postmortems kept asking for. Remaining follow-ons are the P10 band re-tune (self-firing at 40 sessions) and
+  the same passive-extraction pattern applied to retire `should_fire`'s dead labeling path.
 
 ### Autonomous test-fix loop — a richer cousin of `iterative-development` *(harvested from `autonomous-testing` before its ADR-0008 cut, 2026-07-17)*
 

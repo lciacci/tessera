@@ -6,6 +6,57 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
+## ═══ SESSION 2026-07-19 — friction-detector Phase 3 (action-link + divergence surface) ═══
+
+**Suite green (top-level 182 + gate/override/spend/verify + 5 mnemos self-checks incl. new
+`test_divergence`), doccheck 18/18. NOT yet committed — on `main`, no branch.**
+
+### What shipped — spec 13 is now CLOSED
+**Phase 3 = action-link + divergence surface.** `scripts/mnemos/divergence.py` (new, pure) derives per
+detected correction the **ASK → DID → CORRECTED(type)** unit: nearest preceding human prompt (intent),
+the assistant work since it (files touched / tool counts / did-it-error), and the correction + its Phase-2
+type. `aggregate()` = flat cross-session rollup by type.
+
+- **Derivation, not storage.** The link is cheap structural data reconstructable from `claude_turns` any
+  time → **no column, no migration, no ingest cost** (unlike Phase 1/2's expensive stored qwen verdicts).
+- **Three surfaces:** `mnemos divergence --session <id>` (triplets), `--recent N` (by-type rollup), and a
+  new **DIVERGENCE** section in `haze --session --explain`.
+- **View-only, held:** does NOT feed the haziness composite (verified — `b6d7b6f5` composite unchanged at
+  0.219 density, 0.11 CLEAR). Same stance as Phase 2; weight changes stay gated on P10.
+- **The surface earns its keep:** it makes a real distinction visible — **action-divergences** (`did:` has
+  edits) vs **conversational pushback** (`did: (no tool actions)`). The doing-calibration instrument the
+  postmortems kept saying only a human catches.
+- **Tests:** `test_divergence.py` (added to `run-tests.sh` enum) — nearest-window, window-reset-per-prompt,
+  no-prior-ask, errors-in-window, non-correction-emits-nothing, aggregate rollup. All pure/fixture, no store.
+- **Ceiling (marked `ponytail:`):** links to the *nearest* action window only; multi-window attribution
+  deferred until it measurably misfits.
+
+### Decisions surfaced this session (all resolved with Lorenzo, gate logged)
+1. Store link vs derive → **derive**. 2. per-session only vs +aggregate → **both** (Lorenzo: "deferment is
+where we've been losing capability"); aggregate kept deliberately flat. 3. window context → added the
+**ask** (intent it diverged from) + **error-in-window** flag. 4. composite → **no**, view-only.
+
+### Docs synced (doc-drift discipline)
+spec 13 (Phase 3 → BUILT), `docs/observatory.md` (Phase 3 update), `.claude/skills/mnemos/SKILL.md` (CLI +
+action-divergence note). This handoff.
+
+### Known UX gap logged (not Phase-3-specific, not fixed)
+`divergence --session` / `haze --session` need the FULL uuid, but `haze`'s listing prints ids truncated to
+8 chars — the shown id can't be pasted back. A prefix-resolve would fix both siblings at once. Left as a
+sibling-consistency call.
+
+### NEXT (in order)
+1. **Refine `skill-profiles.json`** vs the full KEEP set (low-stakes tidy) — now the lead.
+2. **`should_fire` passive extraction** — apply spec-13's now-proven pattern (passive extraction from the
+   response the user already gives) to retire the dead `should_fire` labeling backlog. Phase 3 is the
+   template; this is the natural follow-on.
+3. **P10 haze-recalib** — still self-fires at 40 real-signal sessions (precision spot-check → band re-tune).
+
+**Delivery-mechanism blocker still stands** (see 2026-07-18 section): do NOT trim further
+delivery-entangled skills on the "survives globally" rationale until the delivery design session settles it.
+
+---
+
 ## ═══ SESSION 2026-07-18 — friction Phase 2 + delivery-entangled trims + branch/doc cleanup ═══
 
 **ALL MERGED to `main` (#25–#29). Suite green, doccheck 17→18, `tessera-watch` quiet (P7 snoozed). No

@@ -12,6 +12,9 @@ from .checkpoint import load_checkpoint, write_checkpoint
 from .claude_log import ingest_all, ingest_session, reclassify_session
 from .correction_detect import make_detector
 from .consolidation import micro_consolidate
+from .divergence import (
+    aggregate, recent_divergences, session_divergences,
+)
 from .fatigue import compute_fatigue, read_fatigue_file
 from .haziness import WEIGHTS, band, compute_haze, dominant_dim
 from .models import FatigueState, MnemoNode, _now, _uuid
@@ -128,6 +131,17 @@ def main(argv: list[str] | None = None) -> int:
         help='Suppress output (for hook use)',
     )
 
+    # --- divergence ---
+    p_dv = sub.add_parser(
+        'divergence',
+        help='Surface corrections linked to the action they drew (spec 13 P3)',
+    )
+    p_dv.add_argument('--session', help='Per-correction detail for one session')
+    p_dv.add_argument(
+        '--recent', type=int, default=10,
+        help='Flat rollup across N most-recent sessions (default 10)',
+    )
+
     args = parser.parse_args(argv)
     store = MnemosStore(args.project)
 
@@ -153,6 +167,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_ingest_claude(store, args)
     elif args.command == 'haze':
         return cmd_haze(store, args)
+    elif args.command == 'divergence':
+        return cmd_divergence(store, args)
     else:
         parser.print_help()
         return 1
@@ -665,6 +681,12 @@ def _explain_haze(store: MnemosStore, session_id: str) -> None:
         roll = ', '.join(f'{k}={v}' for k, v in sorted(counts.items()))
         print()
         print(f'CORRECTION TYPES  ({len(corrections)} total)  {roll}')
+        units = session_divergences(store, session_id)
+        if units:
+            print()
+            print('DIVERGENCE  (ask → action it drew → correction)')
+            for u in units:
+                _print_divergence_unit(u)
 
     print()
     print('CONTRIBUTING TURNS')
@@ -693,6 +715,68 @@ def _explain_haze(store: MnemosStore, session_id: str) -> None:
         tag = ','.join(marker) or t['role']
         preview = (t['text_preview'] or t['file_path'] or '')[:80]
         print(f'  idx={t["idx"]:<6d} [{tag:16s}] {preview}')
+
+
+def _action_summary(u: dict) -> str:
+    """One-line 'did' summary: files + tool counts, flagged if it errored."""
+    parts = []
+    if u['files']:
+        parts.append(', '.join(u['files']))
+    tools = ' '.join(f'{n}×{c}' for n, c in sorted(u['tool_counts'].items()))
+    if tools:
+        parts.append(tools)
+    summary = ' | '.join(parts) or '(no tool actions)'
+    return summary + ('  [errored]' if u['had_error'] else '')
+
+
+def _print_divergence_unit(u: dict) -> None:
+    ctype = u['correction_type'] or 'untyped'
+    print(f'  idx={u["correction_idx"]:<6d} {ctype}')
+    print(f'    ask:  {(u["ask_preview"] or "(none)")[:88]}')
+    print(f'    did:  {_action_summary(u)[:88]}')
+    print(f'    →     {(u["correction_preview"] or "")[:88]}')
+
+
+def cmd_divergence(store: MnemosStore, args) -> int:
+    if not store.exists():
+        print('No Mnemos database. Run `mnemos init` first.')
+        return 1
+    store.ensure_schema()
+    session = getattr(args, 'session', None)
+    if session:
+        units = session_divergences(store, session)
+        print(f'DIVERGENCE  {session[:8]}  ({len(units)} corrections)')
+        if not units:
+            print('  none — session had no detected corrections.')
+        for u in units:
+            print()
+            _print_divergence_unit(u)
+        return 0
+
+    units, scanned = recent_divergences(store, getattr(args, 'recent', 10))
+    _print_divergence_aggregate(units, scanned)
+    return 0
+
+
+def _print_divergence_aggregate(units: list, scanned: int) -> None:
+    print(f'DIVERGENCE — last {scanned} sessions  ({len(units)} corrections)')
+    agg = aggregate(units)
+    if not agg:
+        print('  none — no detected corrections in range.')
+        return
+    for ctype, a in sorted(agg.items(), key=lambda kv: -kv[1]['count']):
+        top_tools = ', '.join(
+            f'{n}×{c}' for n, c in
+            sorted(a['tools'].items(), key=lambda kv: -kv[1])[:4])
+        top_files = ', '.join(
+            f'{f}×{c}' for f, c in
+            sorted(a['files'].items(), key=lambda kv: -kv[1])[:3])
+        print()
+        print(f'  {ctype:14s} ×{a["count"]}  ({a["errors"]} errored)')
+        if top_tools:
+            print(f'    tools: {top_tools}')
+        if top_files:
+            print(f'    files: {top_files}')
 
 
 def _try_load_icpg(project_dir: str):

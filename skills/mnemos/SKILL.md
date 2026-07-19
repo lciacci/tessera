@@ -158,8 +158,18 @@ mnemos ingest-claude --all              # ingest every transcript + score
 mnemos ingest-claude --session <id>     # one session by id
 mnemos ingest-claude --transcript <f>   # a specific JSONL file
 mnemos haze --recent 10                 # table of recent sessions
-mnemos haze --session <id>              # per-dimension breakdown
+mnemos haze --session <id>              # per-dimension breakdown (+ --explain)
+mnemos divergence --session <id>        # per-correction ASK→DID→CORRECTED triplets
+mnemos divergence --recent 10           # flat by-type divergence rollup
 ```
+
+**Action-divergence (spec 13 Phase 3).** Each detected correction is linked to the *action* it drew:
+the nearest preceding human prompt (the ASK), the assistant work since it (files/tools, whether it
+errored — the DID), and the correction with its Phase-2 type (CORRECTED). Pure structural derivation
+over `claude_turns` — no new schema. `mnemos divergence --session <id>` shows the triplets;
+`--recent N` a flat by-type rollup; `haze --session --explain` embeds a DIVERGENCE section. **View-only
+— it does NOT feed the haziness composite** (weight changes stay gated on `tessera-watch` P10).
+`--session` needs the FULL session uuid (same as `haze --session`).
 
 Ingestion is idempotent (resumes via `last_line_offset`). **Opt out per project**
 with `touch .mnemos/claude-log.disabled`.
