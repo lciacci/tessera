@@ -35,17 +35,18 @@ def human_labeled_gates(session: str | None = None) -> list[dict]:
     pattern = f".tessera/logs/{session}.jsonl" if session else ".tessera/logs/*.jsonl"
     out: list[dict] = []
     for path in glob.glob(pattern):
-        for line in open(path, encoding="utf-8", errors="replace"):
-            try:
-                ev = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if ev.get("type") != "suggestion_gate":
-                continue
-            d = ev.get("data") or {}
-            if (d.get("should_fire") is not None and not d.get("labeled_by")
-                    and d.get("should_fire_basis")):
-                out.append(d)
+        with open(path, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                try:
+                    ev = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if ev.get("type") != "suggestion_gate":
+                    continue
+                d = ev.get("data") or {}
+                if (d.get("should_fire") is not None and not d.get("labeled_by")
+                        and d.get("should_fire_basis")):
+                    out.append(d)
     return out
 
 
