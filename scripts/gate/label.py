@@ -28,12 +28,15 @@ from pathlib import Path
 
 LOGS = Path(".tessera/logs")
 
-# Balanced, NOT recall-leaning: unlike correction detection (a miss = the failure),
-# should_fire is calibration — an honest yes/no is the point. Ground truth is the
-# user's disposition, never the labeler's opinion of the gate (the 2026-07-12 lesson).
-_PROMPT = """A coding assistant paused to ask the user a decision before acting (a "gate"). From the user's REPLY, judge whether pausing was warranted.
-Answer "yes" if a real decision was at stake — the user chose between options, deliberated, corrected course, or engaged with the tradeoff.
-Answer "no" if the pause was unnecessary — the user just said go ahead / obviously / of course / why are you asking.
+# Ground truth = "did a real decision get made?", never the labeler's opinion of the
+# gate (the 2026-07-12 lesson). CALIBRATED against 26 human-labeled gates: the first
+# rubric ("go ahead / obviously = no") scored recall 0.08 — it read terse option-picks
+# ("1a 2a", "go with 2", "commit") as dismissals, when SELECTING a surfaced option IS
+# the decision the gate existed for. So engagement — including a terse pick — is yes;
+# only an explicit "you didn't need to ask" is no.
+_PROMPT = """A coding assistant paused to surface a decision to the user before acting (a "gate"). From the user's REPLY, decide whether pausing was warranted — was a real decision genuinely at stake?
+Answer "yes" if the user ENGAGED with the decision: chose among options, picked a path, approved a specific proposal, deliberated, or corrected course. Selecting an option counts as yes even when terse — "go with 2", "1a 2b", "commit", "yes create it", "start spec 12" are all a choice being made.
+Answer "no" ONLY if the reply shows the pause was unnecessary: the user dismissed it as obvious or told the assistant not to ask ("why are you asking", "you didn't need to check that", "just do it without asking").
 What the assistant asked: {note}
 The user's reply: {reply}
 Answer only yes or no.

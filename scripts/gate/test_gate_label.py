@@ -134,3 +134,26 @@ def test_label_gate_log_idempotent(tmp_path):
     turns = [(_dt("2026-07-19T16:05:00"), "yes do it")]
     assert label.label_gate_log(log, turns, generate=_yes) == 1
     assert label.label_gate_log(log, turns, generate=_yes) == 0  # already labeled
+
+
+# --- eval_should_fire ---------------------------------------------------
+import eval_should_fire as ev  # noqa: E402
+
+
+def _labeled(human, basis="x"):
+    return {"note": "n", "should_fire": human, "should_fire_basis": basis}
+
+
+def test_evaluate_confusion_matrix():
+    gates = [_labeled(True), _labeled(True), _labeled(False)]
+    # classifier says yes,no,no → TP, FN, TN
+    verdicts = iter(["yes", "no", "no"])
+    gen = lambda *a, **k: next(verdicts)
+    m = ev.evaluate(gates, generate=gen)
+    assert (m["tp"], m["fn"], m["tn"], m["fp"]) == (1, 1, 1, 0)
+    assert m["mismatches"][0][0] is True and m["mismatches"][0][1] is False
+
+
+def test_evaluate_skips_classifier_junk():
+    m = ev.evaluate([_labeled(True)], generate=lambda *a, **k: "")
+    assert m["skipped"] == 1 and m["tp"] == 0

@@ -108,10 +108,14 @@ the same way friction Phase 3 (#31) did for corrections. It writes back in place
 fail-open to null, and **never overwrites a human label**. **The metric definition does not change**
 (`should_fire_ratio` stays mean over `fired` × `should_fire`) — only *how the label gets populated*.
 
-**Backtest finding (n=3, this session):** the plumbing is correct, and precision is **~0.5 as
-spec-13 predicted** — the classifier conflates a terse approval ("go ahead") with an unnecessary
-pause, so it under-labels genuine gates the user simply agreed with quickly. **This is exactly why
-`labeled_by` matters** — the two consequences below are load-bearing, not optional:
+**Calibration (n=26 human ground truth, `scripts/gate/eval_should_fire.py`):** the plumbing is
+correct; the classifier's *rubric* was not, and only a ground-truth eval caught it. The first cut
+(#34) scored **recall 0.08** — near-always-No, because it read terse option-picks ("commit", "1a 2a",
+"go with 2") as dismissals when SELECTING a surfaced option IS the decision the gate existed for. (The
+n=3 backtest had mislabelled this ~0.5.) The rubric was fixed to count engagement — including a terse
+pick — as `should_fire=true`: **recall 0.08 → 0.76, precision 1.00** on the same 26 (tuned + measured
+on one set; the negative class is n=1, so precision is under-measured — a fresh sample via P10 confirms).
+**This is exactly why `labeled_by` matters** — the two consequences below are load-bearing, not optional:
 
 Two consequences the **dashboard (consumer side, still a pickup)** must handle:
 
@@ -126,8 +130,9 @@ Two consequences the **dashboard (consumer side, still a pickup)** must handle:
    un-blinding (exactly like `correction_density` 0.00 → 0.219 when Phase-1 lifted its blindness).
 
 Producer built (`scripts/gate/label.py --session <id>` / `--all`, backfill-first — the Stop-hook
-auto-wire is a deliberate follow-on once a full `--all` backfill has generated a real precision
-sample for the P10 spot-check). Consumer (dashboard `labeled_by` slice) is still the open pickup.
+auto-wire is a deliberate follow-on). Precision is checked by `scripts/gate/eval_should_fire.py`
+(replays the classifier over human-labeled gates → confusion matrix; this is the runnable P10
+spot-check). Consumer (dashboard `labeled_by` slice) is still the open pickup.
 
 ## Consumers
 

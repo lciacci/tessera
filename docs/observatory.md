@@ -786,16 +786,19 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   landed: `scripts/gate/label.py` fills `should_fire` (the gate-calibration ground truth, else `null`
   forever — the dead P7 backlog) from the user's DISPOSITION, the first human turn after the gate
   (timestamp-joined), via a balanced local-qwen classifier. Writes back in place, idempotent, fail-open,
-  `labeled_by: "classifier"`, **never overwrites a human label**. **Backtest (n=3): plumbing correct,
-  precision ~0.5 exactly as spec-13 predicted** — the classifier conflates a terse approval ("go ahead")
-  with an unnecessary pause, under-labelling genuine gates the user just agreed with quickly (2/3 disagreed
-  with the likely human label). This **validates** the `labeled_by` provenance split (#33): noisy
-  auto-labels must stay separable from hand-labels, and any dashboard-trust is P10-gated on a precision
-  spot-check — a full `--all` backfill is exactly what generates that sample. **Deliberately backfill-first:
-  the Stop-hook auto-wire is a follow-on**, so history is labelled and eyeballed before it runs every
-  session. Same shape as Phase 1/3; the *asking*-calibration vector now has the passive instrument the
-  *doing* vector got in #31. Open: (1) Stop-hook wire, (2) `--all` historical backfill, (3) human-overrides-
-  classifier path (undefined — a human disagreeing with an auto-label needs a manual edit today).
+  `labeled_by: "classifier"`, **never overwrites a human label**. **A ground-truth eval caught a rubric
+  bug the anecdotal backtest missed — the real lesson here.** The n=3 self-backtest called precision ~0.5;
+  running the classifier over **n=26 human-labeled gates** (`scripts/gate/eval_should_fire.py`) showed the
+  shipped rubric was actually **recall 0.08** — near-always-No, because it read terse option-picks
+  ("commit", "1a 2a", "go with 2") as dismissals when *selecting a surfaced option IS the decision*. Fixed
+  the rubric to count engagement (incl. a terse pick) as `should_fire=true`: **recall 0.08 → 0.76,
+  precision 1.00** on the same 26 (tuned+measured on one set; negative class n=1, so precision
+  under-measured — P10's fresh sample confirms). This **validates** the `labeled_by` split (#33) AND the
+  discipline: *anecdotes lie, ground-truth evals don't* — build the eval, don't trust n=3. Same story as
+  correction_density's blind detector. **Backfill-first; Stop-hook auto-wire deferred** until a full
+  `--all` backfill + eval on more negatives. Open: (1) Stop-hook wire, (2) `--all` backfill, (3) the last
+  6 FN ceiling (2 are unfair summary-bases; 4 non-option-pick engagements — not chased, overfitting risk),
+  (4) human-overrides-classifier path (a human disagreeing with an auto-label needs a manual edit today).
 
 ### Autonomous test-fix loop — a richer cousin of `iterative-development` *(harvested from `autonomous-testing` before its ADR-0008 cut, 2026-07-17)*
 
