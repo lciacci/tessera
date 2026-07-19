@@ -61,13 +61,16 @@ decisions get read-first, single-decision, no batching.**
 **F. Doc hygiene (end of session).** Promo HTML mosaic (dropped 6 cut skills, fixed eager flags to match
 base+mnemos); `claude-bootstrap-reference` disclaimer (audit done, corpus now 48); this handoff.
 
-### NEXT (in order) — nothing here is started
-1. **Friction-detector Phase 2/3** — type corrections (misunderstood/defied/overreached/wrong), then
-   action-link + divergence surface. The natural follow-on once Phase 1's signal is trusted. **Pure
-   in-repo Tessera build; no cross-repo dep.**
+### NEXT (in order)
+1. ~~**Friction-detector Phase 2 — typing**~~ **DONE — #25 (2026-07-18).** Types each detected
+   correction (misunderstood/defied/overreached/wrong) via a second qwen prompt on already-detected
+   corrections; new `claude_turns.correction_type` col + ADD-COLUMN migration; `haze --explain` rollup;
+   VIEW-ONLY (composite untouched, verified 0.219 on b6d7b6f5). **Phase 3 (action-link + divergence
+   surface) deferred** — see spec 13.
 2. **Delivery-entangled trims** — `python` TRIM, `ui-testing` MERGE (small). *(Read-first, per the
    rule-over-read lesson — these are the same shape that went soupy.)*
 3. **Refine `skill-profiles.json`** vs the full KEEP set (low-stakes).
+4. **Friction-detector Phase 3** — action-link + divergence surface. Follow-on once Phase 2 signal trusted.
 
 **MOVED OUT — S2 divergence build is NOT Tessera work (drift fix 2026-07-18).** Prior NEXT #1 said
 "design + build the scoring variant of `divergence.py`." Per `docs/contracts/three-project-cohesion.md`
