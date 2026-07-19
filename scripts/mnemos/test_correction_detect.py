@@ -7,7 +7,13 @@ and every failure mode falls open to the regex verdict (never worse than today).
 Run from repo root: python3 -m scripts.mnemos.test_correction_detect
 """
 
-from .correction_detect import CorrectionDetector, classify, regex_match
+from .correction_detect import (
+    TYPES,
+    CorrectionDetector,
+    classify,
+    classify_type,
+    regex_match,
+)
 
 
 def _gen(reply):
@@ -64,10 +70,35 @@ def _detector_behavior() -> None:
     assert calls == []
 
 
+def _classify_type_parses() -> None:
+    for t in TYPES:
+        assert classify_type("x", generate=_gen(t)) == t
+    # Word embedded in a sentence still parses.
+    assert classify_type("x", generate=_gen("This was overreached.")) == "overreached"
+    # None on unreachable or a word not in TYPES.
+    assert classify_type("x", generate=_gen("")) is None
+    assert classify_type("x", generate=_gen("dunno")) is None
+
+
+def _detector_type_behavior() -> None:
+    # Types within budget.
+    d = CorrectionDetector(generate=_gen("defied"), enabled=True)
+    assert d.correction_type("you ignored the instruction") == "defied"
+
+    # Null type never crashes; shares budget → disabled/over-budget yields None.
+    d = CorrectionDetector(generate=_gen("wrong"), enabled=False)
+    assert d.correction_type("x") is None
+
+    d = CorrectionDetector(generate=_gen("wrong"), enabled=True, budget_s=0.0)
+    assert d.correction_type("x") is None       # budget already spent
+
+
 def demo() -> None:
     _regex_unchanged()
     _classify_parses_token()
     _detector_behavior()
+    _classify_type_parses()
+    _detector_type_behavior()
     print("ok")
 
 

@@ -62,20 +62,30 @@ decisions get read-first, single-decision, no batching.**
 base+mnemos); `claude-bootstrap-reference` disclaimer (audit done, corpus now 48); this handoff.
 
 ### NEXT (in order) — nothing here is started
-1. **D2 — the union-recall divergence metric** (contract seam S2). **The one genuinely-unblocked
-   high-value lever:** needs no prerequisites (not Phase 3, not a standing fleet), and it's what validates
-   pr-arbiter's thin headline (guard (d)) so the whole three-project integration can start moving. Design
-   + build the scoring variant of `divergence.py` (oracle = union of true findings vs a labeled defect set).
+1. **Friction-detector Phase 2/3** — type corrections (misunderstood/defied/overreached/wrong), then
+   action-link + divergence surface. The natural follow-on once Phase 1's signal is trusted. **Pure
+   in-repo Tessera build; no cross-repo dep.**
 2. **Delivery-entangled trims** — `python` TRIM, `ui-testing` MERGE (small). *(Read-first, per the
    rule-over-read lesson — these are the same shape that went soupy.)*
 3. **Refine `skill-profiles.json`** vs the full KEEP set (low-stakes).
-4. **Friction-detector Phase 2/3** — type corrections (misunderstood/defied/overreached/wrong), then
-   action-link + divergence surface. The natural follow-on once Phase 1's signal is trusted.
+
+**MOVED OUT — S2 divergence build is NOT Tessera work (drift fix 2026-07-18).** Prior NEXT #1 said
+"design + build the scoring variant of `divergence.py`." Per `docs/contracts/three-project-cohesion.md`
+**S2**, that instrument is **Conclave-owned** (`../conclave/orchestrator/divergence.py`); the scoring
+function is co-owned with pr-arbiter. Tessera's only piece of S2 is the **consumer** — the *"is
+review-fan-out worth it?"* gate, i.e. **decision D2**, which is *surfaced, not decided*, and
+evidence-gated on the metric existing in the peer repo. So it's a `../conclave` build + a deferred
+Tessera decision — **not** an in-repo NEXT. See "Deferred with their own triggers" below.
 
 *(The "10 removals" are 9-done — #22. Only `code-review` bulk remains, gated on D3. `workspace` +
 `team-coordination` were never in the 10; they're separate removal candidates.)*
 
 ### Deferred with their own triggers (not "next")
+- **S2 divergence build (`../conclave`) + decision D2** — the union-recall scoring variant of
+  `divergence.py` is a **Conclave-repo build** (instrument owner; scoring fn co-owned w/ pr-arbiter).
+  Tessera's piece is **D2**, the *"is review-fan-out worth it?"* gate: *surfaced, not decided*,
+  evidence-gated on the metric existing. Do the build in a `../conclave` session; D2 firms once its
+  result lands. Validates pr-arbiter's thin headline (guard (d)). Was mis-filed as in-repo NEXT #1.
 - **Three-project ADR — D1/D3/D4** — evidence-gated: D3 needs pr-arbiter **Phase 3** (8–15h annotator
   pilot) + a **standing conclave fleet**; D4 (pr-arbiter adopts `.tessera/`) trips `tessera-watch` P4 at 5
   downstreams. D1 (routing home) firms with D2's result. See the contract's Open decisions.

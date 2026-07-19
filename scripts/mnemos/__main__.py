@@ -651,10 +651,20 @@ def _explain_haze(store: MnemosStore, session_id: str) -> None:
         source_path = src_row['source_path']
         turns = conn.execute(
             """SELECT idx, role, tool_name, file_path, is_error,
-                      text_preview, correction_match
+                      text_preview, correction_match, correction_type
                FROM claude_turns WHERE session_id = ? ORDER BY idx""",
             (session_id,),
         ).fetchall()
+
+    corrections = [t for t in turns if t['correction_match']]
+    if corrections:
+        counts: dict[str, int] = {}
+        for t in corrections:
+            key = t['correction_type'] or 'untyped'
+            counts[key] = counts.get(key, 0) + 1
+        roll = ', '.join(f'{k}={v}' for k, v in sorted(counts.items()))
+        print()
+        print(f'CORRECTION TYPES  ({len(corrections)} total)  {roll}')
 
     print()
     print('CONTRIBUTING TURNS')
@@ -674,7 +684,8 @@ def _explain_haze(store: MnemosStore, session_id: str) -> None:
             break
         marker = []
         if t['correction_match']:
-            marker.append('CORRECT')
+            ct = t['correction_type']
+            marker.append(f'CORRECT:{ct}' if ct else 'CORRECT')
         if t['is_error']:
             marker.append('ERROR')
         if t['tool_name']:

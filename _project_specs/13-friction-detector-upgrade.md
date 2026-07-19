@@ -1,6 +1,7 @@
 # 13 — Friction-detector upgrade (Mnemos correction recall)
 
-**Status:** Phase 1 BUILT + backtested (2026-07-17). Phases 2/3 deferred.
+**Status:** Phase 1 BUILT + backtested (2026-07-17). **Phase 2 (typing) BUILT + verified (2026-07-18).**
+Phase 3 deferred.
 **Motivation:** `docs/observatory.md` → "Haziness's correction-detector has near-zero recall".
 
 ---
@@ -118,10 +119,28 @@ Two things the initial scope under-named:
   The incremental-ingest point matters: **at steady state the cost is small** (new turns since last Stop);
   the volume problem is really just the historical backfill, which can be a one-off batched pass.
 
-## Deferred — Phase 2 / 3
+## Phase 2 — typing — BUILT (2026-07-18)
 
-- **Phase 2 — typing:** classify each detected correction (misunderstood / defied / overreached / wrong).
-  Fuzzy; do not gate the recall fix on it.
+**What shipped:** `correction_detect.py` gained `classify_type` + `CorrectionDetector.correction_type`
+(a second qwen prompt, single label from `TYPES = misunderstood/defied/overreached/wrong`), sharing
+Phase 1's wall-clock budget and fail-open discipline. Typing runs **only on already-detected
+corrections** (regex- or qwen-matched) — small N, not per-turn. Stored in a new nullable
+`claude_turns.correction_type` column (idempotent `store._add_column` ADD-COLUMN migration for
+pre-existing DBs). Surfaced in `mnemos haze --session --explain`: a `CORRECTION TYPES (N total) ...`
+rollup + per-turn `CORRECT:<type>` markers. `--reclassify` backfills types through the same path.
+
+**Design stance (held):** typing is a **diagnostic view — it does NOT feed the haziness composite.**
+A null type (Ollama down / over budget / unparseable) never drops the correction, it just leaves it
+untyped. Composite weight changes stay gated on P10.
+
+**Verified end-to-end (2026-07-18):** `ingest-claude --reclassify --session b6d7b6f5` against live
+qwen3:8b typed its 7 corrections `misunderstood=2, overreached=1, wrong=4`; `correction_density`
+unchanged at 0.219 (composite untouched, as designed). Boundary + wiring unit-tested (mocked Ollama,
+no network in CI): `test_correction_detect.py` (type parse + budget/disabled → None),
+`test_correction.py` (`_emit_rows` types a matched correction; null type never drops it).
+
+## Deferred — Phase 3
+
 - **Phase 3 — action link + view:** tie each correction to the *action* it was about; a "divergence"
   surface. This is where it fully becomes the doing-calibration instrument.
 

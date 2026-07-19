@@ -75,6 +75,36 @@ def classify(cleaned: str, *, generate) -> bool | None:
     return m.group(1).lower() == "yes"
 
 
+# Phase 2 — typing. The four disposition types of a correction (spec 13). A
+# view/diagnostic dimension: it does NOT feed the haziness composite. Single
+# dominant label; recall-first (Phase 1) already decided the turn IS a
+# correction, so this only sorts it.
+TYPES = ("misunderstood", "defied", "overreached", "wrong")
+
+_TYPE_PROMPT = """The user's message corrected or pushed back on what the assistant just did. Classify the ONE closest reason:
+- misunderstood: the assistant misread the request and did the wrong thing.
+- defied: the assistant ignored an instruction or did the opposite of what was asked.
+- overreached: the assistant did more than asked — extra scope, unrequested changes.
+- wrong: what the assistant did was factually or technically incorrect / broken.
+Answer with only one word: misunderstood, defied, overreached, or wrong.
+Message: {text}
+Answer:"""
+
+
+def classify_type(cleaned: str, *, generate) -> str | None:
+    """Pick which of TYPES a (known) correction is. One of TYPES, or None if the
+    model was unreachable / returned a word not in TYPES."""
+    raw = generate(_TYPE_PROMPT.format(text=cleaned[:1500]), model=_MODEL,
+                   num_predict=8, timeout=10.0, think=_THINK)
+    if not raw:
+        return None
+    raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.S).lower()
+    for t in TYPES:
+        if t in raw:
+            return t
+    return None
+
+
 class CorrectionDetector:
     """Per-ingest classifier with a wall-clock budget. When the budget is spent
     (or the classifier is disabled / Ollama is down) it stops calling qwen and
@@ -104,6 +134,15 @@ class CorrectionDetector:
             return False
         self._fails = 0
         return verdict
+
+    def correction_type(self, cleaned: str) -> str | None:
+        """Type a turn already known to be a correction. One of TYPES, or None
+        (Ollama down / over budget / unparseable) — a null type never drops the
+        correction, it just leaves it untyped. Shares the same budget as
+        qwen_says_correction, so typing yields to detection once time is spent."""
+        if not self.enabled or time.monotonic() > self._deadline:
+            return None
+        return classify_type(cleaned, generate=self.generate)
 
 
 def make_detector(*, force: bool = False) -> CorrectionDetector:
