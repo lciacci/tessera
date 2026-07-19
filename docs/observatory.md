@@ -782,6 +782,20 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   tool actions)`). This closes spec 13 — the friction-detector is now the doing-calibration instrument the
   postmortems kept asking for. Remaining follow-ons are the P10 band re-tune (self-firing at 40 sessions) and
   the same passive-extraction pattern applied to retire `should_fire`'s dead labeling path.
+- **UPDATE 2026-07-19 — `should_fire` passive extraction BUILT (producer side).** The follow-on above
+  landed: `scripts/gate/label.py` fills `should_fire` (the gate-calibration ground truth, else `null`
+  forever — the dead P7 backlog) from the user's DISPOSITION, the first human turn after the gate
+  (timestamp-joined), via a balanced local-qwen classifier. Writes back in place, idempotent, fail-open,
+  `labeled_by: "classifier"`, **never overwrites a human label**. **Backtest (n=3): plumbing correct,
+  precision ~0.5 exactly as spec-13 predicted** — the classifier conflates a terse approval ("go ahead")
+  with an unnecessary pause, under-labelling genuine gates the user just agreed with quickly (2/3 disagreed
+  with the likely human label). This **validates** the `labeled_by` provenance split (#33): noisy
+  auto-labels must stay separable from hand-labels, and any dashboard-trust is P10-gated on a precision
+  spot-check — a full `--all` backfill is exactly what generates that sample. **Deliberately backfill-first:
+  the Stop-hook auto-wire is a follow-on**, so history is labelled and eyeballed before it runs every
+  session. Same shape as Phase 1/3; the *asking*-calibration vector now has the passive instrument the
+  *doing* vector got in #31. Open: (1) Stop-hook wire, (2) `--all` historical backfill, (3) human-overrides-
+  classifier path (undefined — a human disagreeing with an auto-label needs a manual edit today).
 
 ### Autonomous test-fix loop — a richer cousin of `iterative-development` *(harvested from `autonomous-testing` before its ADR-0008 cut, 2026-07-17)*
 

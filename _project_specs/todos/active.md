@@ -6,10 +6,11 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## ═══ SESSION 2026-07-19 — friction-detector Phase 3 (action-link + divergence surface) ═══
+## ═══ SESSION 2026-07-19 — friction-detector Phase 3 + skill-profiles tidy + should_fire passive extraction ═══
 
-**Suite green (top-level 182 + gate/override/spend/verify + 5 mnemos self-checks incl. new
-`test_divergence`), doccheck 18/18. NOT yet committed — on `main`, no branch.**
+**MERGED: #31 (Phase 3), #32 (skill-profiles tidy), #33 (dashboard provenance note). #34 (should_fire
+extraction) open. Suite green, doccheck 19/19. Both friction-calibration vectors now have their passive
+instrument: *doing* (divergence #31) and *asking* (should_fire #34).**
 
 ### What shipped — spec 13 is now CLOSED
 **Phase 3 = action-link + divergence surface.** `scripts/mnemos/divergence.py` (new, pure) derives per
@@ -31,26 +32,45 @@ type. `aggregate()` = flat cross-session rollup by type.
 - **Ceiling (marked `ponytail:`):** links to the *nearest* action window only; multi-window attribution
   deferred until it measurably misfits.
 
+### B. skill-profiles tidy (#32)
+3 audit-KEEP skills had no curation home (off everywhere downstream): **code-review → universal**,
+**existing-repo → new `brownfield` ext**, **project-tooling → new `deploy` ext**. `workspace` +
+`team-coordination` left intentionally off (removal candidates). Guard: doccheck **19th check**
+`skill-profiles-names-are-installed` (dangling names, not orphans) + fail-clean on malformed JSON. Read-first
+per rule-over-read (found no dangling, only the 3 orphans).
+
+### C. should_fire passive extraction (#34) — the *asking*-calibration instrument
+`scripts/gate/label.py` fills `should_fire` (gate-calibration ground truth, else `null` forever — dead P7
+backlog) from the user's DISPOSITION (first human turn after the gate, **timestamp-joined**) via a balanced
+local-qwen classifier. Writes back in place, idempotent, fail-open, `labeled_by: "classifier"`, **never
+overwrites a human label**. 11 mocked tests (auto-discovered in the gate suite).
+- **Backtest (n=3): plumbing correct, precision ~0.5 EXACTLY as spec-13 predicted** — classifier conflates
+  terse approval ("go ahead") with unnecessary pause; 2/3 disagreed with likely human label. **Validates the
+  `labeled_by` split** (#33) — noisy auto-labels stay separable; dashboard-trust P10-gated on a precision sample.
+- **Deliberately backfill-first** (`--session`/`--all`) — Stop-hook auto-wire is a follow-on, so history gets
+  labelled + eyeballed before it runs live.
+
 ### Decisions surfaced this session (all resolved with Lorenzo, gate logged)
-1. Store link vs derive → **derive**. 2. per-session only vs +aggregate → **both** (Lorenzo: "deferment is
-where we've been losing capability"); aggregate kept deliberately flat. 3. window context → added the
-**ask** (intent it diverged from) + **error-in-window** flag. 4. composite → **no**, view-only.
+Phase 3: derive-not-store · both surfaces (aggregate flat) · added ask+error context · no composite.
+Tidy: 3 placements + the guard. should_fire: label.py location · timestamp-join · balanced prompt ·
+backfill-first · ship-as-is despite ~0.5 precision (tuning is P10-gated, n=3 too small).
 
 ### Docs synced (doc-drift discipline)
-spec 13 (Phase 3 → BUILT), `docs/observatory.md` (Phase 3 update), `.claude/skills/mnemos/SKILL.md` (CLI +
-action-divergence note). This handoff.
+spec 13, `docs/observatory.md` (Phase 3 + should_fire updates), mnemos SKILL, `docs/contracts/gate-event.md`
+(labeled_by provenance + producer status). This handoff.
 
-### Known UX gap logged (not Phase-3-specific, not fixed)
-`divergence --session` / `haze --session` need the FULL uuid, but `haze`'s listing prints ids truncated to
-8 chars — the shown id can't be pasted back. A prefix-resolve would fix both siblings at once. Left as a
-sibling-consistency call.
+### Known gaps logged (not fixed)
+- `divergence --session` / `haze --session` need the FULL uuid, but `haze` prints 8-char ids — prefix-resolve
+  would fix both. Sibling-consistency call.
+- **should_fire human-overrides-classifier path is undefined** — a human disagreeing with an auto-label needs
+  a manual edit today (`label.py` never re-touches a labeled event). Fine for now; note it.
 
 ### NEXT (in order)
-1. **Refine `skill-profiles.json`** vs the full KEEP set (low-stakes tidy) — now the lead.
-2. **`should_fire` passive extraction** — apply spec-13's now-proven pattern (passive extraction from the
-   response the user already gives) to retire the dead `should_fire` labeling backlog. Phase 3 is the
-   template; this is the natural follow-on.
-3. **P10 haze-recalib** — still self-fires at 40 real-signal sessions (precision spot-check → band re-tune).
+1. **should_fire follow-ons** — (a) `--all` historical backfill (generates the P10 precision sample),
+   (b) Stop-hook auto-wire (backgrounded, after backfill eyeballed), (c) human-override path.
+2. **P10 haze-recalib** — self-fires at 40 real-signal sessions (precision spot-check → band re-tune).
+3. **Refine `skill-profiles.json`** further vs the full KEEP set — the #32 tidy homed the 3 orphans; a
+   deeper profile/extension review (which stack tags, defaults) is still low-stakes-open.
 
 **Delivery-mechanism blocker still stands** (see 2026-07-18 section): do NOT trim further
 delivery-entangled skills on the "survives globally" rationale until the delivery design session settles it.

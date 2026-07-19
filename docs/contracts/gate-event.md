@@ -98,15 +98,22 @@ ADR-0006 already flags for pruning. The **production join question stays open**:
 outcome source ever ships (accept/dismiss captured at disposition time), that producer's shape
 is decided then — and that is the point at which this earns an ADR.
 
-### Pickup for tess-dashboard — `labeled_by` provenance when `should_fire` goes passive (2026-07-19)
+### `labeled_by` provenance — `should_fire` passive extraction (BUILT 2026-07-19, producer side)
 
 Manual labeling is a dead act (the P7 backlog: 52 unlabeled gates across 19 sessions nobody will
-hand-label; P7 snoozed, not resolved). The planned fix is **passive extraction** — apply spec-13's
-Phase-1 pattern (a local-qwen classifier over the transcript delta at Stop-hook ingest) to fill
-`should_fire` from the user's in-session disposition automatically, the same way friction Phase 3
-(#31) did for corrections. **The metric definition does not change** (`should_fire_ratio` stays
-mean over `fired` × `should_fire`) — only *how the label gets populated*. Two consequences the
-dashboard must handle when that lands:
+hand-label; P7 snoozed, not resolved). The fix — **passive extraction** — is now **built on the
+producer side** (`scripts/gate/label.py`): it applies spec-13's classifier pattern to fill
+`should_fire` from the user's DISPOSITION (the first human turn after the gate, timestamp-joined),
+the same way friction Phase 3 (#31) did for corrections. It writes back in place, idempotent,
+fail-open to null, and **never overwrites a human label**. **The metric definition does not change**
+(`should_fire_ratio` stays mean over `fired` × `should_fire`) — only *how the label gets populated*.
+
+**Backtest finding (n=3, this session):** the plumbing is correct, and precision is **~0.5 as
+spec-13 predicted** — the classifier conflates a terse approval ("go ahead") with an unnecessary
+pause, so it under-labels genuine gates the user simply agreed with quickly. **This is exactly why
+`labeled_by` matters** — the two consequences below are load-bearing, not optional:
+
+Two consequences the **dashboard (consumer side, still a pickup)** must handle:
 
 1. **A new provenance field — `labeled_by: human | classifier`.** Auto-filled labels are ~0.5
    precision (the spec-13 classifier finding), so they must be **separable** from the trusted
@@ -118,8 +125,9 @@ dashboard must handle when that lands:
    a shift on the number that is **not** a change in gating behavior — it is the denominator
    un-blinding (exactly like `correction_density` 0.00 → 0.219 when Phase-1 lifted its blindness).
 
-Not built yet — this is the note so the dashboard side is ready. The Tessera-side build is
-"`should_fire` passive extraction" in `_project_specs/todos/active.md`.
+Producer built (`scripts/gate/label.py --session <id>` / `--all`, backfill-first — the Stop-hook
+auto-wire is a deliberate follow-on once a full `--all` backfill has generated a real precision
+sample for the P10 spot-check). Consumer (dashboard `labeled_by` slice) is still the open pickup.
 
 ## Consumers
 
@@ -132,5 +140,7 @@ Not built yet — this is the note so the dashboard side is ready. The Tessera-s
 Tessera **emits** `suggestion_gate` events via the model-emitted recorder (`scripts/gate/emit.py`),
 written to `.tessera/logs/<session-id>.jsonl`. The dashboard reads them live (`source: logs`) and
 falls back to the fixture only when no real events exist. `score`/`threshold` are absent (no scorer)
-and `should_fire` is `null` (unlabeled) until ground truth is filled post-hoc — the dashboard's
-calibration matrix excludes null events rather than scoring them as misses.
+and `should_fire` is `null` at emit time. It is filled post-hoc — by a human (inline label, no
+`labeled_by`) or by the passive classifier (`scripts/gate/label.py`, `labeled_by: "classifier"`,
+~0.5 precision). Events still `null` (no disposition found, or Ollama down) are excluded from the
+dashboard's calibration matrix rather than scored as misses.
