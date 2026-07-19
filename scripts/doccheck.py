@@ -958,8 +958,36 @@ def check_template_skill_refs_exist() -> list[str]:
     return sorted(set(bad))
 
 
+def check_no_phantom_global_skill_body_claim() -> list[str]:
+    """No skill/doc may claim that trimmed skill content is preserved in a full-body
+    `~/.claude/skills/...` copy that serves downstream apps.
+
+    Found 2026-07-18, applying the python-TRIM read-first. The eagerly-loaded `base`
+    skill asserted its cut scaffolding "survives in the GLOBAL `~/.claude/skills/base`
+    copy… which retains the full body those repos actually use." Verified FALSE: the
+    global copy is byte-identical to the trimmed project copy, and NO install.sh/script
+    copies skill bodies out to `~/.claude/skills`. A convincing HARVEST-BEFORE-CUT claim
+    pointed at an archive that does not exist — the exact deletion-safety illusion base
+    itself warns about. This forbids the verbatim phrasings that make that false claim;
+    the corrected note paraphrases around them, so it does not self-trip.
+    """
+    forbidden = re.compile(
+        r"retains the full body|full body those repos|serves downstream app repos", re.I)
+    bad = []
+    scanned = list(_docs()) + sorted((ROOT / "skills").rglob("*.md"))
+    for doc in scanned:
+        # Whitespace-normalized: the original false claim was line-wrapped
+        # ("retains the\nfull body"), which a per-line scan would miss.
+        text = " ".join(doc.read_text().split())
+        if forbidden.search(text):
+            bad.append(f"{_rel(doc)}: claims skill bodies live in a global "
+                       f"`~/.claude/skills` archive — no copy mechanism exists (2026-07-18)")
+    return sorted(set(bad))
+
+
 CHECKS = {
     "referenced-paths-exist": check_referenced_paths_exist,
+    "no-phantom-global-skill-body-claim": check_no_phantom_global_skill_body_claim,
     "template-skill-refs-exist": check_template_skill_refs_exist,
     "hooks-match-templates": check_hooks_match_templates,
     "no-upstream-clone-instructions": check_no_upstream_clone_instructions,

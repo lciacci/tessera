@@ -358,6 +358,38 @@ def test_real_repo_has_no_upstream_clone_instructions():
     assert doccheck.check_no_upstream_clone_instructions() == []
 
 
+# ─── BUG (2026-07-18): the eagerly-loaded `base` skill claimed its trimmed content
+# "survives in the GLOBAL ~/.claude/skills/base copy… which retains the full body those
+# repos actually use." FALSE — global is byte-identical to the trimmed copy, no script
+# copies bodies out. A HARVEST-BEFORE-CUT reassurance pointing at a nonexistent archive.
+def test_catches_phantom_global_skill_body_claim(fake_repo):
+    d = fake_repo / "skills" / "base"
+    d.mkdir(parents=True)
+    # Line-wrapped exactly like the original — proves the whitespace-normalized scan
+    # catches what a per-line scan would miss.
+    (d / "SKILL.md").write_text(
+        "downstream-app scaffolding; they\nsurvive in the GLOBAL `~/.claude/skills/base` "
+        "copy, which serves downstream app repos and retains the\nfull body those repos use.\n")
+    bad = doccheck.check_no_phantom_global_skill_body_claim()
+    assert len(bad) == 1
+    assert "skills/base/SKILL.md" in bad[0]
+
+
+def test_corrected_note_does_not_self_trip(fake_repo):
+    """The falsification note names the bug to correct it; it must not itself fire."""
+    d = fake_repo / "skills" / "base"
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text(
+        "Correction: an earlier note claimed the scaffolding was preserved in a full-body "
+        "`~/.claude/skills/base` copy serving downstream apps. That was **false** — no script "
+        "copies bodies out; it survives in git history and sibling skills.\n")
+    assert doccheck.check_no_phantom_global_skill_body_claim() == []
+
+
+def test_real_repo_has_no_phantom_global_skill_body_claim():
+    assert doccheck.check_no_phantom_global_skill_body_claim() == []
+
+
 # ── no-bare-python3-with-toolchain-import ─────────────────────────────────────
 # THE F-001 REGRESSION. F-001 was a hook invoking the toolchain through bare `python3` while
 # Homebrew silently re-pointed that name; every checkpoint write no-op'd for weeks, invisibly,
