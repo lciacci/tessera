@@ -54,6 +54,24 @@ def _typing_wiring() -> None:
     assert rows[0]['correction_type'] is None
 
 
+def _carrier_rows_excluded() -> None:
+    # `!`-command output, slash-command wrappers, and interrupt markers ride
+    # user role with no isMeta/promptSource flag. They emit as 'user-meta' so
+    # the density denominator drops them (silver-label pass: ~11% dilution).
+    for text in ('<bash-stdout>total 42</bash-stdout>',
+                 '<local-command-stdout>Set model</local-command-stdout>',
+                 '<command-name>/compact</command-name>',
+                 '[Request interrupted by user for tool use]'):
+        rows = _emit_rows(_user_ev(text), 1, 's', 't', False, eligible=True)
+        assert rows[0]['event_type'] == 'user-meta', text
+        assert rows[0]['correction_match'] == 0
+
+    # A human turn that merely QUOTES output mid-text stays human.
+    rows = _emit_rows(_user_ev("the run printed <bash-stdout> markers, why?"),
+                      1, 's', 't', False, eligible=True)
+    assert rows[0]['event_type'] == 'user'
+
+
 def demo() -> None:
     # --- must NOT match (false positives the fix kills) ---
     assert _match("Change in the Don't Hardcode instructions") == 0, "finding #1 regression"
@@ -76,6 +94,7 @@ def demo() -> None:
     assert _preview("No, don't do that", False, is_user=False)[1] == 0
 
     _typing_wiring()
+    _carrier_rows_excluded()
 
     print("ok")
 

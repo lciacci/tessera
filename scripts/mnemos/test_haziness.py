@@ -6,7 +6,7 @@ Guards finding #1's density half: one correction in a short session must not
 saturate the dim, but the term must converge to the raw ratio as turns grow.
 """
 
-from .haziness import _correction_density, _CORRECTION_PRIOR
+from .haziness import _correction_density, _CORRECTION_PRIOR, band
 
 
 def _turn(correction: bool):
@@ -46,6 +46,15 @@ def demo() -> None:
 
     # Bounded in [0, 1) by construction — never needs a clamp.
     assert 0.0 <= _correction_density(_session(5, 5)) < 1.0
+
+    # Bands re-anchored 2026-07-20 (P10): distribution p50/p90/max, so the
+    # label discriminates on real dogfood data instead of reading 'clear'
+    # for every session ever ingested.
+    assert band(0.0) == 'clear'
+    assert band(0.05) == 'cloudy'
+    assert band(0.11) == 'cloudy'   # the hand-labeled heavy session (0.11)
+    assert band(0.12) == 'hazy'
+    assert band(0.20) == 'lost'
 
     print("ok")
 

@@ -2,6 +2,18 @@
 
 **Status:** Phase 1 BUILT + backtested (2026-07-17). **Phase 2 (typing) BUILT + verified (2026-07-18).**
 **Phase 3 (action-link + divergence surface) BUILT + verified (2026-07-19).**
+**P10 FIRED AND ADJUDICATED (2026-07-20) — spec fully closed.** Silver-label eval (125 turns, both
+classes, Claude-judged, live-qwen replay `scripts/mnemos/eval_correction.py`): precision ~0.36–0.48,
+recall ~0.39–0.53, **measured density within ~±50% of true** (errors partially cancel — ordinal
+signal, not absolute rate). Decisions: bands re-anchored to the dogfood distribution
+(`0.05/0.12/0.20` — the old `0.25/0.50/0.75` labeled all 115 sessions 'clear'); **weight stays
+0.30**; **P10 predicate retired** (one-shot tripwire, its review happened) — the standing re-eval
+trigger is now *any detector change re-runs `eval_correction.py` and re-opens bands/weight on its
+numbers*. Bonus finding from the negative sample: ~11% of the eligible denominator was carrier junk
+(`<bash-stdout>`, interrupt markers riding user role) — now tagged `user-meta` at ingest. Historical
+rows keep old denominators (a future `--reclassify` cleans them; band edges are robust to the ~10%
+shift). The silver set lives per-machine at `.mnemos/silver-corrections.jsonl` (gitignored, like all
+runtime state).
 **Motivation:** `docs/observatory.md` → "Haziness's correction-detector has near-zero recall".
 
 ---

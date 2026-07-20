@@ -73,11 +73,19 @@ def compute_haze(store, session_id: str) -> dict:
 
 
 def band(composite: float) -> str:
-    if composite < 0.25:
+    """Re-anchored 2026-07-20 (P10 adjudication): the original 0.25/0.50/0.75
+    bands were tuned against the blind regex detector and labeled all 115
+    dogfood sessions 'clear' (max observed composite 0.20) — dead letters.
+    These sit at the observed distribution's ~p50/p90/max, so the label
+    discriminates. Distribution-anchored, not absolute: if bands ever DRIVE
+    anything (routing, alerts) rather than label a report, re-derive them.
+    Density caveat at current detector quality (silver-label eval): measured
+    is within ~±50% of true — ordinal signal, not absolute rate."""
+    if composite < 0.05:
         return 'clear'
-    if composite < 0.50:
+    if composite < 0.12:
         return 'cloudy'
-    if composite < 0.75:
+    if composite < 0.20:
         return 'hazy'
     return 'lost'
 
