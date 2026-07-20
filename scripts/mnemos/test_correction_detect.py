@@ -12,6 +12,7 @@ from .correction_detect import (
     CorrectionDetector,
     classify,
     classify_type,
+    make_detector,
     regex_match,
 )
 
@@ -105,12 +106,58 @@ def _detector_type_behavior() -> None:
     assert d.correction_type("x") == "defied" and d.enabled is True
 
 
+def _status_traces_how_it_ran() -> None:
+    # spec 16: fail-open must leave a trace. Each degraded shape names itself.
+    assert CorrectionDetector(generate=_gen("yes"), enabled=True).status() == "ran"
+    assert CorrectionDetector(generate=None, enabled=False,
+                              reason="import-error").status() == "regex-only:import-error"
+    assert CorrectionDetector(generate=_gen("yes"), enabled=True,
+                              budget_s=0.0).status() == "budget-exhausted"
+    d = CorrectionDetector(generate=_gen(""), enabled=True)
+    for _ in range(CorrectionDetector._MAX_CONSECUTIVE_FAILS):
+        d.qwen_says_correction("x")
+    assert d.status() == "disabled-mid:consecutive-nulls"
+
+
+def _make_detector_never_raises() -> None:
+    # The 07-17→07-20 outage: make_detector() raised ModuleNotFoundError under
+    # the console script and killed ingest before its first fail-open guard.
+    # Now it must ALWAYS return a detector, and env-off carries its reason.
+    import os
+    os.environ["MNEMOS_CORRECTION_CLASSIFIER"] = "0"
+    try:
+        d = make_detector()
+        assert d.enabled is False and d.status() == "regex-only:env-disabled"
+    finally:
+        del os.environ["MNEMOS_CORRECTION_CLASSIFIER"]
+
+
+def _works_under_console_script_conditions() -> None:
+    # Reproduce the hook's environment: interpreter launched with a cwd OUTSIDE
+    # the repo and no repo root on sys.path — exactly how `.venv/bin/mnemos`
+    # runs from a Stop hook. make_detector must build, not raise.
+    import subprocess
+    import sys
+    import tempfile
+    code = ("import os; os.environ['MNEMOS_CORRECTION_CLASSIFIER']='0'; "
+            "from mnemos.correction_detect import make_detector; "
+            "print(make_detector().status())")
+    with tempfile.TemporaryDirectory() as td:
+        out = subprocess.run([sys.executable, "-c", code], cwd=td,
+                             capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip() == "regex-only:env-disabled"
+
+
 def demo() -> None:
     _regex_unchanged()
     _classify_parses_token()
     _detector_behavior()
     _classify_type_parses()
     _detector_type_behavior()
+    _status_traces_how_it_ran()
+    _make_detector_never_raises()
+    _works_under_console_script_conditions()
     print("ok")
 
 

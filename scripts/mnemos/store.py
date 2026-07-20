@@ -153,6 +153,7 @@ class MnemosStore:
         with self._conn() as conn:
             conn.executescript(SCHEMA)
             _add_column(conn, 'claude_turns', 'correction_type', 'TEXT')
+            _add_column(conn, 'claude_sessions', 'classifier_status', 'TEXT')
             conn.execute('PRAGMA user_version = 1')
 
     def exists(self) -> bool:

@@ -900,6 +900,32 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   on real output caught what the committed eval could not. Sample-check the class your eval is
   thinnest on.
 
+### Stop-hook ingest was dead for 3 days — F-001's cousin, caught by an eval probe *(2026-07-20)*
+
+- **Status:** Fixed same day (spec 16, closed). P11 now watches the pipe.
+- **What:** every Stop-hook transcript ingest from 07-17 (#19 merge) to 07-20 silently died:
+  spec-13's `make_detector()` imported repo-root `scripts.model_routing` from inside the installed
+  mnemos package — resolves under `python -m` from the repo root, raises under the console script
+  the hook execs. First line of `ingest_session`, before every fail-open guard; hook swallows
+  stderr. Hand-runs worked, hook runs no-op'd — **silent divergence between the interactive and
+  hook environments, the F-001 signature** ("the agent's shell is not your shell" entry, now with
+  a second confirmed instance). P9 was blind by construction: it checks the interpreter can import
+  the toolchain, not that the toolchain's own imports survive an arbitrary cwd.
+- **How it surfaced:** a progress-eval probe noticed P10's real-signal counter frozen at 24 while
+  haze rows grew — and read the signature as F-001-shaped (a zero indistinguishable from a dead
+  pipe). The spec-16 hand-run confirmed in one command. **Neither the suite nor doccheck nor any
+  watch predicate caught 3 days of it** — the suite mocks the boundary, and nothing diffed
+  transcripts-on-disk against sessions-in-store. That diff is now **P11 ingest-pipe** (DEAD =
+  recent transcripts with no session row; DEGRADED = 3 consecutive regex-only ingests, via the new
+  per-ingest `classifier_status` trace). The fix's regression test runs the real interpreter from
+  an outside cwd — the hook's condition, not the developer's.
+- **Knock-on:** repair re-ingest lifted real-signal sessions 24 → 50, so **P10 fires legitimately
+  now** — the haziness band-recalib (precision spot-check first) is due as next-work.
+- **The generalized rule:** *reach the toolchain by path, not name* extends to *a package must not
+  depend on its caller's cwd for imports*. And spec-11's thesis got its first live confirmation:
+  a fail-open path that leaves no trace converts "broken" into "clean-looking data" — 3 days here,
+  weeks for F-001.
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.

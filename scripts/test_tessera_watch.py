@@ -126,6 +126,91 @@ def test_ga_ignores_non_core_persistence(tmp_path):
     assert tw.g_a_consecutive(root)[0] is False
 
 
+import os
+import time
+
+
+def _sessions_db(root: Path, ids: list[str], statuses: list[str | None] | None = None) -> None:
+    import sqlite3
+    (root / ".mnemos").mkdir(exist_ok=True)
+    conn = sqlite3.connect(root / ".mnemos" / "mnemo.db")
+    conn.execute("CREATE TABLE claude_sessions (id TEXT, last_ingested_at TEXT, "
+                 "classifier_status TEXT)")
+    st = statuses or [None] * len(ids)
+    conn.executemany("INSERT INTO claude_sessions VALUES (?,?,?)",
+                     [(i, f"2026-07-{20 - n:02d}T00:00:00Z", s)
+                      for n, (i, s) in enumerate(zip(ids, st))])
+    conn.commit(); conn.close()
+
+
+def _transcript(tdir: Path, sid: str, age_h: float, size: int = 20_000) -> None:
+    tdir.mkdir(parents=True, exist_ok=True)
+    p = tdir / f"{sid}.jsonl"
+    p.write_bytes(b"x" * size)
+    mtime = time.time() - age_h * 3600
+    os.utime(p, (mtime, mtime))
+
+
+def test_p11_fires_on_uningested_recent_transcript(tmp_path):
+    root = _root(tmp_path)
+    tdir = tmp_path / "transcripts"
+    _transcript(tdir, "aaaa1111-dead", age_h=24)
+    _sessions_db(root, ["other-session"])
+    fired, detail = tw.p11_ingest_pipe(root, tdir)
+    assert fired is True and "aaaa1111" in detail and "DEAD" in detail
+
+
+def test_p11_quiet_when_all_ingested(tmp_path):
+    root = _root(tmp_path)
+    tdir = tmp_path / "transcripts"
+    _transcript(tdir, "s1", age_h=24)
+    _sessions_db(root, ["s1"], ["ran"])
+    assert tw.p11_ingest_pipe(root, tdir)[0] is False
+
+
+def test_p11_excludes_live_session_and_husks_and_history(tmp_path):
+    root = _root(tmp_path)
+    tdir = tmp_path / "transcripts"
+    _transcript(tdir, "live", age_h=0.2)            # < 1h — may still be open
+    _transcript(tdir, "husk", age_h=24, size=100)   # < min bytes
+    _transcript(tdir, "old", age_h=24 * 30)         # > 7d — history
+    _sessions_db(root, [])
+    assert tw.p11_ingest_pipe(root, tdir)[0] is False
+
+
+def test_p11_fires_on_fallback_streak(tmp_path):
+    root = _root(tmp_path)
+    tdir = tmp_path / "transcripts"
+    tdir.mkdir()
+    _sessions_db(root, ["s1", "s2", "s3"],
+                 ["regex-only:import-error"] * 3)
+    fired, detail = tw.p11_ingest_pipe(root, tdir)
+    assert fired is True and "regex-only" in detail
+
+
+def test_p11_streak_broken_by_a_ran(tmp_path):
+    root = _root(tmp_path)
+    tdir = tmp_path / "transcripts"
+    tdir.mkdir()
+    _sessions_db(root, ["s1", "s2", "s3"],
+                 ["regex-only:ollama-down", "ran", "regex-only:ollama-down"])
+    assert tw.p11_ingest_pipe(root, tdir)[0] is False
+
+
+def test_p11_budget_exhausted_is_not_a_fallback(tmp_path):
+    # A bulk sweep shares one wall-clock budget — later sessions run out. The
+    # classifier partially ran; that is not the silent-death shape P11 hunts.
+    root = _root(tmp_path)
+    tdir = tmp_path / "transcripts"
+    tdir.mkdir()
+    _sessions_db(root, ["s1", "s2", "s3"], ["budget-exhausted"] * 3)
+    assert tw.p11_ingest_pipe(root, tdir)[0] is False
+
+
+def test_p11_no_dir_or_db_is_quiet(tmp_path):
+    assert tw.p11_ingest_pipe(_root(tmp_path), tmp_path / "nope")[0] is False
+
+
 def test_evaluate_returns_one_result_per_predicate(tmp_path):
     results = tw.evaluate(_root(tmp_path))
     assert len(results) == len(tw.PREDICATES)
