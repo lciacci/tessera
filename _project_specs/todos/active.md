@@ -14,8 +14,22 @@ stopped the surfacer — it printed the 07-12 handoff for 8 days. Newest section
 guarded by doccheck `handoff-heading-is-current`.)*
 
 **MERGED: #36 (specs 14–16), #37 (should_fire stop-loss), #38 (ingest-pipe fix + P11), #39 (kind
-enum), #40 (P10 adjudication). Suite green (190 top-level), doccheck 19/19, watch quiet (P7 snoozed).
-No branches in flight. Every spec written today was also closed today.**
+enum), #40 (P10 adjudication), #41 (handoff-surfacer fix, doccheck #20), #42 (ADR-0010 skill
+mirror + P12), #43 (downstream validation + scaffold fix), #44 (findings channels). Plus sibling
+commits: conclave F-001 retitle, heaviside channel opened — both pushed. Suite green, doccheck
+20/20, watch quiet (P7 snoozed). No branches in flight, remote pruned. Every item from the
+morning eval AND every spec written today closed same-day.**
+
+### Next session — start here
+1. **Conclave F-001 — gate-scan disposition memory** (surfaces at SessionStart via findings).
+   Well-specified in conclave's FINDINGS.md: a not-a-gate ledger keyed by turn hash, subtracted
+   from the detected set alongside fired gates. Pairs naturally with:
+2. **Spec 11 — systematic fail-open sweep.** Pattern proven (P11: trace + watcher); remaining
+   scope = the other fail-open paths (hooks, spend guard, gate scan, escalation surfacing).
+3. **Trim backlog (unblocked by ADR-0010)** — remaining ADR-0008 delivery-entangled trims under
+   single-body policy, read-first, one decision at a time.
+4. Minors: uuid prefix-resolve; historical `--reclassify --all` (cleans pre-carrier-fix
+   denominators); deeper skill-profiles refine.
 
 ### What happened — an eval session that turned into a repair session
 Started as a progress eval; the eval's probes found two live instrument failures. The through-line:
