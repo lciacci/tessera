@@ -174,6 +174,13 @@ over `claude_turns` — no new schema. `mnemos divergence --session <id>` shows 
 Ingestion is idempotent (resumes via `last_line_offset`). **Opt out per project**
 with `touch .mnemos/claude-log.disabled`.
 
+**Every ingest leaves a trace** (added 2026-07-20, spec 16): `claude_sessions.classifier_status`
+records how correction detection actually ran — `ran` / `regex-only:<reason>` /
+`disabled-mid:consecutive-nulls` / `budget-exhausted`. `tessera-watch` **P11** diffs recent
+transcripts on disk against ingested sessions (a crashed ingest writes nothing, so only that diff
+can see it) and flags 3 consecutive regex-only ingests. This exists because the Stop-hook ingest
+was silently dead 07-17→07-20 (console-script import bug, F-001's cousin) and nothing noticed.
+
 ## Agent Instructions
 
 When working on a task:

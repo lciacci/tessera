@@ -115,11 +115,25 @@ class CorrectionDetector:
     # run to regex-only; a genuinely-down Ollama still trips it within seconds.
     _MAX_CONSECUTIVE_FAILS = 3
 
-    def __init__(self, *, generate, enabled: bool, budget_s: float = 180.0):
+    def __init__(self, *, generate, enabled: bool, budget_s: float = 180.0,
+                 reason: str = ""):
         self.generate = generate
         self.enabled = enabled
+        self.reason = reason  # why disabled, "" when enabled
         self._deadline = time.monotonic() + budget_s if enabled else 0.0
         self._fails = 0
+
+    def status(self) -> str:
+        """One-line trace of how detection actually ran — persisted per ingest
+        (spec 16: a fail-open path must leave a trace, or a dead pipe reads as
+        a clean one for weeks)."""
+        if not self.enabled:
+            if self._fails >= self._MAX_CONSECUTIVE_FAILS:
+                return "disabled-mid:consecutive-nulls"
+            return f"regex-only:{self.reason or 'disabled'}"
+        if time.monotonic() > self._deadline:
+            return "budget-exhausted"
+        return "ran"
 
     def qwen_says_correction(self, cleaned: str) -> bool:
         """True only on a confident yes within budget. Any failure → False, so
@@ -155,13 +169,39 @@ class CorrectionDetector:
         return verdict
 
 
+def _import_routing():
+    """scripts.model_routing lives at the REPO root, not inside the mnemos
+    package — under the .venv console script the root is not on sys.path, so a
+    bare `from scripts...` raised ModuleNotFoundError and (07-17→07-20)
+    silently killed every Stop-hook ingest before its first fail-open guard,
+    while `python -m` runs from the repo root kept working. F-001's cousin:
+    resolve the root from this file (the editable install keeps that true)."""
+    import sys
+    from pathlib import Path
+    try:
+        from scripts.model_routing import _ollama_up, ollama_generate
+    except ModuleNotFoundError:
+        root = str(Path(__file__).resolve().parents[2])
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        from scripts.model_routing import _ollama_up, ollama_generate
+    return _ollama_up, ollama_generate
+
+
 def make_detector(*, force: bool = False) -> CorrectionDetector:
     """Build a detector. Enabled when Ollama is up, unless
     MNEMOS_CORRECTION_CLASSIFIER=0 disables it. `force` overrides both (used by
-    --reclassify, where the whole point is to run the classifier)."""
-    from scripts.model_routing import _ollama_up, ollama_generate
-
+    --reclassify, where the whole point is to run the classifier). NEVER raises:
+    an unreachable toolchain degrades to regex-only WITH a reason — ingest must
+    survive any environment the hook runs it in."""
+    try:
+        _ollama_up, ollama_generate = _import_routing()
+    except Exception:
+        return CorrectionDetector(generate=None, enabled=False,
+                                  reason="import-error")
     if not force and os.environ.get("MNEMOS_CORRECTION_CLASSIFIER") == "0":
-        return CorrectionDetector(generate=ollama_generate, enabled=False)
+        return CorrectionDetector(generate=ollama_generate, enabled=False,
+                                  reason="env-disabled")
     enabled = force or _ollama_up()
-    return CorrectionDetector(generate=ollama_generate, enabled=enabled)
+    return CorrectionDetector(generate=ollama_generate, enabled=enabled,
+                              reason="" if enabled else "ollama-down")

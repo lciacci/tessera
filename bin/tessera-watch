@@ -40,6 +40,10 @@ GRADUATION_RUNS = 3     # a core predicate firing this many runs running → gra
 GATE_LABEL_MIN = 20     # unlabeled post-backstop gates before should_fire labeling earns its slot
 BACKSTOP_LIVE = "2026-07-12"  # gate-scan wired everywhere; events from here are an honest sample
 HAZE_RECALIB_MIN = 40   # real-signal sessions before revisiting haziness bands (24 at spec-13 backfill; ~16 runway) (2026-07-17)
+INGEST_STALE_MIN_AGE_H = 1     # transcripts younger than this may be a live session — not yet a miss
+INGEST_STALE_MAX_AGE_D = 7     # older than this is history, not a live pipe problem
+INGEST_MIN_BYTES = 10_000      # skip 2-turn husk transcripts
+FALLBACK_STREAK = 3            # consecutive regex-only ingests before surfacing
 
 
 def p1_hook_drift(root: Path) -> tuple[bool, str]:
@@ -418,6 +422,70 @@ def p10_haze_recalib(root: Path) -> tuple[bool, str]:
         f"haziness bands + 0.30 weight; spec 13)")
 
 
+def _transcripts_dir(root: Path) -> Path:
+    """Claude Code's per-project transcript dir for this repo (path-slug)."""
+    slug = str(root.resolve()).replace("/", "-")
+    return Path.home() / ".claude" / "projects" / slug
+
+
+def p11_ingest_pipe(root: Path, transcripts_dir: Path | None = None) -> tuple[bool, str]:
+    """The Stop-hook ingest pipe is silently dead or silently degraded.
+
+    Two failure shapes, both observed or near-missed on 2026-07-20 (spec 16):
+    (a) DEAD — ingest crashes before writing anything, so recent transcripts
+        have no claude_sessions row at all. A status column cannot see this
+        (nothing was written); only transcript-vs-store diffing can. This is
+        exactly how a make_detector() import error killed every hook ingest
+        from 07-17 to 07-20 while hand-runs kept working (F-001's cousin).
+    (b) DEGRADED — ingest runs but the classifier silently falls back to
+        regex-only every time (classifier_status trace, written per ingest).
+    Age window: <1h may be a live session (not yet a miss); >7d is history.
+    """
+    tdir = transcripts_dir or _transcripts_dir(root)
+    db = root / ".mnemos" / "mnemo.db"
+    if not tdir.is_dir() or not db.exists():
+        return False, "no transcripts dir or no mnemos db"
+    now = datetime.now(timezone.utc).timestamp()
+    recent = [p for p in tdir.glob("*.jsonl")
+              if p.stat().st_size >= INGEST_MIN_BYTES
+              and INGEST_STALE_MIN_AGE_H * 3600
+                  <= now - p.stat().st_mtime
+                  <= INGEST_STALE_MAX_AGE_D * 86400]
+    try:
+        conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        try:
+            known = {r[0] for r in conn.execute("SELECT id FROM claude_sessions")}
+            cols = {r[1] for r in conn.execute("PRAGMA table_info(claude_sessions)")}
+            streak = 0
+            if "classifier_status" in cols:
+                statuses = [r[0] for r in conn.execute(
+                    "SELECT classifier_status FROM claude_sessions "
+                    "WHERE classifier_status IS NOT NULL "
+                    "ORDER BY last_ingested_at DESC LIMIT ?", (FALLBACK_STREAK,))]
+                # budget-exhausted = classifier partially ran (a bulk sweep
+                # sharing one wall-clock budget) — degraded is regex-only/
+                # disabled, the shapes where it never judged a single turn.
+                dead = ("regex-only:", "disabled-mid:")
+                if len(statuses) == FALLBACK_STREAK and \
+                        all(s.startswith(dead) for s in statuses):
+                    streak = FALLBACK_STREAK
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return False, "no claude_sessions table"
+    missing = sorted(p.stem[:8] for p in recent if p.stem not in known)
+    if missing:
+        return True, (
+            f"{len(missing)} recent transcript(s) never ingested "
+            f"({', '.join(missing[:5])}{'…' if len(missing) > 5 else ''}) — "
+            f"Stop-hook ingest pipe looks DEAD; run it by hand and read stderr")
+    if streak:
+        return True, (
+            f"last {streak} ingests all fell back to regex-only "
+            f"(classifier_status) — classifier pipe silently degraded")
+    return False, f"{len(recent)} recent transcript(s), all ingested; no fallback streak"
+
+
 def _resolve_label(query: str) -> str | None:
     """Unique predicate whose label contains `query` (case-insensitive), or None."""
     matches = [label for label in PREDICATES if query.lower() in label.lower()]
@@ -434,6 +502,7 @@ PREDICATES = {
     "P8 doc-drift": p8_doc_drift,
     "P9 interpreter-drift": p9_interpreter_drift,
     "P10 haze-recalib": p10_haze_recalib,
+    "P11 ingest-pipe": p11_ingest_pipe,
     "G-a graduation:snooze": g_a_consecutive,
 }
 

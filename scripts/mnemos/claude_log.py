@@ -162,7 +162,8 @@ def ingest_session(
                    tokens_in = tokens_in + ?,
                    tokens_out = tokens_out + ?,
                    model = COALESCE(?, model),
-                   source_path = ?
+                   source_path = ?,
+                   classifier_status = ?
                WHERE id = ?""",
             (new_offset,
              _utc_now_iso(),
@@ -172,6 +173,7 @@ def ingest_session(
              stats.get('tokens_out', 0),
              stats.get('model'),
              str(path),
+             classifier.status(),
              session_id),
         )
         conn.commit()

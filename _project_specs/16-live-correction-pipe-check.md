@@ -1,7 +1,8 @@
 # 16 — live correction-pipe spot-check (dead-pipe suspicion)
 
-**Status:** SPEC (2026-07-20). A probe, not a build — ~30 min; escalates into a watch predicate
-only if the suspicion confirms.
+**Status:** CLOSED (2026-07-20, same day) — **verdict: `pipe-dead`, confirmed and fixed.** The
+suspicion was right and worse than suspected: not classifier fallback — *ingest itself* crashed
+on every Stop-hook run from 07-17 (#19 merge) to 07-20. See "Outcome" at the end.
 **Motivation:** probe (2026-07-20): real-signal sessions stuck at **24/40** (P10 counter) — the
 exact count at the 07-17 backfill — while total haze rows grew 24→43. All 19 sessions ingested
 since score `correction_density = 0`. Plausible innocently (clean sessions exist; the spread was
@@ -58,3 +59,44 @@ properly first?
 ## Sizing
 
 Probe: ~30 min. Remedy if triggered: ~half session (trace line + predicate + tests).
+
+---
+
+## Outcome — `pipe-dead`, fixed (2026-07-20)
+
+**Root cause (found in one hand-run, step 2 of the procedure):** spec-13 Phase 1's
+`make_detector()` opens with `from scripts.model_routing import …` — an absolute import of a
+**repo-root** module from inside the installed `mnemos` package. Under `python -m` from the repo
+root, cwd is on `sys.path` and it resolves; under the **console script** (`.venv/bin/mnemos`) —
+which is exactly what `mnemos-stop-ingest.sh` execs — it raises `ModuleNotFoundError`. The call
+sits on the *first line* of `ingest_session`, **before every fail-open guard**, so the whole
+ingest died with nothing written, and the hook swallows stderr (`>/dev/null 2>&1 … & disown`).
+Every hook ingest since #19 merged (2026-07-17 08:14) was killed; every hand-run/backfill
+(`python -m`, repo root) worked. **F-001's cousin, precisely:** silent no-op in the hook
+environment, silent success in the interactive one — and P9 could not see it (it asserts the
+interpreter imports the *toolchain*; this was the toolchain failing to import a *repo module*).
+
+None of the four hypothesized silent-zero paths was it — the probe's premise ("19 new sessions
+score density 0") was itself wrong: those sessions **were never ingested at all**. The P10
+counter wasn't stuck at 24 from zeros; it was starved of rows.
+
+**Fix (all in one PR, per D16-1's adjudicated lean):**
+1. **Root cause** — `_import_routing()` resolves the repo root from `__file__` before the import;
+   `make_detector()` now NEVER raises (any import failure → regex-only detector with
+   `reason="import-error"`). Regression test runs the real interpreter from an outside cwd —
+   the hook's exact condition.
+2. **Trace** — `claude_sessions.classifier_status` (idempotent ADD-COLUMN), written per ingest:
+   `ran` / `regex-only:<reason>` / `disabled-mid:consecutive-nulls` / `budget-exhausted`.
+3. **Predicate** — `tessera-watch` **P11 ingest-pipe**, two shapes: (a) **DEAD** — recent
+   transcripts (1h < age ≤ 7d, >10KB) with no `claude_sessions` row (the shape a status column
+   cannot see, and the one that actually happened); (b) **DEGRADED** — last 3 ingests all
+   `regex-only`/`disabled-mid` (`budget-exhausted` excluded: a bulk sweep shares one wall-clock
+   budget, partial run ≠ silent death).
+4. **Repair** — full `ingest-claude --all` re-run via the fixed console script (the fix's own
+   verification): 72 missing sessions ingested, real-signal count 24 → **50**, **P10 now fires
+   legitimately** (the band-recalib cue — separate next-work).
+
+**Lesson recorded:** the F-001 rule generalizes — *"reach the toolchain by path, not name"* must
+include *"a package's imports must not depend on the caller's cwd."* A fail-open path with no
+trace reads as clean data; it cost three days of instrument blindness this time (F-001's was
+weeks).
