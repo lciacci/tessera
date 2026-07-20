@@ -39,6 +39,25 @@ def demo() -> None:
     r = build_event(True, "scope", None, session_id="s", retro=True)
     assert r["data"]["retro"] is True
 
+    # Kind vocabulary (spec 15): CLI rejects unknown kinds, fail-closed, exit 2.
+    import os
+    from emit import KINDS, main
+    os.environ.setdefault("CLAUDE_CODE_SESSION_ID", "test-session")
+    assert main(["--fired", "--kind", "refactor", "--dry-run"]) == 2  # pre-enum kind
+    assert main(["--fired", "--kind", KINDS[0], "--dry-run"]) == 0
+
+    # Remap: legacy → canonical with raw kept; canonical and unknown untouched.
+    from remap_kind import remap_line
+    legacy = json.dumps({"type": "suggestion_gate", "data":
+                         {"suggestion_kind": "design-decision", "should_fire": None}})
+    new, change = remap_line(legacy)
+    d = json.loads(new)["data"]
+    assert d["suggestion_kind"] == "design" and d["suggestion_kind_raw"] == "design-decision"
+    assert change == "design-decision→design"
+    assert remap_line(new)[1] is None                 # idempotent — _raw present
+    mystery = json.dumps({"type": "suggestion_gate", "data": {"suggestion_kind": "zzz"}})
+    assert remap_line(mystery) == (mystery, "unknown:zzz")  # reported, not guessed
+
     # Round-trips as one JSONL line.
     assert json.loads(json.dumps(e)) == e
 
