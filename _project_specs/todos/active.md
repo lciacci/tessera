@@ -79,8 +79,13 @@ weeks for F-001) — every fail-open now wants a heartbeat.
    `test_gate_emit` import `remap_kind`; the scaffold cp list drifted — fresh downstreams shipped
    broken gate tests. Fixed + `test_new_project_gate_copies.py` (runs the copied tests in a real
    scaffold output — guards the whole copy-list-drift class).
-3. **Findings channels (small):** conclave FINDINGS.md legacy format → scannable; heaviside has no
-   channel. ~30 min, independent. **The one remaining open from the 2026-07-20 eval.**
+3. ~~**Findings channels (small)**~~ **DONE — same session.** Conclave's finding retitled to the
+   F-NNN shape (committed there, unpushed — conclave rides local-main); heaviside channel opened
+   empty (committed). `tessera-findings` now reads all 4 downstreams. **Every item from the
+   2026-07-20 eval is closed.** Newly visible: **conclave F-001** (gate-scan has no
+   disposition memory — re-flags adjudicated non-gates every Stop) is now a real open backlog
+   item surfacing at session start; good first candidate next session, pairs naturally with the
+   spec-11 sweep.
 
 ---
 
