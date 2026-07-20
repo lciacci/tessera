@@ -184,6 +184,42 @@ def test_p11_no_dir_or_db_is_quiet(tmp_path):
     assert tw.p11_ingest_pipe(_root(tmp_path), tmp_path / "nope")[0] is False
 
 
+def _skilldir(base: Path, *skills: str, body: str = "b") -> Path:
+    for s in skills:
+        d = base / s
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "SKILL.md").write_text(body)
+    return base
+
+
+def test_p12_quiet_when_mirror_matches(tmp_path):
+    root = _root(tmp_path)
+    _skilldir(root / "skills", "a", "b")
+    g = _skilldir(tmp_path / "global", "a", "b")
+    assert tw.p12_skill_registry_drift(root, g)[0] is False
+
+
+def test_p12_fires_on_zombie_and_stale(tmp_path):
+    root = _root(tmp_path)
+    _skilldir(root / "skills", "a")
+    g = _skilldir(tmp_path / "global", "a", "zombie")      # global-only dir
+    (g / "a" / "SKILL.md").write_text("OLD BODY")          # divergent content
+    fired, detail = tw.p12_skill_registry_drift(root, g)
+    assert fired is True and "zombie" in detail and "differs" in detail
+
+
+def test_p12_fires_on_unsynced_repo_addition(tmp_path):
+    root = _root(tmp_path)
+    _skilldir(root / "skills", "a", "new-skill")
+    g = _skilldir(tmp_path / "global", "a")
+    fired, detail = tw.p12_skill_registry_drift(root, g)
+    assert fired is True and "repo-only: new-skill" in detail
+
+
+def test_p12_missing_dirs_quiet(tmp_path):
+    assert tw.p12_skill_registry_drift(_root(tmp_path), tmp_path / "nope")[0] is False
+
+
 def test_evaluate_returns_one_result_per_predicate(tmp_path):
     results = tw.evaluate(_root(tmp_path))
     assert len(results) == len(tw.PREDICATES)
