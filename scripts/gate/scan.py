@@ -146,8 +146,9 @@ def report(turns: list[str], logged: int) -> str:
     lines += [f"  - …{t}" for t in turns]
     lines += [
         "",
-        "Log the gates you surfaced but did not record:",
-        '  python3 scripts/gate/emit.py --fired --kind <kind> --note "<what you proposed>"',
+        "Log the gates you surfaced but did not record (--retro is required here:",
+        "it marks the ts as adjudication time, so passive labelers skip the event):",
+        '  python3 scripts/gate/emit.py --fired --retro --kind <kind> --note "<what you proposed>"',
         "",
         "Detection over-counts on purpose — you are the precision filter. A detected",
         "turn that was a clarifying question, not a decision gate, is not a gate: skip",

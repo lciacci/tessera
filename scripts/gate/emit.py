@@ -34,8 +34,15 @@ def build_event(
     *,
     session_id: str,
     ts: str | None = None,
+    retro: bool = False,
 ) -> dict:
-    """The contract-shaped event. should_fire null, score/threshold absent."""
+    """The contract-shaped event. should_fire null, score/threshold absent.
+
+    retro=True marks an event logged after the fact (gate-scan adjudication):
+    its ts is emit time, not the gate moment, so a timestamp-join to the user's
+    disposition is invalid — any passive labeler must skip it (the 2026-07-20
+    backfill mislabeled these wholesale before the flag existed).
+    """
     data: dict = {
         "fired": fired,
         "suggestion_kind": kind,
@@ -43,6 +50,8 @@ def build_event(
     }
     if note:
         data["note"] = note
+    if retro:
+        data["retro"] = True
     return {
         "type": "suggestion_gate",
         "ts": ts or _utc_now_iso(),
@@ -63,6 +72,8 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--held", action="store_true", help="gate withheld the suggestion")
     p.add_argument("--kind", required=True, help="suggestion category, e.g. refactor/compact")
     p.add_argument("--note", default=None, help="free text: what was proposed")
+    p.add_argument("--retro", action="store_true",
+                   help="logged after the fact (scan adjudication) — ts is not the gate moment")
     p.add_argument("--dry-run", action="store_true", help="print event, do not append")
     args = p.parse_args(argv)
 
@@ -71,7 +82,8 @@ def main(argv: list[str] | None = None) -> int:
         print("CLAUDE_CODE_SESSION_ID not set; cannot key the event", file=sys.stderr)
         return 2
 
-    event = build_event(args.fired, args.kind, args.note, session_id=session_id)
+    event = build_event(args.fired, args.kind, args.note,
+                        session_id=session_id, retro=args.retro)
     line = json.dumps(event, ensure_ascii=False)
 
     if args.dry_run:

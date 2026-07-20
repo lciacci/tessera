@@ -43,6 +43,13 @@ proposes, user disposes).
   rather than inventing numbers; a future scored producer adds them.
 - `should_fire` is the ground-truth label and is **nullable** — `null` at emit time for a
   model-emitted recorder (the outcome isn't known yet), filled post-hoc. See below.
+- `retro` (optional bool, `true` only when present) — the event was logged **after the fact**,
+  at gate-scan adjudication, so `ts` is emit time, **not the gate moment**. A timestamp-join
+  from a retro event to the user's disposition is invalid, permanently — passive labelers
+  (`label.py`) skip retro events rather than guess. Added 2026-07-20 after the first `--all`
+  backfill mislabeled retro-logged gates wholesale (joined them to unrelated wrap-up turns).
+  Events emitted before the flag existed have no `retro` marker and are indistinguishable —
+  another reason historical passive labeling is shelved (see below).
 
 ## Producers
 
@@ -133,6 +140,25 @@ Producer built (`scripts/gate/label.py --session <id>` / `--all`, backfill-first
 auto-wire is a deliberate follow-on). Precision is checked by `scripts/gate/eval_should_fire.py`
 (replays the classifier over human-labeled gates → confusion matrix; this is the runnable P10
 spot-check). Consumer (dashboard `labeled_by` slice) is still the open pickup.
+
+### STOP-LOSS (2026-07-20): classifier labeling shelved, backfill rolled back
+
+The first real `--all` backfill (71 labels) **failed its eyeball acceptance** and every classifier
+label was rolled back to null. Two causes, one of them untunable:
+
+1. **Structural — the retro join.** A large share of gates are retro-logged at scan adjudication
+   (by design: the scan exists because live logging missed ~85%). Their `ts` is adjudication time,
+   so the disposition join landed on unrelated wrap-up turns ("all documentation updated?") and
+   labeled them dismissals. No rubric fixes a wrong join. Remedied *going forward* by the `retro`
+   flag (above); *historical* events are unmarked and unjoinable.
+2. **Rubric — soft assents.** "i think that's okay for now" read as No. The #35 eval could not see
+   this: its negative class was n=1.
+
+**Standing verdict:** asking-calibration rests on the **human anchor set** (26 labels, 25 True /
+1 False — i.e. the gate is not over-firing) and stays there. The classifier path (backfill, Stop-hook
+auto-wire, override CLI — spec 14 B/C) is **shelved**, revisited only if a consumer genuinely needs
+coverage the anchor can't give; any resumption starts from `retro`-clean events only. Three tuning
+cycles on this instrument is the stop-loss line — see `_project_specs/14-should-fire-followons.md`.
 
 ## Consumers
 
