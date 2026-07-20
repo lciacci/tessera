@@ -143,7 +143,11 @@ credentials) are redacted before anything touches disk.
 | orphan_tool_use_rate | 0.15 | Tool calls with no matching result |
 | backtrack_norm | 0.10 | `git revert`/`reset --hard`/`restore` calls |
 
-The composite maps to a band: `clear` < 0.25 ≤ `cloudy` < 0.50 ≤ `hazy` < 0.75 ≤ `lost`.
+The composite maps to a band: `clear` < 0.05 ≤ `cloudy` < 0.12 ≤ `hazy` < 0.20 ≤ `lost` —
+re-anchored to the dogfood distribution's ~p50/p90/max on 2026-07-20 (P10 adjudication; the
+original 0.25/0.50/0.75 labeled every session ever ingested 'clear'). Density caveat: measured
+reads within ~±50% of true at current detector precision/recall (~0.4/~0.5, silver-label eval
+`scripts/mnemos/eval_correction.py`) — treat as ordinal, not absolute.
 
 **Correction detection + typing (spec 13).** `correction_density` counts user turns that push back on
 the agent — caught by a keyword regex plus a recall-first local-qwen classifier over the turns the regex
@@ -168,7 +172,9 @@ the nearest preceding human prompt (the ASK), the assistant work since it (files
 errored — the DID), and the correction with its Phase-2 type (CORRECTED). Pure structural derivation
 over `claude_turns` — no new schema. `mnemos divergence --session <id>` shows the triplets;
 `--recent N` a flat by-type rollup; `haze --session --explain` embeds a DIVERGENCE section. **View-only
-— it does NOT feed the haziness composite** (weight changes stay gated on `tessera-watch` P10).
+— it does NOT feed the haziness composite** (P10 fired and was adjudicated 2026-07-20: weight
+stays 0.30; any future detector change must re-run `eval_correction.py` and re-open bands/weight
+on its numbers).
 `--session` needs the FULL session uuid (same as `haze --session`).
 
 Ingestion is idempotent (resumes via `last_line_offset`). **Opt out per project**

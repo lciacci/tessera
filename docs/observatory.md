@@ -926,6 +926,30 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   a fail-open path that leaves no trace converts "broken" into "clean-looking data" — 3 days here,
   weeks for F-001.
 
+### P10 adjudicated: haziness bands re-anchored, weight kept, predicate retired *(2026-07-20)*
+
+- **Status:** Decided (with Lorenzo). Spec 13 fully closed.
+- **The protocol held:** P10 fired at 50 real-signal sessions (post-#38 repair) and its own rule —
+  *precision spot-check first, then bands* — was followed, then extended at Lorenzo's push to a full
+  **silver-label pass**: 125 turns (25 qwen-positives + 100 negatives), Claude-judged under the
+  spec-13 rubric, tuning session excluded, replayed against live qwen by the now-committed
+  `scripts/mnemos/eval_correction.py`. **Precision ~0.36–0.48, recall ~0.39–0.53, measured density
+  within ~±50% of true** — the FP and FN errors partially cancel. Ordinal signal, not absolute rate.
+- **Decisions:** bands `0.25/0.50/0.75` → `0.05/0.12/0.20` (distribution ~p50/p90/max; the old bands
+  labeled every one of 115 sessions 'clear' — dead letters). Weight stays 0.30 (~0.4 precision argues
+  against raising a noisy signal). P10 retired — a one-shot tripwire whose review happened; leaving it
+  armed would re-fire forever. **Standing re-eval trigger (recorded, not remembered): any change to
+  `correction_detect.py` (model, rubric, prompt) must re-run `eval_correction.py` and re-open
+  bands/weight on its numbers.** Bands are display labels; if they ever *drive* anything, that
+  promotion re-earns a watcher.
+- **The eval-design lessons, now twice-confirmed in one day:** (1) judge BOTH classes — the negative
+  sample surfaced ~11% carrier junk in the eligible denominator (`<bash-stdout>`, `[Request
+  interrupted]` riding user role — now `user-meta` at ingest) that no positives-only eval could see;
+  (2) Claude-as-judge is fine for *eval* (interactive, human in loop) and wrong for *production*
+  (the passive pipe stays local-only by design — privacy, cost, fail-open discipline). The named
+  upgrade path: Claude silver-labels batches → qwen rubric tuned against them → replay shows the
+  before/after.
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.

@@ -60,33 +60,6 @@ def test_p3_absent_log_is_zero_not_error(tmp_path):
     assert tw.p3_compaction(_root(tmp_path))[0] is False
 
 
-def _haze_db(root: Path, densities: list[float]) -> None:
-    import sqlite3
-    (root / ".mnemos").mkdir(exist_ok=True)
-    conn = sqlite3.connect(root / ".mnemos" / "mnemo.db")
-    conn.execute("CREATE TABLE claude_haze (session_id TEXT, correction_density REAL)")
-    conn.executemany("INSERT INTO claude_haze VALUES (?,?)",
-                     [(f"s{i}", d) for i, d in enumerate(densities)])
-    conn.commit(); conn.close()
-
-
-def test_p10_holds_below_threshold(tmp_path):
-    root = _root(tmp_path)
-    _haze_db(root, [0.2] * 5 + [0.0] * 10)  # 5 non-zero < 25
-    fired, detail = tw.p10_haze_recalib(root)
-    assert fired is False and "5 sessions" in detail
-
-
-def test_p10_fires_at_threshold(tmp_path):
-    root = _root(tmp_path)
-    _haze_db(root, [0.15] * tw.HAZE_RECALIB_MIN)  # exactly the threshold, all non-zero
-    assert tw.p10_haze_recalib(root)[0] is True
-
-
-def test_p10_absent_db_is_zero_not_error(tmp_path):
-    assert tw.p10_haze_recalib(_root(tmp_path))[0] is False
-
-
 def test_p5_counts_skill_dirs(tmp_path):
     root = _root(tmp_path)
     for i in range(3):

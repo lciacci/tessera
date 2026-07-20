@@ -321,6 +321,22 @@ def _is_injected_user(ev: dict) -> bool:
     return bool(ev.get('isMeta')) or ev.get('promptSource') == 'system'
 
 
+# Carrier text riding user role with none of the flags above: `!`-command
+# stdout/input, slash-command wrappers, interrupt markers. The 2026-07-20
+# silver-label pass measured them at ~11% of the "eligible" denominator —
+# diluting every correction_density. Prefix match only: a human turn that
+# merely PASTES output mid-text still counts as human.
+_CARRIER_PREFIXES = (
+    '<bash-stdout>', '<bash-input>', '<bash-stderr>',
+    '<local-command-stdout>', '<local-command-stderr>', '<command-name>',
+    '[Request interrupted',
+)
+
+
+def _is_carrier_text(text: str) -> bool:
+    return text.lstrip().startswith(_CARRIER_PREFIXES)
+
+
 def _emit_rows(
     ev: dict, line_no: int, session_id: str, ts: str, redact_text: bool,
     detector=None, eligible: bool = False,
@@ -359,6 +375,13 @@ def _emit_rows(
 
         if btype == 'text':
             text = block.get('text') or ''
+            if is_human and _is_carrier_text(text):
+                preview, _ = _preview(text, redact_text)
+                out.append(_make_row(
+                    session_id, idx, uuid, parent_uuid, role, 'user-meta',
+                    None, None, None, 0, preview, 0, ts,
+                ))
+                continue
             preview, match = _preview(text, redact_text, is_user=is_human)
             cleaned = None
             # Recall net: only spend a qwen call on eligible human turns the
