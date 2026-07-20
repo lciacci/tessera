@@ -1,6 +1,12 @@
 # Spec 11: Fail-open detection — make Tessera report its own failure
 
-**Status:** pending — **this is the next build**
+**Status:** pending as a systematic build — **but its thesis got its first live confirmation and
+first partial delivery on 2026-07-20** (spec 16 / PR #38): the Stop-hook ingest pipe failed open
+with no trace for 3 days and read as clean data. The remedy shipped there is this spec's pattern
+applied to one pipe: a per-run trace (`claude_sessions.classifier_status`) + a loud watcher
+(`tessera-watch` P11, including the transcripts-vs-store diff that catches crash-before-write —
+the shape no status column can see). The systematic sweep across the OTHER fail-open paths
+(hooks, spend guard, gate scan, escalations) remains this spec's open scope.
 **Priority:** Tier 1. It gates the trustworthiness of every other verdict the framework produces.
 **Effort:** Small mechanism, medium substance. One focused session, possibly two.
 **Source:** `docs/observatory.md` → "Fail-open everywhere — Tessera cannot tell you when it is broken"
