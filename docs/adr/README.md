@@ -37,6 +37,7 @@ Auto-generated below as ADRs are created. Update when adding a new ADR.
 | 0007 | 2026-07-13 | The skill corpus — an unpruned inherited baseline, and what the evidence can and cannot authorize | Superseded by ADR-0008 |
 | 0008 | 2026-07-14 | The skill corpus, read at last — the content audit inverts the prune, and the fix is delivery, not deletion | Accepted (delivery mechanism refined by ADR-0009) |
 | 0009 | 2026-07-16 | Skill delivery is curation, not copying — Claude Code already unions the corpus into every project | Accepted |
+| 0010 | 2026-07-20 | Skill registry — repo is truth, global is a managed mirror | Accepted |
 
 ---
 

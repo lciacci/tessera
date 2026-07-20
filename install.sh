@@ -20,8 +20,12 @@ err()  { printf "  ✗ %s\n" "$1"; }
 OLLAMA_BASE="${OLLAMA_BASE:-http://localhost:11434}"
 
 install_skills() {
-  "$REPO/scripts/install-skills.sh" "$CLAUDE/skills" "$REPO/skills" >/dev/null
-  say "skills      -> $CLAUDE/skills"
+  # ADR-0010: repo is truth, global is a managed MIRROR — sync with delete, not
+  # additive copy. The old install-skills.sh cp -r kept cut skills alive in
+  # global forever (10 zombies, 2026-07-20); it stays for non-Claude targets
+  # (~/.kimi, ~/.codex) but no longer serves ~/.claude.
+  TESSERA_GLOBAL_SKILLS="$CLAUDE/skills" "$REPO/bin/tessera-sync-skills" >/dev/null
+  say "skills      -> $CLAUDE/skills (mirror, ADR-0010)"
 }
 
 install_dir() {

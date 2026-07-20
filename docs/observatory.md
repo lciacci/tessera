@@ -575,14 +575,26 @@ Both were found by adversarial verification, **not** by the framework. **The rea
 
 ### Skill registry — which copy is the source of truth (blocks the de-dup, entangled with delivery)
 
-- **Status:** Watching. **Condition to re-open:** the delivery-mechanism design session (ADR-0008 "NOT decided").
+- **Status:** ✅ **RESOLVED — ADR-0010 (2026-07-20).** Repo `skills/` is truth; `~/.claude/skills`
+  is a managed mirror written only by `bin/tessera-sync-skills` (wired into `install.sh`, watched
+  by P12). The de-dup resolved by *demotion*, not deletion: global stays (union-load needs it) but
+  holds no original content. First sync applied 2026-07-20: 10 zombies deleted (listing 57→47
+  machine-wide), 6 stale bodies refreshed. Entry kept below for the trail.
 - **Source:** ADR-0007 finding #7 + FOCUS-004 execution (2026-07-15).
 - **The finding.** `tessera/skills/` and the global `~/.claude/skills/` were byte-identical 56/56 — a duplicate that doubles the session's skill-list cost. ADR-0007 said "kill the duplicate." But FOCUS-004 **diverged them**: this session added `adr-gate` + the `code-review`/`supabase-python`/`council-review`/`code-graph` edits to the *tessera* copy only (now 57 vs 56). So the de-dup is no longer "delete the identical copy" — it *is* the question **which registry is authoritative for downstream delivery**, and that is the delivery design (ADR-0008). Cutting either copy now would either lose this session's work (delete tessera's) or strand it out of the global library (delete global's).
 - **When to revisit:** the delivery session. Decide: does Tessera ship skills via `bin/tessera-new-project` (profile-gated), and is the source the tessera-local dir or the global registry? Until then, **do not delete either copy.**
 
 ### Skill-body delivery has no copy mechanism — and a skill claimed it did
 
-- **Status:** Open (feeds the delivery-mechanism design session above). **Source:** python-TRIM read-first, 2026-07-18.
+- **Status:** ✅ **RESOLVED — ADR-0010 (2026-07-20)**, with one correction to this entry's own claim:
+  a copier DID exist — `scripts/install-skills.sh` (Maggy baseline, wired into `install.sh`) — but
+  **additive-only** (`cp -r`, no delete): it refreshed shared bodies whenever `install.sh` ran while
+  keeping every cut skill alive in global forever. Worse than none — fresh enough to look maintained,
+  accumulating zombies. Replaced for `~/.claude` by `bin/tessera-sync-skills` (mirror-with-delete +
+  delta print); the old script stays for non-Claude targets. Single-body policy adopted: "survives
+  globally" is dead as a trim rationale — a cut is a cut for downstream too. The trim blocker in
+  `active.md` is lifted; delivery-entangled trims now proceed under ADR-0010's policy. Entry kept
+  below for the trail. **Source:** python-TRIM read-first, 2026-07-18.
 - **The finding.** Applying the `python` TRIM (ADR-0008) surfaced two entangled facts. (1) The eagerly-loaded
   `base` skill asserted its cut scaffolding was preserved in a full-body GLOBAL `~/.claude/skills/base` copy
   serving downstream apps. **Verified false:** `diff -q` shows the global copy byte-identical to

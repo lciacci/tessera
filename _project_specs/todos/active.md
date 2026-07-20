@@ -62,12 +62,17 @@ weeks for F-001) — every fail-open now wants a heartbeat.
   open. Both low-stakes.
 
 ### Next (in order)
-1. **ADR-0010 — skill-body delivery mechanism.** THE open item; blocks all further
-   delivery-entangled trims. Interactive design session (needs Lorenzo). Inputs:
-   `docs/observatory.md` → "Skill registry — which copy is source of truth" + "Skill-body delivery
-   has no copy mechanism"; ADR-0008/0009; the 07-18 blocker note below.
+1. ~~**ADR-0010 — skill-body delivery mechanism.**~~ **DONE — same session (2026-07-20, evening).**
+   Decided with Lorenzo: repo `skills/` is truth; global is a managed mirror
+   (`bin/tessera-sync-skills`, mirror-with-delete, in `install.sh`, watched by **P12**); first sync
+   applied (10 zombies deleted, 57→47 machine-wide listing; 6 stale bodies refreshed); single-body
+   policy adopted. **The delivery-entangled trim blocker (07-18) is LIFTED** — trims proceed under
+   ADR-0010 policy (a cut is a cut for downstream too; HARVEST-BEFORE-CUT with downstream in mind).
+   Build-time find: a copier already existed (`install-skills.sh`, additive-only cp — kept for
+   non-Claude targets) — the observatory's "no copy mechanism" was half-right; the missing pieces
+   were delete + watcher.
 2. **Downstream validation** — fresh `tessera-new-project` bootstrap exercising ADR-0009 + ADR-0010
-   end-to-end. Sequenced after 1.
+   end-to-end. Now unblocked.
 3. **Findings channels (small):** conclave FINDINGS.md legacy format → scannable; heaviside has no
    channel. ~30 min, independent.
 

@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Sync the skill registry: repo skills/ → ~/.claude/skills (ADR-0010).
+#
+# Repo is truth, global is a managed mirror. One-way with delete; prints every
+# change it applies. --dry-run previews. Never writes repo-side.
+#
+#   bin/tessera-sync-skills [--dry-run]
+#
+# Wired into ./install.sh; drift between syncs is surfaced by tessera-watch P12.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SRC="$ROOT/skills/"
+DST="${TESSERA_GLOBAL_SKILLS:-$HOME/.claude/skills}/"
+
+if [ ! -d "$SRC" ]; then
+  echo "error: $SRC missing — run from a tessera checkout" >&2
+  exit 1
+fi
+
+DRY=""
+[ "${1:-}" = "--dry-run" ] && DRY="--dry-run"
+
+mkdir -p "$DST"
+# -a preserve, --delete mirror removals, -i itemize so the delta is the output.
+# ponytail: rsync is the whole mechanism; a python rewrite buys nothing here.
+CHANGES=$(rsync -ai --delete $DRY "$SRC" "$DST")
+
+if [ -n "$CHANGES" ]; then
+  echo "$CHANGES"
+  echo "${DRY:+[dry-run] }synced $SRC → $DST" >&2
+else
+  echo "already in sync: $SRC == $DST" >&2
+fi

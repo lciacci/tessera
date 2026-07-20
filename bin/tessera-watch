@@ -454,6 +454,42 @@ def p11_ingest_pipe(root: Path, transcripts_dir: Path | None = None) -> tuple[bo
     return False, f"{len(recent)} recent transcript(s), all ingested; no fallback streak"
 
 
+def p12_skill_registry_drift(root: Path, global_dir: Path | None = None) -> tuple[bool, str]:
+    """Repo skills/ and the global mirror have diverged (ADR-0010).
+
+    Repo is truth, ~/.claude/skills is a managed mirror written only by
+    bin/tessera-sync-skills. Any difference — extra/missing skill dirs or
+    changed file content — means either an unsynced repo edit (run the sync)
+    or a foreign writer to global (find it BEFORE re-syncing over it; see
+    ADR-0010 re-evaluate triggers). Same shape as P1 hook-drift. The last
+    unwatched divergence lasted three weeks (6 stale skills, 10 zombies).
+    """
+    import filecmp
+    src = root / "skills"
+    dst = global_dir if global_dir is not None else Path.home() / ".claude" / "skills"
+    if not src.is_dir() or not dst.is_dir():
+        return False, "repo skills/ or global mirror missing"
+
+    drift: list[str] = []
+
+    def walk(cmp: filecmp.dircmp, rel: str) -> None:
+        for n in cmp.left_only:
+            drift.append(f"repo-only: {rel}{n}")
+        for n in cmp.right_only:
+            drift.append(f"global-only: {rel}{n}")
+        for n in cmp.diff_files:
+            drift.append(f"differs: {rel}{n}")
+        for n, sub in cmp.subdirs.items():
+            walk(sub, f"{rel}{n}/")
+
+    walk(filecmp.dircmp(src, dst), "")
+    if drift:
+        return True, (f"{len(drift)} difference(s) repo skills/ vs global mirror "
+                      f"({', '.join(drift[:4])}{'…' if len(drift) > 4 else ''}) — "
+                      f"run bin/tessera-sync-skills (or find the foreign writer first)")
+    return False, "repo skills/ == global mirror"
+
+
 def _resolve_label(query: str) -> str | None:
     """Unique predicate whose label contains `query` (case-insensitive), or None."""
     matches = [label for label in PREDICATES if query.lower() in label.lower()]
@@ -470,6 +506,7 @@ PREDICATES = {
     "P8 doc-drift": p8_doc_drift,
     "P9 interpreter-drift": p9_interpreter_drift,
     "P11 ingest-pipe": p11_ingest_pipe,
+    "P12 skill-registry-drift": p12_skill_registry_drift,
     "G-a graduation:snooze": g_a_consecutive,
 }
 
