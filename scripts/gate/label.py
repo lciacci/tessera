@@ -110,9 +110,16 @@ def _already_labeled(data: dict) -> bool:
     return data.get("should_fire") is not None or bool(data.get("labeled_by"))
 
 
+def _joinable(data: dict) -> bool:
+    """Retro-logged gates (scan adjudication) carry an emit-time ts, not the
+    gate moment — the disposition join is invalid for them, permanently. The
+    2026-07-20 backfill mislabeled these wholesale; skip, never guess."""
+    return not data.get("retro")
+
+
 def _label_one(ev: dict, turns: list[tuple[datetime, str]], *, generate) -> bool:
     data = ev.get("data") or {}
-    if _already_labeled(data):
+    if _already_labeled(data) or not _joinable(data):
         return False
     gate_ts = _parse_ts(ev.get("ts"))
     reply = find_disposition(turns, gate_ts) if gate_ts else None

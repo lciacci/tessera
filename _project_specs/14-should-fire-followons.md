@@ -1,6 +1,9 @@
 # 14 — should_fire follow-ons (backfill → auto-wire → override)
 
-**Status:** SPEC (2026-07-20). Producer built (#34/#35, `scripts/gate/label.py`); this spec is the
+**Status:** STOP-LOSS (2026-07-20, same day as spec). Phase A ran and **failed its eyeball
+acceptance**; all 74 classifier labels rolled back to null. Phases B and C **shelved**. See
+"Outcome" at the end — the spec body below is kept as written for the trail.
+**Motivation (superseded):** Producer built (#34/#35, `scripts/gate/label.py`); this spec is the
 three follow-ons named in the 07-19 handoff, ordered.
 **Motivation:** 73 of 102 gate events still `should_fire: null` (probe, 2026-07-20). The instrument
 exists but has labeled almost nothing (3 classifier labels). Coverage is what feeds P10's precision
@@ -63,3 +66,28 @@ defined move. Smallest honest fix:
 A now (one sitting, mostly waiting on qwen). B after A's eyeball passes (~half session).
 C when the first real disagreement shows up — build the door when someone knocks; the spec
 records the shape so it's a mechanical add. **[Decision D14-3: C now vs on-demand]**
+
+---
+
+## Outcome — STOP-LOSS (2026-07-20)
+
+Phase A ran: 71 labeled → verdict split 23 True / 51 False, vs ~90% True in the human anchor.
+Eyeball sample showed the False class largely wrong, two causes:
+
+1. **Retro join (structural, untunable).** Retro-logged gates (scan adjudication — a large share
+   by design) carry adjudication-time `ts`; the disposition join grabbed unrelated wrap-up turns.
+   ~24 events sat in <2-min bursts. No rubric can fix a wrong join, and pre-flag events are
+   unmarked, so history is permanently unjoinable.
+2. **Soft assents (rubric).** "i think that's okay for now" → labeled No. Invisible to the #35
+   eval (negative class n=1).
+
+**Disposition (adjudicated with Lorenzo, stop-loss over a 4th tuning cycle):**
+- All 74 classifier labels rolled back to null; human anchor intact (26: 25 True / 1 False).
+- The anchor already answers the instrument's question — the gate is **not over-firing**. Further
+  classifier coverage refines a number whose decision-relevant reading is known.
+- **Shipped as remedy:** `emit.py --retro` flag (adjudication logging now marks itself),
+  `scan.py` exit-2 message requires it, `label.py` skips retro events. Forward events have clean
+  provenance if labeling is ever revisited.
+- **Shelved:** Phase B (auto-wire), Phase C (override). Resumption criteria in
+  `docs/contracts/gate-event.md` → STOP-LOSS section (a consumer must actually need the coverage;
+  retro-clean events only).

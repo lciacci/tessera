@@ -875,6 +875,31 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   2. **Process:** before cutting a skill, trace its *inbound dependents* and READ them — a grep hit is a
      signal to follow, not a ticket to defer.
 
+### Asking-calibration stop-loss — should_fire classifier shelved, human anchor stands *(2026-07-20)*
+
+- **Status:** Decided (stop-loss adjudicated with Lorenzo, 2026-07-20).
+- **What happened:** the first real `label.py --all` backfill (spec 14 Phase A) labeled 71 gates,
+  split 23 True / 51 False — vs ~90% True in the 26-label human anchor. Eyeball acceptance failed:
+  the False class was largely wrong. Two causes: (1) **retro-logged gates** (scan-adjudication
+  emissions, a large share by design) carry adjudication-time `ts`, so the disposition join grabbed
+  unrelated wrap-up turns — structural, no rubric fixes it, and pre-flag history is unmarked hence
+  permanently unjoinable; (2) soft assents ("i think that's okay for now") read as No — invisible
+  to the #35 eval, whose negative class was n=1.
+- **The pattern that forced the call:** third tuning cycle on this instrument (manual labeling died
+  → P7 snooze; rubric recall 0.08 → #35 fix; now the negative class + join). Meanwhile the human
+  anchor already answers the calibration question: **the gate is not over-firing** (25/26 warranted).
+  Chasing coverage refines a number whose reading is known. The under-asking side was never
+  measurable by this instrument anyway (2/103 held events).
+- **Disposition:** all 74 classifier labels rolled back to null (bad Falses would have gutted
+  `should_fire_ratio`); `emit.py --retro` flag added + `scan.py` requires it at adjudication +
+  `label.py` skips retro events — forward provenance is clean if this is ever revisited. Phases
+  B/C (auto-wire, override) shelved; resumption criteria in `docs/contracts/gate-event.md`.
+- **The transferable lesson (twice now in one week):** an eval whose negative class is n≈1 measures
+  only half the classifier — #35's "precision 1.00" was true and useless about the No-verdicts. And
+  a *join* defect masquerades as a *rubric* defect until you read the basis quotes; the eyeball pass
+  on real output caught what the committed eval could not. Sample-check the class your eval is
+  thinnest on.
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.

@@ -108,6 +108,16 @@ def test_label_one_no_disposition_is_noop():
     assert ev["data"]["should_fire"] is None
 
 
+def test_label_one_skips_retro_logged_gate():
+    # retro ts = adjudication time, not the gate moment — join is invalid,
+    # so the classifier must not label it even with a plausible next turn.
+    ev = _gate("2026-07-19T16:00:00Z", "n", retro=True)
+    turns = [(_dt("2026-07-19T16:05:00"), "sounds good, do it")]
+    assert label._label_one(ev, turns, generate=_yes) is False
+    assert ev["data"]["should_fire"] is None
+    assert "labeled_by" not in ev["data"]
+
+
 def test_label_gate_log_end_to_end(tmp_path):
     log = tmp_path / "s.jsonl"
     lines = [

@@ -34,6 +34,11 @@ def demo() -> None:
     assert h["data"]["fired"] is False
     assert "note" not in h["data"]
 
+    # retro: present-and-true only when set — absent means ts IS the gate moment.
+    assert "retro" not in e["data"]
+    r = build_event(True, "scope", None, session_id="s", retro=True)
+    assert r["data"]["retro"] is True
+
     # Round-trips as one JSONL line.
     assert json.loads(json.dumps(e)) == e
 
