@@ -45,8 +45,11 @@ fi
 # Gate recorder is always project-local (not a global-fallback hook). Its Stop-hook
 # backstop rides along: the recorder alone rides model recall and under-logs badly
 # (~85%, observatory), so shipping it without the scan ships the broken half.
+# remap_kind rides along because test_gate_emit imports it (spec 15); the copied
+# set must stay import-closed — guarded by test_new_project_gate_copies.
 cp "$TESSERA_ROOT"/scripts/gate/emit.py "$TESSERA_ROOT"/scripts/gate/test_gate_emit.py \
    "$TESSERA_ROOT"/scripts/gate/scan.py "$TESSERA_ROOT"/scripts/gate/test_gate_scan.py \
+   "$TESSERA_ROOT"/scripts/gate/remap_kind.py \
    "$TARGET/scripts/gate/"
 cp "$TESSERA_ROOT"/.claude/scripts/tessera-gate-scan.sh "$TARGET/.claude/scripts/"
 chmod +x "$TARGET/.claude/scripts/tessera-gate-scan.sh"

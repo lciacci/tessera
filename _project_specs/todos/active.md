@@ -71,10 +71,16 @@ weeks for F-001) — every fail-open now wants a heartbeat.
    Build-time find: a copier already existed (`install-skills.sh`, additive-only cp — kept for
    non-Claude targets) — the observatory's "no copy mechanism" was half-right; the missing pieces
    were delete + watcher.
-2. **Downstream validation** — fresh `tessera-new-project` bootstrap exercising ADR-0009 + ADR-0010
-   end-to-end. Now unblocked.
+2. ~~**Downstream validation**~~ **DONE — same session.** Fresh `tessera-new-project` bootstrap,
+   ADR-0009 + ADR-0010 end-to-end: curation correct (36 off / 11 universal-on = the 47-mirror
+   exactly — pre-sync it would have enumerated 57 with zombies), extension expansion verified
+   (`extensions_added: [python, ai-app]` → exactly its 3 skills flip on), hooks resolve
+   local→global templates, gate scripts ship current. **One real bug found+fixed:** spec 15 made
+   `test_gate_emit` import `remap_kind`; the scaffold cp list drifted — fresh downstreams shipped
+   broken gate tests. Fixed + `test_new_project_gate_copies.py` (runs the copied tests in a real
+   scaffold output — guards the whole copy-list-drift class).
 3. **Findings channels (small):** conclave FINDINGS.md legacy format → scannable; heaviside has no
-   channel. ~30 min, independent.
+   channel. ~30 min, independent. **The one remaining open from the 2026-07-20 eval.**
 
 ---
 
