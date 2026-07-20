@@ -1,6 +1,10 @@
 # 15 — suggestion_kind controlled vocabulary
 
-**Status:** SPEC (2026-07-20).
+**Status:** BUILT (2026-07-20, same day — D15-1/2/3 adjudicated as proposed). `emit.py` enforces
+`KINDS` fail-closed (exit 2); `scripts/gate/remap_kind.py` remapped the live logs — 50 events
+rewritten to the 7 kinds, originals kept in `suggestion_kind_raw`, 0 unknown; post-remap
+distribution: design 58 / finding 11 / process 10 / scope 7 / sequencing 7 / outward 7 / doc 4.
+Contract table + CLAUDE.md gate bullet + scan.py adjudication message all carry the enum.
 **Motivation:** probe (2026-07-20): 102 gate events carry **33 distinct `suggestion_kind` values**,
 mostly singletons — `design`, `design-decision`, `design_choice`, `design-approach`,
 `design-direction` all coexist. Free-text kind = every by-kind rollup (tess-dashboard, any

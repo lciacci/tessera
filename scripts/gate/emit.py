@@ -23,6 +23,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+# Controlled vocabulary (spec 15). 102 events under a free-text kind produced 33
+# distinct values, mostly singletons ("design" ×5 spellings) — unsliceable. The
+# contract's "promote to an enum when the kinds stabilize" clause triggered on
+# the opposite evidence: they diverged. Fail-closed at emit is safe HERE only —
+# emit is model-interactive, the model re-runs with a valid kind in-turn.
+KINDS = ("design", "scope", "sequencing", "process", "finding", "doc", "outward")
+
+
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
@@ -70,12 +78,18 @@ def main(argv: list[str] | None = None) -> int:
     g = p.add_mutually_exclusive_group(required=True)
     g.add_argument("--fired", action="store_true", help="gate surfaced the suggestion")
     g.add_argument("--held", action="store_true", help="gate withheld the suggestion")
-    p.add_argument("--kind", required=True, help="suggestion category, e.g. refactor/compact")
+    p.add_argument("--kind", required=True,
+                   help=f"suggestion category, one of: {'/'.join(KINDS)}")
     p.add_argument("--note", default=None, help="free text: what was proposed")
     p.add_argument("--retro", action="store_true",
                    help="logged after the fact (scan adjudication) — ts is not the gate moment")
     p.add_argument("--dry-run", action="store_true", help="print event, do not append")
     args = p.parse_args(argv)
+
+    if args.kind not in KINDS:
+        print(f"unknown --kind '{args.kind}' — use one of: {', '.join(KINDS)} "
+              f"(docs/contracts/gate-event.md)", file=sys.stderr)
+        return 2
 
     session_id = os.environ.get("CLAUDE_CODE_SESSION_ID")
     if not session_id:

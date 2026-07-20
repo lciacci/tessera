@@ -149,6 +149,7 @@ def report(turns: list[str], logged: int) -> str:
         "Log the gates you surfaced but did not record (--retro is required here:",
         "it marks the ts as adjudication time, so passive labelers skip the event):",
         '  python3 scripts/gate/emit.py --fired --retro --kind <kind> --note "<what you proposed>"',
+        "  kinds: design | scope | sequencing | process | finding | doc | outward",
         "",
         "Detection over-counts on purpose — you are the precision filter. A detected",
         "turn that was a clarifying question, not a decision gate, is not a gate: skip",

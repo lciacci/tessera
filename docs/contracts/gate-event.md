@@ -32,8 +32,23 @@ proposes, user disposes).
 
 - `fired` is a **boolean** by contract. Consumers should parse strictly; real producers must
   not emit truthy-but-non-boolean values.
-- `suggestion_kind` is an open string set today (`refactor`, `compact`, …); promote to an enum
-  if/when the kinds stabilize.
+- `suggestion_kind` is a **closed enum** (promoted 2026-07-20, spec 15 — the "open string set"
+  era produced 33 distinct kinds across 102 events, mostly singletons, unsliceable). Enforced
+  fail-closed at emit (`emit.py` exits 2 on an unknown kind — safe only because emit is
+  model-interactive). The seven kinds:
+
+  | kind | meaning |
+  |---|---|
+  | `design` | how to build/shape a thing |
+  | `scope` | what's in/out of the work |
+  | `sequencing` | what next, what order |
+  | `process` | conventions, protocols, checks |
+  | `finding` | surfacing a discovered problem |
+  | `doc` | doc changes/fixes |
+  | `outward` | irreversible or externally-visible acts (commits, releases, global writes) |
+
+  Legacy events were remapped by `scripts/gate/remap_kind.py` (the executable record of the
+  33→7 merge); a remapped event keeps its original in `suggestion_kind_raw`.
 - `note` is **optional** free text: what the gate actually proposed at that moment. The
   recorder logs it so the event stream reads as a reviewable journal, not a bare counter. Not
   every producer need supply it.
