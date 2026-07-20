@@ -907,3 +907,33 @@ def test_malformed_profiles_json_fails_clean(fake_repo):
     (d / "skill-profiles.json").write_text("{not: valid json,")
     bad = doccheck.check_skill_profiles_names_are_installed()
     assert any("invalid JSON" in v for v in bad), bad
+
+
+# ─── BUG (2026-07-20): active.md's heading convention drifted to `## ═══ SESSION` on
+# 07-17; the SessionStart surfacer greps `^## Handoff — pick up here` and silently
+# printed the 2026-07-12 handoff as current for 8 days. A stale handoff surfaced as
+# current is worse than none.
+def _active(fake_repo, text):
+    d = fake_repo / "_project_specs" / "todos"
+    d.mkdir(parents=True)
+    (d / "active.md").write_text(text)
+
+
+def test_handoff_missing_magic_heading_flagged(fake_repo):
+    _active(fake_repo, "## ═══ SESSION 2026-07-20 ═══\nstuff\n")
+    bad = doccheck.check_handoff_heading_is_current()
+    assert any("no '## Handoff" in v for v in bad), bad
+
+
+def test_handoff_stale_when_session_block_precedes_it(fake_repo):
+    _active(fake_repo, "## ═══ SESSION 2026-07-20 ═══\n\n"
+                       "## Handoff — pick up here (2026-07-12)\nold\n")
+    bad = doccheck.check_handoff_heading_is_current()
+    assert any("stale handoff" in v for v in bad), bad
+
+
+def test_handoff_current_heading_passes(fake_repo):
+    _active(fake_repo, "# Active Focus\n\n"
+                       "## Handoff — pick up here (2026-07-20)\nnew\n\n"
+                       "## ═══ SESSION 2026-07-19 ═══\nold log\n")
+    assert doccheck.check_handoff_heading_is_current() == []

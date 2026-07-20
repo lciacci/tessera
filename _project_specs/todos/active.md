@@ -6,6 +6,73 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
+## Handoff — pick up here (2026-07-20: eval → specs 14/15/16 closed, dead pipe fixed, P10 adjudicated)
+
+*(This heading is load-bearing: `.claude/scripts/tessera-watch-surface.sh` greps
+`^## Handoff — pick up here` at SessionStart. The `## ═══ SESSION` style used 07-17→07-19 silently
+stopped the surfacer — it printed the 07-12 handoff for 8 days. Newest section carries this heading;
+guarded by doccheck `handoff-heading-is-current`.)*
+
+**MERGED: #36 (specs 14–16), #37 (should_fire stop-loss), #38 (ingest-pipe fix + P11), #39 (kind
+enum), #40 (P10 adjudication). Suite green (190 top-level), doccheck 19/19, watch quiet (P7 snoozed).
+No branches in flight. Every spec written today was also closed today.**
+
+### What happened — an eval session that turned into a repair session
+Started as a progress eval; the eval's probes found two live instrument failures. The through-line:
+**three instruments were lying quietly, and only ground-truth sampling caught them.**
+
+- **A. should_fire STOP-LOSS (#37, spec 14).** First real `--all` backfill failed eyeball acceptance
+  (23T/51F vs ~90% T human anchor). Two causes: retro-logged gates' `ts` = adjudication time →
+  disposition join grabs unrelated wrap-up turns (structural, untunable); soft assents read as No
+  (invisible to the #35 eval — negative class was n=1). All 74 classifier labels rolled back;
+  `emit.py --retro` marks adjudication-time events (scan message requires it; `label.py` skips them).
+  **Verdict: asking-calibration rests on the 26-label human anchor — the gate is NOT over-firing.**
+  Classifier path shelved; resumption criteria in `docs/contracts/gate-event.md`.
+- **B. Stop-hook ingest was DEAD 07-17→07-20 (#38, spec 16).** `make_detector()`'s repo-root import
+  raised under the console script the hook execs — before every fail-open guard, stderr swallowed.
+  Every hook ingest since #19 wrote NOTHING; hand-runs worked (F-001's cousin; P9 blind by
+  construction). Fixed path-relative + never-raises; per-ingest `classifier_status` trace; watch
+  **P11** (DEAD = recent transcripts with no session row — the shape no status column can see;
+  DEGRADED = 3 consecutive regex-only). Repair re-ingest: 72 sessions recovered, real-signal 24→50.
+- **C. suggestion_kind enum (#39, spec 15).** 33 free-text kinds → 7 (`design/scope/sequencing/
+  process/finding/doc/outward`), fail-closed at emit; `remap_kind.py` rewrote 50 events
+  (`suggestion_kind_raw` kept, 0 unknown).
+- **D. P10 fired and adjudicated (#40).** Silver-label pass (Lorenzo's push — 125 turns BOTH
+  classes, Claude-judged, live-qwen replay via committed `eval_correction.py`): precision ~0.36–0.48,
+  recall ~0.39–0.53, **measured density within ~±50% of true** — ordinal, not absolute. Bands
+  0.25/0.50/0.75 → **0.05/0.12/0.20** (old bands labeled all 115 sessions 'clear'); weight stays
+  0.30; **P10 retired** — standing trigger: any detector change re-runs `eval_correction.py`.
+  Bonus: ~11% of the eligible denominator was carrier junk (`<bash-stdout>`, interrupts riding user
+  role) → now `user-meta` at ingest.
+
+### The day's transferable lesson (recorded in observatory, twice-confirmed)
+An eval with a thin class measures half a classifier; a join defect masquerades as a rubric defect
+until you read the basis quotes. Sample BOTH classes, on fresh data, before trusting any instrument.
+And: a fail-open path that leaves no trace converts "broken" into "clean-looking data" (3 days here,
+weeks for F-001) — every fail-open now wants a heartbeat.
+
+### Known gaps / stale premises (logged, not fixed)
+- **P7's snooze rationale is now stale:** it says "real fix is passive detector upgrade, spec 13" —
+  but the should_fire classifier was stop-lossed, and pre-flag retro events are permanently
+  unjoinable. When P7 resurfaces (2026-08-31) the likely disposition is **retire**, same logic as
+  P10: the human anchor answered the calibration question. Decide then, not unilaterally now.
+- Historical `claude_turns` rows keep pre-carrier-fix denominators; a future `--reclassify` cleans
+  them (band edges robust to the ~10% shift).
+- uuid prefix-resolve (`haze`/`divergence --session`) still open; skill-profiles deeper refine still
+  open. Both low-stakes.
+
+### Next (in order)
+1. **ADR-0010 — skill-body delivery mechanism.** THE open item; blocks all further
+   delivery-entangled trims. Interactive design session (needs Lorenzo). Inputs:
+   `docs/observatory.md` → "Skill registry — which copy is source of truth" + "Skill-body delivery
+   has no copy mechanism"; ADR-0008/0009; the 07-18 blocker note below.
+2. **Downstream validation** — fresh `tessera-new-project` bootstrap exercising ADR-0009 + ADR-0010
+   end-to-end. Sequenced after 1.
+3. **Findings channels (small):** conclave FINDINGS.md legacy format → scannable; heaviside has no
+   channel. ~30 min, independent.
+
+---
+
 ## ═══ SESSION 2026-07-19 — friction-detector Phase 3 + skill-profiles tidy + should_fire passive extraction ═══
 
 **MERGED: #31 (Phase 3), #32 (skill-profiles tidy), #33 (dashboard provenance note), #34 (should_fire
@@ -530,7 +597,7 @@ wrong. It is kept on purpose. **Do not re-litigate it without the design session
 
 ---
 
-## Handoff — pick up here (2026-07-12, end of the F-001 session)
+## Handoff (2026-07-12, end of the F-001 session — SUPERSEDED, kept for the trail)
 
 **Full accounting: `docs/postmortem-2026-07-12.md`.** One document, the whole story — what
 happened, the ten bugs, why each rule failed, the mechanism ranking, the numbers, and the

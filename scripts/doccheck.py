@@ -1012,8 +1012,37 @@ def check_skill_profiles_names_are_installed() -> list[str]:
     return bad
 
 
+def check_handoff_heading_is_current() -> list[str]:
+    """active.md's newest session section must carry the surfacer's magic heading.
+
+    `.claude/scripts/tessera-watch-surface.sh` greps `^## Handoff — pick up here`
+    (first match) at SessionStart. When the heading convention drifted to
+    `## ═══ SESSION` (2026-07-17), the surfacer silently fell back to the 07-12
+    handoff and printed it for 8 days — a stale handoff surfaced as current is
+    worse than none. Assert: the magic heading exists, and its first occurrence
+    precedes any other session-block heading. Added 2026-07-20.
+    """
+    handoff = ROOT / "_project_specs" / "todos" / "active.md"
+    if not handoff.is_file():
+        return []
+    lines = handoff.read_text().splitlines()
+    magic = next((i for i, l in enumerate(lines)
+                  if l.startswith("## Handoff — pick up here")), None)
+    session = next((i for i, l in enumerate(lines)
+                    if l.startswith("## ═══ SESSION")), None)
+    if magic is None:
+        return ["active.md: no '## Handoff — pick up here' heading — "
+                "the SessionStart surfacer will print nothing (or a stale block)"]
+    if session is not None and session < magic:
+        return [f"active.md: a '## ═══ SESSION' block (line {session + 1}) precedes the "
+                f"magic handoff heading (line {magic + 1}) — the surfacer will print a "
+                f"stale handoff; retitle the newest section"]
+    return []
+
+
 CHECKS = {
     "referenced-paths-exist": check_referenced_paths_exist,
+    "handoff-heading-is-current": check_handoff_heading_is_current,
     "no-phantom-global-skill-body-claim": check_no_phantom_global_skill_body_claim,
     "template-skill-refs-exist": check_template_skill_refs_exist,
     "skill-profiles-names-are-installed": check_skill_profiles_names_are_installed,
