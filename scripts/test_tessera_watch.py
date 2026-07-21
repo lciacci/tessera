@@ -399,3 +399,84 @@ def test_g_a_ignores_a_snoozed_predicate(tmp_path):
     future = (_dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(days=30)).isoformat()
     tw._write_snoozes(root, {"P7 gate-labels": {"until": future, "reason": "acked"}})
     assert tw.g_a_consecutive(root)[0] is False  # snooze = remedy applied → G-a quiets
+
+
+# --- P4: F-003 drift is measured in bytes, not project count (2026-07-21) --------------
+
+
+def _downstream(root, name, hooks: dict):
+    """A downstream project: .tessera/project.yml + optional local hook copies."""
+    p = root / name
+    (p / ".tessera").mkdir(parents=True)
+    (p / ".tessera" / "project.yml").write_text("profile: standard\n")
+    if hooks:
+        (p / ".claude" / "scripts").mkdir(parents=True)
+        for fname, body in hooks.items():
+            (p / ".claude" / "scripts" / fname).write_text(body)
+    return p
+
+
+def test_p4_ignores_projects_with_no_local_copies(tmp_path, monkeypatch):
+    """The regression: settempo (hook_distro global, 0 copies) tripped the old count
+    predicate while adding zero drift surface. Project count is not drift."""
+    home = tmp_path / "home"
+    (home / ".claude" / "templates").mkdir(parents=True)
+    (home / ".claude" / "templates" / "mnemos-pre-compact.sh").write_text("current\n")
+    monkeypatch.setattr(tw.Path, "home", classmethod(lambda cls: home))
+
+    root = tmp_path / "tessera"
+    root.mkdir()
+    for n in ("a", "b", "c", "d", "e"):
+        _downstream(tmp_path, n, {})
+
+    fired, msg = tw.p4_downstream(root)
+    assert fired is False, msg
+    assert "in sync" in msg
+
+
+def test_p4_fires_on_byte_drift_and_names_the_file(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    (home / ".claude" / "templates").mkdir(parents=True)
+    (home / ".claude" / "templates" / "mnemos-pre-compact.sh").write_text("current\n")
+    monkeypatch.setattr(tw.Path, "home", classmethod(lambda cls: home))
+
+    root = tmp_path / "tessera"
+    root.mkdir()
+    _downstream(tmp_path, "fresh", {"mnemos-pre-compact.sh": "current\n"})
+    _downstream(tmp_path, "stale", {"mnemos-pre-compact.sh": "OLD\n"})
+
+    fired, msg = tw.p4_downstream(root)
+    assert fired is True
+    assert "stale/mnemos-pre-compact.sh" in msg
+    assert "fresh/" not in msg, "an in-sync copy must not be reported as drift"
+
+
+def test_p4_flags_a_local_copy_with_no_global_source(tmp_path, monkeypatch):
+    """Orphaned: nothing can ever sync it, so it drifts forever in silence."""
+    home = tmp_path / "home"
+    (home / ".claude" / "templates").mkdir(parents=True)
+    monkeypatch.setattr(tw.Path, "home", classmethod(lambda cls: home))
+
+    root = tmp_path / "tessera"
+    root.mkdir()
+    _downstream(tmp_path, "orphan", {"mnemos-ghost.sh": "x\n"})
+
+    fired, msg = tw.p4_downstream(root)
+    assert fired is True
+    assert "orphaned" in msg and "orphan/mnemos-ghost.sh" in msg
+
+
+def test_p4_can_go_green(tmp_path, monkeypatch):
+    """A predicate that cannot be resolved teaches you to ignore the watcher (see P9)."""
+    home = tmp_path / "home"
+    (home / ".claude" / "templates").mkdir(parents=True)
+    (home / ".claude" / "templates" / "mnemos-pre-compact.sh").write_text("current\n")
+    monkeypatch.setattr(tw.Path, "home", classmethod(lambda cls: home))
+
+    root = tmp_path / "tessera"
+    root.mkdir()
+    proj = _downstream(tmp_path, "p", {"mnemos-pre-compact.sh": "OLD\n"})
+    assert tw.p4_downstream(root)[0] is True
+
+    (proj / ".claude" / "scripts" / "mnemos-pre-compact.sh").write_text("current\n")
+    assert tw.p4_downstream(root)[0] is False

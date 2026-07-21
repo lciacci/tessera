@@ -334,6 +334,27 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   - `mnemos-statusline.sh` was drifted the other way (repo `templates/` 07-02 newer than global 06-27) — the tier-advisory patch `eb21914` never propagated outward.
   - Reconciled 2026-07-09: `.claude/scripts/` is canonical (this repo is `hook_distro: source`); `templates/` re-synced from it. The global layer refresh is a separate, out-of-repo action.
 - **The lesson, which is F-003's own lesson recurring one layer up:** ADR-0004 fixed *runtime* resolution (local → global fallback) but left *authoring* propagation manual. Three writable copies of the same script, no mechanism keeping them in step, and the drift is silent because each copy is independently valid bash. `bin/tessera-hooks status` checks declared-mode vs local-copy-count; it does **not** diff content across layers. **A drift check that doesn't compare bytes isn't a drift check.**
+- **Update, 2026-07-21 — P4 now diffs bytes, and it immediately found real drift.** The watcher's
+  P4 predicate was `len(downstream_projects) >= 5` — a *proxy* for drift risk. Adopting settempo
+  (`hook_distro: global`, zero local copies) tripped it while adding exactly zero drift surface,
+  and the fired message could not name a single stale file. That is the P2 failure shape again:
+  a predicate firing correctly on a proxy that tracks no real pain. **This entry had already
+  written the fix two bullets up — "a drift check that doesn't compare bytes isn't a drift
+  check" — and the check still didn't compare bytes.**
+  P4 now diffs each downstream's `.claude/scripts/mnemos-*.sh` against `~/.claude/templates/`,
+  reporting `drifted` (differs) and `orphaned` (no global counterpart) by name. On its first run
+  it found **3 stale copies of `mnemos-pre-compact.sh`** — in heaviside, howler, and
+  tess-dashboard, all three `frozen` projects — silently running an older hook than the global
+  source. The count predicate never saw them and never would.
+  Two properties the old one lacked: it **names the file**, and it **can go green** (sync the
+  copies and it stops firing). A predicate that cannot be resolved teaches you to ignore the
+  watcher — the lesson P9's docstring records.
+  **Still open:** the 3 stale copies are not synced. These are deliberately-frozen ship-critical
+  repos (howler is shipping two platforms), so re-freezing is their owners' call, not a
+  drive-by. The added trigger below — teach `tessera-hooks status` to diff all three layers by
+  content — is now half-built: P4 covers the downstream↔global layer, doccheck's
+  `hook-templates-match-live` covers `templates/`↔`.claude/scripts/`. Nothing yet covers
+  `templates/` ↔ `~/.claude/templates/`, the layer `install.sh` writes.
 - **Status:** Adopted → ADR-0004; **re-opened** on the authoring-propagation gap
 - **When to revisit:** per ADR-0004's re-evaluate triggers — first real `thaw` of a grandfathered repo (build the settings auto-patch then), a `global` project found silently dead on a machine, or project count crossing ~4–5 with several still `frozen`. **Added trigger (now):** teach `bin/tessera-hooks status` to diff `.claude/scripts/` ↔ `templates/` ↔ `~/.claude/templates/` by content and report drift, or make `templates/` a symlink/generated artifact rather than a hand-maintained third copy. Until one of those lands, every hook edit needs a manual three-way sync — which is precisely the failure mode that produced this entry.
 
@@ -395,7 +416,7 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   | Entry | Stated condition | Reality |
   |---|---|---|
   | Override mechanism — deferred pieces | "when a second `tess` verb appears" | four exist (`tessera-{changelog,findings,hooks,new-project}`) — though these are standalone binaries, not `tess <noun>` subcommands, so it is the spirit, not the letter |
-  | Downstream script drift (F-003) | "project count crossing ~4–5" | exactly 4 |
+  | Downstream script drift (F-003) | "project count crossing ~4–5" | exactly 4 — **and the count was the wrong metric; see below** |
   | Two-stage hierarchical skill routing | "60+ skills"; entry claims "currently at ~50" | 56 |
 
 - **The pattern:** **a trigger written as a sentence can only be checked by someone who reads the sentence.** A trigger written as a predicate checks itself. This is design principle #17 turned on the Observatory itself — the file is a *compendium*, and its value depends on a human seeing a fired condition, which is precisely the model/human-recall channel #17 says drifts. The findings backlog had the identical shape until `bin/tessera-findings` + a SessionStart hook converted it from compendium to channel.

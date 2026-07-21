@@ -34,7 +34,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 COMPACTION_MIN = 3      # mnemos trial: judge after ≥3 compaction_fired events
-DOWNSTREAM_MIN = 5      # F-003: hook-drift risk as downstream count crosses ~4–5
 SKILL_MIN = 60          # two-stage skill routing earns its keep at 60+ skills
 GRADUATION_RUNS = 3     # a core predicate firing this many runs running → graduation-a
 GATE_LABEL_MIN = 20     # unlabeled post-backstop gates before should_fire labeling earns its slot
@@ -121,9 +120,53 @@ def p3_compaction(root: Path) -> tuple[bool, str]:
 
 
 def p4_downstream(root: Path) -> tuple[bool, str]:
-    """Downstream projects (declare .tessera/project.yml), excluding the framework itself."""
+    """F-003 hook drift — measured in BYTES, not in project count.
+
+    This predicate used to be `len(downstream_projects) >= 5`. Project count is a *proxy* for
+    drift risk, and on 2026-07-21 the proxy broke visibly: adopting settempo (hook_distro
+    `global`, zero local copies) tripped the threshold while adding exactly zero drift surface,
+    and the fired message could not name a single stale file. Meanwhile three genuinely stale
+    copies of mnemos-pre-compact.sh had been sitting in the frozen projects — the real F-003,
+    which the count-based check never saw and never would.
+
+    The observatory says it plainly (F-003 entry): *"A drift check that doesn't compare bytes
+    isn't a drift check."* `bin/tessera-hooks status` compares declared-mode vs copy-count;
+    doccheck's `hook-templates-match-live` already byte-diffs templates/ against the
+    framework's own .claude/scripts/. This is that same check, one layer down: downstream local
+    copies vs the global single source they shadow.
+
+    Two failure modes, both real:
+      drifted  — local copy differs from ~/.claude/templates/<name>; local always wins at
+                 resolve time, so the downstream is silently running an older hook.
+      orphaned — local copy with no global counterpart; nothing can ever sync it.
+
+    Unlike the count predicate, this one can go GREEN: sync the copies and it stops firing.
+    A predicate that cannot be resolved teaches you to ignore the watcher (see P9's docstring).
+    """
+    templates = Path.home() / ".claude" / "templates"
+    drifted: list[str] = []
+    orphaned: list[str] = []
+    copies = 0
+    for project in _downstream_projects(root):
+        for local in sorted((project / ".claude" / "scripts").glob("mnemos-*.sh")):
+            copies += 1
+            global_copy = templates / local.name
+            if not global_copy.is_file():
+                orphaned.append(f"{project.name}/{local.name}")
+            elif global_copy.read_bytes() != local.read_bytes():
+                drifted.append(f"{project.name}/{local.name}")
+
     n = len(_downstream_projects(root))
-    return n >= DOWNSTREAM_MIN, f"{n} downstream projects (≥{DOWNSTREAM_MIN} → F-003 hook-drift risk)"
+    if not drifted and not orphaned:
+        return False, f"{copies} local hook copies across {n} downstream projects, all in sync"
+    parts = []
+    if drifted:
+        parts.append(f"{len(drifted)} drifted: {', '.join(drifted)}")
+    if orphaned:
+        parts.append(f"{len(orphaned)} orphaned (no global source): {', '.join(orphaned)}")
+    return True, (f"F-003 hook drift — {'; '.join(parts)}. Local copies shadow the global "
+                  f"fallback, so these projects run stale hooks. Re-freeze with "
+                  f"`tessera-hooks thaw && tessera-hooks freeze` in each, or thaw to global.")
 
 
 def p5_skills(root: Path) -> tuple[bool, str]:
