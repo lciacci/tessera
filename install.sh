@@ -120,16 +120,36 @@ install_venv() {
     err "toolchain install into venv failed"; return 1
   }
 
-  # Console scripts must WIN on PATH. ~/.local/bin precedes /opt/homebrew/bin; tessera/bin
-  # does NOT (it sits at position ~17, behind brew) — a symlink there would be silently
-  # shadowed by any leftover brew copy, and the hooks would keep resolving the old
-  # interpreter while everything *looked* fixed. Verified 2026-07-12, the hard way.
-  mkdir -p "$HOME/.local/bin"
-  local c
-  for c in mnemos icpg polyphony skill-lint; do
-    [ -x "$root/.venv/bin/$c" ] && ln -sf "$root/.venv/bin/$c" "$HOME/.local/bin/$c"
-  done
-  ok "venv built (uv-managed python, toolchain installed, console scripts linked)"
+  # A DISPOSABLE CHECKOUT MUST NOT REPOINT THE MACHINE'S GLOBAL LINKS. `bin/tessera-verify`
+  # spawns a headless verifier in a temp git worktree with --dangerously-skip-permissions; if
+  # that agent runs install.sh to falsify a claim, the `ln -sf` below aimed ~/.local/bin at
+  # the worktree. The worktree is then deleted — leaving all four console scripts DANGLING.
+  # Observed 2026-07-21: mnemos/icpg/polyphony/skill-lint all pointed into a reaped
+  # /var/folders/.../tessera-verify-0iipykaq. Tessera itself did not notice (its hooks try
+  # `.venv/bin/mnemos` before `command -v`), but any downstream project without a local venv
+  # gets F-001 exactly: every hook failing open into silence.
+  #
+  # Worktree isolation was structural for the SOURCE TREE and absent for $HOME. Detect it
+  # without shelling out to git: a linked worktree's `.git` is a FILE (`gitdir: ...`), a real
+  # checkout's is a DIRECTORY. Guarding here — not in tessera-verify — protects every caller,
+  # including install.sh run by hand from a throwaway worktree.
+  local linked="console scripts linked"
+  if [ -f "$root/.git" ] && [ -z "${TESSERA_FORCE_GLOBAL_LINK:-}" ]; then
+    warn "linked git worktree — skipping ~/.local/bin console-script links (would dangle on cleanup)"
+    warn "  override with TESSERA_FORCE_GLOBAL_LINK=1 if this checkout is meant to be permanent"
+    linked="console scripts NOT linked (worktree)"
+  else
+    # Console scripts must WIN on PATH. ~/.local/bin precedes /opt/homebrew/bin; tessera/bin
+    # does NOT (it sits at position ~17, behind brew) — a symlink there would be silently
+    # shadowed by any leftover brew copy, and the hooks would keep resolving the old
+    # interpreter while everything *looked* fixed. Verified 2026-07-12, the hard way.
+    mkdir -p "$HOME/.local/bin"
+    local c
+    for c in mnemos icpg polyphony skill-lint; do
+      [ -x "$root/.venv/bin/$c" ] && ln -sf "$root/.venv/bin/$c" "$HOME/.local/bin/$c"
+    done
+  fi
+  ok "venv built (uv-managed python, toolchain installed, $linked)"
 }
 
 verify() {
