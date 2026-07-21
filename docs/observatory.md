@@ -395,7 +395,21 @@ Both were found by adversarial verification, **not** by the framework. **The rea
 - **Source:** Tessera tooling discussion, 2026-06-28.
 - **What it is:** sqlfluff is a dialect-aware SQL linter + autoformatter (postgres/bigquery/snowflake/…, dbt/jinja templater support). Candidate quality-gate / skill for SQL-heavy projects.
 - **Why deferred:** Tessera-the-framework has **0 `.sql` files and no dbt** — all SQL is inline string literals in Python (`scripts/{mnemos,icpg,polyphony}/store.py`, SQLite DDL). sqlfluff lints `.sql` files and templated SQL; it does **not** see SQL embedded as Python/TS string literals without extraction. Pointed at this repo today it finds nothing. Downstream projects so far (Howler = none, tess-dashboard = inline TS/SQLite) are the same shape.
-- **Adopt-when trigger:** a downstream project introduces **standalone `.sql` files or dbt models**. Then add it as an **on-demand skill** (`paths: **/*.sql`) plus an optional pre-commit gate that **no-ops when no SQL is present** — not an eager default (principle #15). Worth a `/evaluate-framework sqlfluff` run at that point for a real ADR with verdict + re-evaluate triggers, rather than ad-hoc bolting.
+- **RESOLVED 2026-07-21 → ADR-0011 (Watching). The trigger fired and the answer was still no.**
+  settempo arrived as the fifth downstream carrying 2 standalone Postgres files, meeting the
+  condition below exactly as written. Run against them, sqlfluff produced **206 violations, 0
+  actionable**: 185 (89%) pure layout, and of the 21 survivors, 7 RF05 are idiomatic Supabase
+  RLS policy names, 7 PG01 are `CREATE INDEX`-without-`CONCURRENTLY` on a *fresh-install* script
+  (nothing to lock; `CONCURRENTLY` cannot run in a transaction), and 7 RF04 are a column named
+  `date`. The files contain **zero `SELECT`s** — pure write-once DDL, sqlfluff's weakest case.
+  **The trigger was measuring the wrong thing:** file existence is a proxy for "sqlfluff would
+  tell us something we don't know," and the proxy was false. Same failure shape as retired-P2
+  (verb count) and old-P4 (project count) — *name the pain, not the artifact that correlates
+  with it.* Corrected trigger in the ADR: **git-tracked, query-shaped** SQL (a tracked `.sql`
+  containing `SELECT`, or dbt), or SQL under frequent edit. Also learned: a naive
+  `find -name "*.sql"` would have false-fired on conclave months ago — 130 vendored litellm
+  migrations in `harness/venv`, **0 tracked by git**. Use `git ls-files`, never `find`.
+- **Adopt-when trigger (SUPERSEDED — see above; kept for the trail):** a downstream project introduces **standalone `.sql` files or dbt models**. Then add it as an **on-demand skill** (`paths: **/*.sql`) plus an optional pre-commit gate that **no-ops when no SQL is present** — not an eager default (principle #15). Worth a `/evaluate-framework sqlfluff` run at that point for a real ADR with verdict + re-evaluate triggers, rather than ad-hoc bolting.
 - **Separate use — pr-arbiter (different repo, different rationale):** sqlfluff as a deterministic SQL pre-pass for the LLM reviewer — strips style-nit noise, validates parse, normalizes formatting so the model reviews clean SQL. **Caveat:** it does *not* address the SQLi/taint false-positives the dashboard pr-arbiter run hit (those are threat-model context — "discount request-derived-input findings unless a route threads user input", per `../tess-dashboard/docs/FINDINGS.md`). Two layers: sqlfluff = noise floor; reviewer-prompt threat-model = the false-positive fix. That work lives in `~/Claude/pr-arbiter`, not Tessera.
 - **Status:** Watching
 - **When to revisit:** first downstream `.sql`/dbt surface (Tessera side); pr-arbiter side is tracked in that repo.
