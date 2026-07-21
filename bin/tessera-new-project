@@ -94,6 +94,25 @@ The suggestion-gate recorder (`scripts/gate/emit.py`) appends `suggestion_gate`
 events here. This directory is gitignored — logs are session-local.
 EOF
 
+# Findings channel (docs/contracts/findings.md). The contract says EVERY Tessera project
+# carries this file, and that an empty channel is meaningfully different from a missing one —
+# the scanner distinguishes them. The scaffold did not create it until 2026-07-21, so every
+# project born here started with a *missing* channel and had to be patched by hand. All four
+# existing downstreams have it; the newest scaffold would not have. Ship the empty channel.
+mkdir -p "$TARGET/docs"
+cat > "$TARGET/docs/FINDINGS.md" <<EOF
+# $NAME — Tessera dogfood findings
+
+Runtime friction surfaced while working in $NAME. Framework-level fixes land in
+\`tessera\`, not here — findings are staged for transfer and scanned by \`tessera-findings\`.
+
+Contract: the downstream-findings contract in the Tessera framework
+(\`docs/contracts/findings.md\` there). One finding per \`## F-NNN — Title\` section, each
+carrying a \`**Status:**\` line (\`open\` | \`transferred:<ref>\` | \`rejected:<reason>\`).
+
+No findings yet — an empty channel, not a missing one.
+EOF
+
 # CLAUDE.md — fill scalar placeholders; description/commands left for the owner.
 sed -e "s|{{PROJECT_NAME}}|$NAME|g" -e "s|{{PROFILE}}|$PROFILE|g" \
     "$TPL/CLAUDE.md.template" > "$TARGET/CLAUDE.md"
