@@ -37,6 +37,18 @@ verification — make the falsifier a channel; ADR-0006 decision 4).
   failure everywhere**, because a verifier that returns nothing usable must never read as green.
 - `evidence` is the exact command and output summary the verifier reports. A verdict without
   evidence is suspect; consumers may render it as such.
+- `spawn_error` (optional) — **the verifier never produced a judgement at all**: the `claude`
+  CLI was missing, refused, timed out, or exited non-zero. Present only in that case, and
+  distinct from NO_VERDICT (which means the verifier *answered*, unparseably). The run exits 2,
+  not 1. **An event carrying `spawn_error` does NOT disposition the Stop-hook backstop** —
+  `scripts/verify/scan.py` skips it. Added 2026-07-21, after `spawn_verifier` was found
+  discarding returncode and stderr: a spawn that never ran returned `""`, became NO_VERDICT,
+  and satisfied the backstop. The falsifier was failing open, which is the failure it exists to
+  catch. *Skip is a decision; `spawn_error` is an accident. Only decisions disposition.*
+- `raw_excerpt` (optional) — the last 2000 chars of verifier output, recorded only when some
+  verdict is NO_VERDICT. Without it an unparseable answer was undiagnosable: `VERDICT_RE` is
+  end-of-line anchored, so decoration (`**VERDICT 1: CONFIRMED**`, a trailing clause) misses
+  silently and the output was discarded. Diagnostic only — no consumer keys on it.
 - A `skipped` event is a **recorded decision, not silence**: the Stop-hook backstop
   (`scripts/verify/scan.py`) accepts any `verification` event — including a skip — as "this
   session dispositioned verification". Skips are surfaced by `tessera-verify stats`; a rising

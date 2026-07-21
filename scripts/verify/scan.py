@@ -91,8 +91,19 @@ def made_done_claim(transcript: str) -> bool:
 
 
 def verification_logged(session_id: str) -> bool:
-    """Any verification event counts — including a recorded skip. Skips are audited
-    in `tessera-verify stats`, not re-nagged here."""
+    """A DISPOSITION counts — a verdict, or a recorded skip. Skips are audited in
+    `tessera-verify stats`, not re-nagged here.
+
+    An event carrying `spawn_error` does NOT count. That event means the verifier process
+    never produced a judgement — the `claude` CLI was missing, refused, timed out, or exited
+    non-zero. Found 2026-07-21: the nested `claude -p --dangerously-skip-permissions` is
+    refused by the permission classifier from inside a Claude Code session, tessera-verify
+    swallowed the refusal into an empty stdout, and the resulting event silenced this hook.
+    **A verifier that never ran was dispositioning verification.** The backstop against
+    unverified "it's fixed" claims was itself defeated by the failure it should shout about.
+
+    Skip is a decision; spawn_error is an accident. Only decisions disposition.
+    """
     path = LOGS / f"{session_id}.jsonl"
     try:
         lines = path.read_text().splitlines()
@@ -100,10 +111,14 @@ def verification_logged(session_id: str) -> bool:
         return False
     for line in lines:
         try:
-            if json.loads(line).get("type") == "verification":
-                return True
+            event = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if event.get("type") != "verification":
+            continue
+        if event.get("data", {}).get("spawn_error"):
+            continue
+        return True
     return False
 
 

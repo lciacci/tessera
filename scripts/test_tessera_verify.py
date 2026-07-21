@@ -227,3 +227,56 @@ def test_self_test_fails_when_landmine_survives(tmp_path, logs, monkeypatch):
     _mock_spawn(monkeypatch, "VERDICT 1: CONFIRMED\nEVIDENCE 1: looks empty to me\n")
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "s1")
     assert tv.main(["--self-test"]) == 1
+
+
+# --- the verifier failing to run is not a verdict (2026-07-21) -----------------------
+
+
+def test_nonzero_exit_raises_did_not_run(monkeypatch):
+    """A refused/failed spawn must not degrade into an empty string.
+
+    `spawn_verifier` used to `return result.stdout` and discard returncode and stderr, so a
+    spawn that never ran returned "" and parse_verdicts rendered NO_VERDICT — the falsifier
+    failing open, inside the tool built to catch fail-opens.
+    """
+    def fake_run(*a, **k):
+        return subprocess.CompletedProcess(a[0], 1, stdout="", stderr="blocked by classifier")
+
+    monkeypatch.setattr(tv.subprocess, "run", fake_run)
+    with pytest.raises(tv.VerifierDidNotRun, match="blocked by classifier"):
+        tv.spawn_verifier("p", Path("."), "opus", 10)
+
+
+def test_exit_zero_with_empty_stdout_raises_did_not_run(monkeypatch):
+    """Exit 0 and silence is still no judgement — do not read success into an empty stream."""
+    def fake_run(*a, **k):
+        return subprocess.CompletedProcess(a[0], 0, stdout="   \n", stderr="")
+
+    monkeypatch.setattr(tv.subprocess, "run", fake_run)
+    with pytest.raises(tv.VerifierDidNotRun):
+        tv.spawn_verifier("p", Path("."), "opus", 10)
+
+
+def test_missing_claude_cli_raises_did_not_run(monkeypatch):
+    def fake_run(*a, **k):
+        raise FileNotFoundError("claude")
+
+    monkeypatch.setattr(tv.subprocess, "run", fake_run)
+    with pytest.raises(tv.VerifierDidNotRun, match="not on PATH"):
+        tv.spawn_verifier("p", Path("."), "opus", 10)
+
+
+def test_spawn_failure_exits_2_and_logs_spawn_error(tmp_path, logs, monkeypatch):
+    """Exit 2, distinct from 1 (a real REFUTED), and the event carries why."""
+    _mock_worktree(monkeypatch, tmp_path)
+
+    def boom(prompt, cwd, model, timeout):
+        raise tv.VerifierDidNotRun("claude exited 1: blocked by classifier")
+
+    monkeypatch.setattr(tv, "spawn_verifier", boom)
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "s1")
+    assert tv.main(["--claim", "x"]) == 2
+    logged = json.loads((logs / "s1.jsonl").read_text())
+    assert "blocked by classifier" in logged["data"]["spawn_error"]
+    # Still recorded — silence would be worse — but marked as never-ran.
+    assert logged["data"]["claims"][0]["verdict"] == "NO_VERDICT"

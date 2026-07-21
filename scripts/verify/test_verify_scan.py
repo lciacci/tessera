@@ -171,3 +171,31 @@ def test_fail_loud_is_capped_too(tmp_path, logs):
 def test_missing_args_fails_loud(logs, capsys):
     assert scan.main([]) == 1
     assert "BROKEN" in capsys.readouterr().err
+
+
+def test_spawn_error_event_does_not_disposition(tmp_path, monkeypatch):
+    """A verifier that never ran must not silence this hook.
+
+    Regression for 2026-07-21: `claude -p --dangerously-skip-permissions` is refused by the
+    permission classifier from inside a session; tessera-verify swallowed the refusal into an
+    empty stdout and logged a NO_VERDICT event. That event satisfied verification_logged(), so
+    the backstop against unverified "it's fixed" claims was defeated by a failure it should
+    have shouted about. Skip is a decision; spawn_error is an accident.
+    """
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    monkeypatch.setattr(scan, "LOGS", logs)
+
+    def _write(session, data):
+        (logs / f"{session}.jsonl").write_text(
+            json.dumps({"type": "verification", "session_id": session, "data": data}) + "\n"
+        )
+
+    _write("blocked", {"claims": [], "spawn_error": "claude exited 1: blocked by classifier"})
+    assert scan.verification_logged("blocked") is False
+
+    _write("skipped", {"claims": [], "skipped": True, "reason": "detector over-count"})
+    assert scan.verification_logged("skipped") is True
+
+    _write("judged", {"claims": [{"text": "x", "verdict": "CONFIRMED", "evidence": "ran it"}]})
+    assert scan.verification_logged("judged") is True

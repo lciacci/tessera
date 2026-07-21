@@ -1,0 +1,23 @@
+{
+  "id": "esc-20260721-225028",
+  "ts": "2026-07-21T22:50:28Z",
+  "agent": "claude",
+  "session_id": "e85c9e23-d16a-47d5-9d81-ac0ecb3b7fc9",
+  "severity": "blocking",
+  "category": "tooling",
+  "summary": "bin/tessera-verify cannot run from inside a Claude Code session \u2014 nested 'claude -p --dangerously-skip-permissions' is refused by the permission classifier, and the failure is swallowed into NO_VERDICT",
+  "tried": [
+    "Ran bin/tessera-verify with two claims about this session's install.sh and scaffold fixes \u2014 both returned NO_VERDICT with empty evidence, exit 1",
+    "Reproduced the spawn directly ('claude -p ... --dangerously-skip-permissions') \u2014 denied by the auto-mode classifier; did not attempt to route around it",
+    "Confirmed the claude CLI itself resolves (~/.local/bin/claude), so this is a permission refusal, not a missing binary",
+    "Falsified both claims by hand instead: real linked worktree + real install.sh (links untouched, mnemos resolves post-reap), and the real scanner reading pre-fix vs post-fix scaffolds (channel missing vs nothing open)"
+  ],
+  "options": [
+    "Patch spawn_verifier to surface returncode/stderr so a blocked spawn is loud rather than NO_VERDICT \u2014 fixes the fail-open regardless of the permission question",
+    "Add a Bash permission rule allowing the nested verifier spawn, accepting that verify runs a --dangerously-skip-permissions subagent",
+    "Accept that tessera-verify is a human-run tool only, and make the Stop hook's verify-scan say so instead of demanding a run the agent cannot perform"
+  ],
+  "refs": [],
+  "status": "resolved:Premise was WRONG. tessera-verify is not blocked from inside a session \u2014 it now runs and returns CONFIRMED with positive controls. The direct 'claude -p --dangerously-skip-permissions' I ran by hand was blocked, and I wrongly generalized that to the tool's own spawn; the NO_VERDICTs were transient. The real defect was option 1, now fixed: spawn_verifier discarded returncode/stderr, so a failed spawn became NO_VERDICT, and scripts/verify/scan.py counted that event as dispositioning verification \u2014 a verifier that never ran silenced the Stop-hook backstop. Fixed at all three layers (raise VerifierDidNotRun, exit 2 + spawn_error in the event, scan.py ignores spawn_error events) plus raw_excerpt so NO_VERDICT is diagnosable. Options 2 and 3 are moot.",
+  "resolved_ts": "2026-07-21T23:09:07Z"
+}
