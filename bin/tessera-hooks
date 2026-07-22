@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # tessera-hooks — flip a project's mnemos hook distribution (ADR-0004).
 #
-#   tessera-hooks status   # declared mode + filesystem reality + drift check
+#   tessera-hooks status   # declared mode, filesystem reality, and CONTENT drift vs the global source
 #   tessera-hooks freeze    # pin local copies from ~/.claude/templates (ship-critical)
 #   tessera-hooks thaw      # drop local copies, ride the global single source
 #
@@ -20,6 +20,39 @@ distro=${distro:-unset}
 
 local_count() { local f n=0; for f in "$SCR"/mnemos-*.sh; do [ -e "$f" ] && n=$((n+1)); done; echo "$n"; }
 settings_has_fallback() { grep -q 'HOME/.claude/templates/mnemos' "$SETTINGS" 2>/dev/null; }
+
+# CONTENT drift, not copy-count drift. Line 4 advertised a "drift check" and this command
+# only ever compared declared-mode against how MANY local copies existed — it could not see
+# a local copy that had diverged from the global source it shadows, which is the entire
+# failure F-003 describes. The observatory said so plainly ("a drift check that doesn't
+# compare bytes isn't a drift check") and the header kept claiming it did anyway.
+#
+# Found live 2026-07-21 by tessera-watch P4 (rewritten the same day to diff bytes): three
+# projects had been running a stale mnemos-pre-compact.sh since 07-16, missing an
+# AttributeError guard whose absence drops the compaction event entirely. Six days, no
+# symptom, because each copy is independently valid bash.
+#
+# Local ALWAYS wins at resolve time, so a drifted local copy is what actually runs.
+report_content_drift() {
+  local f base drifted=0 orphaned=0
+  for f in "$SCR"/mnemos-*.sh; do
+    [ -e "$f" ] || continue
+    base=$(basename "$f")
+    if [ ! -f "$TPL/$base" ]; then
+      echo "  ORPHANED: $base has no counterpart in $TPL — nothing can ever sync it"
+      orphaned=$((orphaned+1))
+    elif ! cmp -s "$f" "$TPL/$base"; then
+      echo "  DRIFTED:  $base differs from $TPL/$base"
+      drifted=$((drifted+1))
+    fi
+  done
+  if [ "$drifted" -gt 0 ] || [ "$orphaned" -gt 0 ]; then
+    echo "  → this project runs the LOCAL copy. Inspect: diff $SCR/<name> $TPL/<name>"
+    echo "  → take the global version with: tessera-hooks freeze   (re-pins all copies)"
+    return 1
+  fi
+  return 0
+}
 set_distro() {
   if grep -q '^hook_distro:' "$YML"; then
     sed -i '' "s|^hook_distro:.*|hook_distro: $1|" "$YML"
@@ -38,6 +71,17 @@ case "${1:-status}" in
       global) if [ "$n" -gt 0 ]; then echo "MISMATCH: declared global but $n local copies present (run thaw)"; fi ;;
       frozen|source) if [ "$n" -eq 0 ]; then echo "MISMATCH: declared $distro but no local copies (run freeze)"; fi ;;
     esac
+    # Content drift is only meaningful where local copies shadow a global source. The
+    # framework itself is `source` — its .claude/scripts ARE the upstream that install.sh
+    # ships, so comparing them to the copy install.sh made is circular, not informative.
+    if [ "$n" -gt 0 ] && [ "$distro" != source ]; then
+      if [ -d "$TPL" ]; then
+        echo "content drift:"
+        report_content_drift || true
+      else
+        echo "content drift: UNKNOWN — no $TPL on this machine (run install.sh)"
+      fi
+    fi
     ;;
   freeze)
     [ -d "$TPL" ] || { echo "no $TPL — run tessera install.sh on this machine first" >&2; exit 1; }

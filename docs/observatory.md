@@ -355,6 +355,34 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   content — is now half-built: P4 covers the downstream↔global layer, doccheck's
   `hook-templates-match-live` covers `templates/`↔`.claude/scripts/`. Nothing yet covers
   `templates/` ↔ `~/.claude/templates/`, the layer `install.sh` writes.
+- **Update, 2026-07-22 — the freeze rationale was reviewed, and 2 of 3 had none.** P4's byte-diff
+  prompted the question nobody had asked since the freezes were set: *are these projects frozen
+  for a reason that is still true?* All three were frozen on the **same day (2026-07-12)** — one
+  batch, not three decisions. Reviewing them:
+  - **howler** — "churn-immune while shipping to store" (ADR-0004). **Still true**; shipping two
+    platforms as of 07-19. Stays frozen and stays stale, deliberately: the drifted hook buys a
+    shipping app nothing.
+  - **heaviside** — no rationale recorded anywhere, nothing shipping, two active days. **Thawed**
+    (`2319e24`). All 7 hook commands verified resolving to executable global targets first.
+  - **tess-dashboard** — its own `project.yml` said *"thaw to global when convenient"*. It was
+    never meant to persist. **Blocked on the settings gap below.**
+  **The real finding is that freeze is a sticky, unreviewed state.** You enter it for a reason,
+  the reason expires, and nothing re-asks. The drift was the symptom; the unreviewed freeze was
+  the cause. Any future freeze should carry its reason *in `project.yml`* — howler's did, which
+  is exactly why howler's was the one that survived review.
+- **`tessera-hooks status` now compares BYTES (2026-07-22).** Its usage line advertised a "drift
+  check" from day one while only comparing declared-mode against local-copy *count* — the gap
+  this entry named two bullets up and then did not close. It now reports `DRIFTED` / `ORPHANED`
+  per file against `~/.claude/templates`, skipping `source` repos (where the comparison is
+  circular). Guarded by doccheck `hooks-status-compares-content`, which was verified to go red
+  when the byte comparison is removed.
+- **ADR-0004's re-evaluate trigger "first real thaw of a grandfathered repo (build the settings
+  auto-patch then)" HAS NOW FIRED.** tess-dashboard cannot be thawed: all 7 of its hook commands
+  are local-only (`if [ -x .claude/scripts/X ]; then exec X; fi`) with no global branch, and its
+  `statusLine` is a bare local path — the pre-`eb21914` shape this entry calls "the literal root
+  cause". `tessera-hooks thaw` correctly refuses rather than silently disabling every hook. The
+  auto-patch ADR-0004 deferred is now the thing standing between a grandfathered repo and the
+  single-source end-state. **Open.**
 - **Status:** Adopted → ADR-0004; **re-opened** on the authoring-propagation gap
 - **When to revisit:** per ADR-0004's re-evaluate triggers — first real `thaw` of a grandfathered repo (build the settings auto-patch then), a `global` project found silently dead on a machine, or project count crossing ~4–5 with several still `frozen`. **Added trigger (now):** teach `bin/tessera-hooks status` to diff `.claude/scripts/` ↔ `templates/` ↔ `~/.claude/templates/` by content and report drift, or make `templates/` a symlink/generated artifact rather than a hand-maintained third copy. Until one of those lands, every hook edit needs a manual three-way sync — which is precisely the failure mode that produced this entry.
 

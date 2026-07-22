@@ -902,6 +902,31 @@ def check_no_upstream_clone_instructions() -> list[str]:
     return sorted(set(bad))
 
 
+def check_hooks_status_really_compares_content() -> list[str]:
+    """`tessera-hooks status` must actually compare bytes, since its header says it does.
+
+    Its usage line advertised "drift check" from the start, and for weeks the command only
+    compared declared-mode against how MANY local copies existed. A copy that had DIVERGED
+    from the global source it shadows was invisible to it — which is the entire failure
+    F-003 describes, and the observatory had already written the verdict: "a drift check
+    that doesn't compare bytes isn't a drift check." The header kept claiming it anyway.
+
+    Cost, measured: three projects ran a stale mnemos-pre-compact.sh for six days (missing an
+    AttributeError guard, so a non-object payload drops the compaction event) and the tool
+    whose job was to say so reported clean. Fixed 2026-07-22 — this asserts it stays fixed.
+    """
+    hooks = ROOT / "bin" / "tessera-hooks"
+    if not hooks.is_file():
+        return []
+    body = hooks.read_text()
+    if "CONTENT drift" not in body:
+        return []          # header no longer makes the claim; nothing to hold it to
+    if "cmp -s" not in body:
+        return ["bin/tessera-hooks: header advertises CONTENT drift but the script performs "
+                "no byte comparison (`cmp -s`) — the claim the observatory already called out"]
+    return []
+
+
 def check_hooks_match_templates() -> list[str]:
     """Every live hook in .claude/scripts/ must be byte-identical to its templates/ copy.
 
@@ -1047,6 +1072,7 @@ CHECKS = {
     "template-skill-refs-exist": check_template_skill_refs_exist,
     "skill-profiles-names-are-installed": check_skill_profiles_names_are_installed,
     "hooks-match-templates": check_hooks_match_templates,
+    "hooks-status-compares-content": check_hooks_status_really_compares_content,
     "no-upstream-clone-instructions": check_no_upstream_clone_instructions,
     "adr-index-complete": check_adr_index_complete,
     "compaction-threshold-qualified": check_compaction_threshold_qualified,
