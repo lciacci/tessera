@@ -29,7 +29,7 @@ PROFILE="${3:-standard}"
 [ -e "$TARGET" ] && { echo "refuse: $TARGET already exists" >&2; exit 1; }
 for f in "$TPL/CLAUDE.md.template" "$TPL/settings.base.json" "$TPL/gitignore.base" \
          "$TPL/project.yml.template" "$TPL/security-exceptions.yml.template" \
-         "$TPL/config.yml.template" "$TPL/skill-profiles.json"; do
+         "$TPL/config.yml.template" "$TPL/skill-profiles.json" "$TPL/sqlfluff.template"; do
   [ -f "$f" ] || { echo "missing template: $f" >&2; exit 1; }
 done
 
@@ -94,6 +94,31 @@ The suggestion-gate recorder (`scripts/gate/emit.py`) appends `suggestion_gate`
 events here. This directory is gitignored — logs are session-local.
 EOF
 
+# SQL lint gate (ADR-0012). WARN-ONLY and silent unless a commit stages .sql, so shipping it
+# to every project costs nothing in the ones without SQL — that no-op is the whole reason it
+# can be a default at all (principle #15). Ship BOTH halves: the script without .sqlfluff runs
+# stock rules, which is 89% whitespace noise — the same "ship both halves or neither" rule the
+# gate recorder and spend guard follow above.
+mkdir -p "$TARGET/scripts/sql"
+cp "$TESSERA_ROOT"/scripts/sql/lint.sh "$TARGET/scripts/sql/"
+chmod +x "$TARGET/scripts/sql/lint.sh"
+cp "$TPL/sqlfluff.template" "$TARGET/.sqlfluff"
+# ...and the hook that INVOKES it. A gate nothing calls is the "ship both halves" rule
+# violated one layer up: downstream projects get no pre-commit hook otherwise (doccheck is
+# framework-only), so lint.sh would sit there looking wired and never run. .githooks/ is
+# TRACKED — .git/hooks/ is not, and a hook that exists on one disk and nowhere else is how
+# three separate bugs shipped on 2026-07-11. core.hooksPath is set below, after git init.
+mkdir -p "$TARGET/.githooks"
+cat > "$TARGET/.githooks/pre-commit" <<'EOF'
+#!/bin/bash
+# Downstream pre-commit. Add your project's own blocking checks here.
+# SQL lint is WARN-ONLY and silent unless this commit stages .sql (ADR-0012).
+ROOT="$(git rev-parse --show-toplevel)"
+[ -x "$ROOT/scripts/sql/lint.sh" ] && "$ROOT/scripts/sql/lint.sh"
+exit 0
+EOF
+chmod +x "$TARGET/.githooks/pre-commit"
+
 # Findings channel (docs/contracts/findings.md). The contract says EVERY Tessera project
 # carries this file, and that an empty channel is meaningfully different from a missing one —
 # the scanner distinguishes them. The scaffold did not create it until 2026-07-21, so every
@@ -130,7 +155,8 @@ sed -e "s|{{PROJECT_NAME}}|$NAME|g" -e "s|{{PROFILE}}|$PROFILE|g" \
   --map "$TPL/skill-profiles.json" \
   || echo "warn: skill curation skipped (skillOverrides not written)" >&2
 
-( cd "$TARGET" && git init -q && git symbolic-ref HEAD refs/heads/main )
+( cd "$TARGET" && git init -q && git symbolic-ref HEAD refs/heads/main \
+  && git config core.hooksPath .githooks )
 
 # iCPG: init the intent graph so SessionStart's bridge-icpg can feed Mnemos's
 # code-intent Goal/ConstraintNodes. Bootstrap is skipped here (fresh repo, no

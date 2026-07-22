@@ -38,7 +38,8 @@ Auto-generated below as ADRs are created. Update when adding a new ADR.
 | 0008 | 2026-07-14 | The skill corpus, read at last — the content audit inverts the prune, and the fix is delivery, not deletion | Accepted (delivery mechanism refined by ADR-0009) |
 | 0009 | 2026-07-16 | Skill delivery is curation, not copying — Claude Code already unions the corpus into every project | Accepted |
 | 0010 | 2026-07-20 | Skill registry — repo is truth, global is a managed mirror | Accepted |
-| 0011 | 2026-07-21 | sqlfluff — the trigger fired, the evidence said no, and the trigger was the bug | Watching |
+| 0011 | 2026-07-21 | sqlfluff — the trigger fired, the evidence said no, and the trigger was the bug | Superseded by ADR-0012 |
+| 0012 | 2026-07-22 | sqlfluff adopted, warn-only — supersedes ADR-0011 | Accepted |
 
 ---
 

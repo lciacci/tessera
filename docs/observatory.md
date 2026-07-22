@@ -395,7 +395,18 @@ Both were found by adversarial verification, **not** by the framework. **The rea
 - **Source:** Tessera tooling discussion, 2026-06-28.
 - **What it is:** sqlfluff is a dialect-aware SQL linter + autoformatter (postgres/bigquery/snowflake/…, dbt/jinja templater support). Candidate quality-gate / skill for SQL-heavy projects.
 - **Why deferred:** Tessera-the-framework has **0 `.sql` files and no dbt** — all SQL is inline string literals in Python (`scripts/{mnemos,icpg,polyphony}/store.py`, SQLite DDL). sqlfluff lints `.sql` files and templated SQL; it does **not** see SQL embedded as Python/TS string literals without extraction. Pointed at this repo today it finds nothing. Downstream projects so far (Howler = none, tess-dashboard = inline TS/SQLite) are the same shape.
-- **RESOLVED 2026-07-21 → ADR-0011 (Watching). The trigger fired and the answer was still no.**
+- **CLOSED 2026-07-22 → ADR-0012: ADOPTED, warn-only. Supersedes ADR-0011 below.** ADR-0011
+  answered "would sqlfluff find defects in settempo's SQL today" (no); the actual ask was
+  "implement it across Tessera and downstream projects." A framework's job is to have the rail
+  laid before a downstream needs it — the ADR-0004 argument. Shipped in the shape this entry
+  prescribed all along: on-demand skill (`paths: **/*.sql`), a pre-commit gate that **no-ops when
+  no SQL is staged**, not an eager default. **Warn-only** and `exclude_rules = layout` by
+  default, tuned directly from ADR-0011's numbers so the 89% whitespace noise never reaches a
+  human. The gate shouts if sqlfluff is unreachable — silent skip is indistinguishable from pass.
+  Wired into tessera's `.githooks/pre-commit`, shipped by `tessera-new-project` (script + config
+  + downstream hook + `core.hooksPath`), applied to settempo. This entry is now closed; the
+  lessons below survive it.
+- **The 2026-07-21 evaluation (ADR-0011, superseded — kept because its measurements are load-bearing).**
   settempo arrived as the fifth downstream carrying 2 standalone Postgres files, meeting the
   condition below exactly as written. Run against them, sqlfluff produced **206 violations, 0
   actionable**: 185 (89%) pure layout, and of the 21 survivors, 7 RF05 are idiomatic Supabase

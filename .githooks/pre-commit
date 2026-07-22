@@ -29,6 +29,12 @@
 ROOT="$(git rev-parse --show-toplevel)"
 DOCCHECK="$ROOT/scripts/doccheck.py"
 
+# SQL lint (ADR-0012). WARN-ONLY and silent unless this commit stages .sql — so in the four
+# downstreams with no SQL, and in this repo (0 .sql files), it costs nothing and says nothing.
+# Deliberately runs BEFORE doccheck's blocking gate: a warning you only see after a commit is
+# refused for an unrelated reason is a warning you do not see.
+[ -x "$ROOT/scripts/sql/lint.sh" ] && "$ROOT/scripts/sql/lint.sh"
+
 [ -f "$DOCCHECK" ] || exit 0          # not the tessera repo (or a very old checkout)
 command -v python3 >/dev/null 2>&1 || exit 0
 
