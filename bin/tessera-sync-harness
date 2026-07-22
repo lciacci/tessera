@@ -37,6 +37,7 @@ customized deliberately, and overwriting unread content is exactly what the base
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 import subprocess
@@ -116,7 +117,40 @@ def missing_hooks(reference: dict, target: dict) -> list[tuple[str, dict]]:
     return out
 
 
-def sync(project: Path, apply: bool, exclude: list[str] | None = None) -> int:
+def _sha(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def known_tessera_versions(rel: str) -> set[str]:
+    """Every blob this path has ever had in tessera's history, by sha256.
+
+    This is the PROOF that makes updating a stale file safe. "Only ever adds" was the right
+    default while customization was possible, but a file that is byte-identical to some commit
+    in tessera's own history was demonstrably never edited downstream — there is nothing to
+    lose by replacing it. Anything matching NO known version is left alone and reported: it
+    was either customized or came from somewhere this tool cannot vouch for.
+
+    Not a heuristic. Either the bytes appear in our history or they do not.
+    """
+    # The scaffold does not always preserve the path: scripts/tessera-escalate is copied from
+    # bin/tessera-escalate. Check both shapes rather than hardcoding a rename table.
+    candidates = {rel, f"bin/{Path(rel).name}"}
+    seen: set[str] = set()
+    for path in candidates:
+        commits = subprocess.run(
+            ["git", "-C", str(TESSERA_ROOT), "log", "--format=%H", "--", path],
+            capture_output=True, text=True).stdout.split()
+        for commit in commits:
+            blob = subprocess.run(
+                ["git", "-C", str(TESSERA_ROOT), "show", f"{commit}:{path}"],
+                capture_output=True).stdout
+            if blob:
+                seen.add(_sha(blob))
+    return seen
+
+
+def sync(project: Path, apply: bool, exclude: list[str] | None = None,
+         update_stale: bool = False) -> int:
     exclude = exclude or []
     with tempfile.TemporaryDirectory() as td:
         ref_root = reference_scaffold(Path(td))
@@ -142,6 +176,19 @@ def sync(project: Path, apply: bool, exclude: list[str] | None = None) -> int:
                         dst.chmod(dst.stat().st_mode | 0o755)
             elif dst.read_bytes() != src.read_bytes():
                 drifted.append(rel)
+
+        # Stale-but-unmodified files: provably safe to update (see known_tessera_versions).
+        updated, customized = [], []
+        if update_stale:
+            for rel in drifted:
+                current = (project / rel).read_bytes()
+                if _sha(current) in known_tessera_versions(rel):
+                    updated.append(rel)
+                    if apply:
+                        shutil.copy2(ref[rel], project / rel)
+                else:
+                    customized.append(rel)
+            drifted = []
 
         # Copying .githooks/pre-commit without pointing git at it ships a hook git never runs
         # — the same half-shipment this tool exists to fix, committed by the tool itself.
@@ -193,8 +240,19 @@ def sync(project: Path, apply: bool, exclude: list[str] | None = None) -> int:
               f"{', '.join(shadowed)}")
         print("  Setting it would silently disable them. Merge by hand, then:")
         print("  git config core.hooksPath .githooks")
+    if updated:
+        print(f"\n{verb} {len(updated)} stale file(s) (byte-identical to a known tessera "
+              f"version, so provably not customized):")
+        for rel in updated:
+            print(f"  ^ {rel}")
+    if customized:
+        print(f"\n{len(customized)} differ and match NO tessera version — NOT touched, "
+              f"review by hand:")
+        for rel in customized:
+            print(f"  ! {rel}")
     if drifted:
-        print(f"\n{len(drifted)} present but DIFFERENT — not touched, review by hand:")
+        print(f"\n{len(drifted)} present but DIFFERENT — not touched (pass --update-stale "
+              f"to refresh the provably-unmodified ones):")
         for rel in drifted:
             print(f"  ~ {rel}")
     if not apply and (added or hooks_to_add):
@@ -206,6 +264,9 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Back-fill harness components into a project.")
     ap.add_argument("project", nargs="?", default=".", type=Path)
     ap.add_argument("--apply", action="store_true", help="write changes (default: dry run)")
+    ap.add_argument("--update-stale", action="store_true",
+                    help="also refresh files that are byte-identical to a known tessera "
+                         "version (provably not customized); never touches anything else")
     ap.add_argument("--exclude", action="append", default=[], metavar="SUBSTR",
                     help="skip components whose path contains SUBSTR (repeatable), "
                          "e.g. --exclude spend")
@@ -214,7 +275,7 @@ def main(argv: list[str] | None = None) -> int:
     if not (project / ".tessera" / "project.yml").is_file():
         print(f"not a Tessera project: {project}", file=sys.stderr)
         return 2
-    return sync(project, args.apply, args.exclude)
+    return sync(project, args.apply, args.exclude, args.update_stale)
 
 
 if __name__ == "__main__":

@@ -146,3 +146,60 @@ def test_hookspath_is_set_when_only_samples_exist(tmp_path):
     got = subprocess.run(["git", "-C", str(p), "config", "core.hooksPath"],
                          capture_output=True, text=True).stdout.strip()
     assert got == ".githooks"
+
+
+# --- --update-stale: the provenance proof ------------------------------------------------
+
+
+def test_known_versions_finds_historical_blobs():
+    """The proof this whole mode rests on: bytes that appear in tessera's history."""
+    versions = sh.known_tessera_versions("scripts/gate/emit.py")
+    assert len(versions) > 1, "emit.py has changed over time; history should show several"
+    current = sh._sha((REPO / "scripts" / "gate" / "emit.py").read_bytes())
+    assert current in versions, "the current file must match its own latest commit"
+
+
+def test_known_versions_checks_the_bin_path_too():
+    """scripts/tessera-escalate is copied from bin/tessera-escalate — the scaffold renames it,
+    so provenance must look under both shapes or every downstream copy reads as customized."""
+    assert sh.known_tessera_versions("scripts/tessera-escalate"), \
+        "must resolve via bin/<basename>"
+
+
+def test_update_stale_refreshes_a_provably_unmodified_file(tmp_path):
+    p = _project(tmp_path)
+    sh.sync(p, apply=True)                      # bring it up to date
+    target = p / "scripts" / "gate" / "emit.py"
+    current = target.read_bytes()
+
+    # Plant a genuine OLD tessera version — provably ours, just stale.
+    old = subprocess.run(["git", "-C", str(REPO), "log", "--format=%H", "--",
+                          "scripts/gate/emit.py"], capture_output=True, text=True).stdout.split()[-1]
+    old_blob = subprocess.run(["git", "-C", str(REPO), "show", f"{old}:scripts/gate/emit.py"],
+                              capture_output=True).stdout
+    target.write_bytes(old_blob)
+
+    sh.sync(p, apply=True, update_stale=True)
+    assert target.read_bytes() == current, "a provably-unmodified stale file must be refreshed"
+
+
+def test_update_stale_refuses_a_customized_file(tmp_path):
+    """The safety property. Bytes matching no tessera version were either customized or came
+    from somewhere this tool cannot vouch for — either way, not ours to overwrite."""
+    p = _project(tmp_path)
+    sh.sync(p, apply=True)
+    target = p / "scripts" / "gate" / "emit.py"
+    target.write_text("# downstream customization nobody upstream has ever seen\n")
+
+    sh.sync(p, apply=True, update_stale=True)
+    assert target.read_text() == "# downstream customization nobody upstream has ever seen\n", \
+        "must never overwrite content with no known provenance"
+
+
+def test_update_stale_off_by_default_leaves_stale_files(tmp_path):
+    p = _project(tmp_path)
+    sh.sync(p, apply=True)
+    target = p / "scripts" / "gate" / "emit.py"
+    target.write_text("# stale-ish\n")
+    sh.sync(p, apply=True)                      # no update_stale
+    assert target.read_text() == "# stale-ish\n"
