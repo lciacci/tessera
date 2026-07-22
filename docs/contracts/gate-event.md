@@ -175,11 +175,57 @@ auto-wire, override CLI — spec 14 B/C) is **shelved**, revisited only if a con
 coverage the anchor can't give; any resumption starts from `retro`-clean events only. Three tuning
 cycles on this instrument is the stop-loss line — see `_project_specs/14-should-fire-followons.md`.
 
+## Sibling event: `gate_disposition` (added 2026-07-22, conclave F-001)
+
+A **second** event type shares this log. It is not a gate and must never be counted as one.
+
+```jsonc
+{
+  "type": "gate_disposition",       // discriminator — NOT suggestion_gate
+  "ts": "2026-07-22T17:10:00Z",
+  "session_id": "<uuid>",
+  "source": "suggestion-gate-recorder",
+  "data": {
+    "verdict": "not-a-gate",        // only value today
+    "turn_ids": ["346e82bae6fd"],   // content hashes from scan.py's report
+    "note": "clarifying question, not a decision gate"   // optional
+  }
+}
+```
+
+**Why it exists.** The Stop-hook gate-scan over-counts by design — the model is the precision
+filter. But the ruling was discarded: turns already adjudicated as narration or a clarifying
+question were re-flagged on **every subsequent Stop**, so each Stop re-litigated closed decisions
+instead of surfacing what was new. Conclave hit this ~4× in one session (its F-001). Persisting
+the ruling makes adjudication **monotonic**. Detection is unchanged — the net stays exactly as
+wide, it just stops asking twice.
+
+**Keyed by content hash, not index.** `scan.turn_id()` is a sha256 prefix of the
+whitespace-normalized *whole* turn. Transcripts grow between Stops, so any positional key would
+slide; and hashing the 100-char preview rather than the whole turn would collide across this
+repo's many turns ending "…, OK to proceed?", silently suppressing a real gate.
+
+**Producer:** `scripts/gate/emit.py --not-a-gate --turn <id> [--turn <id> …] [--note "why"]`.
+Requires at least one `--turn` — a disposition with no target is a shrug, not a ruling.
+
+**Consumers must filter on `type`.** `scan.count_logged()` counts only `suggestion_gate`; a
+disposition inflating the logged count would mask a real miss. Same discipline the ratio.py /
+watch.jsonl fix required when this directory first held two event types.
+
+**Scope note.** Only the *skipped* set is subtracted from the detected set. Conclave's finding
+also proposed subtracting **fired** gates by identity, which is not possible today: a
+`suggestion_gate` event carries no reference to the turn that produced it, so fired gates remain
+a count. That is a deliberate smaller cut — it fully addresses the re-litigation complaint. Adding
+turn linkage to `suggestion_gate` would change this contract and all downstream copies; do it only
+if the count-based comparison proves insufficient.
+
+---
+
 ## Consumers
 
 - `tess-dashboard` — gate calibration panel. Computes the confusion matrix / precision / recall
   over (`fired` × `should_fire`). That math is consumer-side and documented in the dashboard,
-  not here.
+  not here. **Must filter on `type == "suggestion_gate"`** — see the sibling event above.
 
 ## Status of the producer
 

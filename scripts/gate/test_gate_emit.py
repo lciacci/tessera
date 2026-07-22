@@ -66,3 +66,34 @@ def demo() -> None:
 
 if __name__ == "__main__":
     demo()
+
+
+# --- conclave F-001: the disposition recorder -------------------------------------------
+
+import emit  # noqa: E402
+
+
+def test_not_a_gate_writes_a_disposition_event(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "s1")
+    assert emit.main(["--not-a-gate", "--turn", "abc123", "--turn", "def456",
+                      "--note", "both were clarifying questions"]) == 0
+    logged = json.loads((tmp_path / ".tessera/logs/s1.jsonl").read_text().strip())
+    assert logged["type"] == "gate_disposition"
+    assert logged["data"]["verdict"] == "not-a-gate"
+    assert logged["data"]["turn_ids"] == ["abc123", "def456"]
+
+
+def test_not_a_gate_requires_a_turn_id(tmp_path, monkeypatch):
+    """A disposition with no target is a shrug, not a ruling."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "s1")
+    assert emit.main(["--not-a-gate", "--note", "nope"]) == 2
+
+
+def test_fired_still_requires_kind(tmp_path, monkeypatch):
+    """--kind stopped being argparse-required so --not-a-gate could omit it; the
+    requirement must still hold for the gate paths."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "s1")
+    assert emit.main(["--fired", "--note", "x"]) == 2
