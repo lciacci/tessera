@@ -3,7 +3,8 @@
 #
 #   tessera-hooks status   # declared mode, filesystem reality, and CONTENT drift vs the global source
 #   tessera-hooks freeze    # pin local copies from ~/.claude/templates (ship-critical)
-#   tessera-hooks thaw      # drop local copies, ride the global single source
+#   tessera-hooks thaw [--patch-settings]   # drop local copies, ride the global single source
+#          --patch-settings: first rewrite pre-ADR-0004 local-only hook commands to two-tier
 #
 # Run from a Tessera project root. The `.sh` scripts are the drift surface;
 # settings.json is per-project and carries the local→global fallback branch.
@@ -93,7 +94,17 @@ case "${1:-status}" in
     ;;
   thaw)
     [ "$distro" = source ] && { echo "refuse: this repo is the hook 'source' — cannot thaw the framework itself" >&2; exit 1; }
-    settings_has_fallback || { echo "refuse: $SETTINGS lacks the local→global fallback branch — thaw would silently disable every mnemos hook. Add the fallback (see ADR-0004) first." >&2; exit 1; }
+    # Grandfathered repos (scaffolded pre-ADR-0004) carry LOCAL-ONLY hook commands. Thawing
+    # those deletes the scripts and leaves nothing to resolve — every hook exits 0, silently,
+    # while still looking wired in settings.json. --patch-settings rewrites them to the
+    # two-tier form first. This is the auto-patch ADR-0004 deferred and named the trigger for:
+    # "first real thaw of a grandfathered repo". Fired 2026-07-22 on tess-dashboard.
+    if [ "${2:-}" = "--patch-settings" ] && ! settings_has_fallback; then
+      echo "patching $SETTINGS with the local→global fallback first..."
+      python3 "$(dirname "${BASH_SOURCE[0]}")/../scripts/hooks/patch_settings.py" "$SETTINGS" \
+        || { echo "refuse: settings patch failed — not thawing" >&2; exit 1; }
+    fi
+    settings_has_fallback || { echo "refuse: $SETTINGS lacks the local→global fallback branch — thaw would silently disable every mnemos hook. Re-run as: tessera-hooks thaw --patch-settings" >&2; exit 1; }
     rm -f "$SCR"/mnemos-*.sh
     set_distro global
     echo "thawed: dropped local copies, now riding $TPL"

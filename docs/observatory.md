@@ -376,13 +376,27 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   per file against `~/.claude/templates`, skipping `source` repos (where the comparison is
   circular). Guarded by doccheck `hooks-status-compares-content`, which was verified to go red
   when the byte comparison is removed.
-- **ADR-0004's re-evaluate trigger "first real thaw of a grandfathered repo (build the settings
-  auto-patch then)" HAS NOW FIRED.** tess-dashboard cannot be thawed: all 7 of its hook commands
-  are local-only (`if [ -x .claude/scripts/X ]; then exec X; fi`) with no global branch, and its
-  `statusLine` is a bare local path — the pre-`eb21914` shape this entry calls "the literal root
-  cause". `tessera-hooks thaw` correctly refuses rather than silently disabling every hook. The
-  auto-patch ADR-0004 deferred is now the thing standing between a grandfathered repo and the
-  single-source end-state. **Open.**
+- **ADR-0004's deferred settings auto-patch is BUILT, and F-003 is closed (2026-07-22).** The
+  trigger — *"first real thaw of a grandfathered repo (build the settings auto-patch then)"* —
+  fired on tess-dashboard, whose 7 hook commands were all local-only
+  (`if [ -x .claude/scripts/X ]; then exec X; fi`) with `statusLine` a bare local path, the
+  pre-`eb21914` shape this entry calls "the literal root cause". `thaw` correctly refused rather
+  than silently disabling every hook.
+  `scripts/hooks/patch_settings.py` rewrites those to the two-tier form;
+  `tessera-hooks thaw --patch-settings` runs it first. It **refuses on any command shape it does
+  not recognise** rather than guessing — a settings patcher that guesses is worse than one that
+  stops — and leaves non-mnemos hooks (gate-scan, spend) alone, since those are project-local by
+  design. 8 tests, including idempotence and that a refusal leaves the file byte-identical.
+  **All three frozen repos are now `global`.** howler was thawed too, mid-iOS-ship, on the
+  reasoning that mnemos hooks are *dev-time instrumentation that never enters the app binary* —
+  the only exposure is a wedged dev session, and it was already running the stale hook that drops
+  compaction events. One command (`tessera-hooks freeze`) reverts it.
+  **`frozen` now has zero users**, so the propagation-mechanism question that opened this
+  discussion evaporates rather than needing an answer: with no local copies anywhere, there is
+  nothing to propagate *to*. The capability stays for the next genuinely ship-critical freeze —
+  and the lesson stays with it: **record the reason in `project.yml`.** howler's was the only
+  freeze rationale ever written down, and it was the only one that survived review.
+  **P4 is green.**
 - **Status:** Adopted → ADR-0004; **re-opened** on the authoring-propagation gap
 - **When to revisit:** per ADR-0004's re-evaluate triggers — first real `thaw` of a grandfathered repo (build the settings auto-patch then), a `global` project found silently dead on a machine, or project count crossing ~4–5 with several still `frozen`. **Added trigger (now):** teach `bin/tessera-hooks status` to diff `.claude/scripts/` ↔ `templates/` ↔ `~/.claude/templates/` by content and report drift, or make `templates/` a symlink/generated artifact rather than a hand-maintained third copy. Until one of those lands, every hook edit needs a manual three-way sync — which is precisely the failure mode that produced this entry.
 
