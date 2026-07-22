@@ -21,17 +21,25 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
 1. **Spec 11 — fail-open sweep.** Now the top item; F-001 is done and it warmed up the same
    `scripts/gate/` code. Scope is fixed in the spec: five components, ~15 sites, **chaos tests
    FIRST**. Its new predicate is **P13** (P10 retired, P11/P12 taken).
-2. **P4 is red and G-a with it** — 3 stale `mnemos-pre-compact.sh` in heaviside/howler/
-   tess-dashboard. Still not synced: deliberately frozen ship-critical repos, owners' call.
-   Either sync (`tessera-hooks thaw && tessera-hooks freeze` in each) or snooze. **G-a's "3
-   consecutive runs" straddles the P4 rewrite**, so it is counting two different predicates
-   as one — worth knowing before treating the number as meaningful.
+2. ~~**P4 red**~~ **DONE — P4 is GREEN.** All three frozen repos thawed to `global`
+   (heaviside `2319e24`, tess-dashboard `abecbf4`, howler `b274055`), unblocked by ADR-0004's
+   settings auto-patch built the same day (`2fbeed3`). **`frozen` now has zero users.**
+   **G-a still fires and that is correct** — it reads the fire-log (`watch.jsonl`), whose last
+   3 *logged* runs predate the fix. Its docstring says so ("the log is the tail, not now"). It
+   self-clears after 3 more SessionStart-logged runs. Do not "fix" it.
 3. **Third hook layer still unchecked** — nothing compares `templates/` ↔ `~/.claude/templates/`,
-   the layer `install.sh` writes.
-4. **Consider flipping sqlfluff to blocking per project** once a project's `.sqlfluff` is tuned
-   enough that findings are real (change `lint.sh`'s final `exit 0` → `exit 1`). Do NOT do this
-   while false positives remain. settempo is not there yet — its RF05/PG01 hits are wrong.
-5. Trim backlog (ADR-0008); minors: uuid prefix-resolve, historical `--reclassify --all`.
+   the layer `install.sh` writes. P4 covers downstream↔global; doccheck `hooks-match-templates`
+   covers `templates/`↔`.claude/scripts/`. This is the last uncovered seam.
+4. **No back-fill mechanism for scaffold components.** Found while thawing: tess-dashboard has
+   **no `tessera-gate-scan.sh` at all** — never tracked (0 commits), because it was scaffolded
+   before the gate backstop existed, and nothing back-fills new harness components into existing
+   projects. Its gate recorder therefore ships without its backstop, which is the "ship both
+   halves or neither" rule violated by *time* rather than by a missing `cp`. The settings
+   auto-patch is the same shape, solved for one component. Worth a general answer.
+5. **Consider flipping sqlfluff to blocking per project** once its `.sqlfluff` is tuned enough
+   that findings are real (`lint.sh` final `exit 0` → `exit 1`). settempo is NOT there — its
+   RF05/PG01 hits are wrong.
+6. Trim backlog (ADR-0008); minors: uuid prefix-resolve, historical `--reclassify --all`.
 
 ### What happened
 
