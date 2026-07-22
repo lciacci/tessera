@@ -6,7 +6,71 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-07-22: F-001 closed, sqlfluff adopted, findings backlog empty)
+## Handoff — pick up here (2026-07-22: F-001 closed, sqlfluff adopted, fleet harness current)
+
+*(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
+Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering.)*
+
+### THE ONE THING TO KNOW
+**Every downstream is now on the current harness, and `frozen` has zero users.** Tessera
+suite green (231 top-level), doccheck 21/21, watch quiet but for snoozed P7, findings
+backlog empty, no escalations, all six repos' trees clean.
+
+### Open, in priority order
+
+1. **howler spend guard — do it IN a howler session.** The only remaining fleet gap (9 files).
+   Deferred on purpose: it adds a `PreToolUse` hook that **denies Bash by default**, and howler
+   is mid-iOS-ship. The only way to learn whether it blocks a build, upload or signing step is
+   to be in howler running those commands. Then:
+   `tessera-sync-harness ~/Claude/howler --apply` (drop `--exclude spend`).
+   Have `tessera-authorize` ready before any spend-committing command.
+2. **Spec 11 — fail-open sweep.** The standing top framework item. Five components, ~15 sites,
+   **chaos tests FIRST** — the spec is emphatic and right about why. New predicate is **P13**
+   (P10 retired, P11/P12 taken). Its thesis got a *third* live confirmation on 07-21.
+3. **Third hook layer still unchecked** — nothing compares `templates/` ↔ `~/.claude/templates/`,
+   the layer `install.sh` writes. P4 covers downstream↔global; doccheck `hooks-match-templates`
+   covers `templates/`↔`.claude/scripts/`. Last uncovered seam.
+4. **Gate log splits across repos.** `emit.py` writes `.tessera/logs/` **relative to cwd**, so a
+   session spanning two repos splits its log and each repo's scan under-counts. Hit live during
+   the settempo adoption. Same file as F-001, different cause.
+5. **Consider flipping sqlfluff to blocking per project** once a `.sqlfluff` is tuned enough that
+   findings are real (`lint.sh` final `exit 0` → `exit 1`). settempo is NOT there — its RF05/PG01
+   hits are wrong.
+6. **G-a fires and that is correct** — it reads the fire-log tail, not current state. Self-clears
+   after 3 more logged runs. Do not "fix" it.
+7. Trim backlog (ADR-0008); minors: uuid prefix-resolve, historical `--reclassify --all`.
+
+### What happened (2026-07-22)
+
+- **conclave F-001 closed** (`a7ba928`) — gate-scan content-addresses asking turns and subtracts
+  turns ruled not-a-gate. Narrower than the finding asked: fired gates stay a *count*, because a
+  `suggestion_gate` carries no reference to the turn that produced it.
+- **sqlfluff adopted warn-only** (`e7162d4`, **ADR-0012 supersedes ADR-0011**). 0011 answered the
+  wrong question — whether sqlfluff finds defects in settempo's SQL *today*, rather than whether
+  the framework should carry the capability.
+- **F-003 closed.** P4 rewritten to diff bytes; `tessera-hooks status` now compares content;
+  ADR-0004's deferred settings auto-patch built; **all three frozen repos thawed**.
+- **`tessera-sync-harness` built** — the fleet was silently behind by *time*, not by a missing
+  `cp`. tess-dashboard had no gate harness at all.
+
+### The through-line, and it is now the framework's most-repeated bug
+**A component ships, and the thing that would tell you it is broken is also broken.** Six
+instances now: F-001's interpreter, the dead ingest pipe, the falsifier's swallowed spawn
+failure, P4 counting projects instead of bytes, `tessera-hooks status` advertising a drift check
+it never performed, and the fleet quietly running a retired gate vocabulary. **Spec 11 is the
+systematic answer and it is item 2 for a reason.**
+
+Second, smaller: **name the pain, not the artifact that correlates with it** — retired-P2 (verb
+count), old-P4 (project count), the sqlfluff trigger (file existence). Three proxy predicates.
+
+### Cross-repo cautions learned the hard way
+- A `git add -A` in settempo swept up **another session's** uncommitted edits. Caught only by
+  reading the diff. Check `git status` before staging in a downstream; prefer explicit paths.
+- Before committing in a downstream, check whether someone is working in it.
+
+---
+
+## ═══ SESSION 2026-07-22 (earlier) — F-001 closed, sqlfluff adopted, findings backlog empty ═══
 
 *(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
 Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering.)*
@@ -30,12 +94,14 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
 3. **Third hook layer still unchecked** — nothing compares `templates/` ↔ `~/.claude/templates/`,
    the layer `install.sh` writes. P4 covers downstream↔global; doccheck `hooks-match-templates`
    covers `templates/`↔`.claude/scripts/`. This is the last uncovered seam.
-4. **No back-fill mechanism for scaffold components.** Found while thawing: tess-dashboard has
-   **no `tessera-gate-scan.sh` at all** — never tracked (0 commits), because it was scaffolded
-   before the gate backstop existed, and nothing back-fills new harness components into existing
-   projects. Its gate recorder therefore ships without its backstop, which is the "ship both
-   halves or neither" rule violated by *time* rather than by a missing `cp`. The settings
-   auto-patch is the same shape, solved for one component. Worth a general answer.
+4. ~~**No back-fill mechanism for scaffold components.**~~ **DONE — `bin/tessera-sync-harness`
+   (`401e0cf`, `df92cfe`, `c833edc`).** The whole fleet is current. It scaffolds a reference
+   project with the real `tessera-new-project` and diffs against it, so it carries no second
+   definition of "what the harness is" to drift from the scaffold. `--update-stale` refreshes
+   files **only** when they are byte-identical to a commit in tessera's history — a proof of
+   non-customization, not a judgement. `--exclude <substr>` skips a component (built for the
+   spend guard). Sets `core.hooksPath`, but refuses when real `.git/hooks` would be shadowed.
+   16 tests. **Only howler's spend guard remains, deliberately — see below.**
 5. **Consider flipping sqlfluff to blocking per project** once its `.sqlfluff` is tuned enough
    that findings are real (`lint.sh` final `exit 0` → `exit 1`). settempo is NOT there — its
    RF05/PG01 hits are wrong.

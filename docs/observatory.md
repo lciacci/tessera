@@ -397,6 +397,26 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   and the lesson stays with it: **record the reason in `project.yml`.** howler's was the only
   freeze rationale ever written down, and it was the only one that survived review.
   **P4 is green.**
+- **The sibling gap, found the same day and closed: nothing back-filled the harness either
+  (2026-07-22, `bin/tessera-sync-harness`).** ADR-0004's freeze/thaw story was about hook
+  *scripts*; the same silence covered every other harness component. `tessera-new-project` ships
+  the harness once and nothing ever revisits it, so each component added later existed only in
+  projects scaffolded after it. Measured: **tess-dashboard had no gate harness at all** — no
+  `emit.py`, no `scan.py`, no `tessera-gate-scan.sh`, no wiring — so every gate there rode pure
+  model recall with no backstop, the ~85% miss rate this observatory measured. howler had no
+  spend guard. All four pre-settempo repos ran a **retired gate vocabulary** (no `KINDS` enum
+  from spec 15, no `turn_id` from F-001). *"Ship both halves or neither" violated by **time**
+  rather than by a missing `cp`* — and the scaffold gained two components that same day, so it
+  recurs by construction.
+  Two design points worth keeping. **The tool diffs against a reference project scaffolded by
+  the real `tessera-new-project`**, so it carries no second definition of "what the harness is" —
+  a hardcoded list would be F-003's own shape inside the tool built to clean it up. And
+  `--update-stale` is gated on a **proof, not a judgement**: a file is refreshed only if its
+  bytes match some commit in tessera's history, which demonstrates it was never customized
+  downstream. That check turned "a per-file decision across three sessions" into one mechanical
+  update — all three stale repos held byte-identical copies of the same two old commits.
+  Fleet is current. Only howler's spend guard is outstanding, deliberately (deny-by-default
+  hook, mid-iOS-ship; belongs in a howler session).
 - **Status:** Adopted → ADR-0004; **re-opened** on the authoring-propagation gap
 - **When to revisit:** per ADR-0004's re-evaluate triggers — first real `thaw` of a grandfathered repo (build the settings auto-patch then), a `global` project found silently dead on a machine, or project count crossing ~4–5 with several still `frozen`. **Added trigger (now):** teach `bin/tessera-hooks status` to diff `.claude/scripts/` ↔ `templates/` ↔ `~/.claude/templates/` by content and report drift, or make `templates/` a symlink/generated artifact rather than a hand-maintained third copy. Until one of those lands, every hook edit needs a manual three-way sync — which is precisely the failure mode that produced this entry.
 
