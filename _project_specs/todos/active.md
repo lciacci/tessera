@@ -6,7 +6,64 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-07-21: settempo adopted, three fail-opens closed, ADR-0011)
+## Handoff — pick up here (2026-07-22: F-001 closed, sqlfluff adopted, findings backlog empty)
+
+*(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
+Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering.)*
+
+**COMMITTED: `c626418` docs/handoff + spec 11, `a7ba928` gate disposition memory (F-001),
+`e7162d4` sqlfluff warn-only (ADR-0012). Downstream: conclave `586cd8d`, settempo `78d3f96`
++ `f93c0d6`. Suite green (215 top-level), doccheck 20/20, tree clean, no escalations,
+**findings backlog empty across all 5 projects**.**
+
+### Next session — start here
+
+1. **Spec 11 — fail-open sweep.** Now the top item; F-001 is done and it warmed up the same
+   `scripts/gate/` code. Scope is fixed in the spec: five components, ~15 sites, **chaos tests
+   FIRST**. Its new predicate is **P13** (P10 retired, P11/P12 taken).
+2. **P4 is red and G-a with it** — 3 stale `mnemos-pre-compact.sh` in heaviside/howler/
+   tess-dashboard. Still not synced: deliberately frozen ship-critical repos, owners' call.
+   Either sync (`tessera-hooks thaw && tessera-hooks freeze` in each) or snooze. **G-a's "3
+   consecutive runs" straddles the P4 rewrite**, so it is counting two different predicates
+   as one — worth knowing before treating the number as meaningful.
+3. **Third hook layer still unchecked** — nothing compares `templates/` ↔ `~/.claude/templates/`,
+   the layer `install.sh` writes.
+4. **Consider flipping sqlfluff to blocking per project** once a project's `.sqlfluff` is tuned
+   enough that findings are real (change `lint.sh`'s final `exit 0` → `exit 1`). Do NOT do this
+   while false positives remain. settempo is not there yet — its RF05/PG01 hits are wrong.
+5. Trim backlog (ADR-0008); minors: uuid prefix-resolve, historical `--reclassify --all`.
+
+### What happened
+
+- **conclave F-001 closed** (`a7ba928`). Gate-scan now content-addresses each asking turn
+  (sha256 of the whole normalized turn — not the preview, which collides across this repo's
+  many turns ending "…OK to proceed?"; not an index, which slides as transcripts grow) and
+  subtracts turns ruled not-a-gate via `emit.py --not-a-gate --turn <id>` → a `gate_disposition`
+  event. Detection is unchanged; it just stops asking twice. **Deliberately narrower than the
+  finding asked:** it also proposed subtracting *fired* gates by identity, which is impossible
+  today — a `suggestion_gate` carries no reference to the turn that produced it. Condition for
+  revisiting is in `docs/contracts/gate-event.md`.
+- **sqlfluff adopted warn-only** (`e7162d4`, **ADR-0012 supersedes ADR-0011**). ADR-0011 was one
+  day old and not wrong on its facts — it answered the wrong question, evaluating whether
+  sqlfluff finds defects in settempo's SQL today rather than whether the framework should carry
+  the capability. Lorenzo's disposition; #12 is *Claude proposes, user disposes*. Ships as
+  `scripts/sql/lint.sh` + `.sqlfluff` (`exclude_rules = layout`) + on-demand skill + a downstream
+  `.githooks/pre-commit` and `core.hooksPath` — **caught mid-build that downstream projects had
+  no pre-commit hook at all**, so the gate would have shipped with nothing invoking it.
+- **A gate-log split worth fixing.** `emit.py` writes to `.tessera/logs/` **relative to cwd**, so
+  a session working across two repos splits its gate log and each repo's scan under-counts by
+  whatever was logged in the other. Hit live this session (the settempo adoption gate). Belongs
+  next to the gate-scan work — same file, different cause from F-001.
+
+### Cross-repo caution learned the hard way
+A `git add -A` in settempo swept up CLAUDE.md edits that were **not mine** — another session was
+working in that repo concurrently. Caught before committing, but only by reading the diff.
+**Check `git status` for unexpected modifications before staging in a downstream repo**, and
+prefer explicit paths over `-A` when another session may be live.
+
+---
+
+## ═══ SESSION 2026-07-21 — settempo adopted, three fail-opens closed, ADR-0011 ═══
 
 *(This heading is load-bearing: `.claude/scripts/tessera-watch-surface.sh` greps
 `^## Handoff — pick up here` at SessionStart. Newest section carries it; guarded by doccheck
