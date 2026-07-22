@@ -6,7 +6,95 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-07-20: eval → specs 14/15/16 closed, dead pipe fixed, P10 adjudicated)
+## Handoff — pick up here (2026-07-21: settempo adopted, three fail-opens closed, ADR-0011)
+
+*(This heading is load-bearing: `.claude/scripts/tessera-watch-surface.sh` greps
+`^## Handoff — pick up here` at SessionStart. Newest section carries it; guarded by doccheck
+`handoff-heading-is-current`.)*
+
+**COMMITTED: `491b330` install worktree guard, `2ff424b` scaffold findings channel, `49b4bbc`
+verify fail-open, `f1fbde1` P4 byte-drift, `17d69ee` ADR-0011 sqlfluff. Plus settempo `7e13bf8`
+(harness adoption). Suite green (212 top-level), doccheck 20/20, tree clean, no open escalations.**
+
+### Next session — start here
+
+1. **Conclave F-001 — gate-scan disposition memory. CLOSEABLE IN ONE SESSION** (sized 07-22, see
+   below). The only open finding, and it pairs with #2.
+2. **Spec 11 — fail-open sweep.** Its thesis got a *third* live confirmation this session (the
+   verify fail-open below). Scope is fixed in the spec: five components, ~15 sites, chaos tests
+   FIRST. **Do not build the mechanism first** — the spec says why, in bold, and it is right.
+   Note the spec calls its new predicate "P10"; that number is taken (retired haziness trigger)
+   and P11/P12 exist — the next free one is **P13**.
+3. **The third hook layer is still unchecked.** P4 now covers downstream↔`~/.claude/templates`;
+   doccheck `hooks-match-templates` covers `templates/`↔`.claude/scripts/`. **Nothing covers
+   `templates/` ↔ `~/.claude/templates/`** — the layer `install.sh` writes, and the layer that
+   armed the latent regression in the F-003 entry.
+4. **P4 is red on real drift:** 3 stale `mnemos-pre-compact.sh` in heaviside/howler/tess-dashboard.
+   Deliberately not synced — frozen ship-critical repos, owners' call. **G-a also fires** (P4 3
+   consecutive runs), but those runs straddle the predicate rewrite, so it is counting two
+   different predicates as one. Resolve by syncing, or snooze.
+5. Trim backlog (ADR-0008, unblocked by ADR-0010); minors: uuid prefix-resolve, historical
+   `--reclassify --all`, skill-profiles refine.
+
+### What happened — an adoption that turned into three fail-open fixes
+
+Started as "should settempo become a downstream?". Answer was *defer* — until Lorenzo said a
+session was starting, which flipped it. Wiring it surfaced bugs in the framework, not settempo.
+
+- **A. `tessera-verify` was poisoning `~/.local/bin`.** It spawns a verifier in a temp worktree;
+  when that agent ran `./install.sh`, line 130's `ln -sf "$root/.venv/bin/$c"` aimed the machine's
+  console scripts at the worktree, which was then reaped. **All four (mnemos, icpg, polyphony,
+  skill-lint) were dangling** into a deleted `/var/folders/.../tessera-verify-0iipykaq`. Tessera
+  never noticed — its hooks try `.venv/bin/mnemos` before `command -v` — but settempo has no
+  `.venv`, so it would have inherited F-001 on day one. Guard now lives in `install.sh` (protects
+  every caller, not just tessera-verify): skip the global link when `$root/.git` is a *file*
+  (linked worktree). Verified end-to-end, including under a real `tessera-verify` run.
+- **B. The falsifier was failing open, inside the tool built to catch fail-opens.**
+  `spawn_verifier` did `return result.stdout` and discarded returncode + stderr, so a spawn that
+  never ran became `NO_VERDICT` — and `scripts/verify/scan.py` counted *any* verification event as
+  a disposition. **A verifier that never ran was silencing its own Stop-hook backstop.** Fixed at
+  three layers + `raw_excerpt` so `NO_VERDICT` is diagnosable. *Skip is a decision; `spawn_error`
+  is an accident. Only decisions disposition.*
+  **Wrong turn worth recording:** I attributed the first `NO_VERDICT`s to the permission classifier
+  blocking the nested `claude -p`. That was a guess stated with too much confidence and it was
+  **wrong** — tessera-verify runs fine from inside a session; the failures were transient. An
+  escalation was raised and resolved on the corrected facts.
+- **C. Scaffold shipped a *missing* findings channel.** `docs/contracts/findings.md` says every
+  project carries `docs/FINDINGS.md` and that empty ≠ missing — but `tessera-new-project` never
+  created it. All four prior downstreams had it *by hand*. A contract with a producer requirement
+  and no producer.
+- **D. P4 measured the wrong thing** — `len(downstream_projects) >= 5`. settempo (`global`, 0 local
+  copies) tripped it while adding zero drift surface. Now diffs bytes and **names the file**; first
+  run found 3 genuinely stale hooks the count predicate never saw and never would. It can also go
+  *green*, which the old one could not.
+- **E. ADR-0011 sqlfluff — Watching.** Trigger fired (settempo has standalone `.sql`), evidence said
+  no: **206 violations, 0 actionable** (89% layout; the 21 survivors are idiomatic Supabase RLS
+  names, `CONCURRENTLY` demanded on a fresh-install script, and a column named `date`). Zero
+  `SELECT`s — pure write-once DDL.
+
+### The through-line, and it is now a rule
+
+**D and E are the same bug as retired-P2: a predicate firing correctly on a proxy that tracks no
+real pain.** Three instances now. Stated in ADR-0011 as: ***name the pain, not the artifact that
+correlates with it.*** Corollary learned the same day: a naive `find -name "*.sql"` would have
+false-fired on conclave for months (130 vendored litellm migrations under `harness/venv`, **0
+tracked by git**) — **use `git ls-files`, never `find`.**
+
+**A, B and the 07-20 dead ingest pipe are all spec 11's thesis**: the instrument lied quietly, and
+only ground-truth poking found it. Three in a week, each found by accident. That is the argument
+for sweeping deliberately rather than waiting for the fourth.
+
+### Also
+- **settempo** is the framework's **first adoption of a pre-existing repo** — the other five were
+  all greenfield (the scaffold commit is commit #1 in each). `tessera-new-project --adopt` was
+  *not* built: n=1, so there is nothing yet to generalize from. Build it on the second adoption.
+  Procedure used is in `7e13bf8`'s message.
+- settempo is the first downstream with auth + SQL + user input, so the first place the universal
+  profile's `security` skill has real surface.
+
+---
+
+## ═══ SESSION 2026-07-20 — eval → specs 14/15/16 closed, dead pipe fixed, P10 adjudicated ═══
 
 *(This heading is load-bearing: `.claude/scripts/tessera-watch-surface.sh` greps
 `^## Handoff — pick up here` at SessionStart. The `## ═══ SESSION` style used 07-17→07-19 silently

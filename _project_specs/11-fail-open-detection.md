@@ -7,6 +7,18 @@ applied to one pipe: a per-run trace (`claude_sessions.classifier_status`) + a l
 (`tessera-watch` P11, including the transcripts-vs-store diff that catches crash-before-write —
 the shape no status column can see). The systematic sweep across the OTHER fail-open paths
 (hooks, spend guard, gate scan, escalations) remains this spec's open scope.
+
+**Third confirmation, 2026-07-21 (`49b4bbc`) — and it landed in the adversarial verifier itself.**
+`bin/tessera-verify`'s `spawn_verifier` did `return result.stdout`, discarding returncode and
+stderr; a spawn that never ran returned `""` and rendered as `NO_VERDICT`. Worse,
+`scripts/verify/scan.py` counted *any* `verification` event as a disposition — so **a verifier
+that never executed silenced the Stop-hook backstop built to catch unverified "it's fixed"
+claims.** Found by accident (two claims came back `NO_VERDICT` with no explanation), not by any
+detector. Fixed at three layers, plus `raw_excerpt` so an unparseable answer is diagnosable.
+*The distinction this spec turns on, again: a spawn failure is "I could not do my job", and it
+was being treated as "nothing to do."* Three live instances in eight days — F-001's interpreter,
+the dead ingest pipe, and now the falsifier — **every one found by accident.** That is the case
+for sweeping deliberately instead of waiting for the fourth.
 **Priority:** Tier 1. It gates the trustworthiness of every other verdict the framework produces.
 **Effort:** Small mechanism, medium substance. One focused session, possibly two.
 **Source:** `docs/observatory.md` → "Fail-open everywhere — Tessera cannot tell you when it is broken"
@@ -108,8 +120,10 @@ RED *before* any mechanism exists.
 - **`tessera-degraded`** — a helper that appends a `degraded` event to
   `.tessera/logs/<session>.jsonl`. Same shape as the gate/spend events; **the channel already
   exists**, so this is ~20 lines and no new concepts.
-- **`tessera-watch` P10** — fires on any `degraded` event. ~15 lines. The SessionStart surface
-  already prints watcher output, so surfacing is free.
+- **`tessera-watch` P13** — fires on any `degraded` event. ~15 lines. The SessionStart surface
+  already prints watcher output, so surfacing is free. *(Was written as "P10" — that number was
+  taken by the haziness-band trigger, which fired and was retired on 2026-07-20, and P11/P12
+  have since landed. Next free number is P13. Corrected 2026-07-22.)*
 
 ### 3. Classify the ~15 bail-outs inside those five components
 
