@@ -902,6 +902,52 @@ def check_no_upstream_clone_instructions() -> list[str]:
     return sorted(set(bad))
 
 
+def check_tessera_tools_are_documented() -> list[str]:
+    """Every `bin/tessera-*` tool must be named somewhere in CLAUDE.md.
+
+    CLAUDE.md's Commands section is the agent's index of what exists. A tool absent from it is
+    a tool nobody reaches for — including the model that most needs it.
+
+    Found 2026-07-22 the way six prior doc-drift bugs were found: Lorenzo asked "anything
+    stale?". FIVE of eleven tools were undocumented — tessera-hooks, tessera-new-project,
+    tessera-sync-harness, tessera-sync-skills, tessera-changelog — two of them written that
+    same day. CLAUDE.md's standing rule is that a doc-drift bug a human finds becomes an
+    assertion here; this is that assertion, and it covers the whole class rather than the five
+    instances, so the next tool added cannot go undocumented quietly.
+    """
+    claude_md = ROOT / "CLAUDE.md"
+    bindir = ROOT / "bin"
+    if not claude_md.is_file() or not bindir.is_dir():
+        return []
+    body = claude_md.read_text()
+    missing = sorted(
+        t.name for t in bindir.glob("tessera-*")
+        if t.is_file() and t.name not in body
+    )
+    if missing:
+        return [f"CLAUDE.md: {len(missing)} bin/ tool(s) undocumented — "
+                f"{', '.join(missing)} (add to the Commands section)"]
+    return []
+
+
+def check_downstream_template_names_the_findings_channel() -> list[str]:
+    """The scaffolded CLAUDE.md must tell a downstream agent its findings channel exists.
+
+    `tessera-new-project` ships docs/FINDINGS.md, and the findings contract calls it the
+    downstream-to-framework channel — but until 2026-07-22 the CLAUDE.md template never
+    mentioned it. A channel the agent is never told about collects nothing: shipping the file
+    without the instruction is the "ship both halves" rule violated in documentation.
+    """
+    tpl = ROOT / "templates" / "tessera" / "CLAUDE.md.template"
+    if not tpl.is_file():
+        return []
+    body = tpl.read_text()
+    if "FINDINGS.md" not in body:
+        return ["templates/tessera/CLAUDE.md.template: never mentions docs/FINDINGS.md — "
+                "scaffolded projects ship a findings channel their agent is never told about"]
+    return []
+
+
 def check_hooks_status_really_compares_content() -> list[str]:
     """`tessera-hooks status` must actually compare bytes, since its header says it does.
 
@@ -1073,6 +1119,8 @@ CHECKS = {
     "skill-profiles-names-are-installed": check_skill_profiles_names_are_installed,
     "hooks-match-templates": check_hooks_match_templates,
     "hooks-status-compares-content": check_hooks_status_really_compares_content,
+    "tessera-tools-are-documented": check_tessera_tools_are_documented,
+    "template-names-findings-channel": check_downstream_template_names_the_findings_channel,
     "no-upstream-clone-instructions": check_no_upstream_clone_instructions,
     "adr-index-complete": check_adr_index_complete,
     "compaction-threshold-qualified": check_compaction_threshold_qualified,

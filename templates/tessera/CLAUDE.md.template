@@ -66,11 +66,38 @@ it, don't re-derive. If no checkpoint fires on resume but `.mnemos/` exists, run
 
 Requires the `mnemos` CLI on PATH (pip-installed globally). Hooks degrade gracefully without it.
 
+## Findings channel — how friction gets back to the framework
+
+`docs/FINDINGS.md` is this project's channel to Tessera. When the *framework* gets in your way
+here — a hook that misfires, a guard that blocks the wrong thing, a convention that does not fit
+this stack — write it up as `## F-NNN — Title` with a `**Status:**` line
+(`open` | `transferred:<ref>` | `rejected:<reason>`).
+
+It is scanned by `tessera-findings` and surfaced in the framework's SessionStart, so an open
+finding is seen without anyone remembering to look. **An empty channel is meaningfully different
+from a missing file** — the scanner distinguishes them, so never delete it when it has no
+findings.
+
+Framework-level fixes land in the Tessera repo, not here. This file is where they get staged.
+
+## SQL
+
+If this project has `.sql` files, `scripts/sql/lint.sh` runs from `.githooks/pre-commit`
+(ADR-0012). It is **warn-only** and silent unless the commit stages `.sql`, so it costs nothing
+in projects without any — but it does shout if sqlfluff cannot run at all, because a linter that
+silently skips looks exactly like one that passed.
+
+Set `dialect` in `.sqlfluff` — the shipped default is `ansi`, and guessing wrong makes every rule
+lie. `exclude_rules = layout` is deliberate: stock sqlfluff output measured 89% whitespace on the
+first real corpus. To make it blocking once findings are genuinely real, change the script's
+final `exit 0` to `exit 1` — not before, since a gate that cries wolf gets bypassed.
+
 ## Don't
 
 - Don't modify `.env` / `.env.*` (also denied in settings.json)
 - Don't add dependencies without checking existing ones cover the need
 - Don't commit secrets
+- Don't delete `docs/FINDINGS.md` when it is empty — empty ≠ missing
 
 ## Commands
 
