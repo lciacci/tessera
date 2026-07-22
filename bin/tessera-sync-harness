@@ -1,0 +1,179 @@
+#!/usr/bin/env python3
+"""Back-fill harness components into an EXISTING Tessera project.
+
+THE GAP THIS CLOSES. `tessera-new-project` ships the harness at scaffold time and nothing ever
+revisits it. Every component added later exists only in projects scaffolded after it. Measured
+2026-07-22 across the fleet:
+
+  tess-dashboard  no gate harness AT ALL — no emit.py, no scan.py, no gate-scan hook, no escalate
+  howler          no spend guard (scripts or hook wiring)
+  all four pre-settempo repos   no remap_kind.py — so their test_gate_emit.py imports a module
+                  that does not exist and their gate suite is simply broken
+  all four        no SQL gate (shipped today)
+
+That is "ship both halves or neither" violated by TIME rather than by a missing `cp`. The
+scaffold gained two components today alone, so this recurs by construction.
+
+WHY IT SCAFFOLDS A REFERENCE PROJECT INSTEAD OF LISTING FILES. A hardcoded list here would be a
+second definition of "what the harness is", drifting from `tessera-new-project` the moment
+either changes — which is F-003's exact shape, one layer up, and the thing this tool exists to
+clean up. Instead it runs the real scaffold into a temp dir and diffs against that. The scaffold
+stays the single source of truth; this tool cannot disagree with it.
+
+SAFETY: only ever ADDS. Never overwrites a file that exists, never touches project-identity
+files, and reports drifted-but-present files rather than "fixing" them — a project may have
+customized deliberately, and overwriting unread content is exactly what the base skill forbids.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+TESSERA_ROOT = Path(__file__).resolve().parent.parent
+
+# Files the scaffold writes that belong to the PROJECT, not the harness. Never back-fill these:
+# they carry identity (name, description, test command, findings) or are merged, not copied.
+# NOTE: .sqlfluff is deliberately NOT here. It is a harness default (the scaffold ships one),
+# and lint.sh without it runs stock rules = 89% whitespace noise — the broken half. Projects
+# that already have one keep it, because this tool only ever adds.
+IDENTITY = {
+    "CLAUDE.md", ".gitignore",
+    ".tessera/project.yml", ".tessera/config.yml", ".tessera/security-exceptions.yml",
+    ".claude/settings.json",          # merged separately — never wholesale copied
+    "docs/FINDINGS.md",               # carries real findings
+    ".mnemos/.gitignore", ".tessera/logs/README.md",
+}
+SKIP_DIRS = (".git/", ".icpg/", ".mnemos/")
+
+
+def reference_scaffold(tmp: Path) -> Path:
+    """A pristine project from the REAL scaffold — the single source of truth."""
+    target = tmp / "reference"
+    r = subprocess.run(
+        [str(TESSERA_ROOT / "bin" / "tessera-new-project"), str(target), "reference", "standard"],
+        capture_output=True, text=True, timeout=180,
+    )
+    if r.returncode != 0:
+        raise SystemExit(f"reference scaffold failed:\n{r.stderr}")
+    return target
+
+
+def harness_files(root: Path) -> dict[str, Path]:
+    out = {}
+    for p in sorted(root.rglob("*")):
+        if not p.is_file():
+            continue
+        rel = p.relative_to(root).as_posix()
+        if rel in IDENTITY or any(rel.startswith(d) for d in SKIP_DIRS):
+            continue
+        out[rel] = p
+    return out
+
+
+def missing_hooks(reference: dict, target: dict) -> list[tuple[str, dict]]:
+    """Hook entries in the reference that the target lacks, keyed by the script they invoke.
+
+    Copying a script without wiring the hook that calls it ships a component that looks
+    installed and never runs — the same half-shipped failure this tool exists to fix. Matching
+    is by script basename, so a project that reworded its command is left alone.
+    """
+    def scripts_of(settings: dict) -> set[str]:
+        found = set()
+        for groups in settings.get("hooks", {}).values():
+            for g in groups:
+                for h in g.get("hooks", []):
+                    for token in h.get("command", "").split():
+                        if ".sh" in token:
+                            found.add(token.strip('";').split("/")[-1])
+        return found
+
+    have = scripts_of(target)
+    out = []
+    for event, groups in reference.get("hooks", {}).items():
+        for g in groups:
+            for h in g.get("hooks", []):
+                cmd = h.get("command", "")
+                if "mnemos" in cmd:
+                    continue          # mnemos wiring is ADR-0004's business, not this tool's
+                names = {t.strip('";').split("/")[-1] for t in cmd.split() if ".sh" in t}
+                if names and not (names & have):
+                    out.append((event, h))
+    return out
+
+
+def sync(project: Path, apply: bool) -> int:
+    with tempfile.TemporaryDirectory() as td:
+        ref_root = reference_scaffold(Path(td))
+        ref = harness_files(ref_root)
+
+        added, drifted = [], []
+        for rel, src in ref.items():
+            dst = project / rel
+            if not dst.exists():
+                added.append(rel)
+                if apply:
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(src, dst)
+                    if src.stat().st_mode & 0o111:
+                        dst.chmod(dst.stat().st_mode | 0o755)
+            elif dst.read_bytes() != src.read_bytes():
+                drifted.append(rel)
+
+        # Copying .githooks/pre-commit without pointing git at it ships a hook git never runs
+        # — the same half-shipment this tool exists to fix, committed by the tool itself.
+        hooks_path_set = False
+        if apply and (project / ".githooks" / "pre-commit").exists():
+            current = subprocess.run(["git", "-C", str(project), "config", "core.hooksPath"],
+                                     capture_output=True, text=True).stdout.strip()
+            if not current:
+                subprocess.run(["git", "-C", str(project), "config", "core.hooksPath", ".githooks"],
+                               capture_output=True)
+                hooks_path_set = True
+
+        ref_settings = json.loads((ref_root / ".claude" / "settings.json").read_text())
+        tgt_path = project / ".claude" / "settings.json"
+        tgt_settings = json.loads(tgt_path.read_text()) if tgt_path.exists() else {}
+        hooks_to_add = missing_hooks(ref_settings, tgt_settings)
+        if hooks_to_add and apply:
+            tgt_settings.setdefault("hooks", {})
+            for event, hook in hooks_to_add:
+                tgt_settings["hooks"].setdefault(event, []).append({"hooks": [hook]})
+            tgt_path.write_text(json.dumps(tgt_settings, indent=2) + "\n")
+
+    verb = "added" if apply else "would add"
+    print(f"{verb} {len(added)} file(s):")
+    for rel in added:
+        print(f"  + {rel}")
+    print(f"{verb} {len(hooks_to_add)} hook wiring(s):")
+    for event, hook in hooks_to_add:
+        print(f"  + {event}: {hook.get('command','')[:80]}")
+    if apply and hooks_path_set:
+        print("set core.hooksPath = .githooks (git would never have run the hook otherwise)")
+    if drifted:
+        print(f"\n{len(drifted)} present but DIFFERENT — not touched, review by hand:")
+        for rel in drifted:
+            print(f"  ~ {rel}")
+    if not apply and (added or hooks_to_add):
+        print("\nre-run with --apply to write.")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description="Back-fill harness components into a project.")
+    ap.add_argument("project", nargs="?", default=".", type=Path)
+    ap.add_argument("--apply", action="store_true", help="write changes (default: dry run)")
+    args = ap.parse_args(argv)
+    project = args.project.resolve()
+    if not (project / ".tessera" / "project.yml").is_file():
+        print(f"not a Tessera project: {project}", file=sys.stderr)
+        return 2
+    return sync(project, args.apply)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
