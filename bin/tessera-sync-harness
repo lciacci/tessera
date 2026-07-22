@@ -7,9 +7,19 @@ revisits it. Every component added later exists only in projects scaffolded afte
 
   tess-dashboard  no gate harness AT ALL — no emit.py, no scan.py, no gate-scan hook, no escalate
   howler          no spend guard (scripts or hook wiring)
-  all four pre-settempo repos   no remap_kind.py — so their test_gate_emit.py imports a module
-                  that does not exist and their gate suite is simply broken
-  all four        no SQL gate (shipped today)
+  all four pre-settempo repos   no remap_kind.py, and no SQL gate (shipped today)
+
+CORRECTION (2026-07-22, same day): an earlier version of this docstring claimed those four
+repos' gate suites were BROKEN because test_gate_emit.py imports remap_kind.py. That is FALSE
+and was never checked before being written down — they carry OLDER copies of test_gate_emit.py
+that never import it, and howler's suite passes. The real gap in those repos is STALENESS, not
+absence: their emit.py has no KINDS enum (spec 15) and no --not-a-gate, their scan.py has no
+turn_id (F-001 disposition memory).
+
+That distinction bounds this tool. It ONLY ADDS. It cannot fix a stale component, only a
+missing one, and it deliberately reports present-but-different files rather than replacing
+them. Updating a stale harness is a separate problem and needs a separate decision per file,
+because a downstream may have customized.
 
 That is "ship both halves or neither" violated by TIME rather than by a missing `cp`. The
 scaffold gained two components today alone, so this recurs by construction.
@@ -106,10 +116,19 @@ def missing_hooks(reference: dict, target: dict) -> list[tuple[str, dict]]:
     return out
 
 
-def sync(project: Path, apply: bool) -> int:
+def sync(project: Path, apply: bool, exclude: list[str] | None = None) -> int:
+    exclude = exclude or []
     with tempfile.TemporaryDirectory() as td:
         ref_root = reference_scaffold(Path(td))
         ref = harness_files(ref_root)
+        # --exclude exists for one concrete case: the spend guard is a PreToolUse hook that
+        # DENIES by default. Adding it to a repo mid-release can block a build or upload at the
+        # worst moment. "Back-fill everything except the component that says no, for now" is a
+        # real posture, and it should be a recorded choice rather than a reason to skip the
+        # whole back-fill and leave a broken gate suite in place.
+        if exclude:
+            ref = {rel: src for rel, src in ref.items()
+                   if not any(e in rel for e in exclude)}
 
         added, drifted = [], []
         for rel, src in ref.items():
@@ -127,10 +146,20 @@ def sync(project: Path, apply: bool) -> int:
         # Copying .githooks/pre-commit without pointing git at it ships a hook git never runs
         # — the same half-shipment this tool exists to fix, committed by the tool itself.
         hooks_path_set = False
+        shadowed: list[str] = []
         if apply and (project / ".githooks" / "pre-commit").exists():
             current = subprocess.run(["git", "-C", str(project), "config", "core.hooksPath"],
                                      capture_output=True, text=True).stdout.strip()
-            if not current:
+            # core.hooksPath redirects git AWAY from .git/hooks. Setting it where real hooks
+            # already live would silently disable every one of them — this tool would be
+            # committing the same class of invisible breakage it was written to repair.
+            # .git/hooks is untracked, so those hooks exist on one disk and nowhere else and
+            # nothing else would ever report their loss.
+            hooks_dir = project / ".git" / "hooks"
+            if hooks_dir.is_dir():
+                shadowed = sorted(f.name for f in hooks_dir.iterdir()
+                                  if f.is_file() and not f.name.endswith(".sample"))
+            if not current and not shadowed:
                 subprocess.run(["git", "-C", str(project), "config", "core.hooksPath", ".githooks"],
                                capture_output=True)
                 hooks_path_set = True
@@ -139,6 +168,11 @@ def sync(project: Path, apply: bool) -> int:
         tgt_path = project / ".claude" / "settings.json"
         tgt_settings = json.loads(tgt_path.read_text()) if tgt_path.exists() else {}
         hooks_to_add = missing_hooks(ref_settings, tgt_settings)
+        # An excluded component's wiring must go too, or the hook points at a script that was
+        # deliberately not copied — a dangling hook is worse than a missing one.
+        if exclude:
+            hooks_to_add = [(e, h) for e, h in hooks_to_add
+                            if not any(x in h.get("command", "") for x in exclude)]
         if hooks_to_add and apply:
             tgt_settings.setdefault("hooks", {})
             for event, hook in hooks_to_add:
@@ -154,6 +188,11 @@ def sync(project: Path, apply: bool) -> int:
         print(f"  + {event}: {hook.get('command','')[:80]}")
     if apply and hooks_path_set:
         print("set core.hooksPath = .githooks (git would never have run the hook otherwise)")
+    elif apply and shadowed:
+        print(f"\nDID NOT set core.hooksPath — .git/hooks holds {len(shadowed)} real hook(s): "
+              f"{', '.join(shadowed)}")
+        print("  Setting it would silently disable them. Merge by hand, then:")
+        print("  git config core.hooksPath .githooks")
     if drifted:
         print(f"\n{len(drifted)} present but DIFFERENT — not touched, review by hand:")
         for rel in drifted:
@@ -167,12 +206,15 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Back-fill harness components into a project.")
     ap.add_argument("project", nargs="?", default=".", type=Path)
     ap.add_argument("--apply", action="store_true", help="write changes (default: dry run)")
+    ap.add_argument("--exclude", action="append", default=[], metavar="SUBSTR",
+                    help="skip components whose path contains SUBSTR (repeatable), "
+                         "e.g. --exclude spend")
     args = ap.parse_args(argv)
     project = args.project.resolve()
     if not (project / ".tessera" / "project.yml").is_file():
         print(f"not a Tessera project: {project}", file=sys.stderr)
         return 2
-    return sync(project, args.apply)
+    return sync(project, args.apply, args.exclude)
 
 
 if __name__ == "__main__":

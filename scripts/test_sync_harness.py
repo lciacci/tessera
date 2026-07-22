@@ -3,7 +3,12 @@
 The gap it closes: `tessera-new-project` ships the harness once and nothing revisits it, so
 every component added later exists only in projects scaffolded after it. Measured 2026-07-22 —
 tess-dashboard had no gate harness at all, howler no spend guard, and all four pre-settempo
-repos lacked remap_kind.py, which their own test_gate_emit.py imports.
+repos lacked remap_kind.py and the SQL gate.
+
+(Corrected same day: an earlier version of this docstring said those repos' gate suites were
+BROKEN because test_gate_emit.py imports remap_kind. False, and unchecked before being written
+down — they carry OLDER test_gate_emit.py copies that never import it, and howler's suite
+passes. Their real gap is staleness, which this add-only tool cannot fix and does not claim to.)
 
 The dangerous direction is OVERWRITING. This tool runs against real projects with real
 customization, so "only ever adds" is the property that has to hold under test.
@@ -80,7 +85,7 @@ def test_apply_adds_the_gate_harness_and_wires_it(tmp_path):
     # Both halves: the scripts AND the hook that invokes them.
     assert (p / "scripts" / "gate" / "emit.py").is_file()
     assert (p / "scripts" / "gate" / "remap_kind.py").is_file(), \
-        "test_gate_emit.py imports it — omitting it ships a broken suite"
+        "the CURRENT test_gate_emit.py imports it; a fresh back-fill must stay import-closed"
     assert (p / ".claude" / "scripts" / "tessera-gate-scan.sh").is_file()
 
     settings = json.loads((p / ".claude" / "settings.json").read_text())
@@ -112,3 +117,32 @@ def test_apply_is_idempotent(tmp_path):
 
 def test_refuses_a_non_tessera_directory(tmp_path):
     assert sh.main([str(tmp_path)]) == 2
+
+
+def test_hookspath_is_not_set_when_it_would_shadow_existing_hooks(tmp_path):
+    """core.hooksPath redirects git AWAY from .git/hooks. Setting it where real hooks live
+    silently disables them — and .git/hooks is untracked, so they exist on one disk and
+    nothing would ever report the loss."""
+    p = _project(tmp_path)
+    hooks = p / ".git" / "hooks"
+    hooks.mkdir(parents=True, exist_ok=True)
+    (hooks / "pre-push").write_text("#!/bin/sh\necho real\n")
+    (hooks / "pre-commit.sample").write_text("#!/bin/sh\n")   # samples don't count
+
+    sh.sync(p, apply=True)
+    got = subprocess.run(["git", "-C", str(p), "config", "core.hooksPath"],
+                         capture_output=True, text=True).stdout.strip()
+    assert got == "", "must not shadow a real .git/hooks hook"
+    assert (hooks / "pre-push").exists()
+
+
+def test_hookspath_is_set_when_only_samples_exist(tmp_path):
+    p = _project(tmp_path)
+    hooks = p / ".git" / "hooks"
+    hooks.mkdir(parents=True, exist_ok=True)
+    (hooks / "pre-commit.sample").write_text("#!/bin/sh\n")
+
+    sh.sync(p, apply=True)
+    got = subprocess.run(["git", "-C", str(p), "config", "core.hooksPath"],
+                         capture_output=True, text=True).stdout.strip()
+    assert got == ".githooks"
