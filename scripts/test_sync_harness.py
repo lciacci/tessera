@@ -203,3 +203,23 @@ def test_update_stale_off_by_default_leaves_stale_files(tmp_path):
     target.write_text("# stale-ish\n")
     sh.sync(p, apply=True)                      # no update_stale
     assert target.read_text() == "# stale-ish\n"
+
+
+def test_patch_settings_anchors_only_and_never_backfills(tmp_path):
+    """REGRESSION (2026-07-24): --patch-settings once ran the full back-fill and installed
+    howler's DEFERRED spend guard mid-ship. Anchor-only must touch ONLY settings.json commands,
+    never add a file or a hook wiring — even in a project missing everything."""
+    p = _project(tmp_path)
+    (p / ".claude" / "settings.json").write_text(json.dumps({"hooks": {"Stop": [{"hooks": [
+        {"type": "command",
+         "command": 'if [ -x ".claude/scripts/tessera-gate-scan.sh" ]; then '
+                    'exec ".claude/scripts/tessera-gate-scan.sh"; fi; exit 0'}]}]}}))
+    files_before = {f for f in p.rglob("*") if f.is_file()}
+    assert sh.patch_settings_only(p, apply=True) == 0
+    files_after = {f for f in p.rglob("*") if f.is_file()}
+    assert files_before == files_after, "anchor-only must not add or remove any file"
+    settings = json.loads((p / ".claude" / "settings.json").read_text())
+    cmds = [h["command"] for g in settings["hooks"].values() for gr in g for h in gr["hooks"]]
+    assert len(cmds) == 1, "anchor-only must not add a hook wiring"
+    assert "${CLAUDE_PROJECT_DIR:-.}" in cmds[0], "the existing command should be anchored"
+    assert "spend" not in json.dumps(settings), "no spend guard may appear"

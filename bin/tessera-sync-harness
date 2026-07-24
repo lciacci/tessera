@@ -151,8 +151,32 @@ def known_tessera_versions(rel: str) -> set[str]:
     return seen
 
 
+def patch_settings_only(project: Path, apply: bool) -> int:
+    """Anchor EXISTING cwd-relative hook commands in the project's settings.json — and NOTHING
+    else. Kept separate from sync() on purpose: bundling anchoring with the file/hook back-fill
+    meant `--patch-settings --apply` also installed missing components — it back-filled howler's
+    DEFERRED spend guard mid-iOS-ship (2026-07-24). Anchoring must never carry that payload.
+    """
+    tgt = project / ".claude" / "settings.json"
+    if not tgt.exists():
+        print(f"no .claude/settings.json in {project}", file=sys.stderr)
+        return 2
+    settings = json.loads(tgt.read_text())
+    _, anchored = anchor_settings.anchor(settings)
+    verb = "anchored" if apply else "would anchor"
+    if not anchored:
+        print("settings.json hook paths already anchored — nothing to patch")
+        return 0
+    if apply:
+        tgt.write_text(json.dumps(settings, indent=2) + "\n")
+    print(f"{verb} {len(anchored)} cwd-relative hook command(s): {', '.join(sorted(set(anchored)))}")
+    if not apply:
+        print("re-run with --apply to write.")
+    return 0
+
+
 def sync(project: Path, apply: bool, exclude: list[str] | None = None,
-         update_stale: bool = False, patch_settings: bool = False) -> int:
+         update_stale: bool = False) -> int:
     exclude = exclude or []
     with tempfile.TemporaryDirectory() as td:
         ref_root = reference_scaffold(Path(td))
@@ -222,22 +246,10 @@ def sync(project: Path, apply: bool, exclude: list[str] | None = None,
         if exclude:
             hooks_to_add = [(e, h) for e, h in hooks_to_add
                             if not any(x in h.get("command", "") for x in exclude)]
-        settings_dirty = False
         if hooks_to_add and apply:
             tgt_settings.setdefault("hooks", {})
             for event, hook in hooks_to_add:
                 tgt_settings["hooks"].setdefault(event, []).append({"hooks": [hook]})
-            settings_dirty = True
-        # --patch-settings: rewrite EXISTING cwd-relative hook commands to the anchored form.
-        # sync-harness otherwise only ADDS; this is the one thing that touches a command already
-        # present. Mutates in memory even in dry-run (never written unless --apply), so the count
-        # is honest either way. See scripts/hooks/anchor_settings.py for the severity split.
-        anchored: list[str] = []
-        if patch_settings:
-            _, anchored = anchor_settings.anchor(tgt_settings)
-            if anchored and apply:
-                settings_dirty = True
-        if settings_dirty:
             tgt_path.write_text(json.dumps(tgt_settings, indent=2) + "\n")
 
     verb = "added" if apply else "would add"
@@ -269,14 +281,7 @@ def sync(project: Path, apply: bool, exclude: list[str] | None = None,
               f"to refresh the provably-unmodified ones):")
         for rel in drifted:
             print(f"  ~ {rel}")
-    if patch_settings:
-        verb_a = "anchored" if apply else "would anchor"
-        if anchored:
-            print(f"\n{verb_a} {len(anchored)} cwd-relative hook command(s) in "
-                  f".claude/settings.json: {', '.join(sorted(set(anchored)))}")
-        else:
-            print("\nsettings.json hook paths already anchored — nothing to patch")
-    if not apply and (added or hooks_to_add or anchored):
+    if not apply and (added or hooks_to_add):
         print("\nre-run with --apply to write.")
     return 0
 
@@ -292,15 +297,24 @@ def main(argv: list[str] | None = None) -> int:
                     help="skip components whose path contains SUBSTR (repeatable), "
                          "e.g. --exclude spend")
     ap.add_argument("--patch-settings", action="store_true",
-                    help="also anchor EXISTING cwd-relative hook commands in the project's "
-                         ".claude/settings.json to ${CLAUDE_PROJECT_DIR:-.} (the one rewrite "
-                         "sync-harness makes to a command already present)")
+                    help="anchor EXISTING cwd-relative hook commands in the project's "
+                         ".claude/settings.json to ${CLAUDE_PROJECT_DIR:-.}. Anchor-ONLY: does "
+                         "NOT back-fill files or hooks (bundling them installed a deferred "
+                         "component by accident once). Run without this flag for back-fill.")
     args = ap.parse_args(argv)
     project = args.project.resolve()
     if not (project / ".tessera" / "project.yml").is_file():
         print(f"not a Tessera project: {project}", file=sys.stderr)
         return 2
-    return sync(project, args.apply, args.exclude, args.update_stale, args.patch_settings)
+    # Anchor-only and back-fill are separate operations; mixing them is what caused the
+    # accidental spend-guard install. Refuse the ambiguous combination rather than guess.
+    if args.patch_settings and (args.update_stale or args.exclude):
+        print("--patch-settings is anchor-only; do not combine with --update-stale/--exclude "
+              "(run a separate back-fill pass for those)", file=sys.stderr)
+        return 2
+    if args.patch_settings:
+        return patch_settings_only(project, args.apply)
+    return sync(project, args.apply, args.exclude, args.update_stale)
 
 
 if __name__ == "__main__":
