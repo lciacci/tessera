@@ -38,7 +38,11 @@ if [ -f "$SEEN" ] && grep -qxF "$TARGET" "$SEEN" 2>/dev/null; then
 fi
 printf '%s\n' "$TARGET" >> "$SEEN" 2>/dev/null
 
+# --hook makes decision_surface.py emit a PreToolUse `additionalContext` JSON envelope —
+# the ONLY stdout that reaches the model on this event (bare text goes to the debug log,
+# verified against the hooks docs). stderr is NOT folded into stdout: a crash must not
+# corrupt the JSON the harness parses. On exit 0 the harness ignores stderr anyway.
 # Stdlib-only by design, so bare python3 is correct here (CLAUDE.md's interpreter split).
-OUT=$(python3 scripts/decision_surface.py "$TARGET" 2>&1)
+OUT=$(python3 scripts/decision_surface.py --hook "$TARGET" 2>/dev/null)
 [ -n "$OUT" ] && printf '%s\n' "$OUT"
 exit 0

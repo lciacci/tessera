@@ -80,13 +80,20 @@ if [ -f "$HANDOFF" ]; then
         # decision-surface hook cannot find them; a pointer would ride model recall, which
         # is the failure this whole surfacer exists to remove. Scoped to the first handoff
         # block, same as the priorities, so a stale copy further down cannot win.
+        # The italic *( ... )* note under the heading is skipped STRUCTURALLY — from a line
+        # containing `*(` to one containing `)*`. An earlier version enumerated the note's
+        # first-words in a grep -vE, which silently leaked meta-commentary the moment the
+        # paragraph was re-wrapped (caught in review 2026-07-24). The awk already tracks
+        # state; a state flag costs nothing and does not rot on a reflow.
         patterns=$(awk '
             /^## Handoff — pick up here/ { blk=1; next }
             blk && /^## /                { exit }
             blk && /^### Standing patterns/ { want=1; next }
             blk && want && /^### /       { want=0 }
+            blk && want && /\*\(/        { skip=1 }
+            blk && want && skip          { if (/\)\*/) skip=0; next }
             blk && want                  { print }
-        ' "$HANDOFF" | grep -vE '^\*\(|^Add a line|^file-anchored|^repo has paid|^SessionStart;' | cut -c1-116)
+        ' "$HANDOFF" | cut -c1-116)
 
         if [ -n "$patterns" ]; then
             echo "=== STANDING PATTERNS (paid for more than once — do not re-learn) ==="

@@ -66,3 +66,27 @@ def test_lowercase_cwd_still_resolves_F002():
     if swapped == root:
         return  # path has no claude/Claude segment to swap on this machine
     assert ds.relative(swapped + "/scripts/doccheck.py") == "scripts/doccheck.py"
+
+
+def test_hook_mode_emits_valid_pretooluse_envelope():
+    """CRITICAL fix (review 2026-07-24): a PreToolUse hook's bare stdout goes to the debug
+    log, NOT the model's context. The wired path must emit hookSpecificOutput.additionalContext
+    JSON, or the whole mechanism is silent to its audience. Verified against the hooks docs."""
+    import io, json, contextlib
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        ds.emit_hook(".claude/scripts/mnemos-pre-compact.sh")
+    env = json.loads(buf.getvalue())
+    hs = env["hookSpecificOutput"]
+    assert hs["hookEventName"] == "PreToolUse"
+    assert "ADR-0004" in hs["additionalContext"]
+
+
+def test_hook_mode_is_silent_when_nothing_governs():
+    """No governing decision -> emit NOTHING (not an empty envelope), so the hook stays quiet
+    on files no ADR covers."""
+    import io, contextlib
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        ds.emit_hook("some/unrelated/path.txt")
+    assert buf.getvalue().strip() == ""

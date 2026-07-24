@@ -28,6 +28,7 @@ it is how we learn the assertion set has rotted into theater.
 import argparse
 import ast
 import json
+import os
 import re
 import subprocess
 import sys
@@ -1001,6 +1002,7 @@ _BARE_HOOK_PATH = re.compile(r'"((?:\.claude/scripts|hooks)/[A-Za-z0-9._-]+)"')
 _BARE_UNQUOTED_PATH = re.compile(r"(?:\.claude/scripts|hooks)/[A-Za-z0-9._-]+")
 _SELF_ANCHOR = 'cd "$(dirname "$0")/../.."'
 _SCRIPT_DIR_ANCHOR = 'cd "$SCRIPT_DIR/../.."'
+_ANCHOR_GUARD = "*/.claude/scripts)"
 # Hooks with no repo-relative path of their own: nothing inside them to mis-resolve.
 _NO_ANCHOR_NEEDED = {"mnemos-stop-ingest.sh", "tessera-spend-guard.sh", "tessera-spend-backstop.sh"}
 
@@ -1087,6 +1089,16 @@ def check_hook_commands_are_anchored() -> list[str]:
                 f".claude/scripts/{hook.name}: no project-root self-anchor — its own relative "
                 f'paths resolve against the session cwd. Add cd "$(dirname "$0")/../.." after '
                 f"the shebang (or after SCRIPT_DIR if the script resolves $0 itself)."
+            )
+        # The anchor MUST be guarded by `*/.claude/scripts)`. Unguarded, the ~/.claude/templates/
+        # global-tier copy (where ../.. is $HOME) cd's every downstream hook to $HOME and silently
+        # no-ops it — the exact catastrophe the anchor's own comments warn about. An unguarded cd
+        # that passed this check would be "ship both halves" violated inside the check for it.
+        elif _ANCHOR_GUARD not in body:
+            bad.append(
+                f".claude/scripts/{hook.name}: self-anchor is UNGUARDED — add the "
+                f'`case ... */.claude/scripts) cd ...` guard, or the global-tier copy in '
+                f"~/.claude/templates/ cd's to $HOME and silently disables every downstream hook."
             )
     return bad
 
@@ -1253,13 +1265,23 @@ def check_decision_surface_is_wired() -> list[str]:
     if not wired:
         bad.append("no PreToolUse decision-surface hook in .claude/settings.json — which ADR "
                    "governs a file is back to riding model recall")
+    # The settings entry's `if [ -x SCRIPT ]` wrapper makes a missing/non-exec script a SILENT
+    # no-op. Asserting only the wire (not the script) certifies a hook that may never run — the
+    # vacuous-green trap this repo keeps hitting. Check the mechanism, not just the reference.
+    script = ROOT / ".claude" / "scripts" / "tessera-decision-surface.sh"
+    if wired and not (script.exists() and os.access(script, os.X_OK)):
+        bad.append(".claude/scripts/tessera-decision-surface.sh missing or not executable — the "
+                   "wired hook is a silent no-op (the `if [ -x ]` wrapper swallows it)")
     try:
         sys.path.insert(0, str(ROOT / "scripts"))
         import decision_surface
         index = decision_surface.build_index()
     except Exception as exc:
         return bad + [f"scripts/decision_surface.py cannot build its index: {exc}"]
-    reachable = {e["title"].split()[0] for entries in index.values() for e in entries}
+    # Only ADR entries mark an ADR reachable. Keying on every entry's first token (L4) let an
+    # observatory heading starting "ADR-0004" falsely satisfy the ADR — collision, however rare.
+    reachable = {e["title"].split()[0] for entries in index.values()
+                 for e in entries if e["kind"] == "adr"}
     for adr in sorted((ROOT / "docs" / "adr").glob("0*.md")):
         body = adr.read_text()
         if "**Status:** Accepted" not in body:

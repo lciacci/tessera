@@ -129,24 +129,55 @@ def relative(target: str) -> str:
     return target
 
 
+def emit_hook(target: str) -> None:
+    """Emit a PreToolUse `additionalContext` envelope — the ONLY channel that reaches the model.
+
+    A PreToolUse hook's plain stdout on exit 0 goes to the debug log, NOT into context
+    (verified against code.claude.com/docs/en/hooks; the exceptions are SessionStart /
+    UserPromptSubmit). The original build printed bare text and was silent to its whole
+    audience — the fail-open class on the very hook meant to defeat it. So: JSON envelope.
+
+    The error path also routes through additionalContext, not stderr: this hook is ADVISORY
+    and must never block an edit, so exit 2 (the other loud channel) is wrong. A wrong-but-
+    visible message beats a silent one — the message just rides the same channel as a hit.
+    """
+    rel = relative(target)
+    try:
+        hits = lookup(rel, build_index())
+    except Exception as exc:
+        _print_context(f"DECISION-SURFACE UNAVAILABLE: {exc}")
+        return
+    if hits:
+        _print_context(render(rel, hits))
+
+
+def _print_context(text: str) -> None:
+    envelope = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": text}}
+    print(json.dumps(envelope))
+
+
 def main() -> int:
     if "--self-test" in sys.argv:
         idx = build_index()
         print(f"index: {len(idx)} paths from {len({e['doc'] for v in idx.values() for e in v})} docs")
         for probe in (".claude/scripts/mnemos-pre-compact.sh", "skills/base/SKILL.md"):
-            print(f"\n{probe} -> {len(lookup(probe, idx))} hit(s)")
-            if lookup(probe, idx):
-                print(render(probe, lookup(probe, idx)))
+            hits = lookup(probe, idx)
+            print(f"\n{probe} -> {len(hits)} hit(s)")
+            if hits:
+                print(render(probe, hits))
         return 0
 
-    target = sys.argv[1] if len(sys.argv) > 1 else ""
+    args = [a for a in sys.argv[1:] if a != "--hook"]
+    target = args[0] if args else ""
     if not target:
         return 0
+    if "--hook" in sys.argv:
+        emit_hook(target)              # JSON envelope for the PreToolUse channel
+        return 0
+    # Plain-text mode: standalone/CLI use only. NOT the wired hook path.
     try:
         hits = lookup(relative(target), build_index())
     except Exception as exc:
-        # LOUD, per spec 11. 2026-07-24 proved a wrong-but-loud message beats twelve
-        # clean exits: silence here is indistinguishable from "no decision governs this".
         print(f"DECISION-SURFACE UNAVAILABLE: {exc}", file=sys.stderr)
         return 0
     if hits:

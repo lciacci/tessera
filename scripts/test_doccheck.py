@@ -965,7 +965,12 @@ def _seed(repo, settings, script_body, templates=None):
     (repo / "templates" / "settings.json").write_text(json.dumps(tpl))
 
 
-ANCHORED_SCRIPT = '#!/usr/bin/env bash\ncd "$(dirname "$0")/../.." 2>/dev/null || exit 0\n'
+# A correctly anchored script GUARDS the cd so the ~/.claude/templates/ global-tier copy
+# (where ../.. is $HOME) does not cd to $HOME. Guard + cd is the passing form.
+ANCHORED_SCRIPT = ('#!/usr/bin/env bash\ncase "$(dirname "$0")" in\n'
+                   '  */.claude/scripts) cd "$(dirname "$0")/../.." 2>/dev/null || exit 0 ;;\n'
+                   'esac\n')
+UNGUARDED_SCRIPT = '#!/usr/bin/env bash\ncd "$(dirname "$0")/../.." 2>/dev/null || exit 0\n'
 BARE_SCRIPT = '#!/usr/bin/env bash\necho hi\n'
 
 
@@ -988,6 +993,15 @@ def test_passes_when_both_halves_are_anchored(fake_repo):
     assert doccheck.check_hook_commands_are_anchored() == []
 
 
+def test_catches_an_unguarded_anchor(fake_repo):
+    """M1 (review 2026-07-24): an anchor WITHOUT the */.claude/scripts) guard cd's the global-
+    tier copy to $HOME and silently disables every downstream hook. The check must catch it —
+    a bare cd that passed would be 'ship both halves' violated inside the check for it."""
+    _seed(fake_repo, _anchored_settings(), UNGUARDED_SCRIPT)
+    out = doccheck.check_hook_commands_are_anchored()
+    assert any("UNGUARDED" in p for p in out), out
+
+
 def test_statusline_is_checked_too(fake_repo):
     """statusLine is not in hooks{} — it was the 16th carrier the first count missed."""
     s = _anchored_settings()
@@ -995,6 +1009,18 @@ def test_statusline_is_checked_too(fake_repo):
     _seed(fake_repo, s, ANCHORED_SCRIPT)
     out = doccheck.check_hook_commands_are_anchored()
     assert any("statusLine" in p for p in out), out
+
+
+def test_decision_surface_wired_but_script_missing_is_caught(fake_repo):
+    """#4 (review 2026-07-24): the settings `if [ -x SCRIPT ]` wrapper makes a missing script
+    a silent no-op. The check must verify the script exists, not just that the wire mentions
+    'decision-surface' — else it certifies a hook that never runs."""
+    (fake_repo / ".claude" / "settings.json").write_text(json.dumps({"hooks": {"PreToolUse": [
+        {"hooks": [{"type": "command", "command": 'if [ -x "x/tessera-decision-surface.sh" ]; '
+                    'then exec "x/tessera-decision-surface.sh"; fi; exit 0'}]}]}}))
+    # No tessera-decision-surface.sh written under .claude/scripts/.
+    out = doccheck.check_decision_surface_is_wired()
+    assert any("missing or not executable" in p for p in out), out
 
 
 def test_catches_a_scaffold_template_that_births_the_bug(fake_repo):
