@@ -998,8 +998,31 @@ def check_hooks_match_templates() -> list[str]:
     return bad
 
 
-_BARE_HOOK_PATH = re.compile(r'"((?:\.claude/scripts|hooks)/[A-Za-z0-9._-]+)"')
-_BARE_UNQUOTED_PATH = re.compile(r"(?:\.claude/scripts|hooks)/[A-Za-z0-9._-]+")
+_HOOK_PATH_TOKEN = re.compile(r"(?:\.claude/scripts|hooks)/[A-Za-z0-9._-]+")
+# A path as its OWN quoted token, tolerating a leading `./`. The `${CLAUDE_PROJECT_DIR:-.}/`
+# anchor sits between the `"` and the path, so an anchored path does not match — only a bare
+# `".claude/scripts/x"` or `"./.claude/scripts/x"` does.
+_HOOK_PATH_QUOTED = re.compile(r'"(?:\./)?((?:\.claude/scripts|hooks)/[A-Za-z0-9._-]+)"')
+
+
+def _bare_hook_paths(cmd: str) -> list[str]:
+    """Cwd-relative hook paths in a command — the quoted exec form and the bare-statusLine form.
+
+    The first cut required a `"` IMMEDIATELY before the path, so `"./.claude/scripts/x"` (a
+    leading ./) slipped a check whose whole job is catching cwd-relative paths (review L3).
+    This tolerates the `./`.
+
+    DELIBERATELY NOT matched: a fully unquoted command-position path (`bash .claude/scripts/x`).
+    It is indistinguishable from a path merely NAMED in a message — templates/settings.json's
+    maggy hooks say `echo "… touch .claude/scripts/X to silence"`, and flagging that mention is
+    a false positive (it bit the first broad version of this check). The actual-execution risk
+    of an unquoted path is caught by the script self-anchor check anyway; the string-mention
+    ambiguity is real, so this stays scoped to quoted/statusLine forms.
+    """
+    stripped = cmd.strip()
+    if _HOOK_PATH_TOKEN.fullmatch(stripped):        # statusLine: whole command is a bare path
+        return [stripped]
+    return _HOOK_PATH_QUOTED.findall(cmd)
 _SELF_ANCHOR = 'cd "$(dirname "$0")/../.."'
 _SCRIPT_DIR_ANCHOR = 'cd "$SCRIPT_DIR/../.."'
 _ANCHOR_GUARD = "*/.claude/scripts)"
@@ -1043,17 +1066,7 @@ def check_hook_commands_are_anchored() -> list[str]:
                 commands.append((event, hook.get("command", "")))
 
     for event, cmd in commands:
-        # statusLine is a BARE path, not a shell block — unquoted, so the quoted-path regex
-        # below cannot see it. That is the exact form this repo shipped until 2026-07-24, and
-        # a check that missed it would have certified the original bug as fixed.
-        if _BARE_UNQUOTED_PATH.fullmatch(cmd.strip()):
-            bad.append(
-                f'.claude/settings.json {event}: command "{cmd.strip()}" is a bare cwd-relative '
-                f"path — it retargets to whatever repo the session cd'd into. Wrap it in "
-                f"sh -c with ${{CLAUDE_PROJECT_DIR:-.}}."
-            )
-            continue
-        for path in _BARE_HOOK_PATH.findall(cmd):
+        for path in _bare_hook_paths(cmd):
             bad.append(
                 f".claude/settings.json {event}: hook path \"{path}\" is cwd-relative — it "
                 f'retargets to whatever repo the session cd\'d into. Use "${{CLAUDE_PROJECT_DIR:-.}}/{path}".'
@@ -1074,7 +1087,7 @@ def check_hook_commands_are_anchored() -> list[str]:
                 for hook in group.get("hooks", []):
                     tcmds.append(hook.get("command", ""))
         for cmd in tcmds:
-            for path in _BARE_HOOK_PATH.findall(cmd):
+            for path in _bare_hook_paths(cmd):
                 bad.append(
                     f'{tpl}: hook path "{path}" is cwd-relative — every project scaffolded '
                     f"from this template is born with the retargeting bug."

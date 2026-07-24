@@ -1052,3 +1052,26 @@ def test_pretooluse_with_additionalcontext_passes(fake_repo):
     (fake_repo / ".claude" / "scripts" / "ok.sh").write_text(
         '#!/usr/bin/env bash\necho \'{"hookSpecificOutput":{"additionalContext":"hi"}}\'\nexit 0\n')
     assert doccheck.check_pretooluse_hooks_reach_the_model() == []
+
+
+def test_anchor_check_catches_dotslash_form(fake_repo):
+    """L3 (review 2026-07-24): the first regex required a `"` right before the path, so
+    `"./.claude/scripts/x"` (leading ./) slipped a check whose whole job is catching cwd-
+    relative paths. Now caught; the anchored form still passes."""
+    cmd = 'if [ -x "./.claude/scripts/x.sh" ]; then exec "./.claude/scripts/x.sh"; fi; exit 0'
+    _seed(fake_repo, _anchored_settings(cmd=cmd), ANCHORED_SCRIPT)
+    assert any("cwd-relative" in p for p in doccheck.check_hook_commands_are_anchored())
+    ok = 'if [ -x "${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/x.sh" ]; then exec "${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/x.sh"; fi; exit 0'
+    _seed(fake_repo, _anchored_settings(cmd=ok), ANCHORED_SCRIPT)
+    assert not any("cwd-relative" in p for p in doccheck.check_hook_commands_are_anchored())
+
+
+def test_anchor_check_ignores_a_path_named_in_a_message(fake_repo):
+    """The maggy two-tier hooks say `echo "… touch .claude/scripts/X to silence"`. That path
+    is a MENTION, not an exec target — flagging it is a false positive (it bit the first broad
+    L3 fix). An anchored exec path plus a bare mention in the same command must stay clean."""
+    cmd = ('if [ -x "${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/x.sh" ]; then '
+           'exec "${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/x.sh"; fi; '
+           'echo "not installed — touch .claude/scripts/x.sh to silence" >&2; exit 0')
+    _seed(fake_repo, _anchored_settings(cmd=cmd), ANCHORED_SCRIPT)
+    assert not any("cwd-relative" in p for p in doccheck.check_hook_commands_are_anchored())
