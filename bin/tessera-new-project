@@ -53,6 +53,13 @@ cp "$TESSERA_ROOT"/scripts/gate/emit.py "$TESSERA_ROOT"/scripts/gate/test_gate_e
    "$TARGET/scripts/gate/"
 cp "$TESSERA_ROOT"/.claude/scripts/tessera-gate-scan.sh "$TARGET/.claude/scripts/"
 chmod +x "$TARGET/.claude/scripts/tessera-gate-scan.sh"
+# Decision surface (2026-07-24): the scaffold settings WIRE tessera-decision-surface.sh, so
+# both halves must ship — the hook AND the stdlib script it calls. Wiring alone leaves a
+# dangling `if [ -x … ]` that silently no-ops (found when a fleet back-fill added the wiring
+# with no file). Same "ship both halves or neither" rule as the gate recorder and spend guard.
+cp "$TESSERA_ROOT"/.claude/scripts/tessera-decision-surface.sh "$TARGET/.claude/scripts/"
+cp "$TESSERA_ROOT"/scripts/decision_surface.py "$TARGET/scripts/"
+chmod +x "$TARGET/.claude/scripts/tessera-decision-surface.sh"
 # Escalation: reached by name from PATH (tessera/bin). The copy is a BRIDGE for machines
 # where PATH is not set — delete it once install.sh's PATH check is green everywhere.
 cp "$TESSERA_ROOT"/bin/tessera-escalate "$TARGET/scripts/tessera-escalate"
