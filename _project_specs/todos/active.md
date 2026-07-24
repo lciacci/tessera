@@ -146,6 +146,17 @@ Add a line only when a lesson recurs; the value is that the list is short enough
   scoped away from the string-mention false positive the maggy template exposed.
 - **neon + neon-postgres absorbed into `skills/`** (`18c6578`) — P12 was firing on Claude-shipped
   global-only skills; content was already byte-identical, the drift was provenance.
+- **Part A push mechanism built + applied to the fleet.** `--patch-settings` (anchor-only after
+  a bug — see item 2) anchored all 5 downstreams (`9333e19`/`c2dbf00`/`ccd41e3`/`684df86`/
+  `5d25036`, all pushed). Two bugs the apply exposed: it once bundled the back-fill and installed
+  howler's deferred spend guard (reverted, refactored `6af5246`); and B was half-shipped into the
+  scaffold (fixed `efb7649`, guard `10c18ac`).
+- **Second multi-agent review** (`81f5579`) of the whole post-surfacer diff. Found 2 mediums —
+  BOTH the signature bug applied to the guards built this session: `pretooluse-hooks-reach-the-
+  model` cleared on a channel named in a *comment* (M1), and `anchor_settings` skipped statusLine
+  while the detector flagged it (M2). Both fixed + regression-tested. **The session's sharpest
+  meta-lesson: every check I built to catch the silent-failure class had itself a silent-failure
+  bug. Independent review caught what my testing certified green — twice.** (standing patterns #1, #9.)
 - Doccheck grew 20 → **27 checks** across the session.
 
 ### Not Tessera's to execute (2026-07-24 reclassification)
