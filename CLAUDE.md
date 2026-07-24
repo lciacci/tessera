@@ -52,9 +52,9 @@ If conflicts emerge (state collisions, performance issues, noise), options are d
 
 The hooks in `.claude/settings.json` invoke scripts in `.claude/scripts/`:
 
-- **SessionStart** — `mnemos-session-start.sh` loads any prior checkpoint, restores session continuity; `tessera-findings-surface.sh` runs `bin/tessera-findings` and injects the un-transferred downstream findings backlog (silent when nothing is open). This is the framework learning from its own downstreams without human recall — see `docs/contracts/findings.md`.
+- **SessionStart** — `mnemos-session-start.sh` loads any prior checkpoint, restores session continuity; `tessera-findings-surface.sh` runs `bin/tessera-findings` and injects the un-transferred downstream findings backlog (silent when nothing is open); `tessera-watch-surface.sh` prints the handoff pointer, the **Standing patterns** block (the cross-cutting lessons, verbatim), and any fired observatory trigger. This is the framework learning from its own downstreams and its own past without human recall — see `docs/contracts/findings.md`.
 - **PreCompact** — `mnemos-pre-compact.sh` writes an emergency checkpoint before compaction
-- **PreToolUse** — `mnemos-post-compact-inject.sh` checks for post-compaction restore; `mnemos-pre-edit.sh` (Edit/Write matcher) checks fatigue and intent context
+- **PreToolUse** — `mnemos-post-compact-inject.sh` checks for post-compaction restore; `mnemos-pre-edit.sh` (Edit/Write matcher) surfaces fatigue and intent context; `tessera-decision-surface.sh` (Edit/Write matcher) prints the ADRs and observatory entries that govern the file you are about to edit (the `DECISION SURFACE` block). **All three inject via `hookSpecificOutput.additionalContext` JSON, not bare stdout** — a PreToolUse hook's plain stdout goes to the debug log, never to the model (found 2026-07-24, observatory → "PreToolUse hooks' bare stdout never reached the model"; guarded by doccheck `pretooluse-hooks-reach-the-model`). When you see a `DECISION SURFACE` block, read the named ADR before editing.
 - **PostToolUse** — `mnemos-post-tool.sh` logs tool outcomes
 - **Stop** — `mnemos-stop-checkpoint.sh` writes a session checkpoint; `mnemos-stop-ingest.sh` ingests the transcript and scores haze
 
