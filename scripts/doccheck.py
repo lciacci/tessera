@@ -1246,6 +1246,54 @@ def check_standing_patterns_are_surfaced() -> list[str]:
     return bad
 
 
+# JSON mechanisms by which a PreToolUse hook can actually reach the model. Bare stdout cannot:
+# it goes to the debug log (only SessionStart/UserPromptSubmit add bare stdout to context).
+_MODEL_CHANNELS = ("additionalContext", "permissionDecision", "updatedInput")
+# Model-facing stdout: a python `print(` (not to stderr), or a shell echo/printf at line-start
+# whose output is NOT piped or redirected away (`printf … | jq` feeds jq, not the hook's stdout).
+_EMITS_STDOUT = re.compile(r"\bprint\((?![^)]*file=)|^\s*(?:echo|printf)\b(?![^\n]*[|>])", re.M)
+
+
+def check_pretooluse_hooks_reach_the_model() -> list[str]:
+    """A PreToolUse hook that emits stdout must use a JSON channel, not bare stdout.
+
+    FOUND 2026-07-24 in multi-agent review. A PreToolUse hook's plain stdout goes to the DEBUG
+    LOG, not context (verified against code.claude.com/docs/en/hooks). It bit three hooks: the
+    decision-surface hook built this same session, and — silently for the whole Mnemos trial —
+    mnemos-pre-edit.sh (the fatigue/constraint/drift feature) and mnemos-post-compact-inject.sh
+    (Layer 3 compaction recovery, which explained why its injection was "never seen reaching the
+    model"). This asserts the fix holds and the class cannot recur at commit.
+    """
+    bad = []
+    settings = ROOT / ".claude" / "settings.json"
+    try:
+        data = json.loads(settings.read_text())
+    except Exception:
+        return [".claude/settings.json unreadable — cannot verify PreToolUse hooks"]
+    scripts_dir = ROOT / ".claude" / "scripts"
+    for group in (data.get("hooks") or {}).get("PreToolUse", []):
+        for hook in group.get("hooks", []):
+            for name in re.findall(r'(?:\.claude/scripts|hooks)/([A-Za-z0-9._-]+)', hook.get("command", "")):
+                script = scripts_dir / name if (scripts_dir / name).exists() else ROOT / "hooks" / name
+                if not script.exists():
+                    continue
+                text = script.read_text()
+                # Follow referenced scripts/*.py — decision-surface.sh delegates its envelope there.
+                for py in re.findall(r'scripts/([A-Za-z0-9._/-]+\.py)', text):
+                    ref = ROOT / "scripts" / py
+                    if ref.exists():
+                        text += "\n" + ref.read_text()
+                if any(ch in text for ch in _MODEL_CHANNELS):
+                    continue                      # reaches the model via a JSON channel
+                if _EMITS_STDOUT.search(script.read_text()):
+                    bad.append(
+                        f".claude/scripts/{name}: PreToolUse hook emits stdout but uses no JSON "
+                        f"channel — bare stdout goes to the debug log, not the model. Emit "
+                        f"hookSpecificOutput.additionalContext (or permissionDecision/updatedInput)."
+                    )
+    return bad
+
+
 def check_decision_surface_is_wired() -> list[str]:
     """The decision surface must be wired, and every Accepted ADR must be reachable by it.
 
@@ -1296,6 +1344,7 @@ def check_decision_surface_is_wired() -> list[str]:
 CHECKS = {
     "standing-patterns-are-surfaced": check_standing_patterns_are_surfaced,
     "decision-surface-is-wired": check_decision_surface_is_wired,
+    "pretooluse-hooks-reach-the-model": check_pretooluse_hooks_reach_the_model,
     "referenced-paths-exist": check_referenced_paths_exist,
     "handoff-heading-is-current": check_handoff_heading_is_current,
     "no-phantom-global-skill-body-claim": check_no_phantom_global_skill_body_claim,

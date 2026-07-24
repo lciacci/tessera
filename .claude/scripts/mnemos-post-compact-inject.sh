@@ -109,7 +109,13 @@ esac
 # downstream hook to $HOME and silently no-op it. In the global tier the session cwd
 # IS the right signal — that copy has no repo of its own.
 
-"$TOOLCHAIN_PY" -c "
+# A PreToolUse hook's plain stdout goes to the DEBUG LOG, not context (verified against
+# code.claude.com/docs/en/hooks 2026-07-24; only SessionStart/UserPromptSubmit add bare
+# stdout to context). This is Layer 3 of compaction recovery — and it explains the trial
+# observation that Layer 3's injection "was never seen reaching the model" while Layer 2
+# (a SessionStart hook, whose bare stdout DOES reach context) delivered. So: capture the
+# restore block unchanged and emit it through the PreToolUse additionalContext channel.
+INJECT=$("$TOOLCHAIN_PY" -c "
 import sys, json
 sys.path.insert(0, '${SCRIPT_DIR%/templates}/scripts')
 
@@ -148,6 +154,9 @@ except Exception as e:
     except:
         print('=== MNEMOS: Compaction detected but checkpoint unreadable. ===')
         print('Ask the user what they were working on.')
-"
+")
+
+# json.dumps is stdlib, so $TOOLCHAIN_PY encodes the captured block safely.
+[ -n "$INJECT" ] && printf '%s' "$INJECT" | "$TOOLCHAIN_PY" -c "import json,sys; print(json.dumps({'hookSpecificOutput':{'hookEventName':'PreToolUse','additionalContext':sys.stdin.read()}}))"
 
 exit 0

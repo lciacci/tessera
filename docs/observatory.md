@@ -1134,6 +1134,42 @@ Both were found by adversarial verification, **not** by the framework. **The rea
 - **Related:** open item 3 in `_project_specs/todos/active.md` (cwd-relative retargeting, 15/15
   hook commands) and item 1 (spec 11 fail-open sweep) — both are the same fail-quiet family.
 
+### PreToolUse hooks' bare stdout never reached the model — and it explains a standing Mnemos-trial mystery *(2026-07-24)*
+
+- **Status:** RESOLVED for the two data-injection hooks (fixed + regression-checked); the trial
+  reinterpretation is the lasting content.
+- **The rule, verified against `code.claude.com/docs/en/hooks`:** a `PreToolUse` hook's plain
+  stdout on exit 0 goes to the **debug log only** — it is NOT added to the model's context. The
+  only events whose bare stdout reaches context are `SessionStart`, `UserPromptSubmit`, and
+  `UserPromptExpansion`. To inject context from `PreToolUse` you must emit JSON
+  `{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"…"}}` on exit 0.
+- **Found by the multi-agent review** of this session's decision-surface hook (B), which had
+  exactly this defect — built to defeat the fail-open class, silent by the fail-open class, the
+  ninth instance. Fixing it exposed that the bug was a **class**, not one hook.
+- **It explains the Layer-3 compaction mystery the Mnemos skill already recorded.** The skill
+  notes (2026-07-11) that Layer 3 (`mnemos-post-compact-inject.sh`, a **PreToolUse** hook)
+  "logged `restore_injected` … but its injected text was never *seen* reaching the model," while
+  Layer 2 (`mnemos-session-start.sh`, a **SessionStart** hook) "delivered." That asymmetry was
+  read as flaky plumbing. It is not flaky — it is **exactly** this rule: SessionStart bare stdout
+  reaches context, PreToolUse bare stdout does not. Layer 3 has been firing into the debug log
+  the entire trial. The plumbing was confirmed *because* the marker was consumed; the injection
+  was never seen *because the channel drops it.*
+- **Also silent for the whole trial: `mnemos-pre-edit.sh`** — the documented "PreToolUse checks
+  fatigue and intent context" feature (fatigue warning, active constraints, iCPG drift). All of
+  it was bare stdout on PreToolUse, so none of it ever reached the model. This is material to any
+  Mnemos kill/keep verdict: a feature that "ran" but was structurally unable to affect the model
+  is not evidence the *idea* failed — same shape as F-001 (empty ≠ unused), one layer up.
+- **Fix:** both hooks now emit the `additionalContext` envelope (advisory, so the error path
+  rides the same channel — never exit 2, which would block the edit). The other three PreToolUse
+  hooks were checked and are correct: `subagent-route-hook` uses `hookSpecificOutput.updatedInput`,
+  `tessera-spend-guard` uses the permission-decision mechanism.
+- **Check left behind:** doccheck `pretooluse-hooks-reach-the-model` asserts every PreToolUse-wired
+  hook that emits stdout reaches the model via a JSON mechanism (additionalContext / permissionDecision
+  / updatedInput), following the referenced `.py`. It would have caught all three at commit.
+- **When to revisit:** when the Mnemos compaction-recovery half is judged on a real Claude Code CLI
+  session (the open P3 question) — it must be re-judged with Layer 3 *actually reaching the model*,
+  because every prior observation of it was through a dropped channel.
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.

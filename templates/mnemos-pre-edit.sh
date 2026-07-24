@@ -180,22 +180,31 @@ HAS_OUTPUT=""
 [ -n "$DRIFT" ] && HAS_OUTPUT="1"
 
 if [ -n "$HAS_OUTPUT" ]; then
-    echo "--- Mnemos + iCPG Context ---"
-
-    if [ -n "$FATIGUE_WARNING" ]; then
-        echo "$FATIGUE_WARNING"
-        echo ""
-    fi
-
-    [ -n "$CONTEXT" ] && echo "$CONTEXT"
-    [ -n "$CONSTRAINTS" ] && echo -e "\n$CONSTRAINTS"
-    [ -n "$DRIFT" ] && echo -e "\n$DRIFT"
-
+    # A PreToolUse hook's plain stdout goes to the DEBUG LOG, not the model's context
+    # (verified against code.claude.com/docs/en/hooks 2026-07-24; only SessionStart /
+    # UserPromptSubmit add bare stdout to context). This block — fatigue, constraints,
+    # drift, the whole documented "PreToolUse checks fatigue and intent" feature — was
+    # emitted as bare echo and so had NEVER reached the model. Accumulate it and emit the
+    # PreToolUse `additionalContext` envelope, the only channel the model reads on this event.
+    BLOCK="--- Mnemos + iCPG Context ---"
+    [ -n "$FATIGUE_WARNING" ] && BLOCK="$BLOCK
+$FATIGUE_WARNING
+"
+    [ -n "$CONTEXT" ] && BLOCK="$BLOCK
+$CONTEXT"
+    [ -n "$CONSTRAINTS" ] && BLOCK="$BLOCK
+$CONSTRAINTS"
+    [ -n "$DRIFT" ] && BLOCK="$BLOCK
+$DRIFT"
     if [ -n "$CONTEXT" ] || [ -n "$CONSTRAINTS" ]; then
-        echo "PRESERVE function signatures unless your task requires changing them."
+        BLOCK="$BLOCK
+PRESERVE function signatures unless your task requires changing them."
     fi
+    BLOCK="$BLOCK
+---"
 
-    echo "---"
+    # json.dumps is stdlib, so $TOOLCHAIN_PY (already resolved above) encodes it safely.
+    printf '%s' "$BLOCK" | "$TOOLCHAIN_PY" -c "import json,sys; print(json.dumps({'hookSpecificOutput':{'hookEventName':'PreToolUse','additionalContext':sys.stdin.read()}}))"
 fi
 
 exit 0

@@ -1031,3 +1031,24 @@ def test_catches_a_scaffold_template_that_births_the_bug(fake_repo):
         cmd='if [ -x ".claude/scripts/x.sh" ]; then exec ".claude/scripts/x.sh"; fi; exit 0'))
     out = doccheck.check_hook_commands_are_anchored()
     assert any("born with the retargeting bug" in p for p in out), out
+
+
+def test_pretooluse_bare_stdout_is_caught(fake_repo):
+    """The class found 2026-07-24: a PreToolUse hook that dumps model-facing text to bare
+    stdout reaches the debug log, not the model. Must be flagged; a JSON-channel hook must not."""
+    (fake_repo / ".claude" / "settings.json").write_text(json.dumps({"hooks": {"PreToolUse": [
+        {"hooks": [{"type": "command", "command": 'if [ -x ".claude/scripts/bad.sh" ]; then '
+                    'exec ".claude/scripts/bad.sh"; fi; exit 0'}]}]}}))
+    (fake_repo / ".claude" / "scripts" / "bad.sh").write_text(
+        '#!/usr/bin/env bash\necho "--- Context for the model ---"\necho "$STUFF"\nexit 0\n')
+    out = doccheck.check_pretooluse_hooks_reach_the_model()
+    assert any("bad.sh" in p and "bare stdout" in p for p in out), out
+
+
+def test_pretooluse_with_additionalcontext_passes(fake_repo):
+    (fake_repo / ".claude" / "settings.json").write_text(json.dumps({"hooks": {"PreToolUse": [
+        {"hooks": [{"type": "command", "command": 'if [ -x ".claude/scripts/ok.sh" ]; then '
+                    'exec ".claude/scripts/ok.sh"; fi; exit 0'}]}]}}))
+    (fake_repo / ".claude" / "scripts" / "ok.sh").write_text(
+        '#!/usr/bin/env bash\necho \'{"hookSpecificOutput":{"additionalContext":"hi"}}\'\nexit 0\n')
+    assert doccheck.check_pretooluse_hooks_reach_the_model() == []
