@@ -46,6 +46,8 @@ import tempfile
 from pathlib import Path
 
 TESSERA_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(TESSERA_ROOT / "scripts" / "hooks"))
+import anchor_settings  # noqa: E402  (path set above; stdlib-only, safe under any python3)
 
 # Files the scaffold writes that belong to the PROJECT, not the harness. Never back-fill these:
 # they carry identity (name, description, test command, findings) or are merged, not copied.
@@ -150,7 +152,7 @@ def known_tessera_versions(rel: str) -> set[str]:
 
 
 def sync(project: Path, apply: bool, exclude: list[str] | None = None,
-         update_stale: bool = False) -> int:
+         update_stale: bool = False, patch_settings: bool = False) -> int:
     exclude = exclude or []
     with tempfile.TemporaryDirectory() as td:
         ref_root = reference_scaffold(Path(td))
@@ -220,10 +222,22 @@ def sync(project: Path, apply: bool, exclude: list[str] | None = None,
         if exclude:
             hooks_to_add = [(e, h) for e, h in hooks_to_add
                             if not any(x in h.get("command", "") for x in exclude)]
+        settings_dirty = False
         if hooks_to_add and apply:
             tgt_settings.setdefault("hooks", {})
             for event, hook in hooks_to_add:
                 tgt_settings["hooks"].setdefault(event, []).append({"hooks": [hook]})
+            settings_dirty = True
+        # --patch-settings: rewrite EXISTING cwd-relative hook commands to the anchored form.
+        # sync-harness otherwise only ADDS; this is the one thing that touches a command already
+        # present. Mutates in memory even in dry-run (never written unless --apply), so the count
+        # is honest either way. See scripts/hooks/anchor_settings.py for the severity split.
+        anchored: list[str] = []
+        if patch_settings:
+            _, anchored = anchor_settings.anchor(tgt_settings)
+            if anchored and apply:
+                settings_dirty = True
+        if settings_dirty:
             tgt_path.write_text(json.dumps(tgt_settings, indent=2) + "\n")
 
     verb = "added" if apply else "would add"
@@ -255,7 +269,14 @@ def sync(project: Path, apply: bool, exclude: list[str] | None = None,
               f"to refresh the provably-unmodified ones):")
         for rel in drifted:
             print(f"  ~ {rel}")
-    if not apply and (added or hooks_to_add):
+    if patch_settings:
+        verb_a = "anchored" if apply else "would anchor"
+        if anchored:
+            print(f"\n{verb_a} {len(anchored)} cwd-relative hook command(s) in "
+                  f".claude/settings.json: {', '.join(sorted(set(anchored)))}")
+        else:
+            print("\nsettings.json hook paths already anchored — nothing to patch")
+    if not apply and (added or hooks_to_add or anchored):
         print("\nre-run with --apply to write.")
     return 0
 
@@ -270,12 +291,16 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--exclude", action="append", default=[], metavar="SUBSTR",
                     help="skip components whose path contains SUBSTR (repeatable), "
                          "e.g. --exclude spend")
+    ap.add_argument("--patch-settings", action="store_true",
+                    help="also anchor EXISTING cwd-relative hook commands in the project's "
+                         ".claude/settings.json to ${CLAUDE_PROJECT_DIR:-.} (the one rewrite "
+                         "sync-harness makes to a command already present)")
     args = ap.parse_args(argv)
     project = args.project.resolve()
     if not (project / ".tessera" / "project.yml").is_file():
         print(f"not a Tessera project: {project}", file=sys.stderr)
         return 2
-    return sync(project, args.apply, args.exclude, args.update_stale)
+    return sync(project, args.apply, args.exclude, args.update_stale, args.patch_settings)
 
 
 if __name__ == "__main__":
