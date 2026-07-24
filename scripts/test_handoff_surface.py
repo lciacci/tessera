@@ -59,9 +59,22 @@ Prose only. Someone forgot the numbered list.
 
 
 def _surface(tmp_path: Path, handoff: str) -> str:
+    """Run the surfacer against a fixture repo.
+
+    The script is COPIED into the fixture's own .claude/scripts/ rather than run from the
+    real repo with cwd=tmp_path. Since 2026-07-24 it anchors to `dirname $0/../..`, because
+    a hook inherits the session cwd and that may be another repo entirely — so its own
+    location, not the cwd, is what decides which repo it reads. Pointing the test at the
+    real script with a fixture cwd would exercise the coupling that anchoring removed, and
+    would go green only while the bug was present.
+    """
     (tmp_path / "_project_specs" / "todos").mkdir(parents=True)
     (tmp_path / "_project_specs" / "todos" / "active.md").write_text(handoff)
-    out = subprocess.run(["bash", str(SURFACE)], cwd=tmp_path, input="{}",
+    scripts = tmp_path / ".claude" / "scripts"
+    scripts.mkdir(parents=True)
+    surface = scripts / SURFACE.name
+    surface.write_text(SURFACE.read_text())
+    out = subprocess.run(["bash", str(surface)], cwd=tmp_path, input="{}",
                          capture_output=True, text=True)
     return out.stdout
 

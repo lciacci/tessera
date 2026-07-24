@@ -997,6 +997,100 @@ def check_hooks_match_templates() -> list[str]:
     return bad
 
 
+_BARE_HOOK_PATH = re.compile(r'"((?:\.claude/scripts|hooks)/[A-Za-z0-9._-]+)"')
+_BARE_UNQUOTED_PATH = re.compile(r"(?:\.claude/scripts|hooks)/[A-Za-z0-9._-]+")
+_SELF_ANCHOR = 'cd "$(dirname "$0")/../.."'
+_SCRIPT_DIR_ANCHOR = 'cd "$SCRIPT_DIR/../.."'
+# Hooks with no repo-relative path of their own: nothing inside them to mis-resolve.
+_NO_ANCHOR_NEEDED = {"mnemos-stop-ingest.sh", "tessera-spend-guard.sh", "tessera-spend-backstop.sh"}
+
+
+def check_hook_commands_are_anchored() -> list[str]:
+    """Hook commands must anchor to the project root, and their scripts must self-anchor.
+
+    A hook command inherits the SESSION's cwd, which is NOT guaranteed to be this repo — the
+    Bash tool keeps cwd across calls, so one `cd ~/Claude/howler` retargets every relative
+    path for the rest of the session.
+
+    FOUND 2026-07-24, live, in this repo. A cd into a downstream persisted and: this session's
+    gate log split 4/2 across two repos under one session id; the Stop hook resolved against
+    howler and reported "hook script missing or not executable" for a file that existed and
+    was -rwxr-xr-x (`[ -x ]` cannot tell wrong-directory from not-executable). An adversarial
+    probe then planted decoys and got RETARGETED 13/13 — and from a cwd with no
+    .claude/scripts, twelve of thirteen exited 0 with EMPTY OUTPUT. Only verify-scan spoke.
+
+    BOTH halves are required and neither is sufficient. Anchoring only the command runs the
+    right script, which then reads the wrong repo's files (proven: the anchored watch-surface
+    still printed nothing until the script itself anchored). Anchoring only the script is
+    unreachable, because the command cannot find it.
+    """
+    bad = []
+    settings = ROOT / ".claude" / "settings.json"
+    try:
+        data = json.loads(settings.read_text())
+    except Exception:
+        return [".claude/settings.json unreadable — cannot verify hook anchoring"]
+
+    commands = []
+    sl = data.get("statusLine") or {}
+    if sl.get("type") == "command":
+        commands.append(("statusLine", sl.get("command", "")))
+    for event, groups in (data.get("hooks") or {}).items():
+        for group in groups:
+            for hook in group.get("hooks", []):
+                commands.append((event, hook.get("command", "")))
+
+    for event, cmd in commands:
+        # statusLine is a BARE path, not a shell block — unquoted, so the quoted-path regex
+        # below cannot see it. That is the exact form this repo shipped until 2026-07-24, and
+        # a check that missed it would have certified the original bug as fixed.
+        if _BARE_UNQUOTED_PATH.fullmatch(cmd.strip()):
+            bad.append(
+                f'.claude/settings.json {event}: command "{cmd.strip()}" is a bare cwd-relative '
+                f"path — it retargets to whatever repo the session cd'd into. Wrap it in "
+                f"sh -c with ${{CLAUDE_PROJECT_DIR:-.}}."
+            )
+            continue
+        for path in _BARE_HOOK_PATH.findall(cmd):
+            bad.append(
+                f".claude/settings.json {event}: hook path \"{path}\" is cwd-relative — it "
+                f'retargets to whatever repo the session cd\'d into. Use "${{CLAUDE_PROJECT_DIR:-.}}/{path}".'
+            )
+
+    for tpl in ("templates/tessera/settings.base.json", "templates/settings.json"):
+        try:
+            tdata = json.loads((ROOT / tpl).read_text())
+        except Exception:
+            bad.append(f"{tpl}: unreadable — cannot verify hook anchoring")
+            continue
+        tcmds = []
+        tsl = tdata.get("statusLine") or {}
+        if tsl.get("type") == "command":
+            tcmds.append(tsl.get("command", ""))
+        for groups in (tdata.get("hooks") or {}).values():
+            for group in groups:
+                for hook in group.get("hooks", []):
+                    tcmds.append(hook.get("command", ""))
+        for cmd in tcmds:
+            for path in _BARE_HOOK_PATH.findall(cmd):
+                bad.append(
+                    f'{tpl}: hook path "{path}" is cwd-relative — every project scaffolded '
+                    f"from this template is born with the retargeting bug."
+                )
+
+    for hook in sorted((ROOT / ".claude" / "scripts").glob("*.sh")):
+        if hook.name in _NO_ANCHOR_NEEDED:
+            continue
+        body = hook.read_text()
+        if _SELF_ANCHOR not in body and _SCRIPT_DIR_ANCHOR not in body:
+            bad.append(
+                f".claude/scripts/{hook.name}: no project-root self-anchor — its own relative "
+                f'paths resolve against the session cwd. Add cd "$(dirname "$0")/../.." after '
+                f"the shebang (or after SCRIPT_DIR if the script resolves $0 itself)."
+            )
+    return bad
+
+
 # Skills a template/command tells you to load or copy, by name. Matches
 # `@.claude/skills/X/…`, `~/.claude/skills/X/…`, `cp … skills/X/`, etc.
 _TEMPLATE_SKILL_REF = re.compile(r"skills/([a-z][a-z0-9-]+)/")
@@ -1118,6 +1212,7 @@ CHECKS = {
     "template-skill-refs-exist": check_template_skill_refs_exist,
     "skill-profiles-names-are-installed": check_skill_profiles_names_are_installed,
     "hooks-match-templates": check_hooks_match_templates,
+    "hook-commands-are-anchored": check_hook_commands_are_anchored,
     "hooks-status-compares-content": check_hooks_status_really_compares_content,
     "tessera-tools-are-documented": check_tessera_tools_are_documented,
     "template-names-findings-channel": check_downstream_template_names_the_findings_channel,

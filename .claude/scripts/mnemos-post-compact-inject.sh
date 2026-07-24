@@ -98,6 +98,17 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# Anchor to the project root: hook commands inherit the SESSION cwd, which may be another
+# repo entirely (2026-07-24). Deliberately AFTER SCRIPT_DIR — that line resolves $0, which
+# is relative whenever CLAUDE_PROJECT_DIR is unset, so cd-ing above it breaks it.
+case "$SCRIPT_DIR" in
+  */.claude/scripts) cd "$SCRIPT_DIR/../.." 2>/dev/null || exit 0 ;;
+esac
+# Guarded: this script is ALSO installed to ~/.claude/templates/ as the ADR-0004
+# global fallback, where ../.. is $HOME, not a repo. Anchoring there would cd every
+# downstream hook to $HOME and silently no-op it. In the global tier the session cwd
+# IS the right signal — that copy has no repo of its own.
+
 "$TOOLCHAIN_PY" -c "
 import sys, json
 sys.path.insert(0, '${SCRIPT_DIR%/templates}/scripts')

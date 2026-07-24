@@ -937,3 +937,71 @@ def test_handoff_current_heading_passes(fake_repo):
                        "## Handoff — pick up here (2026-07-20)\nnew\n\n"
                        "## ═══ SESSION 2026-07-19 ═══\nold log\n")
     assert doccheck.check_handoff_heading_is_current() == []
+
+
+# ── hook-commands-are-anchored (added 2026-07-24) ──────────────────────────────────────────
+#
+# A hook command inherits the SESSION cwd. One `cd` into a downstream retargets every relative
+# path for the rest of the session: this repo's gate log split 4/2 across two repos, and a
+# probe got RETARGETED 13/13 with twelve exiting 0 and EMPTY. Both halves are asserted because
+# neither alone is sufficient — an anchored command runs the right script, which then reads
+# the wrong repo unless the script anchors too.
+
+def _anchored_settings(**over):
+    cmd = over.get("cmd", 'if [ -x "${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/x.sh" ]; then '
+                          'exec "${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/x.sh"; fi; exit 0')
+    return {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": cmd}]}]}}
+
+
+def _seed(repo, settings, script_body, templates=None):
+    """Seed a fake repo. Templates default to ANCHORED so the live-settings assertions are
+    isolated; pass `templates` explicitly to exercise the scaffold half of the check."""
+    (repo / ".claude" / "scripts").mkdir(parents=True, exist_ok=True)
+    (repo / ".claude" / "settings.json").write_text(json.dumps(settings))
+    (repo / ".claude" / "scripts" / "x.sh").write_text(script_body)
+    tpl = templates if templates is not None else _anchored_settings()
+    (repo / "templates" / "tessera").mkdir(parents=True, exist_ok=True)
+    (repo / "templates" / "tessera" / "settings.base.json").write_text(json.dumps(tpl))
+    (repo / "templates" / "settings.json").write_text(json.dumps(tpl))
+
+
+ANCHORED_SCRIPT = '#!/usr/bin/env bash\ncd "$(dirname "$0")/../.." 2>/dev/null || exit 0\n'
+BARE_SCRIPT = '#!/usr/bin/env bash\necho hi\n'
+
+
+def test_catches_cwd_relative_hook_command(fake_repo):
+    _seed(fake_repo, _anchored_settings(
+        cmd='if [ -x ".claude/scripts/x.sh" ]; then exec ".claude/scripts/x.sh"; fi; exit 0'),
+        ANCHORED_SCRIPT)
+    out = doccheck.check_hook_commands_are_anchored()
+    assert any("cwd-relative" in p for p in out), out
+
+
+def test_catches_script_with_no_self_anchor(fake_repo):
+    _seed(fake_repo, _anchored_settings(), BARE_SCRIPT)
+    out = doccheck.check_hook_commands_are_anchored()
+    assert any("no project-root self-anchor" in p for p in out), out
+
+
+def test_passes_when_both_halves_are_anchored(fake_repo):
+    _seed(fake_repo, _anchored_settings(), ANCHORED_SCRIPT)
+    assert doccheck.check_hook_commands_are_anchored() == []
+
+
+def test_statusline_is_checked_too(fake_repo):
+    """statusLine is not in hooks{} — it was the 16th carrier the first count missed."""
+    s = _anchored_settings()
+    s["statusLine"] = {"type": "command", "command": '.claude/scripts/x.sh'}
+    _seed(fake_repo, s, ANCHORED_SCRIPT)
+    out = doccheck.check_hook_commands_are_anchored()
+    assert any("statusLine" in p for p in out), out
+
+
+def test_catches_a_scaffold_template_that_births_the_bug(fake_repo):
+    """A new project must not be scaffolded with cwd-relative hooks. templates/tessera/
+    settings.base.json is what tessera-new-project copies into every new project, and
+    templates/settings.json is what install_session_hooks.py merges into existing ones."""
+    _seed(fake_repo, _anchored_settings(), ANCHORED_SCRIPT, templates=_anchored_settings(
+        cmd='if [ -x ".claude/scripts/x.sh" ]; then exec ".claude/scripts/x.sh"; fi; exit 0'))
+    out = doccheck.check_hook_commands_are_anchored()
+    assert any("born with the retargeting bug" in p for p in out), out

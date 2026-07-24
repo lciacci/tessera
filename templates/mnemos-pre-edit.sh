@@ -1,5 +1,16 @@
 #!/bin/bash
 
+# Anchor to the project root: hook commands inherit the SESSION cwd, which may be
+# another repo entirely (2026-07-24 — a cd into a downstream split this repo's gate
+# log 4/2 and silently no-op'd twelve hooks). $0 is a fact this script always has.
+case "$(dirname "$0")" in
+  */.claude/scripts) cd "$(dirname "$0")/../.." 2>/dev/null || exit 0 ;;
+esac
+# Guarded: this script is ALSO installed to ~/.claude/templates/ as the ADR-0004
+# global fallback, where ../.. is $HOME, not a repo. Anchoring there would cd every
+# downstream hook to $HOME and silently no-op it. In the global tier the session cwd
+# IS the right signal — that copy has no repo of its own.
+
 # ── Toolchain resolution: a PATH, never a NAME, and NO bare-python3 fallback. (F-001) ──
 # This block used to fall back to `python3 -m mnemos`. That fallback was the bug: with
 # PYTHONPATH=scripts, ANY interpreter imports mnemos straight from source — so it did not

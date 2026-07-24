@@ -1,7 +1,7 @@
 {
   "statusLine": {
     "type": "command",
-    "command": "if [ -x \".claude/scripts/mnemos-statusline.sh\" ]; then exec \".claude/scripts/mnemos-statusline.sh\"; fi; if [ -x \"$HOME/.claude/templates/mnemos-statusline.sh\" ]; then exec \"$HOME/.claude/templates/mnemos-statusline.sh\"; fi; exit 0",
+    "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-statusline.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-statusline.sh\"; fi; if [ -x \"$HOME/.claude/templates/mnemos-statusline.sh\" ]; then exec \"$HOME/.claude/templates/mnemos-statusline.sh\"; fi; exit 0",
     "padding": 0
   },
   "permissions": {
@@ -48,7 +48,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -x \".claude/scripts/tier-classify-hook\" ]; then exec \".claude/scripts/tier-classify-hook\"; fi; if [ -x \"$HOME/.claude/templates/tier-classify-hook\" ]; then exec \"$HOME/.claude/templates/tier-classify-hook\"; fi; exit 0",
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tier-classify-hook\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tier-classify-hook\"; fi; if [ -x \"$HOME/.claude/templates/tier-classify-hook\" ]; then exec \"$HOME/.claude/templates/tier-classify-hook\"; fi; exit 0",
             "timeout": 12,
             "statusMessage": "Classifying Claude effort tier (qwen)..."
           }
@@ -60,7 +60,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -x \".claude/scripts/mnemos-pre-compact.sh\" ]; then exec \".claude/scripts/mnemos-pre-compact.sh\"; fi; if [ -x \"$HOME/.claude/templates/mnemos-pre-compact.sh\" ]; then exec \"$HOME/.claude/templates/mnemos-pre-compact.sh\"; fi; echo \"[maggy] hook script 'mnemos-pre-compact.sh' not installed \u2014 run <maggy>/install.sh (one-time) or touch .claude/scripts/mnemos-pre-compact.sh to silence\" >&2; exit 0",
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-pre-compact.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-pre-compact.sh\"; fi; if [ -x \"$HOME/.claude/templates/mnemos-pre-compact.sh\" ]; then exec \"$HOME/.claude/templates/mnemos-pre-compact.sh\"; fi; echo \"[maggy] hook script 'mnemos-pre-compact.sh' not installed \u2014 run <maggy>/install.sh (one-time) or touch .claude/scripts/mnemos-pre-compact.sh to silence\" >&2; exit 0",
             "timeout": 8,
             "statusMessage": "Writing emergency checkpoint + compaction priorities..."
           }
@@ -72,7 +72,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -x \".claude/scripts/mnemos-post-compact-inject.sh\" ]; then exec \".claude/scripts/mnemos-post-compact-inject.sh\"; fi; if [ -x \"$HOME/.claude/templates/mnemos-post-compact-inject.sh\" ]; then exec \"$HOME/.claude/templates/mnemos-post-compact-inject.sh\"; fi; echo \"[maggy] hook script 'mnemos-post-compact-inject.sh' not installed \u2014 run <maggy>/install.sh (one-time) or touch .claude/scripts/mnemos-post-compact-inject.sh to silence\" >&2; exit 0",
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-post-compact-inject.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-post-compact-inject.sh\"; fi; if [ -x \"$HOME/.claude/templates/mnemos-post-compact-inject.sh\" ]; then exec \"$HOME/.claude/templates/mnemos-post-compact-inject.sh\"; fi; echo \"[maggy] hook script 'mnemos-post-compact-inject.sh' not installed \u2014 run <maggy>/install.sh (one-time) or touch .claude/scripts/mnemos-post-compact-inject.sh to silence\" >&2; exit 0",
             "timeout": 2,
             "statusMessage": "Checking for post-compaction restore..."
           }
@@ -83,7 +83,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -x \".claude/scripts/mnemos-pre-edit.sh\" ]; then exec \".claude/scripts/mnemos-pre-edit.sh\"; fi; if [ -x \"$HOME/.claude/templates/mnemos-pre-edit.sh\" ]; then exec \"$HOME/.claude/templates/mnemos-pre-edit.sh\"; fi; echo \"[maggy] hook script 'mnemos-pre-edit.sh' not installed \u2014 run <maggy>/install.sh (one-time) or touch .claude/scripts/mnemos-pre-edit.sh to silence\" >&2; exit 0",
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-pre-edit.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-pre-edit.sh\"; fi; if [ -x \"$HOME/.claude/templates/mnemos-pre-edit.sh\" ]; then exec \"$HOME/.claude/templates/mnemos-pre-edit.sh\"; fi; echo \"[maggy] hook script 'mnemos-pre-edit.sh' not installed \u2014 run <maggy>/install.sh (one-time) or touch .claude/scripts/mnemos-pre-edit.sh to silence\" >&2; exit 0",
             "timeout": 5,
             "statusMessage": "Checking fatigue + intent context..."
           }
@@ -94,7 +94,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -x \".claude/scripts/subagent-route-hook\" ]; then exec \".claude/scripts/subagent-route-hook\"; fi; if [ -x \"$HOME/.claude/templates/subagent-route-hook\" ]; then exec \"$HOME/.claude/templates/subagent-route-hook\"; fi; exit 0",
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/subagent-route-hook\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/subagent-route-hook\"; fi; if [ -x \"$HOME/.claude/templates/subagent-route-hook\" ]; then exec \"$HOME/.claude/templates/subagent-route-hook\"; fi; exit 0",
             "timeout": 3,
             "statusMessage": "Applying Claude effort tier to subagent..."
           }
@@ -105,7 +105,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -x \".claude/scripts/tessera-spend-guard.sh\" ]; then exec \".claude/scripts/tessera-spend-guard.sh\"; fi; exit 0",
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-spend-guard.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-spend-guard.sh\"; fi; exit 0",
             "timeout": 5,
             "statusMessage": "Checking spend authorization..."
           }
@@ -117,7 +117,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -x \".claude/scripts/mnemos-post-tool.sh\" ]; then exec \".claude/scripts/mnemos-post-tool.sh\"; fi; if [ -x \"$HOME/.claude/templates/mnemos-post-tool.sh\" ]; then exec \"$HOME/.claude/templates/mnemos-post-tool.sh\"; fi; echo \"[maggy] hook script 'mnemos-post-tool.sh' not installed \u2014 run <maggy>/install.sh (one-time) or touch .claude/scripts/mnemos-post-tool.sh to silence\" >&2; exit 0",
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-post-tool.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-post-tool.sh\"; fi; if [ -x \"$HOME/.claude/templates/mnemos-post-tool.sh\" ]; then exec \"$HOME/.claude/templates/mnemos-post-tool.sh\"; fi; echo \"[maggy] hook script 'mnemos-post-tool.sh' not installed \u2014 run <maggy>/install.sh (one-time) or touch .claude/scripts/mnemos-post-tool.sh to silence\" >&2; exit 0",
             "timeout": 1,
             "statusMessage": "Logging tool outcome..."
           }
@@ -129,37 +129,37 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -x \".claude/scripts/tdd-loop-check.sh\" ]; then exec \".claude/scripts/tdd-loop-check.sh\"; fi; if [ -x \"$HOME/.claude/templates/tdd-loop-check.sh\" ]; then exec \"$HOME/.claude/templates/tdd-loop-check.sh\"; fi; echo \"[maggy] hook script 'tdd-loop-check.sh' not installed \u2014 run <maggy>/install.sh (one-time) or touch .claude/scripts/tdd-loop-check.sh to silence\" >&2; exit 0",
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tdd-loop-check.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tdd-loop-check.sh\"; fi; if [ -x \"$HOME/.claude/templates/tdd-loop-check.sh\" ]; then exec \"$HOME/.claude/templates/tdd-loop-check.sh\"; fi; echo \"[maggy] hook script 'tdd-loop-check.sh' not installed \u2014 run <maggy>/install.sh (one-time) or touch .claude/scripts/tdd-loop-check.sh to silence\" >&2; exit 0",
             "timeout": 60,
             "statusMessage": "Running tests..."
           },
           {
             "type": "command",
-            "command": "if command -v codex &>/dev/null; then if [ -x \".claude/scripts/codex-auto-review.sh\" ]; then exec \".claude/scripts/codex-auto-review.sh\"; elif [ -x \"$HOME/.claude/templates/codex-auto-review.sh\" ]; then exec \"$HOME/.claude/templates/codex-auto-review.sh\"; fi; fi; exit 0",
+            "command": "if command -v codex &>/dev/null; then if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/codex-auto-review.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/codex-auto-review.sh\"; elif [ -x \"$HOME/.claude/templates/codex-auto-review.sh\" ]; then exec \"$HOME/.claude/templates/codex-auto-review.sh\"; fi; fi; exit 0",
             "timeout": 120,
             "statusMessage": "Codex reviewing changes..."
           },
           {
             "type": "command",
-            "command": "if [ -x \".claude/scripts/icpg-stop-record.sh\" ]; then exec \".claude/scripts/icpg-stop-record.sh\"; fi; if [ -x \"$HOME/.claude/templates/icpg-stop-record.sh\" ]; then exec \"$HOME/.claude/templates/icpg-stop-record.sh\"; fi; echo \"[maggy] hook script 'icpg-stop-record.sh' not installed \u2014 run <maggy>/install.sh (one-time) or touch .claude/scripts/icpg-stop-record.sh to silence\" >&2; exit 0",
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/icpg-stop-record.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/icpg-stop-record.sh\"; fi; if [ -x \"$HOME/.claude/templates/icpg-stop-record.sh\" ]; then exec \"$HOME/.claude/templates/icpg-stop-record.sh\"; fi; echo \"[maggy] hook script 'icpg-stop-record.sh' not installed \u2014 run <maggy>/install.sh (one-time) or touch .claude/scripts/icpg-stop-record.sh to silence\" >&2; exit 0",
             "timeout": 5,
             "statusMessage": "Recording symbols to intent graph..."
           },
           {
             "type": "command",
-            "command": "if [ -x \".claude/scripts/mnemos-stop-checkpoint.sh\" ]; then exec \".claude/scripts/mnemos-stop-checkpoint.sh\"; fi; if [ -x \"$HOME/.claude/templates/mnemos-stop-checkpoint.sh\" ]; then exec \"$HOME/.claude/templates/mnemos-stop-checkpoint.sh\"; fi; echo \"[maggy] hook script 'mnemos-stop-checkpoint.sh' not installed \u2014 run <maggy>/install.sh (one-time) or touch .claude/scripts/mnemos-stop-checkpoint.sh to silence\" >&2; exit 0",
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-stop-checkpoint.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-stop-checkpoint.sh\"; fi; if [ -x \"$HOME/.claude/templates/mnemos-stop-checkpoint.sh\" ]; then exec \"$HOME/.claude/templates/mnemos-stop-checkpoint.sh\"; fi; echo \"[maggy] hook script 'mnemos-stop-checkpoint.sh' not installed \u2014 run <maggy>/install.sh (one-time) or touch .claude/scripts/mnemos-stop-checkpoint.sh to silence\" >&2; exit 0",
             "timeout": 5,
             "statusMessage": "Writing session checkpoint..."
           },
           {
             "type": "command",
-            "command": "if [ -x \".claude/scripts/mnemos-stop-ingest.sh\" ]; then exec \".claude/scripts/mnemos-stop-ingest.sh\"; fi; if [ -x \"$HOME/.claude/templates/mnemos-stop-ingest.sh\" ]; then exec \"$HOME/.claude/templates/mnemos-stop-ingest.sh\"; fi; echo \"[maggy] hook script 'mnemos-stop-ingest.sh' not installed \u2014 run <maggy>/install.sh (one-time) or touch .claude/scripts/mnemos-stop-ingest.sh to silence\" >&2; exit 0",
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-stop-ingest.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-stop-ingest.sh\"; fi; if [ -x \"$HOME/.claude/templates/mnemos-stop-ingest.sh\" ]; then exec \"$HOME/.claude/templates/mnemos-stop-ingest.sh\"; fi; echo \"[maggy] hook script 'mnemos-stop-ingest.sh' not installed \u2014 run <maggy>/install.sh (one-time) or touch .claude/scripts/mnemos-stop-ingest.sh to silence\" >&2; exit 0",
             "timeout": 10,
             "statusMessage": "Ingesting Claude transcript + scoring haze..."
           },
           {
             "type": "command",
-            "command": "if [ -x \".claude/scripts/tessera-gate-scan.sh\" ]; then exec \".claude/scripts/tessera-gate-scan.sh\"; elif [ -x \"$HOME/.claude/templates/tessera-gate-scan.sh\" ]; then exec \"$HOME/.claude/templates/tessera-gate-scan.sh\"; fi; exit 0",
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-gate-scan.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-gate-scan.sh\"; elif [ -x \"$HOME/.claude/templates/tessera-gate-scan.sh\" ]; then exec \"$HOME/.claude/templates/tessera-gate-scan.sh\"; fi; exit 0",
             "timeout": 10,
             "statusMessage": "Scanning for unlogged suggestion-gates..."
           }
@@ -169,7 +169,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -x \".claude/scripts/tessera-spend-backstop.sh\" ]; then exec \".claude/scripts/tessera-spend-backstop.sh\"; fi; exit 0",
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-spend-backstop.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-spend-backstop.sh\"; fi; exit 0",
             "timeout": 5,
             "statusMessage": "Checking spend denials were dispositioned..."
           }
@@ -181,7 +181,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -x \".claude/scripts/mnemos-session-start.sh\" ]; then exec \".claude/scripts/mnemos-session-start.sh\"; fi; if [ -x \"$HOME/.claude/templates/mnemos-session-start.sh\" ]; then exec \"$HOME/.claude/templates/mnemos-session-start.sh\"; fi; echo \"[maggy] hook script 'mnemos-session-start.sh' not installed \u2014 run <maggy>/install.sh (one-time) or touch .claude/scripts/mnemos-session-start.sh to silence\" >&2; exit 0",
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-session-start.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-session-start.sh\"; fi; if [ -x \"$HOME/.claude/templates/mnemos-session-start.sh\" ]; then exec \"$HOME/.claude/templates/mnemos-session-start.sh\"; fi; echo \"[maggy] hook script 'mnemos-session-start.sh' not installed \u2014 run <maggy>/install.sh (one-time) or touch .claude/scripts/mnemos-session-start.sh to silence\" >&2; exit 0",
             "timeout": 5,
             "statusMessage": "Loading session checkpoint + project context..."
           }
