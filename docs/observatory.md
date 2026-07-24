@@ -1070,6 +1070,70 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   upgrade path: Claude silver-labels batches → qwen rubric tuned against them → replay shows the
   before/after.
 
+### Harness-staleness notification inverts: push a record downstream, don't pull from Tessera *(2026-07-24)*
+
+- **Status:** Investigating — design settled in argument, nothing built. Needs a gate before code.
+- **The trigger.** howler was 9 files behind on the spend guard. Moving that task off Tessera's
+  backlog (correct — no Tessera session can execute it) exposed the fact that **there is no
+  framework→downstream channel at all.** `tessera-findings` runs downstream→framework only. A
+  downstream has no `bin/`, no `tessera-watch`; `templates/tessera/` ships no `bin/` either. The
+  observatory machinery is framework-only, so there was no existing surface to hang a check on.
+
+- **The proposal I made first, and why it was wrong.** A downstream SessionStart hook that shells
+  out to `tessera-sync-harness <self>` and prints the gap. Measured cheap — 0.151s for a full
+  dry-run, scaffolded reference project and all — so cost was no objection. The objection is
+  Lorenzo's question: *Tessera isn't always checked out before a downstream is worked.* That hook
+  depends on the framework being present, so it goes **quiet exactly when the framework is
+  missing** — and a downstream then reads as current because its checker was unreachable. That is
+  the house pattern (*the component ships and the thing that would tell you it's broken is also
+  broken*) authored deliberately, one conversation after citing it.
+
+- **The distinction that resolves it.** Two things were conflated, and they have opposite
+  dependency requirements:
+  1. **Knowing what to fix** — must survive Tessera being absent, offline, or deleted. Zero
+     dependency permitted.
+  2. **Detecting that *new* drift appeared** — *cannot* work without Tessera. Staleness is defined
+     relative to a reference; nothing can know it is behind without the thing it is behind. Not a
+     flaw to engineer around, a fact to design with.
+
+- **So the mechanism inverts: push, not pull.** `tessera-sync-harness` **writes** the pending
+  record into the downstream's own docs when it finds a gap. The hand-written section now in
+  howler's `CLAUDE.md` (`2fab695`) is the *primary* mechanism, not a stopgap that a hook later
+  replaces — the hook's real job is generating such a record automatically. A downstream-side
+  check becomes optional garnish, and when it cannot reach Tessera it must say so **loudly**
+  rather than pass. Same session's cwd bug is the empirical argument for that last clause:
+  twelve of thirteen hooks exit 0 silently when their path does not resolve, and the one that
+  complained — with a *wrong* diagnosis — is the only reason any of it surfaced.
+
+- **Portability considerations (raised by Lorenzo; the reason this is not just a howler fix):**
+  1. **Absolute paths.** `~/Claude/howler` is baked into the record just written, and
+     `tessera-findings` roots at "tessera's parent" — a sibling-layout assumption. F-002 already
+     burned this repo once via the `lciacci`→`lorenzociacci` path slug.
+  2. **PATH-based tool discovery.** `tessera-sync-harness` resolves only because this machine's
+     PATH includes `tessera/bin`. F-001's lesson generalizes past interpreters: *a name is not a
+     location.* A portable methodology cannot assume the binary exists.
+  3. **Sibling coupling.** `discover_projects` globs `root/*/.tessera/project.yml`. Fine for one
+     `~/Claude`; breaks across machines, orgs, or nesting.
+  4. **Methodology and tooling are entangled.** The methodology ports by copying text
+     (design-principles, ADRs, working conventions); the tooling needs `install.sh` + venv +
+     PATH. But CLAUDE.md's conventions cite `scripts/gate/emit.py` by relative path — adopt the
+     methodology without the tooling and half of it dangles as instructions to run absent things.
+  5. **Stdlib-only is already the portability asset,** arrived at for a different reason.
+     `doccheck.py`, `gate/*`, `spend/*` port by copy. The venv-dependent parts (mnemos, icpg,
+     polyphony) are the least portable *and* the ones still on trial.
+  6. **Retraction, recorded because the reasoning was wrong not just the conclusion.** A
+     synced-from-commit marker in each downstream's `.tessera/` was dismissed as YAGNI earlier in
+     the same session, on cost grounds — 0.15s made live detection cheap, so why store a marker.
+     Cost was the wrong axis entirely. Across machines there is no single answer to "is howler
+     stale" without a committed marker, because *the reference itself differs per machine*.
+     Portability is the real reason to want it.
+
+- **When to revisit:** before building any harness-currency check — the push/pull choice decides
+  its shape. Also the moment a second machine or a non-sibling checkout appears, which converts
+  consideration 6 from theory into a defect.
+- **Related:** open item 3 in `_project_specs/todos/active.md` (cwd-relative retargeting, 15/15
+  hook commands) and item 1 (spec 11 fail-open sweep) — both are the same fail-quiet family.
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.
