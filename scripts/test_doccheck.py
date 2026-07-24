@@ -1075,3 +1075,16 @@ def test_anchor_check_ignores_a_path_named_in_a_message(fake_repo):
            'echo "not installed — touch .claude/scripts/x.sh to silence" >&2; exit 0')
     _seed(fake_repo, _anchored_settings(cmd=cmd), ANCHORED_SCRIPT)
     assert not any("cwd-relative" in p for p in doccheck.check_hook_commands_are_anchored())
+
+
+def test_pretooluse_channel_named_only_in_a_comment_does_not_clear(fake_repo):
+    """M1 (review 2026-07-24): the channel test was a raw substring scan, so a hook emitting
+    bare stdout but merely MENTIONING additionalContext in a comment passed — the guard against
+    the silent-hook class, weakened by the same class. Channels must be in an executed line."""
+    (fake_repo / ".claude" / "settings.json").write_text(json.dumps({"hooks": {"PreToolUse": [
+        {"hooks": [{"type": "command", "command": 'if [ -x ".claude/scripts/c.sh" ]; then '
+                    'exec ".claude/scripts/c.sh"; fi; exit 0'}]}]}}))
+    (fake_repo / ".claude" / "scripts" / "c.sh").write_text(
+        '#!/bin/bash\n# we do not use additionalContext here\necho "CONTEXT FOR THE MODEL"\n')
+    out = doccheck.check_pretooluse_hooks_reach_the_model()
+    assert any("c.sh" in p and "bare stdout" in p for p in out), out

@@ -53,6 +53,16 @@ def anchor_command(cmd: str) -> str | None:
 def anchor(settings: dict) -> tuple[dict, list[str]]:
     """Anchor every hook command in place. Returns (settings, changed-event-labels)."""
     changed: list[str] = []
+    # statusLine too: doccheck's detector flags a quoted .claude/scripts path in a statusLine,
+    # so a fixer that skipped it would UNDER-fix silently — detector-flags-what-fixer-can't-fix,
+    # the exact asymmetry this module exists to avoid (review 2026-07-24, M2). The unquoted
+    # `sh -c '… .claude/scripts/X …'` form is untouched on BOTH sides, same as the detector.
+    sl = settings.get("statusLine")
+    if sl and sl.get("type") == "command":
+        new = anchor_command(sl.get("command", ""))
+        if new is not None:
+            sl["command"] = new
+            changed.append("statusLine")
     for event, groups in (settings.get("hooks") or {}).items():
         for group in groups:
             for hook in group.get("hooks", []):

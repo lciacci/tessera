@@ -49,28 +49,24 @@ def _local_only_scripts(cmd: str) -> list[str]:
     return [m.group(1) for m in _TOKEN.finditer(cmd)]
 
 
-def test_every_local_only_wired_hook_ships_its_file(tmp_path):
-    target = _scaffold(tmp_path)
+def _missing(target):
     settings = json.loads((target / ".claude" / "settings.json").read_text())
-    missing = []
-    for cmd in _commands(settings):
-        for rel in _local_only_scripts(cmd):
-            if not (target / rel).exists():
-                missing.append(rel)
-    assert not missing, (
-        f"scaffold wires local-only hook(s) with no shipped file: {missing} — "
-        f"add the file to bin/tessera-new-project (ship both halves)")
+    return [rel for cmd in _commands(settings)
+            for rel in _local_only_scripts(cmd) if not (target / rel).exists()]
 
 
-def test_the_check_would_have_caught_the_decision_surface_bug(tmp_path):
-    """Not vacuous: delete the decision-surface file from a scaffold and confirm the rule fires.
-    Guards against the check silently passing because its detector is broken."""
+def test_local_only_wired_hooks_ship_and_the_rule_is_not_vacuous(tmp_path):
+    """One scaffold (a subprocess), both assertions. Pass case: every local-only wired hook
+    ships its file. Not-vacuous: deleting decision-surface.sh makes the rule fire — proving a
+    real local-only hook is present and evaluated, not a green from finding nothing to check."""
     target = _scaffold(tmp_path)
-    (target / ".claude" / "scripts" / "tessera-decision-surface.sh").unlink()
-    settings = json.loads((target / ".claude" / "settings.json").read_text())
-    flagged = [rel for cmd in _commands(settings)
-               for rel in _local_only_scripts(cmd) if not (target / rel).exists()]
-    assert any("tessera-decision-surface.sh" in r for r in flagged), flagged
+    assert not _missing(target), (
+        f"scaffold wires local-only hook(s) with no shipped file — add to bin/tessera-new-project")
+    surface = target / ".claude" / "scripts" / "tessera-decision-surface.sh"
+    assert surface.exists(), "precondition: a local-only hook must exist for the rule to bite"
+    surface.unlink()
+    assert any("tessera-decision-surface.sh" in r for r in _missing(target)), \
+        "rule did not fire on a deleted local-only file — the check is vacuous"
 
 
 if __name__ == "__main__":

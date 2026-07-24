@@ -58,3 +58,26 @@ def test_no_change_returns_empty():
     already = a.anchor_command(LOCAL_ONLY)
     _, changed = a.anchor({"hooks": {"Stop": [{"hooks": [{"command": already}]}]}})
     assert changed == []
+
+
+def test_fixer_covers_statusline_where_the_detector_does(tmp_path=None):
+    """M2 (review 2026-07-24): the detector flags a quoted .claude/scripts path in a statusLine;
+    the fixer must not skip it, or --patch-settings under-fixes silently. Assert the fixer
+    anchors a quoted-statusLine path AND the result is clean under the detector."""
+    quoted_sl = 'sh -c \'if [ -x ".claude/scripts/mnemos-statusline.sh" ]; then exec ".claude/scripts/mnemos-statusline.sh"; fi\''
+    assert doccheck._bare_hook_paths(quoted_sl), "precondition: detector flags this statusLine"
+    settings = {"statusLine": {"type": "command", "command": quoted_sl}}
+    _, changed = a.anchor(settings)
+    assert "statusLine" in changed
+    assert doccheck._bare_hook_paths(settings["statusLine"]["command"]) == []
+
+
+def test_main_writes_and_is_idempotent(tmp_path):
+    """main() is the standalone operator entry (sibling to patch_settings.py's) — exercise it so
+    it is not shipped untested (review flagged the CLI as uncovered)."""
+    import json
+    p = tmp_path / "settings.json"
+    p.write_text(json.dumps({"hooks": {"Stop": [{"hooks": [{"type": "command", "command": LOCAL_ONLY}]}]}}))
+    assert a.main([str(p)]) == 0                       # writes
+    assert doccheck._bare_hook_paths(json.loads(p.read_text())["hooks"]["Stop"][0]["hooks"][0]["command"]) == []
+    assert a.main([str(p)]) == 0                       # idempotent: nothing left to anchor

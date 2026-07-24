@@ -1267,6 +1267,14 @@ _MODEL_CHANNELS = ("additionalContext", "permissionDecision", "updatedInput")
 _EMITS_STDOUT = re.compile(r"\bprint\((?![^)]*file=)|^\s*(?:echo|printf)\b(?![^\n]*[|>])", re.M)
 
 
+def _executable_lines(text: str) -> str:
+    """Drop full-line `#` comments. A channel or an emit named ONLY in a comment must not count:
+    the check clears/flags on what the hook DOES, not what its rationale says. Review 2026-07-24
+    found the channel test matched 'additionalContext' in a comment — the guard against the
+    silent-hook class, silently weakened by the same class."""
+    return "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("#"))
+
+
 def check_pretooluse_hooks_reach_the_model() -> list[str]:
     """A PreToolUse hook that emits stdout must use a JSON channel, not bare stdout.
 
@@ -1296,9 +1304,12 @@ def check_pretooluse_hooks_reach_the_model() -> list[str]:
                     ref = ROOT / "scripts" / py
                     if ref.exists():
                         text += "\n" + ref.read_text()
-                if any(ch in text for ch in _MODEL_CHANNELS):
+                code = _executable_lines(text)      # channels/emits in comments do not count
+                if any(ch in code for ch in _MODEL_CHANNELS):
                     continue                      # reaches the model via a JSON channel
-                if _EMITS_STDOUT.search(script.read_text()):
+                # Emission checked across the .sh AND its referenced .py: a hook whose shell is
+                # silent but delegates model output to a bare-print() .py is the same bug.
+                if _EMITS_STDOUT.search(code):
                     bad.append(
                         f".claude/scripts/{name}: PreToolUse hook emits stdout but uses no JSON "
                         f"channel — bare stdout goes to the debug log, not the model. Emit "
