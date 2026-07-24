@@ -74,6 +74,29 @@ if [ -f "$HANDOFF" ]; then
             echo "      working one. See docs/observatory.md → 'Fail-open everywhere'.)"
         fi
         echo ""
+
+        # Standing patterns — the lessons paid for more than once. Printed VERBATIM, not
+        # pointed at. These are cross-cutting, so no ADR owns them and the file-anchored
+        # decision-surface hook cannot find them; a pointer would ride model recall, which
+        # is the failure this whole surfacer exists to remove. Scoped to the first handoff
+        # block, same as the priorities, so a stale copy further down cannot win.
+        patterns=$(awk '
+            /^## Handoff — pick up here/ { blk=1; next }
+            blk && /^## /                { exit }
+            blk && /^### Standing patterns/ { want=1; next }
+            blk && want && /^### /       { want=0 }
+            blk && want                  { print }
+        ' "$HANDOFF" | grep -vE '^\*\(|^Add a line|^file-anchored|^repo has paid|^SessionStart;' | cut -c1-116)
+
+        if [ -n "$patterns" ]; then
+            echo "=== STANDING PATTERNS (paid for more than once — do not re-learn) ==="
+            echo "$patterns"
+            echo ""
+        else
+            echo "  ⚠️  NO STANDING-PATTERNS BLOCK IN THE HANDOFF — the cross-cutting lessons"
+            echo "     are not being surfaced. Restore '### Standing patterns' in active.md."
+            echo ""
+        fi
     fi
 fi
 

@@ -16,6 +16,40 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
 suite green (231 top-level), doccheck 21/21, watch quiet but for snoozed P7, findings
 backlog empty, no escalations, all six repos' trees clean.
 
+### Standing patterns
+
+*(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` prints this block at
+SessionStart; doccheck `standing-patterns-are-surfaced` guards it. These are the lessons this
+repo has paid for MORE THAN ONCE. They are cross-cutting, so no ADR owns them and no
+file-anchored surfacer can find them — that is exactly why they are printed verbatim.
+Add a line only when a lesson recurs; the value is that the list is short enough to read.)*
+
+1. **A component ships, and the thing that would tell you it is broken is also broken.**
+   Eight instances: F-001's interpreter, the dead ingest pipe, the falsifier's swallowed
+   spawn failure, P4 counting projects not bytes, `tessera-hooks status` advertising a drift
+   check it never ran, the fleet on a retired gate vocabulary, twelve hooks silently
+   no-op'ing on a wrong cwd, and the anchor fix that would have cd'd the global tier to
+   `$HOME`. **Before shipping a check, ask what would tell you the check itself died.**
+2. **It did not break — it produced something plausible.** The fail-open class. A mechanism
+   that fails open needs a paired signal that fails LOUD. Proven again 2026-07-24: a
+   *wrong* error message was the only reason a session-wide cwd bug surfaced, while twelve
+   correct-looking `exit 0`s said nothing. Spec 11 is the systematic answer.
+3. **Name the pain, not the artifact that correlates with it.** Three retired proxy
+   predicates so far: retired-P2 (verb count), old-P4 (project count), the sqlfluff trigger
+   (file existence). If a predicate measures a stand-in, it will fire correctly and mean
+   nothing.
+4. **An interpreter is a path, not a name** (F-001). Generalises past interpreters: any
+   NAME resolved through a mutable, ordered lookup — `python3`, a `tessera-*` binary on
+   PATH, a bare relative hook path against an inherited cwd — is a landmine.
+5. **Ship both halves or neither** — and note that this is violated by TIME as often as by a
+   missing `cp`. The fleet went stale with every component correctly installed.
+6. **Green is only meaningful if failing it actually stops something.** P8 alone let a red
+   commit through; the pre-commit hook is what made doccheck load-bearing.
+7. **A test is never evidence about the thing it tests.** Manual `/compact` cannot validate
+   the compaction-recovery layer; P3 counts only non-manual events.
+8. **Never subtract from a knowledge artifact you have not read. Harvest before you cut**
+   (ADR-0007). Code has grep and tests as safeguards; prose has neither.
+
 ### Open, in priority order
 
 1. **Spec 11 — fail-open sweep.** The standing top framework item. Five components, ~15 sites,

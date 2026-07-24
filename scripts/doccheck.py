@@ -1205,7 +1205,75 @@ def check_handoff_heading_is_current() -> list[str]:
     return []
 
 
+def check_standing_patterns_are_surfaced() -> list[str]:
+    """The cross-cutting lessons must be PRINTED at SessionStart, not merely written down.
+
+    ADDED 2026-07-24. The file-anchored decision surface (ADR/observatory -> file) cannot
+    reach these: they are patterns ACROSS entries, owned by no ADR, keyed to no path.
+    Measured that day: only 20 of 43 observatory entries name a file at all. So the
+    through-lines rode model recall — and a session re-derived a lesson the repo had already
+    paid for eight times. A pointer would ride recall too; the block is printed verbatim.
+    """
+    bad = []
+    handoff = ROOT / "_project_specs" / "todos" / "active.md"
+    surfacer = ROOT / ".claude" / "scripts" / "tessera-watch-surface.sh"
+    if not handoff.exists():
+        return ["_project_specs/todos/active.md missing — cannot verify standing patterns"]
+    text = handoff.read_text()
+    first = text.find("## Handoff — pick up here")
+    if first == -1:
+        return []                      # handoff-heading-is-current owns that failure
+    nxt = text.find("\n## ", first + 5)
+    block = text[first:nxt if nxt != -1 else len(text)]
+    if "### Standing patterns" not in block:
+        bad.append("_project_specs/todos/active.md: newest handoff has no '### Standing "
+                   "patterns' block — the cross-cutting lessons are not surfaced at SessionStart")
+    if surfacer.exists() and "Standing patterns" not in surfacer.read_text():
+        bad.append(".claude/scripts/tessera-watch-surface.sh: does not extract the standing-"
+                   "patterns block — the section exists but nothing prints it")
+    return bad
+
+
+def check_decision_surface_is_wired() -> list[str]:
+    """The decision surface must be wired, and every Accepted ADR must be reachable by it.
+
+    ADDED 2026-07-24, after ADR-0004 was missed on a change it directly governs. An ADR that
+    names no file cannot be surfaced by a file-keyed hook — so it will be missed the same way.
+    That is a finding about the ADR, not only about the hook.
+    """
+    bad = []
+    settings = ROOT / ".claude" / "settings.json"
+    try:
+        data = json.loads(settings.read_text())
+    except Exception:
+        return [".claude/settings.json unreadable — cannot verify the decision surface"]
+    wired = any("decision-surface" in h.get("command", "")
+                for g in (data.get("hooks") or {}).get("PreToolUse", [])
+                for h in g.get("hooks", []))
+    if not wired:
+        bad.append("no PreToolUse decision-surface hook in .claude/settings.json — which ADR "
+                   "governs a file is back to riding model recall")
+    try:
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import decision_surface
+        index = decision_surface.build_index()
+    except Exception as exc:
+        return bad + [f"scripts/decision_surface.py cannot build its index: {exc}"]
+    reachable = {e["title"].split()[0] for entries in index.values() for e in entries}
+    for adr in sorted((ROOT / "docs" / "adr").glob("0*.md")):
+        body = adr.read_text()
+        if "**Status:** Accepted" not in body:
+            continue
+        num = body.splitlines()[0].split(":")[0].lstrip("# ").strip()
+        if num not in reachable:
+            bad.append(f"docs/adr/{adr.name}: {num} is Accepted but names no repo path in "
+                       f"backticks — nothing can surface it when its subject is edited")
+    return bad
+
+
 CHECKS = {
+    "standing-patterns-are-surfaced": check_standing_patterns_are_surfaced,
+    "decision-surface-is-wired": check_decision_surface_is_wired,
     "referenced-paths-exist": check_referenced_paths_exist,
     "handoff-heading-is-current": check_handoff_heading_is_current,
     "no-phantom-global-skill-body-claim": check_no_phantom_global_skill_body_claim,
