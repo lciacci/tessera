@@ -18,27 +18,76 @@ backlog empty, no escalations, all six repos' trees clean.
 
 ### Open, in priority order
 
-1. **howler spend guard — do it IN a howler session.** The only remaining fleet gap (9 files).
-   Deferred on purpose: it adds a `PreToolUse` hook that **denies Bash by default**, and howler
-   is mid-iOS-ship. The only way to learn whether it blocks a build, upload or signing step is
-   to be in howler running those commands. Then:
-   `tessera-sync-harness ~/Claude/howler --apply` (drop `--exclude spend`).
-   Have `tessera-authorize` ready before any spend-committing command.
-2. **Spec 11 — fail-open sweep.** The standing top framework item. Five components, ~15 sites,
+1. **Spec 11 — fail-open sweep.** The standing top framework item. Five components, ~15 sites,
    **chaos tests FIRST** — the spec is emphatic and right about why. New predicate is **P13**
    (P10 retired, P11/P12 taken). Its thesis got a *third* live confirmation on 07-21.
-3. **Third hook layer still unchecked** — nothing compares `templates/` ↔ `~/.claude/templates/`,
+2. **Third hook layer still unchecked** — nothing compares `templates/` ↔ `~/.claude/templates/`,
    the layer `install.sh` writes. P4 covers downstream↔global; doccheck `hooks-match-templates`
    covers `templates/`↔`.claude/scripts/`. Last uncovered seam.
-4. **Gate log splits across repos.** `emit.py` writes `.tessera/logs/` **relative to cwd**, so a
-   session spanning two repos splits its log and each repo's scan under-counts. Hit live during
-   the settempo adoption. Same file as F-001, different cause.
+3. **cwd-relative paths retarget silently across repos — WIDER than "the gate log splits".**
+   Original statement: `emit.py` writes `.tessera/logs/` **relative to cwd**, so a session
+   spanning two repos splits its log and each repo's scan under-counts. Hit live during the
+   settempo adoption. Same file as F-001, different cause.
+
+   **Reproduced live 2026-07-24, and it is not one script — it is every cwd-relative path in
+   the harness, hook commands included.** A `cd ~/Claude/howler` in a Bash call persisted (the
+   Bash tool keeps cwd between calls), and for the rest of the session:
+   - This session's gate log **split 4/2** — four events in tessera, two written into
+     *howler's* `.tessera/logs/` under tessera's session id. Merged back by hand; howler's
+     stray file removed. A cross-repo session's gate scan under-counts on **both** sides.
+   - The **Stop hook itself** misfired. Its command is
+     `if [ -x ".claude/scripts/tessera-verify-scan.sh" ]; ...` — a *relative* path, resolved
+     against howler, which has no verify-scan hook. Every Stop hook in `settings.json` is
+     written this way.
+   - **The error message was a misdiagnosis.** It printed `VERIFY-SCAN BROKEN: hook script
+     missing or not executable`. The script existed and was `-rwxr-xr-x`. That message sends
+     you to check permissions on a file with correct permissions. The `-x` test cannot
+     distinguish "wrong directory" from "not executable", so it reports the latter for both.
+   - **12 of 13 fail SILENTLY, and that is the real finding.** Adversarial probe planted 13
+     executable decoys in a fake repo and ran every real command string with `cwd=decoy`:
+     `RETARGETED 13/13` — each one executed the decoy. Then from a cwd with no
+     `.claude/scripts` at all: hooks 1–9 and 11–13 → `exit=0`, **empty output, silent no-op**.
+     Only hook 10 (verify-scan) → `exit=2` with the error. So for the whole window the cwd sat
+     in howler, mnemos checkpointing, gate-scan, post-tool logging and watch-surface were all
+     quietly doing nothing, and **verify-scan's loudness is the only reason it was noticed.**
+     A misdiagnosis you can act on beat twelve clean exits. That is the argument for spec 11
+     (item 1) stated in one data point.
+   - **Exposure is 15/15, not 13/13.** The two non-`.claude/scripts` hook commands —
+     `hooks/subagent-route-hook` and `hooks/tier-classify-hook` — are bare-relative too.
+   - *Residual gap, stated because it was not closed:* hook-cwd == shell-cwd is **inferred**
+     from the harness's own `Shell cwd was reset to …` accounting plus a reproduced exact error
+     string. A real Stop hook could not be spawned to execute the link directly.
+
+   Fix direction (undecided — needs a gate): anchor to the repo root rather than cwd, in both
+   `emit.py` and the hook commands, and make the hook's failure message name the cwd it
+   actually looked in. Leave a check behind: doccheck can assert no hook command in
+   `settings.json` uses a bare relative `.claude/...` path. **Class note:** this is instance
+   seven of "the component ships and the thing that would tell you it is broken is also
+   broken" — here the breakage detector reported the wrong cause, which is worse than silence.
+4. **Evaluate scryer** — https://github.com/aklos/scryer. Run `/evaluate-framework` (produces a
+   decision ADR with adoption verdict + re-evaluate triggers). Unread as of 2026-07-24; scope
+   and overlap with Tessera unknown, so this is an evaluation, not an adoption.
 5. **Consider flipping sqlfluff to blocking per project** once a `.sqlfluff` is tuned enough that
    findings are real (`lint.sh` final `exit 0` → `exit 1`). settempo is NOT there — its RF05/PG01
    hits are wrong.
 6. **G-a fires and that is correct** — it reads the fire-log tail, not current state. Self-clears
    after 3 more logged runs. Do not "fix" it.
 7. Trim backlog (ADR-0008); minors: uuid prefix-resolve, historical `--reclassify --all`.
+
+### Not Tessera's to execute (2026-07-24 reclassification)
+
+- **howler spend guard.** Was item 1 here for two sessions and never moved — because *nothing in
+  a Tessera session can do it*. The command runs against `~/Claude/howler`, the hook it installs
+  denies Bash by default there, and the only way to learn whether it blocks a build/upload/signing
+  step is to be in howler running those commands. A task that can only be executed in another
+  repo does not belong on this repo's priority list; parking it at #1 made the list read as
+  blocked when the framework work was never blocked. Command when in howler:
+  `tessera-sync-harness ~/Claude/howler --apply` (drop `--exclude spend`), with
+  `tessera-authorize` ready before any spend-committing command.
+  **Tessera's residual share is real but small:** the fleet-currency *check* is Tessera's — today
+  nothing tells you howler is 9 files behind except a human running `tessera-sync-harness`
+  by hand. That gap is the same class as items 2 and 3 and belongs with them, not with the
+  howler-side install.
 
 ### What happened (2026-07-22)
 
