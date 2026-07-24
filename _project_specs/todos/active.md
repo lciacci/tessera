@@ -69,17 +69,24 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    (P10 retired, P11/P12 taken). Got its 4th+ live confirmation this session (the cwd silent
    no-op AND the PreToolUse channel bug are both textbook instances).
 2. **Push mechanism (framework→downstream).** Split into two, Part A DONE:
-   - **Part A — `tessera-sync-harness --patch-settings` (SHIPPED `b981731`).** Anchors *existing*
-     cwd-relative hook commands in a downstream `settings.json` — the one rewrite the tool makes
-     to a command already present. `scripts/hooks/anchor_settings.py`, output kept clean under
-     doccheck's own detector so fixer/detector can't drift.
-     **REMAINING: apply it to the fleet** — 5 repos, each a `settings.json` edit + commit:
-     `tessera-sync-harness ~/Claude/<repo> --patch-settings --apply`. This is 5 **cross-repo
-     writes** — do them deliberately (git-status-first, check no one's working there; see the
-     Cross-repo cautions). **Severity is mostly LATENT:** the 7 mnemos hooks have the ADR-0004
-     global fallback that masks the bug; only the 3 local-only Tessera hooks (gate-scan,
-     spend-guard, spend-backstop) are live-vulnerable, and only in a cross-repo session. So this
-     is correctness/defense-in-depth, not a fire.
+   - **Part A — `tessera-sync-harness --patch-settings` (SHIPPED + APPLIED TO ALL 5).** Anchors
+     *existing* cwd-relative hook commands in a downstream `settings.json`.
+     `scripts/hooks/anchor_settings.py`; output kept clean under doccheck's own detector so
+     fixer/detector can't drift. **Applied + committed in all 5** (conclave `9333e19`, heaviside
+     `c2dbf00`, settempo `ccd41e3`, tess-dashboard `684df86`, howler `5d25036`) — pure anchoring,
+     settings.json only. **PUSH STATUS: local only** — heaviside/tess-dashboard also carry
+     pre-existing unpushed commits, so pushing was left for a deliberate call.
+     Two bugs the apply exposed, both fixed: **(1)** `--patch-settings --apply` bundled the full
+     back-fill and installed howler's DEFERRED spend guard mid-ship — reverted, refactored to
+     **anchor-only** (`6af5246`, regression-tested); **(2)** B was half-shipped into the scaffold
+     this session (wired in the template, file not copied) — `tessera-new-project` now ships both
+     halves (`efb7649`). **Follow-up not yet guarded:** no doccheck asserts the scaffold ships a
+     file for every hook it wires — that class (wire-without-file) bit here and is caught only by
+     a fleet back-fill accident, not a check. A robust check has false-positive surface (globs,
+     global-tier hooks); worth building deliberately.
+     **Severity of the original anchoring gap was mostly LATENT:** the 7 mnemos hooks have the
+     ADR-0004 global fallback that masks it; only the 3 local-only Tessera hooks (gate-scan,
+     spend-guard, spend-backstop) were live-vulnerable, and only in a cross-repo session.
    - **Part B — the pending-record channel (framework→downstream). NEEDS A DESIGN GATE first**
      (its observatory entry says "design settled in argument, nothing built"). When sync finds a
      gap it should *write* a record into the downstream's own docs (automating the howler
