@@ -6,15 +6,20 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-07-22: F-001 closed, sqlfluff adopted, fleet harness current)
+## Handoff — pick up here (2026-07-24: cwd anchoring shipped both tiers, PreToolUse channel bug fixed, decision-surface + standing-patterns surfacers live)
 
 *(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
 Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering.)*
 
 ### THE ONE THING TO KNOW
-**Every downstream is now on the current harness, and `frozen` has zero users.** Tessera
-suite green (231 top-level), doccheck 21/21, watch quiet but for snoozed P7, findings
-backlog empty, no escalations, all six repos' trees clean.
+**A whole class of silent-hook bugs was found and fixed — and an adversarial multi-agent code
+review caught a CRITICAL my own testing had certified green.** Shipped this session: cwd-anchoring
+across all 15/15 hook commands + 11 scripts + both scaffold templates + the global tier (guarded
+so the `~/.claude/templates` copy does not cd to `$HOME`); the decision-surface hook (B, surfaces
+governing ADRs before an edit) and the standing-patterns block (E, this block); and the fix for a
+PreToolUse-channel bug that had `mnemos-pre-edit` and Layer-3 compaction recovery **silent to the
+model the entire Mnemos trial**. Tessera suite green, doccheck **27/27**, watch quiet but for
+snoozed P7, findings backlog empty, no escalations. **Both tessera and howler pushed; trees clean.**
 
 ### Standing patterns
 
@@ -25,11 +30,12 @@ file-anchored surfacer can find them — that is exactly why they are printed ve
 Add a line only when a lesson recurs; the value is that the list is short enough to read.)*
 
 1. **A component ships, and the thing that would tell you it is broken is also broken.**
-   Eight instances: F-001's interpreter, the dead ingest pipe, the falsifier's swallowed
-   spawn failure, P4 counting projects not bytes, `tessera-hooks status` advertising a drift
-   check it never ran, the fleet on a retired gate vocabulary, twelve hooks silently
-   no-op'ing on a wrong cwd, and the anchor fix that would have cd'd the global tier to
-   `$HOME`. **Before shipping a check, ask what would tell you the check itself died.**
+   Instances: F-001's interpreter, the dead ingest pipe, the falsifier's swallowed spawn
+   failure, P4 counting projects not bytes, `tessera-hooks status` advertising a drift check
+   it never ran, the fleet on a retired gate vocabulary, twelve hooks silently no-op'ing on a
+   wrong cwd, the anchor fix that would have cd'd the global tier to `$HOME`, and the
+   decision-surface hook — built to defeat this exact pattern — shipped silent by it (2026-07-24).
+   **Before shipping a check, ask what would tell you the check itself died.**
 2. **It did not break — it produced something plausible.** The fail-open class. A mechanism
    that fails open needs a paired signal that fails LOUD. Proven again 2026-07-24: a
    *wrong* error message was the only reason a session-wide cwd bug surfaced, while twelve
@@ -49,64 +55,74 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    the compaction-recovery layer; P3 counts only non-manual events.
 8. **Never subtract from a knowledge artifact you have not read. Harvest before you cut**
    (ADR-0007). Code has grep and tests as safeguards; prose has neither.
+9. **A mechanism that RUNS has not necessarily REACHED its audience.** Verify the delivery
+   channel, not just that the code produced output. A PreToolUse hook's stdout goes to the
+   debug log, not the model — `decision-surface`, `mnemos-pre-edit`, and Layer-3 compaction
+   recovery all "ran" while silent to the model. Self-testing proved they *produced* text;
+   only review and the docs proved the harness *delivered* none of it. Test the real path to
+   the real audience, and let an independent reviewer check what you didn't think to.
 
 ### Open, in priority order
 
 1. **Spec 11 — fail-open sweep.** The standing top framework item. Five components, ~15 sites,
    **chaos tests FIRST** — the spec is emphatic and right about why. New predicate is **P13**
-   (P10 retired, P11/P12 taken). Its thesis got a *third* live confirmation on 07-21.
-2. **Third hook layer still unchecked** — nothing compares `templates/` ↔ `~/.claude/templates/`,
+   (P10 retired, P11/P12 taken). Got its 4th+ live confirmation this session (the cwd silent
+   no-op AND the PreToolUse channel bug are both textbook instances).
+2. **Push mechanism (framework→downstream) — NOW FORCED, highest leverage.** Two concrete gaps
+   demand it: (a) the 5 downstream `settings.json` still carry bare-relative hook paths (~92
+   refs) and `tessera-sync-harness` **cannot** patch an existing `settings.json` (it only adds
+   files); (b) the howler-currency check has no delivery channel. Design is settled in the
+   observatory ("Harness-staleness notification inverts: push a record downstream"). One build
+   (`tessera-sync-harness --patch-settings` + a written pending-record) closes both.
+3. **`emit.py` still writes `.tessera/logs/` relative to cwd.** The hook commands + scripts are
+   anchored now, but `emit.py` is run *directly* (not via a hook), so a cross-repo session still
+   splits the gate log — this session's 4/2 split was exactly that. Anchor it to the repo root.
+   The hooks half of old item 3 is DONE (shipped `1b2d6c7`); this is the remaining half.
+4. **Third hook layer still unchecked** — nothing compares `templates/` ↔ `~/.claude/templates/`,
    the layer `install.sh` writes. P4 covers downstream↔global; doccheck `hooks-match-templates`
-   covers `templates/`↔`.claude/scripts/`. Last uncovered seam.
-3. **cwd-relative paths retarget silently across repos — WIDER than "the gate log splits".**
-   Original statement: `emit.py` writes `.tessera/logs/` **relative to cwd**, so a session
-   spanning two repos splits its log and each repo's scan under-counts. Hit live during the
-   settempo adoption. Same file as F-001, different cause.
+   covers `templates/`↔`.claude/scripts/`. Last uncovered seam. (install.sh synced it this
+   session, but nothing *checks* it.)
+5. **Re-judge Mnemos compaction recovery AND the fatigue/intent feature.** Both PreToolUse hooks
+   were silent to the model the whole trial (fixed `[HEAD]`). Every prior observation of Layer 3
+   "not reaching the model" and of the fatigue-injection was through a dropped channel — same
+   shape as F-001 (empty ≠ unused). P3's verdict must be re-formed with Layer 3 actually landing.
+   See observatory → "PreToolUse hooks' bare stdout never reached the model".
+6. **Evaluate scryer** — https://github.com/aklos/scryer. Run `/evaluate-framework`. Unread as of
+   2026-07-24; scope/overlap unknown, so this is an evaluation, not an adoption.
+7. Minors: **concept-tags for B** (it only surfaces file-keyed decisions; Alternatives-Considered
+   and cross-cutting lessons are blind — the observatory "harness-staleness" entry is a live
+   example B could not have surfaced); **auto-guard for E** (the standing-patterns block is
+   hand-maintained — a doccheck could assert every phrase appearing 3+ times has a line);
+   **B vs `adr-gate`** (decide if B replaces that skill's intent or if it wires as a Stop hook
+   too — avoid two mechanisms for one job); sqlfluff blocking flip (settempo not there); **G-a
+   fires correctly** (reads the fire-log tail, self-clears after 3 runs — do NOT "fix"); trim
+   backlog (ADR-0008); uuid prefix-resolve; historical `--reclassify --all`.
 
-   **Reproduced live 2026-07-24, and it is not one script — it is every cwd-relative path in
-   the harness, hook commands included.** A `cd ~/Claude/howler` in a Bash call persisted (the
-   Bash tool keeps cwd between calls), and for the rest of the session:
-   - This session's gate log **split 4/2** — four events in tessera, two written into
-     *howler's* `.tessera/logs/` under tessera's session id. Merged back by hand; howler's
-     stray file removed. A cross-repo session's gate scan under-counts on **both** sides.
-   - The **Stop hook itself** misfired. Its command is
-     `if [ -x ".claude/scripts/tessera-verify-scan.sh" ]; ...` — a *relative* path, resolved
-     against howler, which has no verify-scan hook. Every Stop hook in `settings.json` is
-     written this way.
-   - **The error message was a misdiagnosis.** It printed `VERIFY-SCAN BROKEN: hook script
-     missing or not executable`. The script existed and was `-rwxr-xr-x`. That message sends
-     you to check permissions on a file with correct permissions. The `-x` test cannot
-     distinguish "wrong directory" from "not executable", so it reports the latter for both.
-   - **12 of 13 fail SILENTLY, and that is the real finding.** Adversarial probe planted 13
-     executable decoys in a fake repo and ran every real command string with `cwd=decoy`:
-     `RETARGETED 13/13` — each one executed the decoy. Then from a cwd with no
-     `.claude/scripts` at all: hooks 1–9 and 11–13 → `exit=0`, **empty output, silent no-op**.
-     Only hook 10 (verify-scan) → `exit=2` with the error. So for the whole window the cwd sat
-     in howler, mnemos checkpointing, gate-scan, post-tool logging and watch-surface were all
-     quietly doing nothing, and **verify-scan's loudness is the only reason it was noticed.**
-     A misdiagnosis you can act on beat twelve clean exits. That is the argument for spec 11
-     (item 1) stated in one data point.
-   - **Exposure is 15/15, not 13/13.** The two non-`.claude/scripts` hook commands —
-     `hooks/subagent-route-hook` and `hooks/tier-classify-hook` — are bare-relative too.
-   - *Residual gap, stated because it was not closed:* hook-cwd == shell-cwd is **inferred**
-     from the harness's own `Shell cwd was reset to …` accounting plus a reproduced exact error
-     string. A real Stop hook could not be spawned to execute the link directly.
+### What happened (2026-07-24)
 
-   Fix direction (undecided — needs a gate): anchor to the repo root rather than cwd, in both
-   `emit.py` and the hook commands, and make the hook's failure message name the cwd it
-   actually looked in. Leave a check behind: doccheck can assert no hook command in
-   `settings.json` uses a bare relative `.claude/...` path. **Class note:** this is instance
-   seven of "the component ships and the thing that would tell you it is broken is also
-   broken" — here the breakage detector reported the wrong cause, which is worse than silence.
-4. **Evaluate scryer** — https://github.com/aklos/scryer. Run `/evaluate-framework` (produces a
-   decision ADR with adoption verdict + re-evaluate triggers). Unread as of 2026-07-24; scope
-   and overlap with Tessera unknown, so this is an evaluation, not an adoption.
-5. **Consider flipping sqlfluff to blocking per project** once a `.sqlfluff` is tuned enough that
-   findings are real (`lint.sh` final `exit 0` → `exit 1`). settempo is NOT there — its RF05/PG01
-   hits are wrong.
-6. **G-a fires and that is correct** — it reads the fire-log tail, not current state. Self-clears
-   after 3 more logged runs. Do not "fix" it.
-7. Trim backlog (ADR-0008); minors: uuid prefix-resolve, historical `--reclassify --all`.
+- **cwd anchoring shipped, both tiers** (`1b2d6c7`). A `cd ~/Claude/howler` persisted (the Bash
+  tool keeps cwd across calls) and retargeted every relative hook path: the gate log split 4/2,
+  the Stop hook misdiagnosed a wrong-cwd as "not executable", and an adversarial probe showed
+  12 of 13 hooks silently no-op from a foreign cwd. Fixed: 16 settings commands →
+  `${CLAUDE_PROJECT_DIR:-.}`, 11 scripts self-anchor from `$0` (GUARDED so the global-tier copy
+  does not cd to `$HOME`), both scaffold templates, global tier synced via `install.sh`. Checks:
+  doccheck `hook-commands-are-anchored` (both halves + guard + templates).
+- **decision-surface (B) + standing-patterns (E) shipped** (`07f4689`) to make #17 land on the
+  design record itself — B surfaces governing ADRs before an edit (it fired correctly on this
+  session's own edits), E prints the cross-cutting lessons at SessionStart.
+- **Multi-agent code review** (3 lenses + a docs verification) on the session diff. Found and
+  fixed a CRITICAL: B was wired PreToolUse and emitted bare stdout, which reaches only the debug
+  log — silent to its whole audience. Plus 2 mediums (doccheck vacuity) and 3 lows (all fixed or
+  consciously left). My own testing had certified B green. See standing pattern #9.
+- **PreToolUse channel bug found to be a CLASS** (`[HEAD-1]`). `mnemos-pre-edit.sh` (fatigue/
+  intent) and `mnemos-post-compact-inject.sh` (Layer 3) had the same bare-stdout defect — silent
+  to the model the whole trial. This EXPLAINS the skill's standing "Layer 3 injection never seen"
+  note. Both fixed; check `pretooluse-hooks-reach-the-model` added. Observatory entry filed.
+- **L3 review nit closed** (`b4178b9`) — anchor check missed the `./`-prefixed path form; fixed,
+  scoped away from the string-mention false positive the maggy template exposed.
+- **neon + neon-postgres absorbed into `skills/`** (`18c6578`) — P12 was firing on Claude-shipped
+  global-only skills; content was already byte-identical, the drift was provenance.
+- Doccheck grew 20 → **27 checks** across the session.
 
 ### Not Tessera's to execute (2026-07-24 reclassification)
 
@@ -122,6 +138,12 @@ Add a line only when a lesson recurs; the value is that the list is short enough
   nothing tells you howler is 9 files behind except a human running `tessera-sync-harness`
   by hand. That gap is the same class as items 2 and 3 and belongs with them, not with the
   howler-side install.
+
+---
+
+## ═══ SESSION 2026-07-22 (wrap) — F-001 closed, sqlfluff adopted, fleet harness current ═══
+
+*(Archived — the 2026-07-24 handoff above supersedes it. Kept for the trail.)*
 
 ### What happened (2026-07-22)
 

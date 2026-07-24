@@ -66,6 +66,19 @@ summarizer honored the PreCompact preservation block. Layer 3 logged `restore_in
 the marker, but its injected text was never *seen* reaching the model: the plumbing is confirmed, the
 injection is not. Treat Layer 2 as the load-bearing one.
 
+**RESOLVED, and it was never flaky (2026-07-24).** The reason Layer 3's injection "was never seen
+reaching the model" is now known: `mnemos-post-compact-inject.sh` is a **PreToolUse** hook and it
+emitted the restore block as **bare stdout**, which Claude Code routes to the debug log — NOT into
+context (verified against `code.claude.com/docs/en/hooks`; only SessionStart/UserPromptSubmit add
+bare stdout to context). Layer 2 delivered *because* it is a SessionStart hook. The asymmetry was
+the channel, not the plumbing. Layer 3 now emits `hookSpecificOutput.additionalContext` and reaches
+the model. **This retroactively taints the trial's Layer-3 evidence** — every prior "not seen"
+observation was through a dropped channel (same shape as F-001: empty ≠ unused). P3's compaction
+verdict must be re-formed with Layer 3 actually landing. Guarded by doccheck
+`pretooluse-hooks-reach-the-model`; see `docs/observatory.md` → "PreToolUse hooks' bare stdout
+never reached the model". The same bug silenced `mnemos-pre-edit.sh` (the fatigue/intent injection
+below) for the whole trial — also fixed.
+
 **Update (2026-07-16, supersedes the 07-15 reading below):** both gaps re-checked.
 - **Fatigue is LIVE, not degraded.** `fatigue.json` carries real token metrics (`source: statusline`);
   `mnemos fatigue` computes all four dims — token-util 0.27 (wt 0.40), composite 0.11 FLOW. The 07-15
