@@ -68,12 +68,28 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    **chaos tests FIRST** — the spec is emphatic and right about why. New predicate is **P13**
    (P10 retired, P11/P12 taken). Got its 4th+ live confirmation this session (the cwd silent
    no-op AND the PreToolUse channel bug are both textbook instances).
-2. **Push mechanism (framework→downstream) — NOW FORCED, highest leverage.** Two concrete gaps
-   demand it: (a) the 5 downstream `settings.json` still carry bare-relative hook paths (~92
-   refs) and `tessera-sync-harness` **cannot** patch an existing `settings.json` (it only adds
-   files); (b) the howler-currency check has no delivery channel. Design is settled in the
-   observatory ("Harness-staleness notification inverts: push a record downstream"). One build
-   (`tessera-sync-harness --patch-settings` + a written pending-record) closes both.
+2. **Push mechanism (framework→downstream).** Split into two, Part A DONE:
+   - **Part A — `tessera-sync-harness --patch-settings` (SHIPPED `b981731`).** Anchors *existing*
+     cwd-relative hook commands in a downstream `settings.json` — the one rewrite the tool makes
+     to a command already present. `scripts/hooks/anchor_settings.py`, output kept clean under
+     doccheck's own detector so fixer/detector can't drift.
+     **REMAINING: apply it to the fleet** — 5 repos, each a `settings.json` edit + commit:
+     `tessera-sync-harness ~/Claude/<repo> --patch-settings --apply`. This is 5 **cross-repo
+     writes** — do them deliberately (git-status-first, check no one's working there; see the
+     Cross-repo cautions). **Severity is mostly LATENT:** the 7 mnemos hooks have the ADR-0004
+     global fallback that masks the bug; only the 3 local-only Tessera hooks (gate-scan,
+     spend-guard, spend-backstop) are live-vulnerable, and only in a cross-repo session. So this
+     is correctness/defense-in-depth, not a fire.
+   - **Part B — the pending-record channel (framework→downstream). NEEDS A DESIGN GATE first**
+     (its observatory entry says "design settled in argument, nothing built"). When sync finds a
+     gap it should *write* a record into the downstream's own docs (automating the howler
+     CLAUDE.md section). Open decisions to gate before any code: **(1) where the record lives** —
+     a `## Pending` block in `CLAUDE.md` (rides the always-loaded file, but must update
+     idempotently without clobbering hand edits) vs a dedicated `docs/PENDING.md` vs `.tessera/`;
+     **(2) idempotent-update semantics** — how re-running sync refreshes the record without
+     duplicating or overwriting human notes; **(3) the committed staleness marker** (portability
+     consideration #6) — cross-machine "is it stale" has no answer without a marker committed in
+     the downstream, because the reference differs per machine. Resolve these three, then build.
 3. **`emit.py` still writes `.tessera/logs/` relative to cwd.** The hook commands + scripts are
    anchored now, but `emit.py` is run *directly* (not via a hook), so a cross-repo session still
    splits the gate log — this session's 4/2 split was exactly that. Anchor it to the repo root.
