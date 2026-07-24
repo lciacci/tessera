@@ -80,10 +80,11 @@ Add a line only when a lesson recurs; the value is that the list is short enough
      back-fill and installed howler's DEFERRED spend guard mid-ship — reverted, refactored to
      **anchor-only** (`6af5246`, regression-tested); **(2)** B was half-shipped into the scaffold
      this session (wired in the template, file not copied) — `tessera-new-project` now ships both
-     halves (`efb7649`). **Follow-up not yet guarded:** no doccheck asserts the scaffold ships a
-     file for every hook it wires — that class (wire-without-file) bit here and is caught only by
-     a fleet back-fill accident, not a check. A robust check has false-positive surface (globs,
-     global-tier hooks); worth building deliberately.
+     halves (`efb7649`). **The wire-without-file class is now GUARDED** (`10c18ac`):
+     `test_new_project_wires_ship_files` asserts every local-only wired hook ships its file,
+     using the fallback-presence rule (no allowlist, zero false positives — the special-casing
+     I'd flagged as the blocker turned out unnecessary once the rule keyed on the ADR-0004
+     fallback). Lives in the suite, not doccheck, because it scaffolds a project.
      **Severity of the original anchoring gap was mostly LATENT:** the 7 mnemos hooks have the
      ADR-0004 global fallback that masks it; only the 3 local-only Tessera hooks (gate-scan,
      spend-guard, spend-backstop) were live-vulnerable, and only in a cross-repo session.
