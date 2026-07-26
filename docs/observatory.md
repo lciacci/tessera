@@ -1410,6 +1410,47 @@ this section — the dedup fix it prescribes is real but is now step 3, not step
   step 2 is judged (criterion 5 wants an *independent* session to confirm the bar — this tool is
   what "independent" was supposed to mean, and it is now plausibly able to be that).
 
+### A Tessera skill silently shadowed a built-in command *(2026-07-26, observed live)*
+
+- **Status:** OPEN. Cause understood and the workaround is known; the *check* is the open part,
+  and it is harder to ground than it first looks (below).
+- **What happened.** `/code-review ultra review-base-20260726` was typed to launch the cloud
+  ultrareview. It did not launch. Tessera ships a skill named **`code-review`**, which shadowed
+  the built-in command of the same name; the arguments `ultra review-base-20260726` were handed
+  to that skill as plain text, and it loaded its local multi-engine review guide instead. **No
+  error, no warning, no cloud session.** `/ultrareview <base>` — the documented alias, and not a
+  skill name — worked first try.
+- **Why it belongs here and not in a commit message.** It is the fail-open class again, in a
+  place nobody had looked: *you invoked X, got Y, and nothing said so.* A skill loading IS what
+  success looks like, so there is no signal to notice. Compare the F-001 family — the failure
+  did not announce itself because the substitute behaved plausibly.
+- **Blast radius is not one machine.** ADR-0010 makes `skills/` the truth and mirrors it to
+  `~/.claude/skills`, which is how this collision exists at BOTH user and project level here,
+  and how it reaches every downstream that syncs. Any name Tessera picks is claimed everywhere
+  the registry lands.
+- **Measured, not assumed:** Tessera owns **51** skills. Against the built-ins visible in this
+  session, exactly **one** collides today — `code-review`. `security` vs the built-in
+  `security-review` and `python` vs the built-in tooling do NOT collide (different names).
+- **Why the obvious check is not obvious.** A doccheck rule "no skill name may equal a built-in
+  command" needs a *list of built-in command names*, and there is no stable, enumerable source
+  for that inside the repo — the set is defined by the harness, changes with Claude Code
+  releases, and is only observable as a rendered listing in a live session. A hardcoded list
+  here would be a **proxy predicate** that rots silently (Standing pattern #3, which has already
+  retired three of them). **Do not ship the hardcoded version as if it were the real check.**
+  Candidate approaches, none yet chosen:
+  1. **Rename ours** — `code-review` → `tessera-code-review`. Fixes today's instance outright and
+     needs no oracle. Costs: it is referenced in this repo's CLAUDE.md, the `adr-gate` skill, and
+     downstream docs, so it is a rename with a blast radius, not a one-liner.
+  2. **A namespace convention** — prefix every Tessera skill, making collisions structurally
+     impossible and checkable without an oracle (`assert every skill dir starts with the prefix`).
+     Cheap to check, expensive to migrate 51 skills, and it makes every skill name uglier.
+  3. **A curated known-collisions list** with an explicit staleness marker, accepting the proxy
+     but making its rot visible.
+- **What is NOT in question:** the workaround. `/ultrareview` is unshadowed and documented.
+- **When to revisit:** next time a built-in command is added that matters here, or when the
+  skill corpus is next touched (ADR-0008/0009/0010 lineage) — a rename is cheapest to do while
+  the corpus is already open.
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.
