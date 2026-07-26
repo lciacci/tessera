@@ -47,9 +47,12 @@ fi
 # (~85%, observatory), so shipping it without the scan ships the broken half.
 # remap_kind rides along because test_gate_emit imports it (spec 15); the copied
 # set must stay import-closed — guarded by test_new_project_gate_copies.
+# paths.py rides along because emit.py imports it (2026-07-26 repo-anchoring). It is
+# load-bearing downstream, not just here: a downstream gate log is session-keyed too,
+# and emit.py is hand-invoked there as well.
 cp "$TESSERA_ROOT"/scripts/gate/emit.py "$TESSERA_ROOT"/scripts/gate/test_gate_emit.py \
    "$TESSERA_ROOT"/scripts/gate/scan.py "$TESSERA_ROOT"/scripts/gate/test_gate_scan.py \
-   "$TESSERA_ROOT"/scripts/gate/remap_kind.py \
+   "$TESSERA_ROOT"/scripts/gate/remap_kind.py "$TESSERA_ROOT"/scripts/gate/paths.py \
    "$TARGET/scripts/gate/"
 cp "$TESSERA_ROOT"/.claude/scripts/tessera-gate-scan.sh "$TARGET/.claude/scripts/"
 chmod +x "$TARGET/.claude/scripts/tessera-gate-scan.sh"

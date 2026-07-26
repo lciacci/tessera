@@ -1088,3 +1088,57 @@ def test_pretooluse_channel_named_only_in_a_comment_does_not_clear(fake_repo):
         '#!/bin/bash\n# we do not use additionalContext here\necho "CONTEXT FOR THE MODEL"\n')
     out = doccheck.check_pretooluse_hooks_reach_the_model()
     assert any("c.sh" in p and "bare stdout" in p for p in out), out
+
+
+# ─── BUG (2026-07-24, fixed 07-26): the gate log split 4/2 across two repos under ONE session
+# id. `.tessera/logs/<session>.jsonl` is session-keyed, but the hand-invoked gate tools resolved
+# it against the cwd — and a `cd` into a downstream persists across Bash calls. The write side
+# corrupted; the read side was worse, because `ratio.py` from a foreign cwd printed a clean
+# report of ZERO gates instead of erroring (standing pattern #2).
+def test_catches_a_cwd_relative_session_log_path(fake_repo, monkeypatch):
+    monkeypatch.setattr(doccheck, "_HAND_INVOKED_SESSION_TOOLS", ("scripts/gate/emit.py",))
+    (fake_repo / "scripts" / "gate").mkdir(parents=True)
+    (fake_repo / "scripts" / "gate" / "emit.py").write_text(
+        'from pathlib import Path\n'
+        'def _log_path(sid):\n'
+        '    return Path(".tessera/logs") / f"{sid}.jsonl"\n'
+    )
+    bad = doccheck.check_session_logs_are_repo_anchored()
+    assert any("cwd-relative" in v and "emit.py" in v for v in bad), bad
+
+
+def test_passes_when_the_session_log_path_is_anchored(fake_repo, monkeypatch):
+    """The real fix's shape: root from __file__/TESSERA_ROOT, segments as separate literals."""
+    monkeypatch.setattr(doccheck, "_HAND_INVOKED_SESSION_TOOLS", ("scripts/gate/emit.py",))
+    (fake_repo / "scripts" / "gate").mkdir(parents=True)
+    (fake_repo / "scripts" / "gate" / "emit.py").write_text(
+        'import os\n'
+        'from pathlib import Path\n'
+        'def _log_path(sid):\n'
+        '    root = Path(os.environ.get("TESSERA_ROOT") or Path(__file__).resolve().parents[2])\n'
+        '    return root / ".tessera" / "logs" / f"{sid}.jsonl"\n'
+    )
+    assert doccheck.check_session_logs_are_repo_anchored() == []
+
+
+def test_session_log_check_ignores_a_path_named_in_a_comment(fake_repo, monkeypatch):
+    """Same false-positive class the anchor check hit: the fixed files DOCUMENT the old bad
+    path in their comments. Flagging the explanation of a fix as the bug would make the check
+    unfixable — the only way to go green would be to delete the reasoning."""
+    monkeypatch.setattr(doccheck, "_HAND_INVOKED_SESSION_TOOLS", ("scripts/gate/emit.py",))
+    (fake_repo / "scripts" / "gate").mkdir(parents=True)
+    (fake_repo / "scripts" / "gate" / "emit.py").write_text(
+        '# was Path(".tessera/logs") / f"{sid}.jsonl" — cwd-relative, split the log 4/2\n'
+        'from pathlib import Path\n'
+        'LOGS = Path(__file__).resolve().parents[2] / ".tessera" / "logs"\n'
+    )
+    assert doccheck.check_session_logs_are_repo_anchored() == []
+
+
+def test_session_log_check_is_not_vacuous():
+    """The list must name files that EXIST in the real repo. A typo'd path would make the
+    check scan nothing and pass forever — the vacuity class found in the 2026-07-24 review."""
+    assert doccheck._HAND_INVOKED_SESSION_TOOLS, "the tool list is empty — check scans nothing"
+    missing = [p for p in doccheck._HAND_INVOKED_SESSION_TOOLS
+               if not (doccheck.ROOT / p).is_file()]
+    assert not missing, f"listed but absent: {missing}"

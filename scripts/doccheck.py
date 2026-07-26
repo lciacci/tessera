@@ -1365,7 +1365,64 @@ def check_decision_surface_is_wired() -> list[str]:
     return bad
 
 
+# The session-keyed tools that are invoked BY HAND — no hook wrapper to cd to the repo first.
+# Their hook-invoked siblings (gate/scan.py, verify/scan.py, spend/*) are omitted on purpose:
+# the wrapper's `cd "$(dirname "$0")/../.."` already anchors them, and that is checked by
+# `hook-commands-are-anchored`. Add a file here the moment it stops being hook-invoked.
+_HAND_INVOKED_SESSION_TOOLS = (
+    "scripts/gate/emit.py",
+    "scripts/gate/label.py",
+    "scripts/gate/ratio.py",
+    "scripts/gate/remap_kind.py",
+    "scripts/override/emit.py",
+    "scripts/mnemos/eval_correction.py",
+)
+# A quoted `.tessera/...` or `.mnemos/...` literal with no leading `/` — i.e. resolved against
+# the cwd. `paths.logs_dir()` and the inlined `_ROOT / ".tessera" / "logs"` forms don't match:
+# their segments are separate string literals, which is the point of splitting them.
+_CWD_RELATIVE_STATE = re.compile(r'"\.(?:tessera|mnemos)/[^"]*"')
+
+
+def check_session_logs_are_repo_anchored() -> list[str]:
+    """Hand-invoked, session-keyed tools must anchor their state paths to the repo.
+
+    `.tessera/logs/<session>.jsonl` is keyed by CLAUDE_CODE_SESSION_ID, so it belongs to the
+    SESSION, not to whatever directory the tool was run from. Resolving it against the cwd is
+    wrong by construction — and the Bash tool keeps cwd across calls, so a single `cd` into a
+    downstream retargets every one of these for the rest of the session.
+
+    FOUND 2026-07-24 as a 4/2 gate-log split under one session id; fixed 2026-07-26. The write
+    side (emit.py) corrupts: half the events land in another repo. The READ side is worse
+    because it is quiet — `ratio.py` from a foreign cwd printed a clean, well-formatted report
+    of ZERO gates over ZERO sessions rather than erroring. Standing pattern #2: it did not
+    break, it produced something plausible.
+
+    NOT flagged, deliberately: `bin/tessera-*` and `tessera_config.py`. Those are repo-keyed —
+    `tessera-watch` run inside a downstream SHOULD evaluate that downstream. The rule is that
+    the anchor must match the key, not that cwd-relative is always wrong.
+    """
+    bad = []
+    for rel in _HAND_INVOKED_SESSION_TOOLS:
+        path = ROOT / rel
+        try:
+            body = path.read_text()
+        except OSError:
+            bad.append(f"{rel}: listed as a hand-invoked session tool but unreadable")
+            continue
+        for line_no, line in enumerate(body.splitlines(), 1):
+            if line.lstrip().startswith("#"):
+                continue
+            for hit in _CWD_RELATIVE_STATE.findall(line):
+                bad.append(
+                    f"{rel}:{line_no}: {hit} is cwd-relative. This tool is invoked by hand with "
+                    f"no hook wrapper to cd first, and its state is session-keyed — anchor it to "
+                    f"the repo (scripts/gate/paths.py, or the inlined TESSERA_ROOT form)."
+                )
+    return bad
+
+
 CHECKS = {
+    "session-logs-are-repo-anchored": check_session_logs_are_repo_anchored,
     "standing-patterns-are-surfaced": check_standing_patterns_are_surfaced,
     "decision-surface-is-wired": check_decision_surface_is_wired,
     "pretooluse-hooks-reach-the-model": check_pretooluse_hooks_reach_the_model,

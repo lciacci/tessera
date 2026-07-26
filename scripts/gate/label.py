@@ -26,7 +26,10 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-LOGS = Path(".tessera/logs")
+import paths  # noqa: E402  (sibling module; label.py is invoked by hand, never via a hook)
+
+# Anchored to the repo, not the cwd — the log is session-keyed. See paths.py.
+LOGS = paths.logs_dir()
 
 # Ground truth = "did a real decision get made?", never the labeler's opinion of the
 # gate (the 2026-07-12 lesson). CALIBRATED against 26 human-labeled gates: the first

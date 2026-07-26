@@ -16,8 +16,12 @@ import json
 import os
 from datetime import datetime, timezone
 
-LOGS = ".tessera/logs"
-SIGNALS = ".mnemos/signals.jsonl"
+import paths
+
+# Anchored to the repo, not the cwd. A read-side tool that resolves against a foreign cwd
+# does not error — it reports zero, which reads as "no gates logged". Standing pattern #2.
+LOGS = str(paths.logs_dir())
+SIGNALS = str(paths.signals_path())
 EDIT_TOOLS = {"Edit", "Write", "NotebookEdit"}
 
 

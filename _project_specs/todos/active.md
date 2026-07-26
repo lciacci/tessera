@@ -98,10 +98,27 @@ Add a line only when a lesson recurs; the value is that the list is short enough
      duplicating or overwriting human notes; **(3) the committed staleness marker** (portability
      consideration #6) — cross-machine "is it stale" has no answer without a marker committed in
      the downstream, because the reference differs per machine. Resolve these three, then build.
-3. **`emit.py` still writes `.tessera/logs/` relative to cwd.** The hook commands + scripts are
-   anchored now, but `emit.py` is run *directly* (not via a hook), so a cross-repo session still
-   splits the gate log — this session's 4/2 split was exactly that. Anchor it to the repo root.
-   The hooks half of old item 3 is DONE (shipped `1b2d6c7`); this is the remaining half.
+3. ~~**`emit.py` still writes `.tessera/logs/` relative to cwd.**~~ — DONE 2026-07-26. The scoping
+   sweep found the item was **under-specified: 12 relative-path sites, not 1.** Sorted by the rule
+   **the anchor must match the key** — `.tessera/logs/<session>.jsonl` is keyed by
+   CLAUDE_CODE_SESSION_ID, so it belongs to the SESSION and cwd-resolution is wrong by
+   construction; `bin/tessera-*` and `tessera_config.py` are **repo**-keyed, so their cwd-relative
+   paths are CORRECT and were deliberately left (`tessera-watch` inside a downstream *should*
+   evaluate that downstream). Fixed the 6 hand-invoked session-keyed tools
+   (`gate/{emit,label,ratio,remap_kind}.py`, `override/emit.py`, `mnemos/eval_correction.py`) via
+   `scripts/gate/paths.py` — anchored on `__file__`, **not** `CLAUDE_PROJECT_DIR`, which is set for
+   hook processes but **UNSET in the Bash tool env**, so the `${CLAUDE_PROJECT_DIR:-.}` form the
+   hook *commands* use collapses to `.` here. `TESSERA_ROOT` overrides. Check:
+   doccheck `session-logs-are-repo-anchored` (+4 regression tests incl. an anti-vacuity one).
+   **The read side was the worse half and is the item-1 evidence:** `ratio.py` from a foreign cwd
+   printed a clean report of ZERO gates over ZERO sessions; anchored, the same command reports
+   27 sessions / 142 gates / 1039 edits. It did not break — it produced something plausible.
+   **The 5 hook-invoked siblings (`gate/scan.py`, `verify/scan.py`, `spend/{backstop,guard,event}.py`)
+   are LATENT, not fixed** — safe only because the wrapper does `cd "$(dirname "$0")/../.."`, i.e.
+   one shell line is the sole guarantee for the spend-authorization lookup. That is a pattern-#1
+   shape and belongs to item 1's sweep. Shipping also exposed a **pattern-#5 half-ship**: the new
+   `paths.py` was not in `tessera-new-project`'s copy set, so every scaffolded project's gate
+   recorder would `ModuleNotFoundError` — caught by `test_new_project_gate_copies`, fixed.
 4. **Third hook layer still unchecked** — nothing compares `templates/` ↔ `~/.claude/templates/`,
    the layer `install.sh` writes. P4 covers downstream↔global; doccheck `hooks-match-templates`
    covers `templates/`↔`.claude/scripts/`. Last uncovered seam. (install.sh synced it this

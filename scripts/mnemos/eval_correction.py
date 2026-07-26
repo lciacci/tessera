@@ -18,10 +18,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
-SILVER = Path(".mnemos/silver-corrections.jsonl")
+# Anchored to the repo, not the cwd. Run by hand (no hook wrapper to cd first); against a
+# foreign cwd it finds no silver labels and reports an empty eval rather than failing.
+# Mirrors scripts/gate/paths.py — see the note there on why it is not shared.
+_ROOT = Path(os.environ.get("TESSERA_ROOT") or Path(__file__).resolve().parents[2])
+SILVER = _ROOT / ".mnemos" / "silver-corrections.jsonl"
 
 
 def main(argv: list[str] | None = None) -> int:

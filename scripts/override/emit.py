@@ -55,7 +55,13 @@ def build_event(ov: Override, *, session_id: str, ts: str | None = None) -> dict
 
 
 def log_path(session_id: str) -> Path:
-    return Path(".tessera/logs") / f"{session_id}.jsonl"
+    """Anchored to the repo, not the cwd — the log is keyed by session, and this is invoked
+    by hand with no hook wrapper to cd first. Mirrors scripts/gate/paths.py; inlined because
+    the two suites cannot share a module (colliding same-directory names, see run-tests.sh).
+    Kept honest by doccheck's `session-logs-are-repo-anchored`, which covers both copies."""
+    override = os.environ.get("TESSERA_ROOT")
+    root = Path(override) if override else Path(__file__).resolve().parents[2]
+    return root / ".tessera" / "logs" / f"{session_id}.jsonl"
 
 
 def append_event(event: dict, session_id: str) -> Path:
