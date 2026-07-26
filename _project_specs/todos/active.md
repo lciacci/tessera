@@ -269,12 +269,18 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    judging it now would measure the plumbing, not the concept. Same shape as F-001, one layer up.
 7. Minors: **concept-tags for B** (it only surfaces file-keyed decisions; Alternatives-Considered
    and cross-cutting lessons are blind — the observatory "harness-staleness" entry is a live
-   example B could not have surfaced); **auto-guard for E** (the standing-patterns block is
+   example B could not have surfaced). *Still open — but note B gained the **amendment edge**
+   2026-07-26 (`scripts/decision_amendments.py`): it now lists the later records that REVISIT
+   each surfaced ADR, which is a different axis from concept-tags. File-keying is unchanged.*
+   ~~uuid prefix-resolve~~ **DONE 2026-07-26** — and it was not cosmetic: `mnemos haze --session`
+   and `divergence --session` **failed OPEN**, scoring an unknown or truncated id as
+   `0.00 CLEAR (0 turns)`, the best possible result, for a session that does not exist. Both now
+   resolve an unambiguous prefix and refuse otherwise (rc=2), sharing one resolver. **auto-guard for E** (the standing-patterns block is
    hand-maintained — a doccheck could assert every phrase appearing 3+ times has a line);
    **B vs `adr-gate`** (decide if B replaces that skill's intent or if it wires as a Stop hook
    too — avoid two mechanisms for one job); sqlfluff blocking flip (settempo not there); **G-a
    fires correctly** (reads the fire-log tail, self-clears after 3 runs — do NOT "fix"); trim
-   backlog (ADR-0008); uuid prefix-resolve; historical `--reclassify --all`;
+   backlog (ADR-0008); historical `--reclassify --all`;
    **`tessera-verify stats` does not break out `verdict_channel`** (the field exists and is the
    number that says whether the file fix is holding — right now you have to read the log by
    hand); **spend-guard matching needs a design gate** (observatory 2026-07-26 — it matches
