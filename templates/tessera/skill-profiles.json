@@ -7,7 +7,7 @@
   "framework-evaluation",
   "adr-gate",
   "code-graph",
-  "code-review",
+  "tessera-code-review",
   "commit-hygiene",
   "iterative-development",
   "security",

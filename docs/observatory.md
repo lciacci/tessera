@@ -1461,10 +1461,30 @@ this section — the dedup fix it prescribes is real but is now step 3, not step
   would be silent and broad), **`workspace`**, **`credentials`**. Five to watch, not 51 to rename.
   No check is claimed for these — the oracle problem above is unchanged; this is a named watch
   list, which is what the observatory is for.
-- **Rename scope (not yet executed):** `skills/code-review/`, the mirrored `~/.claude/skills/`
-  copy (ADR-0010 — re-sync, do not hand-edit), references in this repo's `CLAUDE.md` and the
-  `adr-gate` skill, and any downstream docs naming it. Not a one-liner; cheapest to fold into the
-  next time the skill corpus is open.
+- **RENAME EXECUTED 2026-07-26** → `skills/tessera-code-review/`. Global mirror re-synced via
+  `bin/tessera-sync-skills` (ADR-0010: repo is truth; the old dir was deleted by the sync, not by
+  hand). Also updated: the skill's own `name:` frontmatter, `templates/tessera/skill-profiles.json`,
+  and the `Skill(...)` permission entry in `.claude/settings.local.json`. `.claude/skills` is a
+  symlink to `skills/`, so the project tier followed automatically. Native `/code-review` is
+  unshadowed and `/code-review ultra` reaches the cloud reviewer again.
+- **The rename is an INTERIM, not the verdict — and this is the part a future reader must not
+  misread.** ADR-0008 (Accepted, 07-14) directed **CUT-the-bulk / KEEP-the-ADR-gate** for this
+  skill. The keeper was split out (`skills/adr-gate/`); the cut was never executed. A *later*
+  entry in this same file (the conclave/pr-arbiter note, 07-16/17) then deferred the whole
+  question: *"same vendor-CLI-review-deprecation question, resolved there, not piecemeal"* —
+  **Open decision D1.** So the skill is renamed to stop the live shadowing and otherwise left
+  alone, deliberately pre-empting nothing.
+- **Why cutting it now would have been wrong, on evidence gathered 2026-07-26.** ADR-0008's two
+  stated reasons have both moved: (i) "superseded by native `/code-review`" still holds and is
+  stronger; but (ii) "the multi-engine bulk needs Node (**absent**)" is **no longer true** — Node
+  and npx are installed (fnm); only the `codex`/`gemini` CLIs are still missing. More importantly,
+  `bin/review` already exists as an API-based multi-model review orchestrator (deepseek/kimi/codex),
+  which means the portability the skill *appears* to protect is really a **provider-layer** concern
+  that `bin/review` owns — while the skill's content is **harness-adapter** layer, the thing
+  design-principles §"Primary harness" strips (*"Codex stays available as a model provider via
+  LiteLLM, not as a separate harness"*). Cutting loses no portability; but keeping it also buys
+  none, because the provider layer is **not wired to conclave's gateway or LiteLLM**. That gap is
+  the real work, and it is D1 — see ADR-0014.
 - **What is NOT in question:** the workaround. `/ultrareview` is unshadowed and documented.
 - **When to revisit:** next time a built-in command is added that matters here, or when the
   skill corpus is next touched (ADR-0008/0009/0010 lineage) — a rename is cheapest to do while

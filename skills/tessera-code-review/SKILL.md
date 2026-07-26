@@ -1,7 +1,7 @@
 ---
-name: code-review
-description: Mandatory code reviews via /code-review before commits and deploys
-when-to-use: When user asks to review code, before commits, or when /code-review is invoked
+name: tessera-code-review
+description: Tessera's multi-engine review flow (Claude/Codex/Gemini). Renamed from code-review 2026-07-26 — it was SHADOWING the native /code-review command. Fate pending observatory decision D1.
+when-to-use: When user asks for Tessera's multi-engine review flow. NOTE: this is NOT the native /code-review — invoke as /tessera-code-review
 user-invocable: true
 allowed-tools: [Read, Glob, Grep, Bash]
 effort: high
