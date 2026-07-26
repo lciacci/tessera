@@ -104,7 +104,10 @@ happens *because there is no session id* has no file to write into. Recorded in 
 
 **Still open:** downstream rollout (§4 below) — the fleet has neither `tessera-degraded` nor the
 new wired form. `bin/tessera-new-project` ships both to NEW projects; existing ones need
-`tessera-sync-harness`.
+`tessera-sync-harness`. **Plus one hole found by the criterion-5 re-read (2026-07-26): the
+two-tier ADR-0004 mnemos commands are excluded from reporting, and under the default `global`
+distribution — where no local copy is ever shipped — that leaves every mnemos hook fail-silent
+downstream.** Details and the verified one-line fix under success criterion 5.
 
 **Priority:** Tier 1. It gates the trustworthiness of every other verdict the framework produces.
 **Effort:** Small mechanism, medium substance. One focused session, possibly two.
@@ -252,6 +255,100 @@ the checkers that verify they are wired ("ship both halves or neither", violated
    session also **corrected `run_wired`**, so for probes 4 and 8 the probe author and mechanism
    author are the same. Mitigated by confirming the corrected probes RED before the fix — but a
    third session re-reading that correction would be worth more than this note.*
+   **A third session did that re-read, 2026-07-26 — verdict: the `run_wired` correction was
+   LEGITIMATE, not a weakening. Recorded below.**
+
+### Criterion 5, third-session re-read (2026-07-26)
+
+The gap: `41ad037` corrected `run_wired` *and* shipped the mechanism, so for probes 4 and 8 the
+probe author and the mechanism author were the same session. An independent session re-read it.
+
+**The check that settles it — run, not reasoned about.** Revert the *template* (the artifact the
+probes scaffold from; reverting `.claude/settings.json` would make it pass trivially) to its
+pre-`41ad037` state and run the suite:
+
+```
+git checkout 41ad037~1 -- templates/tessera/settings.base.json
+bin/tessera-chaos     → 2 failed, 6 passed
+                        FAILED probe_4  chmod -x backstop     → rc=0, no degraded event
+                        FAILED probe_8  typo'd wired path     → rc=0, no degraded event
+git checkout HEAD  -- templates/tessera/settings.base.json
+bin/tessera-chaos     → 8 passed
+```
+
+Probes 4 and 8 go RED on the old command string and green on the new one; the other six are
+unmoved. **The corrected probes still detect exactly the failure they claim to.** A weakened
+probe would have stayed green against the reverted template — that is the discriminating
+outcome, and it did not happen.
+
+Three independent judgments, each falsified rather than argued:
+
+1. **Real path or replica?** `run_wired` reads the toy's own `.claude/settings.json`, which
+   `tessera-new-project` `cp`s verbatim from `templates/tessera/settings.base.json` — the shipped
+   downstream artifact, byte for byte, not a second definition. Confirmed by the revert: editing
+   the template alone changes the probe's verdict, which is only possible if the probe reads it.
+   *Residual, minor:* it runs `commands[0]`, so if a script were ever wired more than once only
+   the first copy is exercised; and the framework repo's own `.claude/settings.json` is a
+   separate file no probe drives (doccheck's `unrunnable-hooks-report-themselves` covers both,
+   so it is checked, just not by the chaos suite).
+2. **Can a probe pass while testing nothing?** No. Falsified three ways: calling `run_wired` with
+   a name no command references raises the `setup wrong — the probe would be testing nothing`
+   assertion (reachable, not decorative); deleting the toy's `scripts/tessera-degraded` — the
+   scaffold ships the reporter *there*, not in `bin/` — sends probe 4 back to RED, so the green
+   is *earned* by the reporter, not by the harness; and the emitted event names the right
+   component and reason (`spend-backstop` / `hook-unavailable`, and for the two hook-internal
+   probes `gate-scan/scanner-missing`, `mnemos-checkpoint/toolchain-unreachable`).
+   *Two residuals, both narrow.* `assert_reported` accepts **any** degraded event rather than the
+   expected component/reason — sound today only because each probe gets a fresh tmp toy and
+   drives exactly one command; asserting the reason would make it sound by construction. And the
+   not-vacuous guard is a **substring** test, not a reference check: `run_wired(toy, "")` matches
+   every command, so the assert stays silent and it runs whichever hook comes first. Unreachable
+   from the shipped probes, since each passes a literal script name.
+3. **`needs_reporting()`'s scope rule — SECOND HOLE FOUND. See below.**
+
+**FINDING (open): the two-tier ADR-0004 hooks are excluded, and for the default distribution
+that exclusion is backwards.**
+
+`needs_reporting` returns `None` for any command containing `$HOME/.claude/templates`, on the
+stated grounds that *"a missing local file resolves through the global copy and the hook still
+runs."* That premise holds only while the global copy exists — and under the **default `global`
+distribution the local copy is deliberately never shipped**, so the fallback is not a redundancy,
+it is the *only* tier. Observed on a real scaffold:
+
+```
+toy scaffolded default → local .claude/scripts/mnemos-stop-checkpoint.sh: ABSENT (by design)
+run the wired command with an empty $HOME
+  → rc=0, stdout '', stderr '', degraded events: []
+```
+
+Every mnemos hook in every downstream silently no-ops and nothing says so. That is component 4 of
+this spec's own five ("Mnemos hooks — checkpoints lost"), F-001's exact shape, one tier up from
+the tess-dashboard typo the module was written for. The fixer and doccheck's detector share the
+predicate, so **both are blind to it together** — the consistency guard worked as designed and
+propagated the gap.
+
+It is a genuine hole, not a tradeoff: dropping *only* the `GLOBAL_FALLBACK` exclusion (nothing
+else — the two-tier command already ends `fi; exit 0`, and `_ANCHORED` matches exactly one
+distinct script because the `$HOME` path is unanchored) produces a correct branch, verified both
+directions — reports `mnemos-stop-checkpoint / hook-unavailable` when both tiers are gone, and
+stays **silent** when the global tier is present (a real global copy still `exec`s and no event
+is written). Not fixed here: this session was scoped to judging the correction, and the fix
+belongs with the downstream rollout below.
+
+**It is a one-line predicate change but NOT a one-line fix** — recorded so the next session does
+not discover it mid-flight. Because the predicate is *shared*, widening it immediately makes
+doccheck's `unrunnable-hooks-report-themselves` flag the 7 two-tier commands in
+`templates/tessera/settings.base.json`, and flips
+`scripts/hooks/test_report_settings.py::test_global_fallback_command_is_out_of_scope` to RED —
+that test encodes the very rule being retired. The full change is therefore: drop the exclusion,
+run the fixer over the shipped settings, retire/invert that unit test, and roll the new command
+bodies to the fleet. The detector going red *first* is correct behaviour, not collateral: it is
+the check finding real fail-silent hooks the moment it is allowed to see them.
+
+*Checked and NOT a hole:* `tessera-verify-scan.sh` is excluded by the `_TRAILING_EXIT` shape
+guard, but it already ends `echo 'VERIFY-SCAN BROKEN…' >&2; exit 2` — loud by hand. Correct
+outcome; note the predicate reaches it by accident (unrecognised shape) rather than by knowing
+it is loud.
 
 ## Depends on
 
