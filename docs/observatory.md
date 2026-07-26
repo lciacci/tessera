@@ -1263,6 +1263,40 @@ Both were found by adversarial verification, **not** by the framework. **The rea
 - **When to revisit:** before any unsupervised-autonomy claim leans on the spend guard, or when
   spec 11 step 2 classifies that component's bail-outs.
 
+### `tessera-verify` did the work and lost the verdict — its own Stop hook ate the final message *(2026-07-26)*
+
+- **What happened:** two runs, seven claims, `NO_VERDICT` on every one. The 2026-07-21 fix
+  (`49b4bbc`) correctly ruled out the old cause — a spawn that never ran now raises
+  `VerifierDidNotRun`, and it did not fire, so the verifier *did* execute. `raw_excerpt` (added by
+  that same fix, and the only reason this was diagnosable at all) shows what actually happened:
+  - **Run 1** — the child session's own spend guard blocked its meta-command, because the command
+    body contained a spend command as a *string*. The child spent its turn dispositioning spend
+    denials instead of answering the claims. See the guard-matching entry above.
+  - **Run 2** — the child did the real work: planted landmines in `scripts/gate/ratio.py` and
+    `emit.py`, executed against them, reverted cleanly. Then **its own `verify-scan` Stop hook
+    fired**, it recorded a skip, and *that acknowledgment became its final message*.
+    `parse_verdicts` reads the final message, found no verdict markers, and returned `NO_VERDICT`
+    for all three claims. **The verification happened and the answer was overwritten.**
+- **Why this is the third instance of one shape, not three bugs:** standing pattern #9 — a
+  mechanism that RUNS has not necessarily REACHED its audience. The falsifier is defeated by the
+  backstop it is part of, exactly as `decision-surface`, `mnemos-pre-edit`, and Layer-3 compaction
+  recovery were defeated by the channel they emitted on.
+- **The compounding part:** `raw_excerpt` keeps only `raw_output[-2000:]`, so the tail (the skip
+  note) survived and the verdict block did not. The diagnostic captures the wrong end of the
+  output for this failure mode.
+- **Candidate fixes, none chosen:** (a) have the verifier write verdicts to a **file** in the
+  worktree rather than to its final message, so no hook can overwrite them — the channel fix, and
+  the one that matches the pattern; (b) suppress Stop hooks in the spawned worktree session
+  (`--settings` with hooks stripped), which removes the collision but also removes the child's own
+  safety net; (c) keep more of `raw_output` (mitigation only — it makes the failure diagnosable,
+  not absent).
+- **Bearing on spec 11 and ADR-0005:** `bin/tessera-verify` is the framework's adversarial check,
+  and it has now returned no usable verdict on 3 of 3 real attempts. **Any claim that Tessera
+  independently verifies its own work is currently unsupported.** Until this is fixed, the Stop
+  hook's demand is satisfiable only by a human reading the report or by an auditable `skip`.
+- **When to revisit:** before spec 11 step 2 is judged (criterion 5 wants an *independent* session
+  to confirm the bar — this tool is what "independent" was supposed to mean).
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.
