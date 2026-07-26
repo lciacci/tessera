@@ -48,7 +48,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-pre-compact.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-pre-compact.sh\"; fi; exit 0",
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-pre-compact.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-pre-compact.sh\"; fi; for d in bin scripts; do r=\"${CLAUDE_PROJECT_DIR:-.}/$d/tessera-degraded\"; [ -x \"$r\" ] && exec \"$r\" --component mnemos-pre-compact --reason hook-unavailable --detail \"wired hook mnemos-pre-compact.sh is missing or not executable; it has never run\"; done; exit 0",
             "timeout": 8,
             "statusMessage": "Writing emergency checkpoint + compaction priorities..."
           }
@@ -60,7 +60,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-post-compact-inject.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-post-compact-inject.sh\"; fi; exit 0",
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-post-compact-inject.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-post-compact-inject.sh\"; fi; for d in bin scripts; do r=\"${CLAUDE_PROJECT_DIR:-.}/$d/tessera-degraded\"; [ -x \"$r\" ] && exec \"$r\" --component mnemos-post-compact-inject --reason hook-unavailable --detail \"wired hook mnemos-post-compact-inject.sh is missing or not executable; it has never run\"; done; exit 0",
             "timeout": 2,
             "statusMessage": "Checking for post-compaction restore..."
           }
@@ -71,7 +71,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-pre-edit.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-pre-edit.sh\"; fi; exit 0",
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-pre-edit.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-pre-edit.sh\"; fi; for d in bin scripts; do r=\"${CLAUDE_PROJECT_DIR:-.}/$d/tessera-degraded\"; [ -x \"$r\" ] && exec \"$r\" --component mnemos-pre-edit --reason hook-unavailable --detail \"wired hook mnemos-pre-edit.sh is missing or not executable; it has never run\"; done; exit 0",
             "timeout": 5,
             "statusMessage": "Checking fatigue + intent context..."
           }
@@ -104,7 +104,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-decision-surface.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-decision-surface.sh\"; fi; exit 0"
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-decision-surface.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-decision-surface.sh\"; fi; for d in bin scripts; do r=\"${CLAUDE_PROJECT_DIR:-.}/$d/tessera-degraded\"; [ -x \"$r\" ] && exec \"$r\" --component decision-surface --reason hook-unavailable --detail \"wired hook tessera-decision-surface.sh is missing or not executable; it has never run\"; done; exit 0"
           }
         ]
       }
@@ -126,7 +126,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-post-tool.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-post-tool.sh\"; fi; exit 0",
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-post-tool.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-post-tool.sh\"; fi; for d in bin scripts; do r=\"${CLAUDE_PROJECT_DIR:-.}/$d/tessera-degraded\"; [ -x \"$r\" ] && exec \"$r\" --component mnemos-post-tool --reason hook-unavailable --detail \"wired hook mnemos-post-tool.sh is missing or not executable; it has never run\"; done; exit 0",
             "timeout": 1,
             "statusMessage": "Logging tool outcome..."
           }
@@ -138,13 +138,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-stop-checkpoint.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-stop-checkpoint.sh\"; fi; exit 0",
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-stop-checkpoint.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-stop-checkpoint.sh\"; fi; for d in bin scripts; do r=\"${CLAUDE_PROJECT_DIR:-.}/$d/tessera-degraded\"; [ -x \"$r\" ] && exec \"$r\" --component mnemos-stop-checkpoint --reason hook-unavailable --detail \"wired hook mnemos-stop-checkpoint.sh is missing or not executable; it has never run\"; done; exit 0",
             "timeout": 5,
             "statusMessage": "Writing session checkpoint..."
           },
           {
             "type": "command",
-            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-stop-ingest.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-stop-ingest.sh\"; fi; exit 0",
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-stop-ingest.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-stop-ingest.sh\"; fi; for d in bin scripts; do r=\"${CLAUDE_PROJECT_DIR:-.}/$d/tessera-degraded\"; [ -x \"$r\" ] && exec \"$r\" --component mnemos-stop-ingest --reason hook-unavailable --detail \"wired hook mnemos-stop-ingest.sh is missing or not executable; it has never run\"; done; exit 0",
             "timeout": 10,
             "statusMessage": "Ingesting Claude transcript + scoring haze..."
           },
@@ -182,7 +182,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-session-start.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-session-start.sh\"; fi; exit 0",
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-session-start.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-session-start.sh\"; fi; for d in bin scripts; do r=\"${CLAUDE_PROJECT_DIR:-.}/$d/tessera-degraded\"; [ -x \"$r\" ] && exec \"$r\" --component mnemos-session-start --reason hook-unavailable --detail \"wired hook mnemos-session-start.sh is missing or not executable; it has never run\"; done; exit 0",
             "timeout": 5,
             "statusMessage": "Loading session checkpoint + project context..."
           }
@@ -192,7 +192,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-findings-surface.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-findings-surface.sh\"; fi; exit 0",
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-findings-surface.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-findings-surface.sh\"; fi; for d in bin scripts; do r=\"${CLAUDE_PROJECT_DIR:-.}/$d/tessera-degraded\"; [ -x \"$r\" ] && exec \"$r\" --component findings-surface --reason hook-unavailable --detail \"wired hook tessera-findings-surface.sh is missing or not executable; it has never run\"; done; exit 0",
             "timeout": 10,
             "statusMessage": "Checking downstream findings backlog..."
           }
@@ -202,7 +202,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-watch-surface.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-watch-surface.sh\"; fi; exit 0",
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-watch-surface.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-watch-surface.sh\"; fi; for d in bin scripts; do r=\"${CLAUDE_PROJECT_DIR:-.}/$d/tessera-degraded\"; [ -x \"$r\" ] && exec \"$r\" --component watch-surface --reason hook-unavailable --detail \"wired hook tessera-watch-surface.sh is missing or not executable; it has never run\"; done; exit 0",
             "timeout": 10,
             "statusMessage": "Checking Observatory triggers..."
           }

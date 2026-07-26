@@ -1472,6 +1472,52 @@ def check_chaos_suite_is_reachable() -> list[str]:
     return bad
 
 
+def check_unrunnable_hooks_report_themselves() -> list[str]:
+    """A local-only wired hook that cannot be exec'd must say so, not exit 0 in silence.
+
+    The wired form `if [ -x "P" ]; then exec "P"; fi; exit 0` swallows a missing, typo'd, or
+    non-executable script as a silent success. tess-dashboard carried a typo'd hook path, so
+    that hook had NEVER run, and nothing noticed for weeks — the failure mode is not
+    hypothetical and it is invisible from outside.
+
+    THE FIXER IS scripts/hooks/report_settings.py, and this check IMPORTS its predicate rather
+    than mirroring a regex. The sibling anchoring pair mirrors-plus-tests because its detector
+    predates its fixer; a new pair has no reason to inherit that risk. A detector that flags
+    what the fixer cannot fix (or misses what it does) is the exact asymmetry this repo keeps
+    rediscovering.
+
+    Scoped to local-only commands: one carrying the ADR-0004 `$HOME/.claude/templates` fallback
+    still runs via the global copy, so its silence is recoverable and out of scope.
+    """
+    sys.path.insert(0, str(ROOT / "scripts" / "hooks"))
+    try:
+        import report_settings
+    except Exception as exc:
+        return [f"scripts/hooks/report_settings.py cannot be imported: {exc}"]
+
+    bad = []
+    targets = [".claude/settings.json", "templates/tessera/settings.base.json"]
+    for rel in targets:
+        try:
+            data = json.loads((ROOT / rel).read_text())
+        except Exception:
+            bad.append(f"{rel}: unreadable — cannot verify hook reporting")
+            continue
+        for event, groups in (data.get("hooks") or {}).items():
+            for group in groups:
+                for hook in group.get("hooks", []):
+                    cmd = hook.get("command", "")
+                    script = report_settings.needs_reporting(cmd)
+                    if script:
+                        bad.append(
+                            f"{rel} {event}: local-only hook \"{script}\" exits 0 silently when "
+                            f"it cannot be exec'd — a typo'd or non-executable hook is "
+                            f"indistinguishable from one with nothing to say. Run "
+                            f"`python3 scripts/hooks/report_settings.py {rel}`."
+                        )
+    return bad
+
+
 CHECKS = {
     "chaos-suite-is-reachable": check_chaos_suite_is_reachable,
     "session-logs-are-repo-anchored": check_session_logs_are_repo_anchored,
@@ -1502,6 +1548,7 @@ CHECKS = {
     "bin-scripts-are-stdlib-only": check_bin_scripts_are_stdlib_only,
     "safety-scripts-run-on-system-python": check_safety_scripts_run_on_the_system_python,
     "test-command-is-not-a-bare-interpreter": check_test_command_is_not_a_bare_interpreter,
+    "unrunnable-hooks-report-themselves": check_unrunnable_hooks_report_themselves,
 }
 
 

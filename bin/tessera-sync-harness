@@ -48,6 +48,7 @@ from pathlib import Path
 TESSERA_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(TESSERA_ROOT / "scripts" / "hooks"))
 import anchor_settings  # noqa: E402  (path set above; stdlib-only, safe under any python3)
+import report_settings  # noqa: E402  (spec 11: local-only hooks that cannot run must say so)
 
 # Files the scaffold writes that belong to the PROJECT, not the harness. Never back-fill these:
 # they carry identity (name, description, test command, findings) or are merged, not copied.
@@ -162,14 +163,28 @@ def patch_settings_only(project: Path, apply: bool) -> int:
         print(f"no .claude/settings.json in {project}", file=sys.stderr)
         return 2
     settings = json.loads(tgt.read_text())
+    # Both COMMAND-BODY rewrites: anchor cwd-relative paths, and give local-only hooks a
+    # reporting else-branch so one that cannot be exec'd stops exiting 0 in silence (spec 11).
+    # Adding the second rewrite here does NOT re-open the howler accident: that was caused by
+    # bundling COMPONENT INSTALLATION with settings patching. Both of these are settings-only
+    # and install nothing, which is the invariant that actually matters.
+    # ORDER MATTERS: report_settings only matches an ANCHORED path, because reporting on a path
+    # that still moves with the session cwd would name the wrong file. Reversed, this silently
+    # reports nothing on an unanchored project — a no-op that reads as success.
     _, anchored = anchor_settings.anchor(settings)
-    verb = "anchored" if apply else "would anchor"
-    if not anchored:
-        print("settings.json hook paths already anchored — nothing to patch")
+    _, reported = report_settings.add_reporting(settings)
+    if not anchored and not reported:
+        print("settings.json already anchored and reporting — nothing to patch")
         return 0
     if apply:
         tgt.write_text(json.dumps(settings, indent=2) + "\n")
-    print(f"{verb} {len(anchored)} cwd-relative hook command(s): {', '.join(sorted(set(anchored)))}")
+    verb = "" if apply else "would "
+    if anchored:
+        print(f"{verb}anchor {len(anchored)} cwd-relative hook command(s): "
+              f"{', '.join(sorted(set(anchored)))}")
+    if reported:
+        print(f"{verb}add hook-unavailable reporting to {len(reported)} local-only command(s): "
+              f"{', '.join(sorted(set(reported)))}")
     if not apply:
         print("re-run with --apply to write.")
     return 0
