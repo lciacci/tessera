@@ -129,7 +129,29 @@ future holes.
 - `scripts/verify/scan.py` + `.claude/scripts/tessera-verify-scan.sh` — Stop-hook trigger,
   **fail-LOUD** (the only Tessera hook that does), capped at 3 fires/session.
 - Contract: `docs/contracts/verification-event.md`. Wiring checked by doccheck
-  `verify-scan-is-wired`. Suite: 18 verify tests + 15 CLI tests, all API-free.
+  `verify-scan-is-wired`. Suite: `scripts/verify/` + `scripts/test_tessera_verify.py`, all
+  API-free. *(Counts were quoted here as "18 + 15" and had already drifted by 2026-07-26 —
+  a hardcoded test count is stale the next time anyone adds a test. `tessera-test` is the
+  number.)*
+
+### Amendment 2026-07-26 — the verdict travels by FILE, not by the final message
+
+Step 3 above said "append a `verification` event"; it did not say how the verdict gets *from the
+verifier to this process*, and the implicit answer — scrape the verifier's last chat message —
+turned out to be a channel this tool does not own. **Three real runs returned zero usable
+verdicts** while the verification had actually been performed each time: the spawned session's
+own `verify-scan` Stop hook fired and its skip acknowledgment *became* the final message that
+`VERDICT_RE` reads. The falsifier defeated by the backstop it belongs to (standing pattern #9).
+
+The verifier now writes `tessera-verdicts.json` in its worktree; that file is authoritative,
+message-scraping remains a fallback, and `verdict_channel` on the event records which was used
+so a silent drift back is visible. A live `--self-test` returned `verdict_channel: "file"` +
+`REFUTED`. **A verdict returned as a MESSAGE can be overwritten; a verdict written to a FILE
+cannot** — though it can still be *skipped*, so the channel field is the thing to watch.
+
+Guard worth carrying forward: `make_worktree` copies untracked files INTO the worktree, so a
+stale verdict file would have been read as the current run's answer. Unlinked before every spawn.
+*When you move a channel, ask what else can write to the new one.*
 - **Criterion 2 evidence, unplanned and better than designed:** the hook fired unprompted on
   the very session that built it — mid-build, before wiring was announced — and the falsifier
   ran 4 claims: **4/4 CONFIRMED**, with landmines walked (scan.py moved aside → wrapper exit 2;

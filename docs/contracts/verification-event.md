@@ -24,7 +24,8 @@ verification — make the falsifier a channel; ADR-0006 decision 4).
     "self_test": false,             // true: the claim was a planted landmine (criterion 5)
     "skipped": false,               // true: auditable opt-out (`tessera-verify skip`)
     "reason": "…",                  // present iff skipped — why no verification was needed
-    "model": "opus"                 // verifier model
+    "model": "opus",                // verifier model
+    "verdict_channel": "file"       // "file" (trusted) | "final-message" (scraped fallback)
   }
 }
 ```
@@ -45,6 +46,16 @@ verification — make the falsifier a channel; ADR-0006 decision 4).
   discarding returncode and stderr: a spawn that never ran returned `""`, became NO_VERDICT,
   and satisfied the backstop. The falsifier was failing open, which is the failure it exists to
   catch. *Skip is a decision; `spawn_error` is an accident. Only decisions disposition.*
+- `verdict_channel` (present on every judged run) — **how the verdicts physically got here**:
+  `"file"` (the verifier wrote `tessera-verdicts.json` in its worktree — the trusted path) or
+  `"final-message"` (it did not, so the verdicts were scraped from its last chat message).
+  Added 2026-07-26, after three real runs returned zero usable verdicts: the verifier had done
+  the work every time, and its own `verify-scan` Stop hook fired afterwards and REPLACED the
+  final message, which is what `VERDICT_RE` reads. A verdict returned as a message can be
+  overwritten; a verdict written to a file cannot. **Consumers should not key on this to decide
+  green/red** — a `final-message` verdict is still a verdict. It is recorded on every judged
+  run, including successes, so that a silent drift back to the fragile channel is *visible*
+  rather than something you would have to infer from a rise in NO_VERDICT.
 - `raw_excerpt` (optional) — the last 2000 chars of verifier output, recorded only when some
   verdict is NO_VERDICT. Without it an unparseable answer was undiagnosable: `VERDICT_RE` is
   end-of-line anchored, so decoration (`**VERDICT 1: CONFIRMED**`, a trailing clause) misses

@@ -43,3 +43,11 @@ build/
 # Backstop fire-counter — per-session runtime state. TRACKED IT ONCE BY MISTAKE: a fresh
 # clone inherited count=5 against MAX_FIRES=3, so the backstop was born disabled, silently.
 .tessera/.spend-backstop-fires
+
+# Verdict handoff file — tessera-verify's verifier writes this inside its disposable worktree.
+# It must never be committed or left in the source tree: make_worktree copies untracked files
+# INTO the worktree, so a stale one would be read as this run's verdicts. This is the second
+# line of defence only — bin/tessera-verify unlinks it before every spawn, because an ignore
+# rule is advisory (a --force add, another cwd, a downstream missing this line) and an unlink
+# is not.
+tessera-verdicts.json

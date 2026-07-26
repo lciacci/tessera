@@ -12,15 +12,20 @@ Declared current priority for Tessera framework dev. One focus at a time.
 Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering.)*
 
 ### THE ONE THING TO KNOW
-**`bin/tessera-verify` has returned no usable verdict on 3 of 3 real attempts — so Tessera's
-claim to independently verify its own work is currently unsupported.** Run 2 proved the tool
-does the job: it planted landmines, executed against them, reverted cleanly. Then **its own
+**`bin/tessera-verify` was 0-for-3 on real attempts; it is now fixed and proven at n=1.** The
+tool had done the work every time — planted landmines, executed, reverted — and then **its own
 `verify-scan` Stop hook fired and that skip acknowledgment became its final message**, which is
 exactly what `parse_verdicts` reads. The verification happened; the answer was overwritten.
-Standing pattern #9, now scored against the falsifier itself. **This is on spec 11's critical
-path, not beside it** — criterion 5 wants "an independent session" to confirm the bar, and this
-tool *is* what independent was supposed to mean. Fix candidate that matches the pattern: write
-verdicts to a **file** in the worktree, not to the final message.
+Standing pattern #9, scored against the falsifier itself.
+
+Fixed by moving the verdict onto a channel hooks cannot touch: the verifier writes
+`tessera-verdicts.json` in its worktree, and the event records `verdict_channel` so a silent
+drift back to message-scraping is visible. A live `--self-test` returned
+`verdict_channel: "file"` + `REFUTED` — landmine caught, **first usable verdict in four
+attempts.** Two caveats worth carrying: it is **n=1**, and writing the file is still an
+*instruction to a model* — what changed structurally is that a file cannot be overwritten
+after the fact, not that it cannot be skipped. **Watch `verdict_channel` on the next few real
+runs.** This matters for spec 11 step 2, where criterion 5's "independent session" is this tool.
 
 Also shipped: item 3 closed (session-keyed logs anchored to the repo — the sweep found **12
 sites, not the 1 the todo named**) and **spec 11 step 1 done — the chaos suite exists and its
@@ -80,7 +85,12 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    and that skip acknowledgment became its final message, which is what `parse_verdicts` reads.
    0 usable verdicts in 3 real attempts. The channel was eaten by the backstop the tool belongs
    to. **Corollary worth its own sentence: a verdict returned as a MESSAGE can be overwritten;
-   a verdict written to a FILE cannot.**
+   a verdict written to a FILE cannot.** Acted on same day — the verifier now writes
+   `tessera-verdicts.json` and a live self-test came back `verdict_channel: "file"`. Note the
+   fix's own near-miss, which is the pattern one layer down: the worktree builder copies
+   untracked files IN, so a stale verdict file would have been read as this run's answer —
+   a false CONFIRMED from a verifier that wrote nothing. **When you move a channel, ask what
+   else can write to the new one.**
 
 ### Open, in priority order
 
@@ -230,7 +240,9 @@ Add a line only when a lesson recurs; the value is that the list is short enough
   weakened. Kept reachable by doccheck `chaos-suite-is-reachable`.
 - **Three findings, and they matter more than the two items:**
   1. **`tessera-verify` is 0-for-3** — see THE ONE THING TO KNOW. Observatory entry filed
-     (`0a95e5b`) with three candidate fixes, none chosen.
+     (`0a95e5b`) with three candidate fixes. **Fixed same day:** verdicts now travel by file
+     (`tessera-verdicts.json` in the worktree), `verdict_channel` records which channel was
+     used, and a live `--self-test` came back `verdict_channel: "file"` + `REFUTED`.
   2. **The spend guard matches command TEXT.** It denied a log-cleanup script and the verifier's
      own meta-command for merely *containing* a spend command as a string. The over-denial is
      loud and safe; **the under-denial is unexamined and is the serious half** — a command

@@ -1377,18 +1377,38 @@ this section — the dedup fix it prescribes is real but is now step 3, not step
 - **The compounding part:** `raw_excerpt` keeps only `raw_output[-2000:]`, so the tail (the skip
   note) survived and the verdict block did not. The diagnostic captures the wrong end of the
   output for this failure mode.
-- **Candidate fixes, none chosen:** (a) have the verifier write verdicts to a **file** in the
-  worktree rather than to its final message, so no hook can overwrite them — the channel fix, and
-  the one that matches the pattern; (b) suppress Stop hooks in the spawned worktree session
-  (`--settings` with hooks stripped), which removes the collision but also removes the child's own
-  safety net; (c) keep more of `raw_output` (mitigation only — it makes the failure diagnosable,
-  not absent).
-- **Bearing on spec 11 and ADR-0005:** `bin/tessera-verify` is the framework's adversarial check,
-  and it has now returned no usable verdict on 3 of 3 real attempts. **Any claim that Tessera
-  independently verifies its own work is currently unsupported.** Until this is fixed, the Stop
-  hook's demand is satisfiable only by a human reading the report or by an auditable `skip`.
-- **When to revisit:** before spec 11 step 2 is judged (criterion 5 wants an *independent* session
-  to confirm the bar — this tool is what "independent" was supposed to mean).
+- **FIX (a) SHIPPED AND PROVEN 2026-07-26.** A live `tessera-verify --self-test` returned
+  `verdict_channel: "file"`, verdict `REFUTED`, self-test PASS — the planted landmine caught,
+  and **the first usable verdict this tool has produced in four real attempts.** The verifier is
+  now told to
+  write its verdicts to `tessera-verdicts.json` inside its worktree; `bin/tessera-verify` reads
+  that file as authoritative and falls back to scraping the final message only if it is absent,
+  recording which channel was used in `verdict_channel`. Rejected for now: (b) stripping Stop
+  hooks from the spawned session, which removes the collision but also removes the child's own
+  safety net; (c) keeping more of `raw_output`, a diagnostic mitigation that makes the failure
+  legible rather than absent.
+  - **The fix nearly reintroduced the bug it fixes.** `make_worktree` copies UNTRACKED files
+    from the source tree into the worktree, so a stale `tessera-verdicts.json` in the repo root
+    would have arrived inside the worktree and been read as this run's verdicts — CONFIRMED for
+    a verifier that wrote nothing. Guarded by an unlink before every spawn (authoritative) plus
+    a `.gitignore` line (advisory — a `--force` add or a downstream lacking the rule defeats an
+    ignore rule; nothing defeats the unlink). Regression test removes the guard and watches
+    the false CONFIRMED appear.
+  - **What is proven, and what is still only n=1:** one live run wrote the file. That is
+    evidence the instruction is followable, not that it is always followed — writing the file
+    remains an *instruction to a model*, exactly as the old `VERDICT <n>:` format was. What
+    structurally changed is that a file cannot be **overwritten after the fact**; it can still
+    be **skipped**. `verdict_channel: "final-message"` on a real run is the signal that this is
+    happening, and it is why the field is recorded on successes too.
+- **Bearing on spec 11 and ADR-0005:** `bin/tessera-verify` is the framework's adversarial check
+  and it had returned no usable verdict on 3 of 3 real attempts, so "Tessera independently
+  verifies its own work" was unsupported. **That is now supported at n=1** — the tool caught a
+  planted landmine through the file channel. It is not yet a track record: the number worth
+  watching is how many real runs come back `file` vs `final-message`, and `tessera-verify stats`
+  does not break that out yet.
+- **When to revisit:** check `verdict_channel` on the next few real runs. And before spec 11
+  step 2 is judged (criterion 5 wants an *independent* session to confirm the bar — this tool is
+  what "independent" was supposed to mean, and it is now plausibly able to be that).
 
 ## Closing notes
 
