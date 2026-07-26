@@ -1170,10 +1170,99 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   session (the open P3 question) — it must be re-judged with Layer 3 *actually reaching the model*,
   because every prior observation of it was through a dropped channel.
 
-### iCPG's drift backlog: 700 rows are 154 real drifts, and the verb to close them already existed *(2026-07-25, surfaced by the scryer eval; root cause corrected same day)*
+### iCPG's drift detector measures the emptiness of its own graph *(2026-07-25 → 07-26; surfaced by the scryer eval, root cause found on the third pass)*
 
-- **Status:** OPEN. Corrected in place — the first version of this entry (and ADR-0013) named the
-  wrong mechanism. See ADR-0013's CORRECTION block for the full record of the error.
+- **Status:** OPEN, and this entry has been **corrected twice** — each pass found the previous
+  root cause too shallow. Kept in full, because the *sequence* is the lesson: each correction came
+  from reading one layer deeper into code I had already formed a confident verdict about.
+  1. **First claim (wrong):** "iCPG has no verb to close a drift event." False — `icpg drift resolve`
+     exists. Corrected in ADR-0013's CORRECTION block.
+  2. **Second claim (true but shallow):** "the detector re-inserts duplicates; 700 rows are 154
+     distinct drifts." True, and still worth fixing — but it explains the *count*, not the *content*.
+  3. **Third, and the actual finding (below):** every dimension the detector scores is measuring
+     whether an edge type exists in the graph, not whether the code changed. Fixing dedup would have
+     produced 154 correctly-deduplicated meaningless rows.
+
+- **THE FINDING: five of six edge types have no writer, and the drift dimensions score their absence.**
+
+  ```
+  edges by type:   CREATES 879   MODIFIES 0   REQUIRES 0
+                   DUPLICATES 0  VALIDATED_BY 0   DRIFTS_FROM 0
+  ```
+  `REQUIRES`, `DUPLICATES`, `VALIDATED_BY`, and `DRIFTS_FROM` appear **only** in `models.py`'s enum
+  (`models.py:45`) and on the *read* side (`store.py:303,315,337`). Nothing in the codebase writes
+  them. `MODIFIES` has exactly one writer — `icpg record --edge-type MODIFIES` (`__main__.py:60`) —
+  which is **wired to no hook** and has therefore never run. One edge type is populated. Six are read.
+
+  What that does to the six dimensions:
+  - **test drift** — `_check_test_drift`: `if not test_edges: return 0.3  # "No tests linked — mild
+    concern"`. Zero VALIDATED_BY edges exist, so this returns 0.3 for every symbol on every scan,
+    permanently. **701 of 701 events (100%) carry `test(0.30)`.** It is a constant, not a measurement.
+  - **spec drift** — defined as "checksum changed *without a MODIFIES edge*." With zero MODIFIES
+    edges it degenerates to "checksum changed," which is `git diff`.
+  - **usage drift** — `_check_usage_drift` shells out to **literal `grep -rl <symbol_name> .`** with no
+    path exclusions, so it scans `.venv/`, `.git/`, `build/`, `__pycache__`. `min(1.0, out_of_scope/10)`
+    saturates at 1.00 after ten hits, which any common symbol name reaches inside vendored code alone.
+  - **decision / ownership / dependency drift** — have **never fired once.** Only three dimension-sets
+    have ever occurred: `["test","usage"]` ×543, `["spec","test","usage"]` ×157, `["test"]` ×1.
+
+- **This answers the design doc's own trial criterion, and the answer is no.**
+  `docs/design-principles.md:440` sets the iCPG kill/keep test: *"Does drift detection catch things
+  grep wouldn't?"* The dimension that fires on 700 of 701 events **is implemented as grep** —
+  `subprocess.run(['grep', '-rl', sym.name, '.'])`, `drift.py`. Not grep-like. Grep, in a subprocess,
+  over an unfiltered tree. Standing pattern #3 (*name the pain, not the artifact that correlates with
+  it*) at full strength: every dimension fires correctly and means nothing.
+
+- **A second confound on the same trial.** `design-principles.md:430` records iCPG's delivery as
+  "PreToolUse on Edit/Write shows intent + constraints before every edit; Stop hook auto-records
+  symbols after tests pass." Neither is live here: the PreToolUse path is `mnemos-pre-edit.sh`, which
+  the entry below ("PreToolUse hooks' bare stdout never reached the model") shows was **silent for the
+  entire trial**; and **no Stop hook calls `icpg` at all** — the wired Stop hooks are
+  mnemos-stop-checkpoint, mnemos-stop-ingest, tessera-gate-scan, tessera-spend-backstop,
+  tessera-verify-scan. That is why nothing writes MODIFIES: the auto-record was described but never
+  wired. *(Note: `:430` sits in the Pass 1.5 record of what the upstream skill claims, so it is not
+  itself false — it is a description of a design Tessera never implemented. Left unedited as history.)*
+
+- **Bearing on the kill/keep verdict: it is confounded three ways, and none of them are "the idea
+  failed."** The graph is fed by one edge type; the detector scores the absence of the other five;
+  and the channel that was supposed to deliver its output to the model was dropping it. Same shape as
+  F-001 (*empty ≠ unused*) one layer up — a verdict of "drift detection found nothing useful" would be
+  measuring the plumbing, not the concept. **Do not judge iCPG until at least the writers exist.**
+
+- **Fail-open class, and a spec-11 candidate.** Nothing anywhere asserts that an edge type the
+  detector *reads* has a writer. The natural check — *every edge type consumed by `drift.py` must be
+  produced somewhere* — would have caught all of this at commit, and is the check to leave behind
+  when the code fix lands (Standing pattern #1: before shipping a check, ask what would tell you the
+  check itself died). Worth pointing `tessera-chaos` at too.
+
+- **Corrected work order** (supersedes ADR-0013's, which supersedes the original):
+  0. **Decide what the detector is for.** Either wire the writers (`VALIDATED_BY` from the test suite,
+     `MODIFIES` from a Stop hook) so the dimensions have real inputs, or delete the dimensions that
+     cannot be fed. Do not keep scoring absent edges.
+  1. **Bound or delete usage drift.** `git ls-files`-scoped at minimum; it is grep-with-extra-steps
+     as written, and it is the dimension the trial criterion explicitly rules out.
+  2. **Stop reporting `test(0.30)` as drift.** "No VALIDATED_BY edge" is a graph-completeness signal;
+     report it as coverage, separately, or not at all.
+  3. **Then** dedup on insert, surface event IDs + `drift list`, evidence on the report, `--note` /
+     `dismissed` — the ADR-0013 list, still correct, now correctly ordered *after* the above.
+  4. **Tests.** `scripts/icpg/` has zero and is absent from `run-tests.sh`; adding a suite collides
+     with `scripts/polyphony/` on `store.py`/`models.py`, so it needs its own process line plus
+     doccheck's `ignored-test-suites-are-run` registration or it silently stops running.
+
+- **Method lesson, the reusable part.** Three passes, three verdicts, each stated with confidence and
+  each wrong or shallow — and every correction came from reading the next layer of *our own* code,
+  never from new external information. The evaluation methodology scrutinises the target by
+  construction; nothing in its six dimensions says *read your own implementation before asserting your
+  own gap*. First pass read `icpg status` output. Second read the CLI. Third read the detector and the
+  edge table. The finding was in reach the entire time. This is the `rule-over-read` memory as a
+  repeating failure, not a one-off.
+
+---
+
+**↓ SUPERSEDED ROOT CAUSES (passes 1 and 2), kept verbatim for the trail. Everything from here to
+"end superseded" was true-but-shallow or outright wrong; the live finding is above. Do not action
+this section — the dedup fix it prescribes is real but is now step 3, not step 1.**
+
 - **What it is, measured** against `.icpg/reason.db`:
   ```
   total=700   unresolved=700   distinct(symbol_id, from_reason_id, description)=154
@@ -1208,6 +1297,10 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   `check`/`file`/`status`, add `icpg drift list`, making the existing verb usable; (3) **evidence on
   the report** — symbol, file, and what changed; (4) `--note` and a `dismissed` state (a real gap,
   but the *last* fix, not the first).
+**↑ end superseded.**
+
+---
+
 - **Note on test coverage:** `scripts/icpg/` has **zero tests** and is absent from
   `scripts/run-tests.sh`. Any of the above lands untested unless a suite is added — and adding one
   must go through run-tests.sh's separate-process pattern plus doccheck's `ignored-test-suites-are-run`,
