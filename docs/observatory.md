@@ -1490,6 +1490,60 @@ this section — the dedup fix it prescribes is real but is now step 3, not step
   skill corpus is next touched (ADR-0008/0009/0010 lineage) — a rename is cheapest to do while
   the corpus is already open.
 
+### Mnemos: we never broke it — we inherited it half-wired, and the half we ADDED is the half producing data *(2026-07-26)*
+
+- **Status:** OPEN, but the framing is corrected. Prompted by the fair question: *the machinery has
+  been broken every time we look, so the trial has never had an honest run — what did Tessera do to
+  Maggy's Mnemos that made it useless?*
+- **Answer, from diffing our own history against the Maggy import (`ad19913`): nothing.**
+  ```
+  ad19913..HEAD -- scripts/mnemos/   →  1320 insertions, 41 deletions
+  UNCHANGED: checkpoint.py  fatigue.py  signals.py  consolidation.py
+             models.py      redact.py   auto_nodes.py
+  ```
+  The memory core is untouched. Every line we added is the **analysis** layer —
+  `correction_detect.py`, `divergence.py`, `eval_correction.py`, haziness bands, and the five
+  self-checks. We did not break Mnemos; we bolted analysis onto it and never touched the engine.
+- **Maggy shipped it half-wired, and said otherwise.** A file named mnemos-compact-recovery.sh
+  exists under templates/ **at commit `ad19913`** (written without backticks: it is a path in
+  history, not on disk today, and doccheck rightly reads a backticked path as a current claim), Maggy's own CHANGELOG calls it *"the PRIMARY re-injection point"*, and
+  `mnemos-post-compact-inject.sh` defers to it in a comment — **but no hook entry in Maggy's
+  `settings.json` references it.** Its primary recovery path was never wired, in Maggy.
+  Tessera inherited the file and the claim, then deleted the file (`0255cf0`, "drop phantom
+  compact-recovery") — correct — but recorded the reason wrongly.
+- **CORRECTION to the mnemos skill and design-principles.** Both say that script *"never existed"* (2026-07-09). **False.** It existed at import, unwired, and was deleted later.
+  The *substance* of that 07-09 correction holds — it never ran, Layer 2's job is done by the
+  unmatched `mnemos-session-start.sh` — but "never existed" is not what happened, and the true
+  version matters more: **the gap is inherited, not introduced.**
+- **What every Mnemos failure has actually been: integration, not Mnemos.** F-001's interpreter,
+  the dead Stop-hook ingest, the PreToolUse bare-stdout channel, and today's two-tier hook
+  silence. Four failures, zero of them in `scripts/mnemos/`. That is why the trial has never had
+  an honest run, and it is why "it never fired, so kill it" was never a sound inference.
+- **It IS producing, and this is the part the kill/keep framing kept missing:**
+  ```
+  Active nodes 630 · total 645 · checkpoints 517 · goal 98 / constraint 53 / result 479
+  haziness scored across 8+ ingested sessions, with a dominant dimension per session
+  ```
+  The **session-continuity** half is demonstrably alive. Only the **compaction-recovery** half is
+  untested — and P3 now says out loud that its bar may be unreachable on this harness.
+- **TWO NEW DEFECTS, both found by pointing the instrument at a session with ground truth:**
+  1. **`mnemos haze --session <bad-id>` fails OPEN to the best possible score.** A nonexistent or
+     *truncated* id returns `0.00 CLEAR (0 turns)` instead of an error — and the short form is the
+     natural thing to type, since every other view prints the 8-char prefix. Live proof: this
+     session reads `0.00 CLEAR (0 turns)` by prefix and `0.01 CLEAR (1280 turns)` by full uuid.
+     A silent best-score for a typo is the fail-open class inside the measurement tool.
+  2. **Haziness scored a demonstrably rough session as `clear`.** This session ran 1280 turns in
+     which the agent asserted five confident, wrong things (iCPG's missing verb, the dedup root
+     cause, a half-mirrored regex, ADR-0008's cut, the two-tier exclusion) and was corrected on
+     every one. Composite **0.01**, band **clear**, `correction_density` 0.029. Whatever roughness
+     is, this session had it and the metric did not see it. The likely reason is structural: the
+     five dimensions detect *errors and rework* (redo, first-try errors, orphaned calls,
+     backtracking) — all near zero here, because the work landed cleanly. What actually went wrong
+     was **confidently-wrong-then-corrected**, which leaves no error trace at all. That is a
+     calibration finding with a rare gift attached: a session whose ground truth we know exactly.
+- **When to revisit:** before any Mnemos kill/keep verdict. Judging it now would measure four
+  integration bugs and a metric that cannot see the failure mode this repo actually exhibits.
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.

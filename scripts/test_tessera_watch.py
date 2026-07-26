@@ -310,16 +310,43 @@ def test_p3_does_not_count_an_unreadable_trigger_as_real(tmp_path):
     measurement FAILURE into evidence for a kill/keep trial. That is the exact contamination
     the trigger-tagging fix was built to prevent, arriving through the one door nobody watched.
 
-    It was live: a compaction fired 2026-07-12 tagged `unknown`, and P3 read it as `1 real`."""
+    It was live: a compaction fired 2026-07-12 tagged `unknown`, and P3 read it as `1 real`.
+
+    UPDATED 2026-07-26 — and this test is itself the cautionary tale. Its final assertion read
+    `assert "UNCLASSIFIABLE" in note, "must be reported LOUDLY, not hidden"`. That checked the
+    warning was in the STRING; it never checked the string would ever be SHOWN. `render()`
+    prints only FIRED predicates, and P3 returned `fired=False` here — so the loud warning was
+    unreachable, and two unclassifiable events sat invisible for a fortnight. Pattern #9 inside
+    a unit test: proving a mechanism produced text is not proving anything delivered it.
+
+    The invariant that MUST hold is unchanged and still asserted: unknown is never counted as
+    real. What changed is that this state now FIRES on its own terms — not as "the trial is
+    ready", but as "events are firing and none are countable, so the criterion may be
+    unreachable on this instrument"."""
     log = tmp_path / ".mnemos"; log.mkdir()
     (log / "compaction-log.jsonl").write_text(
         '{"event":"compaction_fired","trigger":"unknown"}\n'
         '{"event":"compaction_fired","trigger":"manual"}\n'
     )
     fired, note = tw.p3_compaction(tmp_path)
+    assert "0 real" in note, "an unreadable trigger must NEVER be promoted to real evidence"
+    assert "UNCLASSIFIABLE" in note, "an unreadable trigger must be reported LOUDLY, not hidden"
+    assert fired is True, (
+        "…and 'LOUDLY' means the predicate must FIRE — render() shows fired predicates only, so "
+        "a warning in a non-fired message is a warning nobody ever sees")
+    assert "unreachable" in note, "must say the bar may be unmeetable here, not just count zero"
+
+
+def test_p3_stays_quiet_when_nothing_has_ever_fired(tmp_path):
+    """No compaction events at all is NOT a degraded instrument — it is an untriggered trial.
+
+    Guards the new fire condition against the obvious over-fire: a fresh repo with an empty or
+    absent log must stay silent, or P3 becomes noise on every project that has never compacted.
+    """
+    (tmp_path / ".mnemos").mkdir()
+    fired, note = tw.p3_compaction(tmp_path)
     assert fired is False
     assert "0 real" in note
-    assert "UNCLASSIFIABLE" in note, "an unreadable trigger must be reported LOUDLY, not hidden"
 
 
 def test_p3_counts_auto_and_pre_tagging_entries_as_real(tmp_path):

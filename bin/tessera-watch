@@ -116,8 +116,32 @@ def p3_compaction(root: Path) -> tuple[bool, str]:
     if unknown:
         notes.append(f"⚠️ {unknown} UNCLASSIFIABLE (trigger unreadable — NOT counted as evidence)")
     note = f" ({'; '.join(notes)})" if notes else ""
-    return real >= COMPACTION_MIN, (f"{real} real compaction_fired{note} "
-                                    f"(≥{COMPACTION_MIN} → judge the Mnemos trial)")
+
+    # THE WARNING USED TO BE UNREACHABLE. `render()` prints only FIRED predicates, so the
+    # "N UNCLASSIFIABLE" note above was embedded in a message that displayed only when
+    # `real >= COMPACTION_MIN` — i.e. the alarm that the instrument could not read an event was
+    # gated on the instrument having succeeded three times. Two unclassifiable events sat
+    # invisible from 2026-07-12 to 07-26. A detector whose failure-report requires its own
+    # success is the fail-open shape this repo keeps finding, here inside the watcher itself.
+    #
+    # So there are now TWO fire conditions, because they are two different facts:
+    #   real >= MIN      -> enough real evidence exists; go judge the trial.
+    #   unknown, no real -> events ARE firing but none are classifiable. The criterion may be
+    #                       unsatisfiable as instrumented, which is a finding about the
+    #                       INSTRUMENT, not about Mnemos. Snooze it if that is understood.
+    if real >= COMPACTION_MIN:
+        return True, (f"{real} real compaction_fired{note} "
+                      f"(≥{COMPACTION_MIN} → judge the Mnemos trial)")
+    if unknown and real == 0:
+        return True, (
+            f"{unknown} compaction event(s) fired but NONE were classifiable, and 0 real ones "
+            f"have ever been recorded{note}. The PreCompact hook defaults `trigger` to "
+            f'"unknown" and overwrites it only from stdin, so this harness may never emit a '
+            f"countable event — meaning P3's ≥{COMPACTION_MIN} bar is unreachable HERE and the "
+            f"Mnemos trial cannot conclude on this instrument. Judge the compaction half on a "
+            f"real Claude Code CLI session, or re-instrument. Snooze once understood.")
+    return False, (f"{real} real compaction_fired{note} "
+                   f"(≥{COMPACTION_MIN} → judge the Mnemos trial)")
 
 
 def p4_downstream(root: Path) -> tuple[bool, str]:
