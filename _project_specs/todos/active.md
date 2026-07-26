@@ -111,8 +111,17 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    "not reaching the model" and of the fatigue-injection was through a dropped channel — same
    shape as F-001 (empty ≠ unused). P3's verdict must be re-formed with Layer 3 actually landing.
    See observatory → "PreToolUse hooks' bare stdout never reached the model".
-6. **Evaluate scryer** — https://github.com/aklos/scryer. Run `/evaluate-framework`. Unread as of
-   2026-07-24; scope/overlap unknown, so this is an evaluation, not an adoption.
+6. ~~**Evaluate scryer**~~ — DONE 2026-07-25, ADR-0013: **Watching**, no dependency (Tauri GUI,
+   FSL license, near-total overlap with iCPG). Two patterns adopted idea-only. **The eval's real
+   output was about iCPG:** `icpg status` reports **680 unresolved drift events** and iCPG has no
+   verb to close one — a counter that can only increment, with no symbol/file/diff in the report,
+   so it is unadjudicable by construction. Standing pattern #2; a fail-open instance for item 1's
+   sweep. **Now the open work:** (a) ship `icpg drift resolve` + a `dismissed` state; (b) put
+   evidence on the drift report; (c) then re-ask whether the 680 mean *miscalibrated* or merely
+   *undisposable* — and whether iCPG's 6-dimension composite should give way to scryer's two
+   deterministic predicates (Standing pattern #3 says the composite is a proxy). See observatory →
+   "iCPG has 680 undisposed drift events". Any iCPG kill/keep verdict formed before (a)+(b) land is
+   tainted the same way F-001 tainted the Mnemos trial.
 7. Minors: **concept-tags for B** (it only surfaces file-keyed decisions; Alternatives-Considered
    and cross-cutting lessons are blind — the observatory "harness-staleness" entry is a live
    example B could not have surfaced); **auto-guard for E** (the standing-patterns block is
