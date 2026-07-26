@@ -181,9 +181,16 @@ def test_probe_3_spend_guard_under_python_39_still_denies(toy):
     deliberate: criterion 4 says this case must be covered, and a suite that only proves
     what is broken cannot show when something un-breaks.
     """
+    # cwd=toy is LOAD-BEARING, not tidiness. guard.py records the denial through
+    # scripts/spend/event.py, whose `.tessera/logs` path is resolved against the PROCESS cwd.
+    # The hook wrapper normally cds first; invoking guard.py directly (as this probe must, to
+    # pin the interpreter) skips that. Without cwd=toy the probe wrote seven synthetic
+    # `spend_denied` events into the REAL session log — fixtures indistinguishable from live
+    # denials, which the Stop-hook spend backstop then demanded a disposition for.
     r = subprocess.run(["/usr/bin/python3", str(toy / "scripts" / "spend" / "guard.py")],
                        input=json.dumps({"tool_input": {"command": SPEND_CMD},
                                          "cwd": str(toy)}),
+                       cwd=str(toy),
                        capture_output=True, text=True, timeout=60)
     assert r.returncode == DENY, (
         f"REGRESSION: the spend guard failed OPEN under python 3.9 (rc={r.returncode}). "

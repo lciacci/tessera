@@ -1229,6 +1229,40 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   verdict formed on "drift detection produced nothing useful" is tainted the same way.
 - **When to revisit:** when the two ADR-0013 fixes ship, or when the iCPG kill/keep trial is judged.
 
+### The spend guard matches command TEXT — it over-denies prose and under-denies assembly *(2026-07-26)*
+
+- **What happened:** while cleaning up after the spec-11 chaos probes, the spend guard blocked a
+  **log-cleanup script** — a pure file rewrite that commits nothing — because the script's body
+  contained the literal string of a spend command it was filtering for. In the same session it
+  also blocked `bin/tessera-verify`'s own meta-command for the same reason: an `echo`/heredoc that
+  merely *named* `terraform apply`. `decide()` is handed the Bash tool's whole command text and
+  matches substrings in it.
+- **The over-denial is the visible half and the safe direction.** An agent that writes *about* the
+  spend gate — a commit message, a grep, a heredoc, a test fixture — gets blocked. Annoying, loud,
+  self-correcting: you find out immediately.
+- **The under-denial is the half nobody has looked at, and it is the serious one.** The same
+  imprecision means the guard only ever sees **pre-expansion** text. A command assembled at
+  runtime — `CMD=$(...)`, a variable, string concatenation, a `$(cat file)` — reaches the Bash
+  tool as text that does not contain the trigger, and passes. The workaround for the false
+  positive *is* the bypass for the real control, which is why the two halves cannot be reasoned
+  about separately. **Nothing currently tests the under-denial direction at all.**
+- **Why this is not a fix-it-now:** the naive tightening (match harder) worsens the over-denial,
+  and the naive loosening (only match the resolved command) is not available — a PreToolUse hook
+  sees the command *before* the shell expands it, so there is no resolved form to inspect. This
+  needs a design gate, not a patch. Candidate directions: treat quoting/heredoc context as
+  structure rather than text (the guard already has a `HEREDOC_START` regex, so it half-does this
+  for a different reason); or accept text-matching as advisory and put the real control at the
+  boundary that *does* see resolved commands (the AWS budget → SNS → hardstop lambda that
+  `tessera-spend-guard.sh` already names as its out-of-band bound).
+- **Bearing on ADR-0005 / spec 11:** the guard is one of spec 11's five components, and this is a
+  DIFFERENT defect class from the one those probes measure. The probes ask *"does it say so when
+  it breaks?"*; this asks *"is what it matches the right thing at all?"* Standing pattern #3 — a
+  predicate that measures a stand-in (command text) for the thing that matters (committed spend)
+  will fire correctly and mean nothing. Deliberately NOT folded into the chaos suite, to keep
+  "report your own failure" and "the matching is wrong" from becoming one blurred item.
+- **When to revisit:** before any unsupervised-autonomy claim leans on the spend guard, or when
+  spec 11 step 2 classifies that component's bail-outs.
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.
