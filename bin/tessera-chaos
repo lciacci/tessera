@@ -4,10 +4,16 @@
 # THE BAR: break a component on purpose, and Tessera tells you within one session,
 # without a human asking.
 #
-# **These are expected to be RED until `tessera-degraded` + `tessera-watch` P13 exist.**
-# That is deliberate, and it is why this is a separate command rather than a suite inside
-# `tessera-test`: the probes are legitimately red today, and a permanently-red main suite
-# is one people learn to ignore. `tessera-test` stays a usable green/red signal meanwhile.
+# **ALL 8 PROBES ARE GREEN as of 2026-07-26** — `tessera-degraded` and `tessera-watch` P13
+# shipped, and the suite is now ALSO folded into `scripts/run-tests.sh` as the `chaos` run,
+# so `tessera-test` covers it. **A red probe here is now a real regression in Tessera's
+# ability to report its own failure, not the expected state.**
+#
+# It stayed a separate command while the probes were legitimately red, because a
+# permanently-red main suite is one people learn to ignore. That reason has expired; the
+# command is KEPT (not deleted) because running the probes in isolation is useful — they
+# scaffold real downstream projects and take seconds, so `tessera-chaos` is the fast way to
+# ask "does the framework still notice when I break it?" without the full suite.
 #
 # The suite lives at top-level `chaos/`, NOT `scripts/chaos/`, because run-tests.sh's
 # top-level run is `pytest scripts/` — which would collect these and fail the main suite,
@@ -15,9 +21,9 @@
 # collide with doccheck's `ignored-test-suites-are-run`. Outside `scripts/`, no exclusion
 # is needed and neither check gets weakened.
 #
-# WHEN THE MECHANISM LANDS: fold these into scripts/run-tests.sh as their own `run` line
-# and delete this script. doccheck's `chaos-suite-is-reachable` is what stops it rotting
-# unrun in the meantime.
+# The mechanism landed 2026-07-26 and the fold-in is done (`run "chaos"` in run-tests.sh).
+# This script is deliberately kept rather than deleted — see the header. doccheck's
+# `chaos-suite-is-reachable` still guards it against rotting unrun.
 #
 # Ordering is not style — spec 11 §ORDERING. The 2026-07-12 session built a detector, then
 # verified the fix with the detector that had the hole, three times, and reported green
@@ -37,7 +43,8 @@ fi
 
 echo "Tessera chaos probes — spec 11"
 echo "──────────────────────────────"
-echo "Expected RED until the degraded mechanism ships. A green run here means the bar is met."
+echo "All 8 green as of 2026-07-26. A RED probe here is a real regression: Tessera has"
+echo "stopped reporting one of its own failures."
 echo
 
 "$PY" -m pytest chaos -q "$@"
@@ -46,7 +53,10 @@ rc=$?
 echo
 echo "──────────────────────────────"
 if [ "$rc" -ne 0 ]; then
-    echo "PROBES RED — Tessera does not yet report its own failure."
-    echo "This is the expected state. See _project_specs/11-fail-open-detection.md."
+    echo "PROBES RED — REGRESSION. A component can now fail without saying so."
+    echo "This was the expected state until 2026-07-26; it is not any more. A broken component"
+    echo "is once again indistinguishable from a healthy one. See _project_specs/11-fail-open-detection.md."
+else
+    echo "PROBES GREEN — breaking a component on purpose still gets reported."
 fi
 exit "$rc"

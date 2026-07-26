@@ -92,6 +92,46 @@ def test_detector_is_not_vacuous_on_the_real_repo():
         "vacuously green. Either the wiring changed shape or the predicate no longer matches it.")
 
 
+def test_no_local_only_hook_silently_escapes_scope():
+    """SCOPE COMPLETENESS — the hole the not-vacuous test could not see.
+
+    `test_detector_is_not_vacuous_on_the_real_repo` only samples commands that ALREADY contain
+    tessera-degraded, so it proves the predicate matches *something*, never that it matches
+    *everything in scope*. A scope hole is invisible to it by construction, and one shipped:
+    `_ANCHORED` required `/.claude/scripts/`, while .claude/settings.json also wires local-only
+    hooks under `hooks/` (subagent-route-hook, tier-classify-hook). Both fixer and detector
+    skipped them — and because doccheck imports this predicate, the check read green while two
+    wired hooks stayed in the pre-spec-11 fail-silent state. Found by cloud review, not by us.
+
+    This asserts the docstring's actual claim: EVERY local-only, anchored, exit-0 wired command
+    is in scope. The candidate regex here is deliberately BROADER than the production one and
+    written independently — a test that reuses `_ANCHORED` could never detect `_ANCHORED` being
+    too narrow.
+    """
+    import re
+    broad = re.compile(r'"\$\{CLAUDE_PROJECT_DIR:-\.\}/([A-Za-z0-9._/-]+)"')
+    data = json.loads((REPO / ".claude" / "settings.json").read_text())
+    escaped = []
+    for event, groups in (data.get("hooks") or {}).items():
+        for group in groups:
+            for hook in group.get("hooks", []):
+                cmd = hook.get("command", "")
+                if "tessera-degraded" in cmd:
+                    continue                                  # already reports
+                if report_settings.GLOBAL_FALLBACK in cmd:
+                    continue                                  # not local-only
+                if not cmd.rstrip().endswith("exit 0"):
+                    continue                                  # unrecognised shape
+                if not broad.search(cmd):
+                    continue                                  # not an anchored hook path
+                if report_settings.needs_reporting(cmd) is None:
+                    escaped.append(f"{event}: {broad.search(cmd).group(1)}")
+    assert not escaped, (
+        "local-only anchored hook(s) silently out of scope — the fixer cannot fix them AND "
+        "doccheck cannot flag them, so they stay fail-silent while the check reads green: "
+        + ", ".join(escaped))
+
+
 def test_doccheck_registers_the_check():
     """The rule must be enforced by the pre-commit gate, not merely importable."""
     out = subprocess.run([sys.executable, str(REPO / "scripts" / "doccheck.py"), "--list"],

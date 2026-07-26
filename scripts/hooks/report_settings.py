@@ -45,18 +45,26 @@ from pathlib import Path
 
 ANCHOR = "${CLAUDE_PROJECT_DIR:-.}"
 GLOBAL_FALLBACK = "$HOME/.claude/templates"
-_ANCHORED = re.compile(r'"\$\{CLAUDE_PROJECT_DIR:-\.\}/\.claude/scripts/([A-Za-z0-9._-]+)"')
+# BOTH wired-hook directories this project uses. The first version had only `.claude/scripts`,
+# which silently excluded the two local-only hooks under `hooks/` (subagent-route-hook,
+# tier-classify-hook) — they passed every other gate. Because doccheck IMPORTS this predicate,
+# the fixer could not fix them and the detector could not flag them, so the check read green
+# while two wired hooks stayed fail-silent. The alternation mirrors anchor_settings._QUOTED,
+# which had it right all along; mirroring only half of a sibling's regex was the mistake.
+_ANCHORED = re.compile(
+    r'"\$\{CLAUDE_PROJECT_DIR:-\.\}/((?:\.claude/scripts|hooks)/[A-Za-z0-9._-]+)"')
 _TRAILING_EXIT = re.compile(r";\s*exit 0\s*$")
 
 
 def component_of(script: str) -> str:
-    """`tessera-gate-scan.sh` -> `gate-scan`.
+    """`.claude/scripts/tessera-gate-scan.sh` -> `gate-scan`; `hooks/tier-classify-hook` -> same.
 
-    Derived, never a lookup table: an allowlist would be a second definition of "which hooks
-    matter" and would drift the moment one was added — the same shape as the bugs this module
-    exists to stop.
+    Takes a path or a bare name: the match now carries its directory, because two different
+    wired-hook directories are in scope. Derived, never a lookup table — an allowlist would be a
+    second definition of "which hooks matter" and would drift the moment one was added, the same
+    shape as the bugs this module exists to stop.
     """
-    return script.removeprefix("tessera-").removesuffix(".sh")
+    return script.rsplit("/", 1)[-1].removeprefix("tessera-").removesuffix(".sh")
 
 
 def needs_reporting(cmd: str) -> str | None:
