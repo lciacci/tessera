@@ -1170,22 +1170,48 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   session (the open P3 question) — it must be re-judged with Layer 3 *actually reaching the model*,
   because every prior observation of it was through a dropped channel.
 
-### iCPG has 680 undisposed drift events — a counter that can only increment *(2026-07-25, surfaced by the scryer eval)*
+### iCPG's drift backlog: 700 rows are 154 real drifts, and the verb to close them already existed *(2026-07-25, surfaced by the scryer eval; root cause corrected same day)*
 
-- **Status:** OPEN. Two fixes decided in ADR-0013; three questions deliberately left open here.
-- **What it is:** `icpg status` reports `Unresolved drift: 680`. iCPG detects drift, scores it, and
-  prints it — and has **no verb to close one**. There is no `resolve`, no `dismiss`, no adjudication
-  path. So the number is monotonically increasing by construction, which makes it indistinguishable
-  from a broken detector. Standing pattern #2 (*it did not break, it produced something plausible*);
-  a fail-open instance for Spec 11's sweep.
-- **Why nobody noticed:** the report is unadjudicable. The top five events are byte-identical —
-  `[0.65] Drift detected: test(0.30), usage(1.00) (test, usage)` — with no symbol, no file, no diff.
-  There is nothing in the output a human could act on even if they wanted to, so 680 accumulated in
-  silence. A report nobody can act on is a report nobody acts on.
+- **Status:** OPEN. Corrected in place — the first version of this entry (and ADR-0013) named the
+  wrong mechanism. See ADR-0013's CORRECTION block for the full record of the error.
+- **What it is, measured** against `.icpg/reason.db`:
+  ```
+  total=700   unresolved=700   distinct(symbol_id, from_reason_id, description)=154
+  distinct_symbols=102         distinct scan-minutes=31
+  most duplicated: n=21 for one (symbol, description) pair — one row per scan
+  ```
+  Standing pattern #2 (*it did not break, it produced something plausible*); a fail-open instance
+  for Spec 11's sweep, and a *better* example than first written — the counter is inflated ~4.5× by
+  the detector itself.
+- **Two real defects, neither of them a missing verb:**
+  1. **Unconditional re-insertion.** `cmd_drift` (`scripts/icpg/__main__.py:384`) does
+     `for event in events: store.create_drift_event(event)` on every scan — fresh UUID, no
+     natural-key check. Same drift, 21 rows.
+  2. **The existing verb is unreachable.** `drift check`, `drift file`, and `status` print severity
+     and description and **never print `event.id`**; there is no `drift list`. The argument
+     `drift resolve` needs cannot be obtained from any command's output — only from raw SQLite.
+- **CORRECTED — the original claim was false.** This entry first said iCPG "has **no verb to close
+  one**." `icpg drift resolve <event_id>` has existed since the module was written
+  (`scripts/icpg/__main__.py:112` → `ICPGStore.resolve_drift()`, `store.py:261`). The claim came from
+  reading `icpg status` output and scryer's MCP tool list without reading iCPG's own CLI — the
+  `rule-over-read` failure exactly: a documented pattern applied by match, without checking the
+  artifact. **The generalisable lesson:** an evaluation scrutinises the *target* by construction;
+  the six-dimension methodology has no step that says "read your own code before asserting your own
+  gap." The unexamined side was ours, and it produced a confident, wrong, committed root cause.
+- **Why nobody noticed the backlog:** the report is unadjudicable. The top five events are
+  byte-identical — `[0.65] Drift detected: test(0.30), usage(1.00) (test, usage)` — with no symbol,
+  no file, no diff. Nothing in the output a human could act on, so it accumulated in silence.
 - **How it surfaced:** reading Scryer's `flag_drift` / `reconcile_drift` / `mark_implemented` verbs
   and then running `icpg status`. The eval's most valuable output was about iCPG, not about scryer.
-- **Decided (ADR-0013):** (1) drift disposition verbs — `icpg drift resolve <id> --note` plus a
-  `dismissed` state; (2) evidence on the report — every event prints symbol, file, and what changed.
+- **Decided (ADR-0013, as corrected):** (1) **dedup on insert** — natural key over open events, bump
+  last-seen/count instead of inserting; (2) **surface the IDs** — print short event IDs in
+  `check`/`file`/`status`, add `icpg drift list`, making the existing verb usable; (3) **evidence on
+  the report** — symbol, file, and what changed; (4) `--note` and a `dismissed` state (a real gap,
+  but the *last* fix, not the first).
+- **Note on test coverage:** `scripts/icpg/` has **zero tests** and is absent from
+  `scripts/run-tests.sh`. Any of the above lands untested unless a suite is added — and adding one
+  must go through run-tests.sh's separate-process pattern plus doccheck's `ignored-test-suites-are-run`,
+  or the new suite silently stops running (Standing pattern #1).
 - **Open — do NOT resolve these without their own evidence:**
   1. **6-dimension composite vs. 2 deterministic predicates.** Scryer uses exactly two, no LLM:
      *source-mapped node whose file changed since last reconcile*, and *project file the model does

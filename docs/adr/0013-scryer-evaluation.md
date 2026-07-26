@@ -9,6 +9,60 @@
 
 ---
 
+## CORRECTION (2026-07-25, same day, before any of this ADR's work was started)
+
+**Read this before the body.** The scryer verdict below is unchanged and stands. The *mechanism* this
+ADR attributes to iCPG's drift backlog was misdiagnosed, and the original text is left intact below
+with `[CORRECTED]` markers rather than rewritten, per this repo's ADR-immutability convention.
+
+**What the ADR claims:** "iCPG detects drift and has no verb to close one." **This is false.**
+`icpg drift resolve <event_id>` has existed since the module was written — `scripts/icpg/__main__.py:112`,
+backed by `ICPGStore.resolve_drift()` at `scripts/icpg/store.py:261`. The claim was made from reading
+`icpg status` output and scryer's MCP tool list, without reading iCPG's own CLI. That is exactly the
+failure the `rule-over-read` memory names: a documented pattern applied by match, without checking
+the specific artifact.
+
+**What is actually wrong,** measured against `.icpg/reason.db` on 2026-07-25:
+
+```
+total=700   unresolved=700   distinct(symbol_id, from_reason_id, description)=154
+distinct_symbols=102         distinct scan-minutes=31
+most duplicated: n=21 for a single (symbol, description) pair — one row per scan
+```
+
+Two real defects, neither of which is a missing verb:
+
+1. **Unconditional re-insertion.** `cmd_drift` (`__main__.py:384`) runs
+   `for event in events: store.create_drift_event(event)` on every scan, minting a fresh UUID each
+   time with no natural-key check. The 700 rows are ~154 distinct drifts re-inserted across 31 scans.
+   The count is ~4.5× inflated, and the "byte-identical top five" the ADR treats as evidence of an
+   unadjudicable report are in fact *the same drift, 21 times*.
+2. **The existing verb is unreachable.** `drift check`, `drift file`, and `status` all print severity
+   and description and **never print `event.id`**. There is no `drift list`. So the argument
+   `drift resolve` requires cannot be obtained from any command's output — only by opening SQLite by
+   hand. A verb with no path to its own argument is, in practice, absent; but that is a different
+   defect with a different fix, and calling it "no verb" sent the fix in the wrong direction.
+
+**What survives unchanged:** the finding that the backlog is a fail-open instance (Standing pattern #2)
+and that the report carries no actionable evidence. Both hold, and #2 holds *more* strongly — a counter
+inflated 4.5× by its own detector is a better example of "it did not break, it produced something
+plausible" than a missing verb would have been. The scryer verdict (Watching, no dependency) rests on
+form factor, license, and overlap — none of which this correction touches.
+
+**What this changes about the work:** §6's "adopt drift disposition verbs" is wrong as written. The
+corrected first fixes are **dedup on insert** and **surface the event IDs**, which together turn 700
+rows into 154 actionable ones and make the verb that already exists usable. See
+`docs/observatory.md` → "iCPG has 680 undisposed drift events" (corrected in place; that file is
+explicitly light-touch and mutable) and `_project_specs/todos/active.md` item 6.
+
+**Method finding, logged because it is the reusable part:** this ADR asserted the absence of a
+capability in Tessera's own code on the strength of an *external* project's feature list plus one
+line of `status` output. Nothing in the framework-evaluation methodology's six dimensions asks
+"did you read the code of the thing you are comparing against?" — the methodology is built to
+scrutinize the *target*, and it scrutinized scryer adequately. The unexamined side was ours.
+
+---
+
 ## Target
 
 - **Name:** Scryer
@@ -46,7 +100,7 @@ The overlap is not partial. Scryer and **iCPG** are two implementations of the s
 |---|---|---|---|---|
 | Intent graph anchored to code | ReasonNodes over 816 symbols, 879 edges, bootstrapped from git history | C4-shaped nodes (person/system/container/component/symbol) anchored to file + line ranges and to backing tests | **Different bet** | Same object. iCPG derives intent *from* existing code; scryer authors intent *before* it. |
 | Drift detection | 6 weighted dimensions (spec/decision/ownership/test/usage/dependency) → composite score | 2 deterministic mechanisms, no LLM: source-mapped node whose file changed since last reconcile; project file the model does not cover | **Different bet** | Scryer's is a direct predicate; iCPG's is a proxy composite. See §4. |
-| Drift disposition | *None.* No verb to adjudicate a drift event. | `flag_drift` / `reconcile_drift` / `mark_implemented` — explicit state transitions | **Conflicting** — and iCPG loses | This is the finding of the eval. See §6. |
+| Drift disposition | ~~*None.* No verb to adjudicate a drift event.~~ **[CORRECTED]** — `icpg drift resolve` exists; it is *unreachable* (no command prints an event ID) and the detector re-inserts duplicates on every scan | `flag_drift` / `reconcile_drift` / `mark_implemented` — explicit state transitions | **Different bet**, not conflicting | This is the finding of the eval — see the CORRECTION block above for the real mechanism. |
 | Code → intent reverse lookup | `tessera-decision-surface.sh` (PreToolUse) prints governing ADRs/observatory entries for the file about to be edited | `locate` MCP tool: file/symbol → anchored claims + owning node chain | **Compatible** — convergent design | Independent arrival at the same mechanism is evidence the mechanism is right. |
 | Pre-task orientation | 3 canonical iCPG queries (`prior`, `constraints`, `risk`) | `orient` — one call returning governing nodes, claims, directives, pending work, drift | **Different bet** | One composite call vs. three named ones. Scryer's is likelier to actually get called. |
 | Agent surface | Hooks + skills + CLAUDE.md, Claude Code only | MCP server, runtime-agnostic | **Different bet** | Tessera's channel discipline (principle #17) needs *deterministic* delivery; MCP tool calls are model-elective, hooks are not. |
@@ -88,7 +142,7 @@ The overlap is not partial. Scryer and **iCPG** are two implementations of the s
 
 | Pattern | Verdict | Notes |
 |---|---|---|
-| Drift disposition verbs (`flag` / `reconcile` / `mark_implemented`) | **Idea-only — adopt** | iCPG detects drift and has no way to close one. A detector with no dispose verb produces a monotonically growing number, which is indistinguishable from a broken detector. |
+| Drift disposition verbs (`flag` / `reconcile` / `mark_implemented`) | **[CORRECTED] — mostly already have it** | ~~iCPG detects drift and has no way to close one.~~ False: `icpg drift resolve` exists. What iCPG lacks is a way to *reach* it (no command prints an event ID, no `drift list`) and dedup on insert. The `--note` / `dismissed`-state half of this row still stands as a real gap. |
 | Inline code evidence attached to a drift report | **Idea-only — adopt** | Scryer embeds the changed code in the drift report so the agent judges without re-reading the model tree. `icpg status` prints `[0.65] Drift detected: test(0.30), usage(1.00)` — a score with no referent. Unadjudicable by construction. |
 | Deterministic drift, two predicates, no LLM | **Idea-only — open, do not adopt yet** | Directly implicates Standing pattern #3: *name the pain, not the artifact that correlates with it*. A 0.65 composite over six weighted dimensions is a proxy. "This file changed since we last reconciled it" is the pain. But retiring iCPG's dimensions is a bigger decision than this ADR should make — logged to the observatory. |
 | Plan/committed split (`planned.scry` vs `model.scry`; the diff is the plan) | **Idea-only — open** | The strongest genuinely-new idea here. Tessera's specs are prose; a machine-diffable "intended state" would be checkable. Needs its own design pass; not a patch. |
@@ -121,13 +175,14 @@ The overlap is not partial. Scryer and **iCPG** are two implementations of the s
 
 Scryer is a good project solving a real problem with a defensible design, and Tessera should not adopt it. Three independent reasons, any one sufficient: it is a **desktop GUI application** where every Tessera mechanism is headless and event-fired; it is **FSL-licensed**, i.e. not open source until 2028, which is a bad dependency for a core subsystem; and it **overlaps iCPG almost completely**, so adopting it means running two intent graphs or killing one — and killing iCPG on the strength of a v0.3.5 solo project's README is not a decision this evidence supports. Its strongest genuinely-distinct idea, the model leading the code via a `planned` / `committed` split, is an idea Tessera can hold without the app.
 
-**The most valuable output of this evaluation is not about scryer.** Reading scryer's drift-disposition verbs and then running `icpg status` produced this: **680 unresolved drift events.** iCPG detects drift, scores it, prints it — and has no verb to close one. That number cannot go down. It is therefore not a measurement of anything; it is a counter that only increments, and a counter that only increments is indistinguishable from a broken detector. This is **Standing pattern #2** exactly — *it did not break, it produced something plausible* — and it is a fail-open instance for Spec 11's sweep. The top five drift events are byte-identical (`[0.65] test(0.30), usage(1.00)`) with no symbol, no file, no diff: unadjudicable by construction, which is why 680 accumulated without anyone noticing. Scryer was the mirror. That finding is worth more than the verdict.
+**The most valuable output of this evaluation is not about scryer.** Reading scryer's drift-disposition verbs and then running `icpg status` produced this: **680 unresolved drift events.** ~~iCPG detects drift, scores it, prints it — and has no verb to close one. That number cannot go down.~~ **[CORRECTED — see the CORRECTION block above.** The verb exists (`icpg drift resolve`); the number climbs because the detector re-inserts a fresh row for the same drift on every scan, and no command prints the event ID the verb needs. 700 rows = 154 distinct drifts × 31 scans.**]** It is therefore not a measurement of anything; it is a counter that only increments, and a counter that only increments is indistinguishable from a broken detector. This is **Standing pattern #2** exactly — *it did not break, it produced something plausible* — and it is a fail-open instance for Spec 11's sweep. The top five drift events are byte-identical (`[0.65] test(0.30), usage(1.00)`) with no symbol, no file, no diff: unadjudicable by construction, which is why the backlog accumulated without anyone noticing — and, per the correction, those five are literally *the same drift repeated 21 times*. Scryer was the mirror. That finding is worth more than the verdict, and it survives the correction intact.
 
 **Biases named.** (1) *Excitement bias* — scryer's framing ("the model leads; the code follows") is articulate and made me want it to be right; I checked the license and form factor before the ideas, deliberately, to avoid reasoning backwards from wanting to adopt. (2) *Sunk-cost protection for iCPG* — 816 symbols and a git-history bootstrap are real work, and I noticed a pull toward defending iCPG's 6-dimension scoring against scryer's 2-predicate design. On the evidence, scryer's is better, and I have marked it open rather than resolving it in iCPG's favor. (3) *Familiarity bias* — I understand iCPG's model because it is documented in this repo, and scryer's only through its README; I have not run it, and the eval is README-and-commits-deep, not usage-deep. That is a real limit on this ADR's confidence, and it is a reason the verdict is Watching rather than Reject.
 
-**Concepts adopted (with implementation notes):**
-- **Drift disposition verbs for iCPG.** `icpg drift resolve <id> --note "<why>"` and a `dismissed` state, so an adjudicated drift event leaves the open set. Without this, `unresolved drift: N` is decoration. Lands in `scripts/icpg/`.
-- **Evidence on the drift report.** Every drift event must print the symbol, the file, and what changed. A report a human cannot act on is a report nobody acts on — which is the 680.
+**Concepts adopted (with implementation notes):** **[CORRECTED — the first bullet was written against a
+misdiagnosis; the corrected ordering is dedup-then-reach, and the verb it proposes adding already exists.]**
+- ~~**Drift disposition verbs for iCPG.** `icpg drift resolve <id> --note "<why>"` and a `dismissed` state, so an adjudicated drift event leaves the open set. Without this, `unresolved drift: N` is decoration.~~ **Corrected to:** (1) **dedup on insert** — `create_drift_event` takes a natural key `(symbol_id, from_reason_id, description)` over open events and bumps a last-seen/count instead of minting a new row; (2) **make the existing verb reachable** — print short event IDs in `check`/`file`/`status` and add `icpg drift list`. The `--note` and `dismissed`-state additions remain wanted, but they are the *third* fix, not the first. Lands in `scripts/icpg/store.py` and `scripts/icpg/__main__.py`.
+- **Evidence on the drift report.** Every drift event must print the symbol, the file, and what changed. A report a human cannot act on is a report nobody acts on — which is the backlog. (Unchanged by the correction; `drift file` already resolves the symbol name, `check` and `status` do not.)
 
 **Concepts held open (logged to the observatory, not decided here):**
 - **Deterministic two-predicate drift vs. iCPG's 6-dimension composite.** Standing pattern #3 says the composite is a proxy. Retiring it is a separate decision needing its own evidence.

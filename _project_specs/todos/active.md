@@ -113,15 +113,23 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    See observatory → "PreToolUse hooks' bare stdout never reached the model".
 6. ~~**Evaluate scryer**~~ — DONE 2026-07-25, ADR-0013: **Watching**, no dependency (Tauri GUI,
    FSL license, near-total overlap with iCPG). Two patterns adopted idea-only. **The eval's real
-   output was about iCPG:** `icpg status` reports **680 unresolved drift events** and iCPG has no
-   verb to close one — a counter that can only increment, with no symbol/file/diff in the report,
-   so it is unadjudicable by construction. Standing pattern #2; a fail-open instance for item 1's
-   sweep. **Now the open work:** (a) ship `icpg drift resolve` + a `dismissed` state; (b) put
-   evidence on the drift report; (c) then re-ask whether the 680 mean *miscalibrated* or merely
-   *undisposable* — and whether iCPG's 6-dimension composite should give way to scryer's two
-   deterministic predicates (Standing pattern #3 says the composite is a proxy). See observatory →
-   "iCPG has 680 undisposed drift events". Any iCPG kill/keep verdict formed before (a)+(b) land is
-   tainted the same way F-001 tainted the Mnemos trial.
+   output was about iCPG:** the drift backlog is **700 rows that are only 154 distinct drifts**
+   (102 symbols, 31 scans; one pair duplicated 21×), with no symbol/file/diff in the report.
+   Standing pattern #2; a fail-open instance for item 1's sweep. **ROOT CAUSE CORRECTED same day —
+   the first write-up of this item was wrong.** It claimed iCPG "has no verb to close one";
+   `icpg drift resolve` has existed all along (`scripts/icpg/__main__.py:112`). The two real
+   defects: (i) `cmd_drift` re-INSERTs a fresh row for the same drift on every scan (`__main__.py:384`,
+   no natural-key check); (ii) no command prints `event.id` and there is no `drift list`, so the
+   existing verb is unreachable without raw SQLite. See ADR-0013's CORRECTION block.
+   **Now the open work, in order:** (a) dedup on insert; (b) surface short event IDs + `drift list`
+   — (a)+(b) turn 700 into 154 actionable rows and make the verb usable; (c) evidence on the report
+   (symbol, file, what changed); (d) `--note` + a `dismissed` state; (e) **`scripts/icpg/` has zero
+   tests and is not in `run-tests.sh`** — adding a suite must use the separate-process pattern and
+   register with doccheck's `ignored-test-suites-are-run`, or it silently stops running (pattern #1);
+   (f) only then re-ask whether the 154 mean *miscalibrated* or merely *undisposed* — and whether
+   iCPG's 6-dimension composite should give way to scryer's two deterministic predicates (pattern #3
+   says the composite is a proxy). See observatory → "iCPG's drift backlog". Any iCPG kill/keep
+   verdict formed before (a)–(c) land is tainted the same way F-001 tainted the Mnemos trial.
 7. Minors: **concept-tags for B** (it only surfaces file-keyed decisions; Alternatives-Considered
    and cross-cutting lessons are blind — the observatory "harness-staleness" entry is a live
    example B could not have surfaced); **auto-guard for E** (the standing-patterns block is
