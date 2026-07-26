@@ -1446,6 +1446,25 @@ this section — the dedup fix it prescribes is real but is now step 3, not step
      Cheap to check, expensive to migrate 51 skills, and it makes every skill name uglier.
   3. **A curated known-collisions list** with an explicit staleness marker, accepting the proxy
      but making its rot visible.
+- **DECIDED 2026-07-26 (Lorenzo): approach 1 — rename `code-review` → `tessera-code-review`.**
+  Cleanest, needs no oracle, and fixes the live instance outright. Approach 2 was considered and
+  rejected as disproportionate, on a sharper argument than cost alone: **Tessera's skill names and
+  Claude Code's command names occupy different namespaces almost everywhere.** The 51 are mostly
+  *domain* names (`android-kotlin`, `supabase-nextjs`, `aws-dynamodb`, `flutter`); built-ins are
+  *harness verbs* (`run`, `init`, `review`, `loop`, `schedule`). Prefixing all 51 pays a full
+  migration to protect ~45 names that were never at risk, and would churn `base` and `mnemos` —
+  the two eagerly loaded by path from CLAUDE.md — for no gain.
+- **Residual after the rename, and it is small enough to watch by eye.** Approach 1 fixes today's
+  instance only, so the names still generic enough for a *future* built-in to claim are worth
+  knowing: **`security`** (built-in `security-review` already exists; `security` is a plausible
+  sibling), **`python`** (maximally generic), **`base`** (generic AND eagerly loaded, so a shadow
+  would be silent and broad), **`workspace`**, **`credentials`**. Five to watch, not 51 to rename.
+  No check is claimed for these — the oracle problem above is unchanged; this is a named watch
+  list, which is what the observatory is for.
+- **Rename scope (not yet executed):** `skills/code-review/`, the mirrored `~/.claude/skills/`
+  copy (ADR-0010 — re-sync, do not hand-edit), references in this repo's `CLAUDE.md` and the
+  `adr-gate` skill, and any downstream docs naming it. Not a one-liner; cheapest to fold into the
+  next time the skill corpus is open.
 - **What is NOT in question:** the workaround. `/ultrareview` is unshadowed and documented.
 - **When to revisit:** next time a built-in command is added that matters here, or when the
   skill corpus is next touched (ADR-0008/0009/0010 lineage) — a rename is cheapest to do while
