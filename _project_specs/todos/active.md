@@ -105,7 +105,7 @@ Add a line only when a lesson recurs; the value is that the list is short enough
 
 ### Open, in priority order
 
-1. **Spec 11 — STEPS 1+2 DONE + fleet rolled out 2026-07-26; open: (a2) NO TOOL updates a wired command BODY (hand-patched 5 repos), (b) a 3rd session re-reads the run_wired fix, and the fleet is UNPUSHED.**
+1. **Spec 11 — DONE + mechanized + fleet rolled out and PUSHED 2026-07-26; one open: (b) a 3rd session should re-read the run_wired correction.**
    *(Step 1)* `chaos/test_chaos.py` + `bin/tessera-chaos` (top-level `chaos/`, not
    `scripts/chaos/` — `pytest scripts/` would collect these red-by-design probes into the main
    suite, and `--ignore`ing them would collide with `ignored-test-suites-are-run`; outside
@@ -148,16 +148,26 @@ Add a line only when a lesson recurs; the value is that the list is short enough
      then `d27caee` / `9277c62` / `d9e2d90` / `bbec874` / `847e3f7`. **NOT PUSHED — local
      only in all five, awaiting a deliberate call** (same status the Part A anchoring rollout
      carried; see item 2).
-   - **(a2) NEW GAP, and it is a tooling gap, not a fleet gap.** The `hook-unavailable`
-     else-branch lives in the **wired command body** in `settings.json`, and **no tool can
-     put it there**: `tessera-sync-harness` only ADDS files, and `--patch-settings` is
-     anchor-only by deliberate design (bundling once installed a deferred component). So the
-     fleet fix above was applied **by hand**, which closes today's hole and guarantees the
-     next one — a repo scaffolded before the *next* command-body change will drift exactly
-     the same way, silently. **The fix is a command-body updater**, whose natural home is
-     `scripts/hooks/anchor_settings.py` (it already rewrites existing commands and already
-     has a doccheck detector keeping fixer and detector aligned). Until it exists, every
-     command-body change is a manual 5-repo edit that nothing verifies.
+   - ~~**(a2) tooling gap — no tool updates a wired command BODY.**~~ **CLOSED 2026-07-26.**
+     `scripts/hooks/report_settings.py` — third sibling of the same shape, one rewrite per
+     file (`patch_settings.py` = ADR-0004 fallback, `anchor_settings.py` = cwd anchoring,
+     this = reporting). Wired into `--patch-settings`, which stays **settings-only and
+     installs nothing** — the invariant the howler accident actually violated, so a second
+     pure-settings rewrite does not re-open it. Order enforced: anchor first, or reporting
+     names a path that still moves with cwd. Detector `unrunnable-hooks-report-themselves`
+     **imports** the fixer's predicate instead of mirroring a regex. Fleet + tessera +
+     template all patched and pushed; tool output verified **byte-identical** to the earlier
+     hand patch. **Scope is every local-only wired hook, no allowlist** — which is why it
+     immediately found the one the hand pass missed (`tessera-decision-surface`, the hook
+     that already shipped silent once) and correctly left the fleet's mnemos hooks alone.
+     **Two findings from building it, both worth carrying:** (i) the predicate counted
+     `findall()` hits and required exactly one, but the wired form names its script **twice**
+     (`[ -x P ]` and `exec P`), so it never matched a real command and the fixer silently did
+     nothing; (ii) because of (i) the new doccheck check **passed on its first run while
+     incapable of flagging anything** — a vacuously green check, inside the check written to
+     stop vacuous greens. Only the not-vacuous test caught it. **Every new doccheck check
+     needs a not-vacuous test that feeds the REAL artifact back through the predicate**; a
+     green from a fresh check is not evidence until something has been seen to make it red.
    - **(b) Criterion 5 is now partially self-referential.** Steps 1 and 2 were different
      sessions, but the step-2 session also corrected `run_wired`, so for probes 4 and 8 the
      probe author and the mechanism author are the same. Mitigated by the RED-before-GREEN
