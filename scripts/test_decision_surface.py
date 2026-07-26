@@ -90,3 +90,57 @@ def test_hook_mode_is_silent_when_nothing_governs():
     with contextlib.redirect_stdout(buf):
         ds.emit_hook("some/unrelated/path.txt")
     assert buf.getvalue().strip() == ""
+
+
+# ── the decision -> amendment edge (2026-07-26) ──────────────────────────────────────────
+
+def test_amendments_link_an_adr_to_later_records_that_revisit_it():
+    """The edge that was missing when a session acted on ADR-0008 and never saw the later
+    observatory entry deferring it. Asserted against the REAL records, not a fixture: the
+    point is that this repo's own decisions are routinely revisited."""
+    import decision_amendments as da
+    am = da.build_amendments()
+    assert "ADR-0004" in am, "ADR-0004 is referenced all over the observatory; the edge is dead"
+    assert len(am["ADR-0004"]) >= 2
+    assert any(t.startswith("observatory:") for t in am["ADR-0004"])
+
+
+def test_amendments_ignore_self_reference_and_earlier_adrs():
+    """An ADR citing itself is not an amendment, and an EARLIER ADR citing a later one is
+    background, not a revision — only later records revise."""
+    import decision_amendments as da
+    am = da.build_amendments()
+    for adr_id, refs in am.items():
+        assert not any(r.startswith(adr_id + ":") for r in refs), f"{adr_id} lists itself"
+        for r in refs:
+            if r.startswith("ADR-"):
+                assert r.split(":")[0] > adr_id, f"{adr_id} revised by earlier {r.split(':')[0]}"
+
+
+def test_amendment_lines_render_only_for_revisited_adrs():
+    import decision_amendments as da
+    assert da.render_amendments("ADR-9999", {}) == []
+    lines = da.render_amendments("ADR-0001", {"ADR-0001": ["observatory: x", "observatory: y"]})
+    assert lines and "REVISITED by 2" in lines[0]
+
+
+def test_amendment_list_is_capped():
+    """ADR-0008 has 15 referring records; an uncapped list would bury the decision itself."""
+    import decision_amendments as da
+    many = [f"observatory: e{i}" for i in range(20)]
+    lines = da.render_amendments("ADR-0001", {"ADR-0001": many})
+    assert len(lines) == da.MAX_AMENDMENTS + 2 and "and 16 more" in lines[-1]
+
+
+def test_adr_reference_check_is_not_vacuous(tmp_path):
+    """A fresh check's green proves nothing until something has been seen to make it red.
+
+    Also pins the external-ADR scope: Open GSD's ADR-1244 is cited in the observatory as
+    provenance and must NOT be flagged, while a dangling Tessera-range id must be.
+    """
+    import re as _re
+    ours = _re.compile(r"ADR-(0\d{3})")
+    assert ours.findall("cites ADR-1244 (theirs)") == [], "external ADRs must be out of scope"
+    assert ours.findall("cites ADR-0099") == ["0099"], "a dangling Tessera id must be caught"
+    on_disk = {p.name[:4] for p in (ds.ROOT / "docs" / "adr").glob("0*.md")}
+    assert "0099" not in on_disk, "precondition: ADR-0099 must not exist for this to bite"

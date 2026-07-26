@@ -61,7 +61,10 @@ chmod +x "$TARGET/.claude/scripts/tessera-gate-scan.sh"
 # dangling `if [ -x … ]` that silently no-ops (found when a fleet back-fill added the wiring
 # with no file). Same "ship both halves or neither" rule as the gate recorder and spend guard.
 cp "$TESSERA_ROOT"/.claude/scripts/tessera-decision-surface.sh "$TARGET/.claude/scripts/"
-cp "$TESSERA_ROOT"/scripts/decision_surface.py "$TARGET/scripts/"
+# decision_amendments.py is NOT optional: decision_surface.py imports it at module scope, so
+# shipping one without the other makes the hook die on import in every downstream. Ship both.
+cp "$TESSERA_ROOT"/scripts/decision_surface.py \
+   "$TESSERA_ROOT"/scripts/decision_amendments.py "$TARGET/scripts/"
 chmod +x "$TARGET/.claude/scripts/tessera-decision-surface.sh"
 # Escalation: reached by name from PATH (tessera/bin). The copy is a BRIDGE for machines
 # where PATH is not set — delete it once install.sh's PATH check is green everywhere.

@@ -1522,6 +1522,41 @@ def check_unrunnable_hooks_report_themselves() -> list[str]:
     return bad
 
 
+def check_adr_references_resolve() -> list[str]:
+    """Every `ADR-NNNN` cited in the docs must name an ADR that exists.
+
+    Found 2026-07-26 while building the decision->amendment edge: the observatory cites
+    `ADR-1244`, which is not an ADR — almost certainly a line number or figure that matched the
+    pattern. Harmless in isolation, corrosive in aggregate: the amendment edge keys on exactly
+    this token, so a dangling id is a decision-link that silently points at nothing, and a
+    reader chasing it finds no record and cannot tell a typo from a deleted decision.
+
+    Cheap because it is exact — a set difference between cited ids and ids on disk, no judgement.
+
+    SCOPED TO Tessera's OWN NUMBERING (`ADR-0NNN`), and that scope is not cosmetic: the first
+    version flagged `ADR-1244 (theirs)`, which is **Open GSD's** ADR, correctly cited as external
+    provenance. A checker that cannot tell our decisions from someone else's would push a reader
+    to "fix" a true reference. Every Tessera ADR is docs/adr/0NNN-*.md, so anything outside the
+    0-range is by construction not ours to resolve.
+    """
+    cited: dict[str, set[str]] = {}
+    for rel in ("docs/observatory.md", "docs/design-principles.md",
+                "_project_specs/todos/active.md", "CLAUDE.md"):
+        path = ROOT / rel
+        if not path.is_file():
+            continue
+        for num in set(re.findall(r"ADR-(0\d{3})", path.read_text())):
+            cited.setdefault(num, set()).add(rel)
+    for adr in (ROOT / "docs" / "adr").glob("0*.md"):
+        for num in set(re.findall(r"ADR-(0\d{3})", adr.read_text())):
+            cited.setdefault(num, set()).add(f"docs/adr/{adr.name}")
+
+    on_disk = {p.name[:4] for p in (ROOT / "docs" / "adr").glob("0*.md")}
+    return [f"ADR-{num} is cited in {', '.join(sorted(where))} but no such ADR exists in "
+            f"docs/adr/ — a decision link pointing at nothing"
+            for num, where in sorted(cited.items()) if num not in on_disk]
+
+
 CHECKS = {
     "chaos-suite-is-reachable": check_chaos_suite_is_reachable,
     "session-logs-are-repo-anchored": check_session_logs_are_repo_anchored,
@@ -1553,6 +1588,7 @@ CHECKS = {
     "safety-scripts-run-on-system-python": check_safety_scripts_run_on_the_system_python,
     "test-command-is-not-a-bare-interpreter": check_test_command_is_not_a_bare_interpreter,
     "unrunnable-hooks-report-themselves": check_unrunnable_hooks_report_themselves,
+    "adr-references-resolve": check_adr_references_resolve,
 }
 
 
