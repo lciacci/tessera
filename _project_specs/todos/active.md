@@ -6,20 +6,31 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-07-24: cwd anchoring shipped both tiers, PreToolUse channel bug fixed, decision-surface + standing-patterns surfacers live)
+## Handoff — pick up here (2026-07-26: gate logs repo-anchored, spec 11 chaos probes watched RED, and the falsifier found to be 0-for-3)
 
 *(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
 Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering.)*
 
 ### THE ONE THING TO KNOW
-**A whole class of silent-hook bugs was found and fixed — and an adversarial multi-agent code
-review caught a CRITICAL my own testing had certified green.** Shipped this session: cwd-anchoring
-across all 15/15 hook commands + 11 scripts + both scaffold templates + the global tier (guarded
-so the `~/.claude/templates` copy does not cd to `$HOME`); the decision-surface hook (B, surfaces
-governing ADRs before an edit) and the standing-patterns block (E, this block); and the fix for a
-PreToolUse-channel bug that had `mnemos-pre-edit` and Layer-3 compaction recovery **silent to the
-model the entire Mnemos trial**. Tessera suite green, doccheck **27/27**, watch quiet but for
-snoozed P7, findings backlog empty, no escalations. **Both tessera and howler pushed; trees clean.**
+**`bin/tessera-verify` has returned no usable verdict on 3 of 3 real attempts — so Tessera's
+claim to independently verify its own work is currently unsupported.** Run 2 proved the tool
+does the job: it planted landmines, executed against them, reverted cleanly. Then **its own
+`verify-scan` Stop hook fired and that skip acknowledgment became its final message**, which is
+exactly what `parse_verdicts` reads. The verification happened; the answer was overwritten.
+Standing pattern #9, now scored against the falsifier itself. **This is on spec 11's critical
+path, not beside it** — criterion 5 wants "an independent session" to confirm the bar, and this
+tool *is* what independent was supposed to mean. Fix candidate that matches the pattern: write
+verdicts to a **file** in the worktree, not to the final message.
+
+Also shipped: item 3 closed (session-keyed logs anchored to the repo — the sweep found **12
+sites, not the 1 the todo named**) and **spec 11 step 1 done — the chaos suite exists and its
+RED baseline is watched** (8 probes, all 5 components, 7 RED / 1 green). Deliberately no
+mechanism: criterion 5 again.
+
+Suite green, doccheck **29/29**, chaos 7 RED by design, watch quiet but for snoozed P7, findings
+backlog empty across all 5 downstreams, no escalations. **Pushed — `4a12630..0a95e5b`, in sync.**
+Note a second session was committing to this repo concurrently (ADR-0013/scryer, iCPG drift);
+`git fetch` before assuming your in-context copy of any doc is current.
 
 ### Standing patterns
 
@@ -39,7 +50,10 @@ Add a line only when a lesson recurs; the value is that the list is short enough
 2. **It did not break — it produced something plausible.** The fail-open class. A mechanism
    that fails open needs a paired signal that fails LOUD. Proven again 2026-07-24: a
    *wrong* error message was the only reason a session-wide cwd bug surfaced, while twelve
-   correct-looking `exit 0`s said nothing. Spec 11 is the systematic answer.
+   correct-looking `exit 0`s said nothing. Spec 11 is the systematic answer. Again 2026-07-26:
+   `gate/ratio.py` from a foreign cwd printed a clean, well-formatted report of ZERO gates over
+   ZERO sessions — the anchored run reports 27/142/1039. A read path that fails open does not
+   look broken, it looks like good news.
 3. **Name the pain, not the artifact that correlates with it.** Three retired proxy
    predicates so far: retired-P2 (verb count), old-P4 (project count), the sqlfluff trigger
    (file existence). If a predicate measures a stand-in, it will fire correctly and mean
@@ -61,6 +75,12 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    recovery all "ran" while silent to the model. Self-testing proved they *produced* text;
    only review and the docs proved the harness *delivered* none of it. Test the real path to
    the real audience, and let an independent reviewer check what you didn't think to.
+   **Now proven against the falsifier itself (2026-07-26):** `bin/tessera-verify` did the whole
+   job — planted landmines, executed, reverted — and then its OWN `verify-scan` Stop hook fired,
+   and that skip acknowledgment became its final message, which is what `parse_verdicts` reads.
+   0 usable verdicts in 3 real attempts. The channel was eaten by the backstop the tool belongs
+   to. **Corollary worth its own sentence: a verdict returned as a MESSAGE can be overwritten;
+   a verdict written to a FILE cannot.**
 
 ### Open, in priority order
 
@@ -172,6 +192,49 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    too — avoid two mechanisms for one job); sqlfluff blocking flip (settempo not there); **G-a
    fires correctly** (reads the fire-log tail, self-clears after 3 runs — do NOT "fix"); trim
    backlog (ADR-0008); uuid prefix-resolve; historical `--reclassify --all`.
+
+### What happened (2026-07-26)
+
+- **Item 3 closed — session-keyed logs anchored to the repo** (`5de7924`). The todo named
+  `emit.py`; the sweep found **12 relative-path sites**. Sorted by a rule worth keeping: **the
+  anchor must match the key.** `.tessera/logs/<session>.jsonl` is keyed by
+  CLAUDE_CODE_SESSION_ID, so it belongs to the SESSION and cwd-resolution is wrong by
+  construction — while `bin/tessera-*` and `tessera_config.py` are **repo**-keyed and their
+  cwd-relative paths are CORRECT (`tessera-watch` inside a downstream *should* evaluate that
+  downstream). Fixed the 6 hand-invoked session-keyed tools via `scripts/gate/paths.py`.
+  **Anchored on `__file__`, NOT `CLAUDE_PROJECT_DIR`** — that var is set for hook processes but
+  is **UNSET in the Bash tool env**, so the `${CLAUDE_PROJECT_DIR:-.}` form the hook *commands*
+  use collapses to `.` for anything you run by hand. `TESSERA_ROOT` overrides. Check: doccheck
+  `session-logs-are-repo-anchored` + 4 regression tests.
+- **Spec 11 step 1 — chaos suite built, RED baseline WATCHED** (`98c5240`). `chaos/test_chaos.py`
+  + `bin/tessera-chaos`. 8 probes, all 5 components, each scaffolding a real downstream and
+  driving hooks through their actual stdin/exit-code contract. **7 RED, 1 green.** Placement
+  matters and cost a rework: under `scripts/` the probes got collected by `pytest scripts/` and
+  failed the main suite, and `--ignore`ing them would have collided with
+  `ignored-test-suites-are-run` — top-level `chaos/` needs no exclusion, so neither check is
+  weakened. Kept reachable by doccheck `chaos-suite-is-reachable`.
+- **Three findings, and they matter more than the two items:**
+  1. **`tessera-verify` is 0-for-3** — see THE ONE THING TO KNOW. Observatory entry filed
+     (`0a95e5b`) with three candidate fixes, none chosen.
+  2. **The spend guard matches command TEXT.** It denied a log-cleanup script and the verifier's
+     own meta-command for merely *containing* a spend command as a string. The over-denial is
+     loud and safe; **the under-denial is unexamined and is the serious half** — a command
+     assembled at runtime reaches the PreToolUse hook without the trigger and passes, so *the
+     workaround for the false positive is the bypass for the control*. `decide()` only ever sees
+     pre-expansion text, and a PreToolUse hook has no resolved form to inspect — needs a design
+     gate, not a patch. Observatory entry, no code change.
+  3. **I got a classification wrong and it bit within the hour** (`c5fca17`). Item 3 filed
+     `scripts/spend/event.py` as "latent — hook-invoked, the wrapper cds." False: the site is
+     live for *any* caller reaching the guard without the wrapper, and chaos probe 3 is such a
+     caller. Seven synthetic `spend_denied` fixtures landed in the real session log before it
+     was caught. **The cwd-relative class is broader than "is it wired to a hook."** The 4
+     remaining hook-invoked siblings should be re-read with that in mind during step 2.
+- **The chaos suite's first fail-open was its own.** A probe targeting a mnemos hook `skip`ped,
+  because the default `global` distribution ships no local mnemos copies — component 4 of 5 went
+  uncovered while the run still read as fine. Fixed by scaffolding `--frozen`.
+- **Spec 11 criterion 4 no longer reproduces:** on the real `/usr/bin/python3` (3.9.6, not a
+  stub) the spend guard denies correctly — `from __future__ import annotations` held. Probe 3
+  retained as the regression guard for a bug that already cost real spend.
 
 ### What happened (2026-07-24)
 
