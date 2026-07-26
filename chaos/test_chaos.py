@@ -110,6 +110,9 @@ def run_wired(toy: Path, script_name: str, stdin: str) -> subprocess.CompletedPr
     Now: find the hook command that references `script_name` and run THAT, with
     CLAUDE_PROJECT_DIR pointed at the project the way Claude Code sets it.
     """
+    # An empty script_name would substring-match EVERY command below and silently run the
+    # wrong hook, turning the not-vacuous guard into a tautology (criterion-5 re-read).
+    assert script_name, "run_wired needs a script name; an empty one matches every command"
     settings = json.loads((toy / ".claude" / "settings.json").read_text())
     commands = [hook.get("command", "")
                 for groups in (settings.get("hooks") or {}).values()
@@ -140,8 +143,14 @@ def degraded_events(toy: Path) -> list[dict]:
     return out
 
 
-def assert_reported(toy: Path, what: str):
-    """THE BAR. Fails today for every probe — no `degraded` channel exists yet."""
+def assert_reported(toy: Path, what: str, component: str):
+    """THE BAR: the broken component reported ITSELF, not merely that something spoke.
+
+    `component` is REQUIRED (added 2026-07-26, criterion-5 re-read). This used to assert only
+    that *some* degraded event existed, which meant a probe could pass on an event emitted by an
+    unrelated component — a green that proves the channel works, not that the thing we broke
+    said so. Every probe breaks exactly one component, so every probe can name it.
+    """
     events = degraded_events(toy)
     assert events, (
         f"SILENT FAILURE: {what}\n"
@@ -150,6 +159,13 @@ def assert_reported(toy: Path, what: str):
         f"SessionStart and no watcher predicate can fire.\n"
         f"    This is spec 11's bar, unmet: breaking a component on purpose must tell you "
         f"within one session, without a human asking."
+    )
+    got = [e.get("data", {}).get("component") for e in events]
+    assert component in got, (
+        f"WRONG REPORTER: {what}\n"
+        f"    Degraded events exist, but none from `{component}` — got {got}. The probe would "
+        f"have passed on another component's event, which proves the channel is alive, not that "
+        f"the component we broke said anything."
     )
 
 
@@ -174,7 +190,7 @@ def test_probe_1_corrupt_guard_allows_spend_silently(toy):
     r = run_hook(toy / ".claude" / "scripts" / "tessera-spend-guard.sh",
                  hook_input(toy, tool_input={"command": SPEND_CMD}))
     assert r.returncode != DENY, "setup wrong — a corrupt guard should not still be denying"
-    assert_reported(toy, "spend guard is corrupt; a spend-committing command was ALLOWED")
+    assert_reported(toy, "spend guard is corrupt; a spend-committing command was ALLOWED", "spend-guard")
 
 
 def test_probe_2_missing_guard_allows_spend_silently(toy):
@@ -188,7 +204,7 @@ def test_probe_2_missing_guard_allows_spend_silently(toy):
     r = run_hook(toy / ".claude" / "scripts" / "tessera-spend-guard.sh",
                  hook_input(toy, tool_input={"command": SPEND_CMD}))
     assert r.returncode == 0 and r.stderr == "", "setup wrong — expected the silent bail-out"
-    assert_reported(toy, "spend guard is MISSING; a spend-committing command was ALLOWED")
+    assert_reported(toy, "spend guard is MISSING; a spend-committing command was ALLOWED", "spend-guard")
 
 
 def test_probe_3_spend_guard_under_python_39_still_denies(toy):
@@ -239,7 +255,7 @@ def test_probe_4_unexecutable_backstop_hook_is_silent(toy):
     hook.chmod(0o644)
     r = run_wired(toy, "tessera-spend-backstop.sh", hook_input(toy))
     assert r.returncode == 0 and r.stdout == "", "setup wrong — expected the silent skip"
-    assert_reported(toy, "the spend backstop hook is not executable and was skipped entirely")
+    assert_reported(toy, "the spend backstop hook is not executable and was skipped entirely", "spend-backstop")
 
 
 # ─────────────────────────────────────────────────────────────────────────────────────
@@ -267,7 +283,7 @@ def test_probe_5_gate_scan_without_jq_is_silent(toy, tmp_path):
     r = run_hook(toy / ".claude" / "scripts" / "tessera-gate-scan.sh",
                  hook_input(toy, transcript_path=str(transcript)), env=env)
     assert r.returncode == 0, "setup wrong — expected the silent jq bail-out"
-    assert_reported(toy, "jq is unavailable, so gate-scan could not scan anything")
+    assert_reported(toy, "jq is unavailable, so gate-scan could not scan anything", "gate-scan")
 
 
 def test_probe_6_gate_scan_with_missing_scanner_is_silent(toy, tmp_path):
@@ -283,7 +299,7 @@ def test_probe_6_gate_scan_with_missing_scanner_is_silent(toy, tmp_path):
     r = run_hook(toy / ".claude" / "scripts" / "tessera-gate-scan.sh",
                  hook_input(toy, transcript_path=str(transcript)))
     assert r.returncode == 0 and r.stderr == "", "setup wrong — expected the silent bail-out"
-    assert_reported(toy, "gate-scan's scan.py is missing; the Stop-hook backstop is a no-op")
+    assert_reported(toy, "gate-scan's scan.py is missing; the Stop-hook backstop is a no-op", "gate-scan")
 
 
 # ─────────────────────────────────────────────────────────────────────────────────────
@@ -321,7 +337,7 @@ def test_probe_7_toolchain_unreachable_is_silent(frozen_toy, tmp_path):
     r = run_hook(hook, hook_input(frozen_toy), env=env)
     assert r.returncode == 0, "setup wrong — expected the silent fallback path"
     assert_reported(frozen_toy,
-                    "mnemos is unreachable; the checkpoint took an unmanaged fallback path")
+                    "mnemos is unreachable; the checkpoint took an unmanaged fallback path", "mnemos-checkpoint")
 
 
 # ─────────────────────────────────────────────────────────────────────────────────────
@@ -352,4 +368,4 @@ def test_probe_8_typo_in_a_wired_hook_path_is_silent(toy):
 
     r = run_wired(toy, "tessera-gate-scn.sh", hook_input(toy))
     assert r.returncode == 0 and r.stdout == "", "setup wrong — expected the silent skip"
-    assert_reported(toy, "a wired hook path is typo'd, so the hook has never run")
+    assert_reported(toy, "a wired hook path is typo'd, so the hook has never run", "gate-scan")

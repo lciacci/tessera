@@ -48,7 +48,7 @@ from pathlib import Path
 TESSERA_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(TESSERA_ROOT / "scripts" / "hooks"))
 import anchor_settings  # noqa: E402  (path set above; stdlib-only, safe under any python3)
-import report_settings  # noqa: E402  (spec 11: local-only hooks that cannot run must say so)
+import report_settings  # noqa: E402  (spec 11: wired hooks that cannot run must say so)
 
 # Files the scaffold writes that belong to the PROJECT, not the harness. Never back-fill these:
 # they carry identity (name, description, test command, findings) or are merged, not copied.
@@ -183,7 +183,7 @@ def patch_settings_only(project: Path, apply: bool) -> int:
         print(f"{verb}anchor {len(anchored)} cwd-relative hook command(s): "
               f"{', '.join(sorted(set(anchored)))}")
     if reported:
-        print(f"{verb}add hook-unavailable reporting to {len(reported)} local-only command(s): "
+        print(f"{verb}add hook-unavailable reporting to {len(reported)} wired command(s): "
               f"{', '.join(sorted(set(reported)))}")
     if not apply:
         print("re-run with --apply to write.")

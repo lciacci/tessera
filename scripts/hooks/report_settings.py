@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Make a local-only hook that CANNOT RUN say so, instead of exiting 0 in silence (spec 11).
+"""Make a wired hook that CANNOT RUN say so, instead of exiting 0 in silence (spec 11).
 
 THE PROBLEM. The wired form is:
 
@@ -70,19 +70,28 @@ def component_of(script: str) -> str:
 def needs_reporting(cmd: str) -> str | None:
     """The hook script this command should report on, or None. THE SHARED PREDICATE.
 
-    Scope is every LOCAL-ONLY wired hook, deliberately NOT a spec-11 component list:
-      - carries the ADR-0004 `$HOME/.claude/templates` fallback -> NOT local-only. A missing
-        local file resolves through the global copy and the hook still runs. Out of scope.
-      - no fallback -> a missing or unrunnable file is unrecoverable AND silent. In scope.
-    That is the same boundary `tessera-new-project`'s ship-both-halves test already draws, so
-    this introduces no third definition of "local-only".
+    Scope is EVERY wired hook of the recognised shape — deliberately not a component list, and
+    (since 2026-07-26) deliberately not "local-only" either.
+
+    THE RETIRED RULE, and why it was wrong. This used to exclude any command carrying the
+    ADR-0004 `$HOME/.claude/templates` fallback, reasoning that a missing local file still
+    resolves through the global copy so the hook runs anyway. That inverts the real risk: under
+    the DEFAULT `global` distribution **no local copy is ever shipped**, so the global branch is
+    not a redundancy — it is the ONLY tier. A default-scaffolded downstream whose global
+    templates are missing runs the wired mnemos command to rc=0 with empty stdout and stderr and
+    zero degraded events. Measured on conclave: 7 two-tier mnemos commands, 0 local copies on
+    disk, needs_reporting None for all 7. Because doccheck imports this predicate, the fixer and
+    the detector were blind together — the consistency guard propagated the gap faithfully.
+    Found by the criterion-5 independent re-read, not by us.
+
+    The reporting branch is appended after the whole `if/elif/fi`, so it fires only when BOTH
+    tiers have failed. That is precisely the unrecoverable case, and it leaves the global tier
+    untouched.
 
     Requires an ANCHORED path: reporting on a path that still moves with the session cwd would
     name the wrong file. Anchoring is `anchor_settings.py`'s job and must run first.
     """
     if "tessera-degraded" in cmd:          # already reports — idempotent
-        return None
-    if GLOBAL_FALLBACK in cmd:             # has a global fallback; not local-only
         return None
     if not _TRAILING_EXIT.search(cmd):     # unrecognised shape — never guess, leave it alone
         return None
@@ -139,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     patched, changed = add_reporting(settings)
     if not changed:
-        print(f"no change needed — {path} local-only hooks already report")
+        print(f"no change needed — {path} wired hooks already report")
         return 0
     if dry:
         print(f"would add reporting to {len(changed)} command(s): {', '.join(sorted(set(changed)))}")

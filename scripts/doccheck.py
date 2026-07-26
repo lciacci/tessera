@@ -1486,8 +1486,12 @@ def check_unrunnable_hooks_report_themselves() -> list[str]:
     what the fixer cannot fix (or misses what it does) is the exact asymmetry this repo keeps
     rediscovering.
 
-    Scoped to local-only commands: one carrying the ADR-0004 `$HOME/.claude/templates` fallback
-    still runs via the global copy, so its silence is recoverable and out of scope.
+    Scope is every wired hook of the recognised shape. It was once narrowed to "local-only",
+    excluding ADR-0004 two-tier commands on the premise that a missing local file still resolves
+    globally — but under the DEFAULT `global` distribution no local copy is ever shipped, so the
+    global branch is the ONLY tier, not a redundancy. That exclusion left all 7 mnemos hooks
+    fail-silent in every default downstream, and because this check imports the fixer's
+    predicate, detector and fixer were blind together. Retired 2026-07-26 (criterion-5 re-read).
     """
     sys.path.insert(0, str(ROOT / "scripts" / "hooks"))
     try:
@@ -1510,8 +1514,8 @@ def check_unrunnable_hooks_report_themselves() -> list[str]:
                     script = report_settings.needs_reporting(cmd)
                     if script:
                         bad.append(
-                            f"{rel} {event}: local-only hook \"{script}\" exits 0 silently when "
-                            f"it cannot be exec'd — a typo'd or non-executable hook is "
+                            f"{rel} {event}: wired hook \"{script}\" exits 0 silently when it "
+                            f"cannot be exec'd — a typo'd, missing or non-executable hook is "
                             f"indistinguishable from one with nothing to say. Run "
                             f"`python3 scripts/hooks/report_settings.py {rel}`."
                         )

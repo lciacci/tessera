@@ -43,9 +43,31 @@ def test_is_idempotent():
         "re-running must not stack a second branch"
 
 
-def test_global_fallback_command_is_out_of_scope():
-    """ADR-0004: a missing local file resolves through the global copy, so the hook still runs."""
-    assert report_settings.report_command(WITH_FALLBACK) is None
+def test_two_tier_fallback_command_IS_in_scope():
+    """RETIRES the old rule, which was wrong. Found by the criterion-5 independent re-read.
+
+    This test used to assert the opposite — that an ADR-0004 two-tier command is out of scope,
+    on the premise that "a missing local file resolves through the global copy, so the hook
+    still runs." That premise inverts the real risk. Under the DEFAULT `global` distribution
+    **no local copy is ever shipped**, so the `$HOME/.claude/templates` branch is not a
+    redundancy, it is the ONLY tier. A default-scaffolded downstream whose global templates are
+    absent runs the wired mnemos command to rc=0, empty stdout, empty stderr, zero degraded
+    events — component 4 of this spec's own five, fail-silent, F-001's shape one tier up.
+
+    Verified on a real downstream before the change: 7 two-tier mnemos commands in conclave,
+    0 local copies on disk, and needs_reporting returned None for all 7. Because doccheck
+    imports the same predicate, fixer and detector were blind together — the consistency guard
+    faithfully propagated the gap.
+
+    The reporting branch is appended after BOTH tiers, so it fires only when local AND global
+    have failed, which is exactly the unrecoverable case.
+    """
+    out = report_settings.report_command(WITH_FALLBACK)
+    assert out is not None, "two-tier commands must report; the global tier can be the only tier"
+    assert "tessera-degraded" in out
+    assert "--component gate-scan" in out, "component comes from the LOCAL path, not the global one"
+    assert out.rstrip().endswith("exit 0"), "must still fail open"
+    assert "elif [ -x \"$HOME/.claude/templates/" in out, "the global tier must survive untouched"
 
 
 def test_unanchored_command_is_skipped():
@@ -118,8 +140,10 @@ def test_no_local_only_hook_silently_escapes_scope():
                 cmd = hook.get("command", "")
                 if "tessera-degraded" in cmd:
                     continue                                  # already reports
-                if report_settings.GLOBAL_FALLBACK in cmd:
-                    continue                                  # not local-only
+                # NOTE: two-tier (ADR-0004 fallback) commands are NO LONGER skipped here. They
+                # were, and that is precisely how the second scope hole hid from this test as
+                # well as from the predicate — the completeness check inherited the same
+                # exclusion it was meant to police.
                 if not cmd.rstrip().endswith("exit 0"):
                     continue                                  # unrecognised shape
                 if not broad.search(cmd):
