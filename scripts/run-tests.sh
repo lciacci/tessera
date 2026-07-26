@@ -69,6 +69,14 @@ run "gate"      "$PY" -m pytest scripts/gate -q
 run "override"  "$PY" -m pytest scripts/override -q
 run "spend"     "$PY" -m pytest scripts/spend -q
 run "verify"    "$PY" -m pytest scripts/verify -q
+# Spec 11's fail-open probes. Held OUT of this file while they were legitimately red (a
+# permanently-red main suite is one people learn to ignore); folded in on 2026-07-26 when
+# all 8 went green, which is the spec's own instruction. They live at top-level chaos/, not
+# scripts/, so the `pytest scripts/` run above never collects them and no --ignore is needed
+# (which would collide with doccheck's ignored-test-suites-are-run). Each scaffolds a REAL
+# downstream and drives the hook through its actual stdin/exit-code contract, so a red here
+# means the framework has genuinely stopped reporting its own failure — not a unit regression.
+run "chaos"     "$PY" -m pytest chaos -q
 
 # mnemos ships assert-based self-checks, not pytest tests — zero `def test_`, run via -m.
 # pytest collects them as zero tests and says "no tests ran", which reads exactly like success.

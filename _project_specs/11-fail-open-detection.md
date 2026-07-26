@@ -57,9 +57,54 @@ Three findings from writing it, all of which change what step 2 has to do:
    4 of 5 uncovered while the run still read as fine. Fixed by scaffolding `--frozen`. *The
    fail-open suite's first fail-open was its own.*
 
-**Step 2 (the mechanism) is deliberately NOT built here** — success criterion 5 wants an
+~~**Step 2 (the mechanism) is deliberately NOT built here**~~ — success criterion 5 wants an
 independent session to confirm the bar, and the session that builds a detector is the worst
 judge of it.
+
+**STEP 2 IS DONE — all 8 probes GREEN, 2026-07-26, and by a different session than the one that
+wrote them** (criterion 5 satisfied: the probe author did not build the mechanism).
+
+```
+8 passed          ← was 7 failed, 1 passed
+```
+
+Folded into `scripts/run-tests.sh` as the `chaos` suite, per the ordering above. What shipped:
+
+- **`bin/tessera-degraded`** — appends a `degraded` event to the session-log channel.
+  **POSIX sh, shell builtins only — no jq, sed, grep, awk or python.** It reports on broken
+  infrastructure so it may not assume working infrastructure: a hook bailing because `python3`
+  is gone cannot use python3 to say so, and one bailing because `jq` is gone cannot use jq to
+  read its own stdin. JSON is parsed with parameter expansion; `date` and `mkdir` are optional
+  and degrade to a blank `ts` / an existing dir, because probe 5 hides both on purpose.
+  Contract: `docs/contracts/degraded-event.md`.
+- **`tessera-watch` P13** — fires on any degraded event **in a 7-day window**. Windowed
+  deliberately: a degraded event is an *incident*, not a standing state, and the same week this
+  shipped, iCPG's drift backlog was found at 700 undisposed rows precisely because nothing could
+  ever leave its open set. Windowing means P13 needs no disposition verb to stay honest.
+- **~31 bail-outs classified** across four components — loud for jq/scanner/guard/backstop
+  missing, no python3, unreachable cwd, `guard.py` exiting a non-verdict code, and the mnemos
+  toolchain being unreachable so the checkpoint takes the unmanaged inline fallback (F-001's
+  shape: a silent *success*). Quiet for no stdin, `stop_hook_active`, and no `.mnemos/`.
+  The spend guard's exit code is passed through unchanged — reporting must never alter the
+  allow/deny contract.
+
+**Probes 4 and 8 needed the PROBE fixed first, and that is the finding worth keeping.**
+`run_wired` **synthesized** its own command string — `f'if [ -x "{path}" ]; then exec ...; fi;
+exit 0'` — hardcoding the fail-open `exit 0` into the test. So the two probes asserted against a
+hand-built replica of the wired form, and **no change to the shipped `settings.json` could ever
+turn them green**; probe 8 even edited `settings.json` and never read it back. That is this
+spec's own pattern #9 ("only the real path proves the real path") violated one layer inside the
+suite written to enforce it. Corrected to read the project's real `settings.json`, then —
+**critically — the corrected probes were confirmed STILL RED before any settings change**, so the
+fix was not certified by a detector edited to accept it. Only then were the three local-only
+wired commands given an else-branch that reports `hook-unavailable`.
+
+**Known blind spot, named not buried:** the log is keyed by `session_id`, so a bail-out that
+happens *because there is no session id* has no file to write into. Recorded in the contract.
+
+**Still open:** downstream rollout (§4 below) — the fleet has neither `tessera-degraded` nor the
+new wired form. `bin/tessera-new-project` ships both to NEW projects; existing ones need
+`tessera-sync-harness`.
 
 **Priority:** Tier 1. It gates the trustworthiness of every other verdict the framework produces.
 **Effort:** Small mechanism, medium substance. One focused session, possibly two.
@@ -189,14 +234,24 @@ the checkers that verify they are wired ("ship both halves or neither", violated
 
 ## Success criteria
 
-1. Every probe in the chaos suite **fails before the mechanism exists** (watched, not assumed).
-2. Every probe **passes after**, i.e. breaking the component produces a `degraded` event AND
+*(All five MET for the framework repo, 2026-07-26. Downstream rollout — §4 — remains open.)*
+
+1. ✅ Every probe in the chaos suite **fails before the mechanism exists** (watched, not assumed).
+   *Watched twice: 7-RED at the start of the step-2 session, and again for probes 4/8 after
+   `run_wired` was corrected but before the settings change.*
+2. ✅ Every probe **passes after**, i.e. breaking the component produces a `degraded` event AND
    surfaces at SessionStart.
-3. `tessera-watch` **P13** fires on any degraded event and is quiet otherwise. *(Was written
+3. ✅ `tessera-watch` **P13** fires on any degraded event and is quiet otherwise. *(Was written
    "P10" here while §2 already said P13 — corrected 2026-07-26. P10 was the haziness-band
-   trigger, fired and retired 2026-07-20; P11/P12 have since landed.)*
-4. The **spend guard on python 3.9** case is covered — it is the one that already failed open.
-5. An **independent session** confirms the bar, not the session that built it.
+   trigger, fired and retired 2026-07-20; P11/P12 have since landed.)* *Verified three ways:
+   fires on a real event, quiet with no log, and ages out past the 7-day window.*
+4. ✅ The **spend guard on python 3.9** case is covered — it is the one that already failed open.
+   *Probe 3, retained as a regression guard; it was already passing and still does.*
+5. ✅ An **independent session** confirms the bar, not the session that built it. *Step 1 (probes)
+   and step 2 (mechanism) were built by different sessions. Note the honest limit: the step-2
+   session also **corrected `run_wired`**, so for probes 4 and 8 the probe author and mechanism
+   author are the same. Mitigated by confirming the corrected probes RED before the fix — but a
+   third session re-reading that correction would be worth more than this note.*
 
 ## Depends on
 

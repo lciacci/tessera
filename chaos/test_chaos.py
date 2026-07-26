@@ -89,16 +89,39 @@ def run_hook(script: Path, stdin: str, env: dict | None = None) -> subprocess.Co
 
 
 def run_wired(toy: Path, script_name: str, stdin: str) -> subprocess.CompletedProcess:
-    """Invoke via the settings.json command string, NOT the script path.
+    """Invoke the command string the project ACTUALLY ships, read from its settings.json.
 
     The wired form is `if [ -x "<path>" ]; then exec "<path>"; fi; exit 0` — so a
     non-executable or missing script is a SILENT exit 0. Calling the script directly
     would never exercise that branch, which is exactly the branch that failed.
+
+    CORRECTED 2026-07-26. This used to SYNTHESIZE the command:
+
+        cmd = f'if [ -x "{path}" ]; then exec "{path}"; fi; exit 0'
+
+    which hardcoded the fail-open `exit 0` into the test itself. Probes 4 and 8 were
+    therefore asserting against a hand-built replica of the wired form, and no change to
+    the shipped settings.json could ever turn them green — probe 8 even edited
+    settings.json and then never read it back. That is this file's own docstring
+    violated (pattern #9: only the real path proves the real path), one layer in from
+    where it was being enforced. The replica also diverged in shape: the real command
+    resolves `${CLAUDE_PROJECT_DIR:-.}`, the replica used an absolute path.
+
+    Now: find the hook command that references `script_name` and run THAT, with
+    CLAUDE_PROJECT_DIR pointed at the project the way Claude Code sets it.
     """
-    path = toy / ".claude" / "scripts" / script_name
-    cmd = f'if [ -x "{path}" ]; then exec "{path}"; fi; exit 0'
-    return subprocess.run(["sh", "-c", cmd], input=stdin, capture_output=True,
-                          text=True, timeout=60)
+    settings = json.loads((toy / ".claude" / "settings.json").read_text())
+    commands = [hook.get("command", "")
+                for groups in (settings.get("hooks") or {}).values()
+                for group in groups
+                for hook in group.get("hooks", [])
+                if script_name in hook.get("command", "")]
+    assert commands, (
+        f"setup wrong — no wired command in settings.json references {script_name}; "
+        f"the probe would be testing nothing")
+    env = dict(os.environ, CLAUDE_PROJECT_DIR=str(toy))
+    return subprocess.run(["sh", "-c", commands[0]], input=stdin, capture_output=True,
+                          text=True, timeout=60, env=env, cwd=str(toy))
 
 
 def degraded_events(toy: Path) -> list[dict]:
