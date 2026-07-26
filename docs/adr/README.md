@@ -40,6 +40,7 @@ Auto-generated below as ADRs are created. Update when adding a new ADR.
 | 0010 | 2026-07-20 | Skill registry — repo is truth, global is a managed mirror | Accepted |
 | 0011 | 2026-07-21 | sqlfluff — the trigger fired, the evidence said no, and the trigger was the bug | Superseded by ADR-0012 |
 | 0012 | 2026-07-22 | sqlfluff adopted, warn-only — supersedes ADR-0011 | Accepted |
+| 0013 | 2026-07-25 | Scryer — near-total overlap with iCPG, and the mirror that showed iCPG has 680 undisposed drift events | Watching |
 
 ---
 

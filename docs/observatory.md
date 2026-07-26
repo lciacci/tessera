@@ -1170,6 +1170,39 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   session (the open P3 question) — it must be re-judged with Layer 3 *actually reaching the model*,
   because every prior observation of it was through a dropped channel.
 
+### iCPG has 680 undisposed drift events — a counter that can only increment *(2026-07-25, surfaced by the scryer eval)*
+
+- **Status:** OPEN. Two fixes decided in ADR-0013; three questions deliberately left open here.
+- **What it is:** `icpg status` reports `Unresolved drift: 680`. iCPG detects drift, scores it, and
+  prints it — and has **no verb to close one**. There is no `resolve`, no `dismiss`, no adjudication
+  path. So the number is monotonically increasing by construction, which makes it indistinguishable
+  from a broken detector. Standing pattern #2 (*it did not break, it produced something plausible*);
+  a fail-open instance for Spec 11's sweep.
+- **Why nobody noticed:** the report is unadjudicable. The top five events are byte-identical —
+  `[0.65] Drift detected: test(0.30), usage(1.00) (test, usage)` — with no symbol, no file, no diff.
+  There is nothing in the output a human could act on even if they wanted to, so 680 accumulated in
+  silence. A report nobody can act on is a report nobody acts on.
+- **How it surfaced:** reading Scryer's `flag_drift` / `reconcile_drift` / `mark_implemented` verbs
+  and then running `icpg status`. The eval's most valuable output was about iCPG, not about scryer.
+- **Decided (ADR-0013):** (1) drift disposition verbs — `icpg drift resolve <id> --note` plus a
+  `dismissed` state; (2) evidence on the report — every event prints symbol, file, and what changed.
+- **Open — do NOT resolve these without their own evidence:**
+  1. **6-dimension composite vs. 2 deterministic predicates.** Scryer uses exactly two, no LLM:
+     *source-mapped node whose file changed since last reconcile*, and *project file the model does
+     not cover*. iCPG's `0.65` over six weighted dimensions is a **proxy** — Standing pattern #3
+     (*name the pain, not the artifact that correlates with it*), which has already retired three
+     predicates. Retiring iCPG's scoring is a bigger decision than one ADR should make.
+  2. **The plan/committed split.** Scryer keeps `planned.scry` (editable draft) and `model.scry`
+     (committed) and treats *the diff between them as the plan*. Tessera has no machine-diffable
+     "intended state" — `_project_specs/todos/active.md` is prose. Design pass, not a patch.
+  3. **Do the 680 mean the detector is miscalibrated, or merely undisposable?** Unanswerable until
+     the two decided fixes land and the backlog is actually worked. Do not read the number as
+     evidence for either until then.
+- **Bearing on the iCPG kill/keep trial:** same shape as F-001 and the PreToolUse channel bug above —
+  a signal that was structurally unable to be acted on is not evidence the idea failed. Any iCPG
+  verdict formed on "drift detection produced nothing useful" is tainted the same way.
+- **When to revisit:** when the two ADR-0013 fixes ship, or when the iCPG kill/keep trial is judged.
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.
