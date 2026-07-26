@@ -1142,3 +1142,58 @@ def test_session_log_check_is_not_vacuous():
     missing = [p for p in doccheck._HAND_INVOKED_SESSION_TOOLS
                if not (doccheck.ROOT / p).is_file()]
     assert not missing, f"listed but absent: {missing}"
+
+
+# ─── Spec 11 (2026-07-26): the chaos probes live OUTSIDE tessera-test on purpose (they are
+# legitimately RED until the degraded mechanism ships). The cost of that choice is standing
+# pattern #1 — a suite nothing runs rots silently. This is the `ls` for it.
+def test_catches_an_unreachable_chaos_suite(fake_repo):
+    (fake_repo / "chaos").mkdir(parents=True)
+    (fake_repo / "scripts").mkdir(exist_ok=True)
+    (fake_repo / "chaos" / "test_chaos.py").write_text("def test_x(): pass\n")
+    (fake_repo / "bin").mkdir(exist_ok=True)
+    (fake_repo / "bin" / "tessera-chaos").write_text("#!/bin/bash\necho nothing\n")
+    (fake_repo / "scripts" / "run-tests.sh").write_text("#!/bin/bash\npytest scripts/ -q\n")
+    bad = doccheck.check_chaos_suite_is_reachable()
+    assert any("unreachable" in v for v in bad), bad
+
+
+def test_catches_a_chaos_runner_that_is_not_executable(fake_repo):
+    """A runner that exists and names the suite but has no +x bit invokes nothing."""
+    (fake_repo / "chaos").mkdir(parents=True)
+    (fake_repo / "scripts").mkdir(exist_ok=True)
+    (fake_repo / "chaos" / "test_chaos.py").write_text("def test_x(): pass\n")
+    (fake_repo / "bin").mkdir(exist_ok=True)
+    runner = fake_repo / "bin" / "tessera-chaos"
+    runner.write_text("#!/bin/bash\npytest chaos -q\n")
+    runner.chmod(0o644)
+    bad = doccheck.check_chaos_suite_is_reachable()
+    assert any("not executable" in v for v in bad), bad
+
+
+def test_passes_when_a_runner_invokes_the_chaos_suite(fake_repo):
+    (fake_repo / "chaos").mkdir(parents=True)
+    (fake_repo / "scripts").mkdir(exist_ok=True)
+    (fake_repo / "chaos" / "test_chaos.py").write_text("def test_x(): pass\n")
+    (fake_repo / "bin").mkdir(exist_ok=True)
+    runner = fake_repo / "bin" / "tessera-chaos"
+    runner.write_text("#!/bin/bash\npytest chaos -q\n")
+    runner.chmod(0o755)
+    assert doccheck.check_chaos_suite_is_reachable() == []
+
+
+def test_chaos_check_is_silent_with_no_chaos_suite(fake_repo):
+    """Must not fire on a repo that simply has no probes — a downstream scaffold."""
+    assert doccheck.check_chaos_suite_is_reachable() == []
+
+
+def test_run_tests_sh_also_satisfies_chaos_reachability(fake_repo):
+    """The check is about reachability, not about WHICH runner — so folding the probes
+    into run-tests.sh when they go green must not make it start failing."""
+    (fake_repo / "chaos").mkdir(parents=True)
+    (fake_repo / "scripts").mkdir(exist_ok=True)
+    (fake_repo / "chaos" / "test_chaos.py").write_text("def test_x(): pass\n")
+    rt = fake_repo / "scripts" / "run-tests.sh"
+    rt.write_text('#!/bin/bash\nrun "chaos" "$PY" -m pytest chaos -q\n')
+    rt.chmod(0o755)
+    assert doccheck.check_chaos_suite_is_reachable() == []

@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Spec 11 chaos probes — break a component on purpose, assert Tessera says so.
+#
+# THE BAR: break a component on purpose, and Tessera tells you within one session,
+# without a human asking.
+#
+# **These are expected to be RED until `tessera-degraded` + `tessera-watch` P13 exist.**
+# That is deliberate, and it is why this is a separate command rather than a suite inside
+# `tessera-test`: the probes are legitimately red today, and a permanently-red main suite
+# is one people learn to ignore. `tessera-test` stays a usable green/red signal meanwhile.
+#
+# The suite lives at top-level `chaos/`, NOT `scripts/chaos/`, because run-tests.sh's
+# top-level run is `pytest scripts/` — which would collect these and fail the main suite,
+# the very thing this separate command exists to prevent. Excluding it instead would
+# collide with doccheck's `ignored-test-suites-are-run`. Outside `scripts/`, no exclusion
+# is needed and neither check gets weakened.
+#
+# WHEN THE MECHANISM LANDS: fold these into scripts/run-tests.sh as their own `run` line
+# and delete this script. doccheck's `chaos-suite-is-reachable` is what stops it rotting
+# unrun in the meantime.
+#
+# Ordering is not style — spec 11 §ORDERING. The 2026-07-12 session built a detector, then
+# verified the fix with the detector that had the hole, three times, and reported green
+# each time. Watching these fail BEFORE the mechanism exists is the correction for that.
+set -uo pipefail
+
+cd "$(dirname "$0")/.." || exit 1
+
+# THE INTERPRETER IS A PATH, NOT A NAME (F-001). Same rule as run-tests.sh, same reason:
+# a silent fallback to a toolchain-less interpreter is how F-001 stayed invisible for weeks.
+PY="${TESSERA_PYTHON:-$PWD/.venv/bin/python}"
+if [ ! -x "$PY" ]; then
+    echo "FATAL: no toolchain interpreter at $PY" >&2
+    echo "       Run ./install.sh to build the venv." >&2
+    exit 1
+fi
+
+echo "Tessera chaos probes — spec 11"
+echo "──────────────────────────────"
+echo "Expected RED until the degraded mechanism ships. A green run here means the bar is met."
+echo
+
+"$PY" -m pytest chaos -q "$@"
+rc=$?
+
+echo
+echo "──────────────────────────────"
+if [ "$rc" -ne 0 ]; then
+    echo "PROBES RED — Tessera does not yet report its own failure."
+    echo "This is the expected state. See _project_specs/11-fail-open-detection.md."
+fi
+exit "$rc"

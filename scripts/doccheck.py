@@ -1421,7 +1421,59 @@ def check_session_logs_are_repo_anchored() -> list[str]:
     return bad
 
 
+def check_chaos_suite_is_reachable() -> list[str]:
+    """Every chaos probe file must be invoked by a runner that exists and is executable.
+
+    The spec-11 probes live OUTSIDE `tessera-test` on purpose: they are legitimately RED
+    until the degraded mechanism ships, and a permanently-red main suite is one people
+    learn to ignore. The cost of that choice is exactly standing pattern #1 — a suite
+    nothing runs is a suite that rots, and its rotting is silent.
+
+    So this is the `ls`. It is the same shape as `ignored-test-suites-are-run`, which
+    exists because a `test:` that enumerated six files reported "57 passed" all evening
+    while running half the suite.
+
+    When the mechanism lands and the probes are folded into run-tests.sh, this check keeps
+    working — `pytest chaos` in run-tests.sh satisfies it just as well as bin/tessera-chaos
+    does. It is about reachability, not about which runner.
+
+    The suite sits at top-level `chaos/`, not `scripts/chaos/`: run-tests.sh's top-level run
+    is `pytest scripts/`, which would collect these deliberately-red probes and fail the main
+    suite. Excluding it there would instead collide with `ignored-test-suites-are-run`.
+    """
+    chaos = ROOT / "chaos"
+    probes = sorted(chaos.glob("test_*.py")) if chaos.is_dir() else []
+    if not probes:
+        return []  # no chaos suite yet — nothing to keep reachable
+
+    runners = {
+        "bin/tessera-chaos": ROOT / "bin" / "tessera-chaos",
+        "scripts/run-tests.sh": ROOT / "scripts" / "run-tests.sh",
+    }
+    invoked_by = []
+    for name, path in runners.items():
+        try:
+            text = path.read_text()
+        except OSError:
+            continue
+        if re.search(r"pytest\s+(?:\S+\s+)*\bchaos\b", text):
+            invoked_by.append((name, path))
+
+    if not invoked_by:
+        return [f"chaos/ has {len(probes)} probe file(s) but neither "
+                f"bin/tessera-chaos nor scripts/run-tests.sh runs them — the suite is "
+                f"unreachable and its rotting would be silent (standing pattern #1)"]
+
+    bad = []
+    for name, path in invoked_by:
+        if not os.access(path, os.X_OK):
+            bad.append(f"{name} runs the chaos probes but is not executable — "
+                       f"`chmod +x {name}`, or nothing can invoke it")
+    return bad
+
+
 CHECKS = {
+    "chaos-suite-is-reachable": check_chaos_suite_is_reachable,
     "session-logs-are-repo-anchored": check_session_logs_are_repo_anchored,
     "standing-patterns-are-surfaced": check_standing_patterns_are_surfaced,
     "decision-surface-is-wired": check_decision_surface_is_wired,

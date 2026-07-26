@@ -19,6 +19,48 @@ detector. Fixed at three layers, plus `raw_excerpt` so an unparseable answer is 
 was being treated as "nothing to do."* Three live instances in eight days — F-001's interpreter,
 the dead ingest pipe, and now the falsifier — **every one found by accident.** That is the case
 for sweeping deliberately instead of waiting for the fourth.
+**STEP 1 IS DONE — the chaos suite exists and the RED baseline is WATCHED, 2026-07-26.**
+`chaos/test_chaos.py`, run by `bin/tessera-chaos` (top-level `chaos/`, not `scripts/chaos/` —
+run-tests.sh's top-level run is `pytest scripts/`, which would collect these deliberately-red
+probes and fail the main suite, while `--ignore`ing them would collide with
+`ignored-test-suites-are-run`; outside `scripts/` neither check has to be weakened. Deliberately
+outside `tessera-test`;
+kept reachable by doccheck `chaos-suite-is-reachable`). Eight probes over all five components,
+each scaffolding a REAL downstream with `tessera-new-project` and driving the hook through its
+actual stdin/exit-code contract — not a hand-built model of the harness (pattern #9). **Observed,
+not assumed:**
+
+```
+FAILED  probe_1  corrupt guard.py            → rc=1, spend ALLOWED
+FAILED  probe_2  guard.py deleted            → rc=0, EMPTY stderr, spend ALLOWED
+FAILED  probe_4  backstop hook chmod -x      → rc=0, silent skip
+FAILED  probe_5  jq removed from PATH        → rc=0, gate-scan cannot scan
+FAILED  probe_6  gate scan.py deleted        → rc=0, EMPTY stderr, backstop is a no-op
+FAILED  probe_7  mnemos unreachable          → rc=0, unmanaged fallback SUCCEEDED
+FAILED  probe_8  typo'd wired hook path      → rc=0, hook has never run
+passed  probe_3  spend guard on python 3.9   → rc=2, correctly DENIES
+7 failed, 1 passed
+```
+
+Three findings from writing it, all of which change what step 2 has to do:
+
+1. **Criterion 4's case no longer reproduces — the 3.9 open-failure is FIXED.** On the real
+   `/usr/bin/python3` (3.9.6, not a stub) the guard denies correctly; `from __future__ import
+   annotations` held. Probe 3 is retained as the regression guard for a bug that already cost
+   real spend. A suite that only proves what is broken cannot show when something un-breaks.
+2. **The live spend fail-opens are the OTHER bail-outs**, and two are worse than the original:
+   a corrupt guard exits 1 and a *deleted* guard exits 0 with empty stderr — and only rc=2
+   blocks, so both ALLOW the spend. The deleted case is indistinguishable from "this command
+   needed no guarding."
+3. **A probe skipped silently and hid a whole component.** Probe 7 targeted a mnemos hook, but
+   the default `global` distribution ships no local mnemos copies, so it `skip`ped — component
+   4 of 5 uncovered while the run still read as fine. Fixed by scaffolding `--frozen`. *The
+   fail-open suite's first fail-open was its own.*
+
+**Step 2 (the mechanism) is deliberately NOT built here** — success criterion 5 wants an
+independent session to confirm the bar, and the session that builds a detector is the worst
+judge of it.
+
 **Priority:** Tier 1. It gates the trustworthiness of every other verdict the framework produces.
 **Effort:** Small mechanism, medium substance. One focused session, possibly two.
 **Source:** `docs/observatory.md` → "Fail-open everywhere — Tessera cannot tell you when it is broken"
@@ -150,7 +192,9 @@ the checkers that verify they are wired ("ship both halves or neither", violated
 1. Every probe in the chaos suite **fails before the mechanism exists** (watched, not assumed).
 2. Every probe **passes after**, i.e. breaking the component produces a `degraded` event AND
    surfaces at SessionStart.
-3. `tessera-watch` P10 fires on any degraded event and is quiet otherwise.
+3. `tessera-watch` **P13** fires on any degraded event and is quiet otherwise. *(Was written
+   "P10" here while §2 already said P13 — corrected 2026-07-26. P10 was the haziness-band
+   trigger, fired and retired 2026-07-20; P11/P12 have since landed.)*
 4. The **spend guard on python 3.9** case is covered — it is the one that already failed open.
 5. An **independent session** confirms the bar, not the session that built it.
 

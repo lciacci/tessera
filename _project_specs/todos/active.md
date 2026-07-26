@@ -64,10 +64,27 @@ Add a line only when a lesson recurs; the value is that the list is short enough
 
 ### Open, in priority order
 
-1. **Spec 11 — fail-open sweep.** The standing top framework item. Five components, ~15 sites,
-   **chaos tests FIRST** — the spec is emphatic and right about why. New predicate is **P13**
-   (P10 retired, P11/P12 taken). Got its 4th+ live confirmation this session (the cwd silent
-   no-op AND the PreToolUse channel bug are both textbook instances).
+1. **Spec 11 — fail-open sweep. STEP 1 DONE 2026-07-26: the chaos suite exists and the RED
+   baseline is WATCHED.** `chaos/test_chaos.py` + `bin/tessera-chaos` (top-level `chaos/`, not
+   `scripts/chaos/` — `pytest scripts/` would collect these red-by-design probes into the main
+   suite, and `--ignore`ing them would collide with `ignored-test-suites-are-run`; outside
+   `tessera-test` on purpose — the probes are legitimately red, and a permanently-red main
+   suite is one people learn to ignore; doccheck `chaos-suite-is-reachable` stops it rotting).
+   8 probes, all 5 components, each scaffolding a REAL downstream and driving the hook through
+   its actual stdin/exit-code contract. **7 RED, 1 green** — output pasted into the spec.
+   **Three findings that change step 2:** (i) **criterion 4's case is already FIXED** — on the
+   real `/usr/bin/python3` (3.9.6) the guard denies correctly; probe 3 is retained as its
+   regression guard; (ii) **the live spend fail-opens are the other bail-outs, and two are worse
+   than the original** — a corrupt guard exits 1, a *deleted* guard exits 0 with empty stderr,
+   and since only rc=2 blocks, **both ALLOW the spend**; (iii) **a probe silently skipped and hid
+   a whole component** — the default `global` distribution ships no local mnemos hooks, so the
+   mnemos probe skipped and component 4/5 was uncovered while the run read as fine (fixed with
+   `--frozen`). *The fail-open suite's first fail-open was its own.*
+   **NEXT — step 2, and criterion 5 says it should be a DIFFERENT session than the one that
+   just wrote the probes:** build `tessera-degraded` (~20 lines, appends a `degraded` event to
+   the existing session-log channel) + `tessera-watch` **P13** (~15 lines), classify the ~15
+   bail-outs inside the five components (could-not-do-my-job → loud; nothing-to-do → quiet),
+   then watch the same 8 probes go green and fold them into `run-tests.sh`.
 2. **Push mechanism (framework→downstream).** Split into two, Part A DONE:
    - **Part A — `tessera-sync-harness --patch-settings` (SHIPPED + APPLIED TO ALL 5).** Anchors
      *existing* cwd-relative hook commands in a downstream `settings.json`.
