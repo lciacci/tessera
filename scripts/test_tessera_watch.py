@@ -76,20 +76,20 @@ def _firelog(root: Path, runs: list[list[str]]) -> None:
 
 def test_ga_holds_below_three_runs(tmp_path):
     root = _root(tmp_path)
-    _firelog(root, [["P3 mnemos-trial"], ["P3 mnemos-trial"]])  # only 2
+    _firelog(root, [["P3 mnemos-compaction-trial"], ["P3 mnemos-compaction-trial"]])  # only 2
     assert tw.g_a_consecutive(root)[0] is False
 
 
 def test_ga_fires_on_three_consecutive_core_fires(tmp_path):
     root = _root(tmp_path)
-    _firelog(root, [["P3 mnemos-trial"]] * 3)
+    _firelog(root, [["P3 mnemos-compaction-trial"]] * 3)
     fired, detail = tw.g_a_consecutive(root)
-    assert fired is True and "P3 mnemos-trial" in detail
+    assert fired is True and "P3 mnemos-compaction-trial" in detail
 
 
 def test_ga_ignores_gap_in_last_three(tmp_path):
     root = _root(tmp_path)
-    _firelog(root, [["P3 mnemos-trial"], [], ["P3 mnemos-trial"]])  # cleared mid-window
+    _firelog(root, [["P3 mnemos-compaction-trial"], [], ["P3 mnemos-compaction-trial"]])  # cleared mid-window
     assert tw.g_a_consecutive(root)[0] is False
 
 

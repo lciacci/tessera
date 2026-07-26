@@ -1544,6 +1544,38 @@ this section — the dedup fix it prescribes is real but is now step 3, not step
 - **When to revisit:** before any Mnemos kill/keep verdict. Judging it now would measure four
   integration bugs and a metric that cannot see the failure mode this repo actually exhibits.
 
+- **WHY the metric can't see it — measured 2026-07-26, and it is NOT the composite weighting.**
+  The suspicion was that `correction_type` already carried the signal and simply wasn't weighted
+  in (the skill calls typing "a diagnostic view, NOT a sixth dimension"). It doesn't. The gap is
+  one layer earlier, in **detection recall**:
+  ```
+  this session: 408 user turns · correction_match = 1 · correction_type = 0
+  ground truth: at least 5 confident-wrong-then-corrected episodes
+  classifier_status = "ran"  (so this is not the dead-pipe failure again)
+  ```
+  **The detector found 1 of 5+.** Typing produced 0 because there was almost nothing to type.
+  Weighting a signal that is 80% missing would not have helped.
+- **The reason is register, and it is a real corpus property.** The corrections in this session
+  arrived as *questions and challenges*, not as declarations:
+  > *"I'm not sure I'm following what doing 3 gets us… or am I missing your point?"*
+  > *"so you are prompting me to delete tessera's code-review skill is that right?"*
+  > *"those are steps towards portability potentially that we're excising"*
+
+  Every one of those reversed the agent's course. None contains the declarative correction
+  language ("no", "that's wrong", "actually") a keyword regex is tuned for, and the recall-first
+  qwen pass over regex-missed turns did not catch them either. **This user corrects
+  interrogatively.** A detector tuned for the declarative register will keep reading a session
+  full of successful course-corrections as `clear`.
+- **Consequence for the "can Tessera self-evaluate?" thread.** Haziness is the closest thing here
+  to a self-evaluation instrument, and it measures *did the tools error* — redo ratio, first-try
+  errors, orphaned calls, backtracking — all near zero this session, because every wrong turn was
+  caught and the work then landed cleanly. It does not measure *was the reasoning wrong*. Those
+  two came fully apart: tools clean, reasoning wrong five times. **Fixing detection recall for
+  interrogative corrections is the single highest-value change available to that thread**, and
+  there is now a labelled session to evaluate against (`scripts/mnemos/eval_correction.py` is the
+  existing silver-label harness; P10's adjudication requires any detector change to re-run it and
+  re-open bands/weights on the new numbers).
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.

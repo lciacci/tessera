@@ -560,6 +560,33 @@ def cmd_ingest_claude(store: MnemosStore, args) -> int:
     return 0
 
 
+def _resolve_session(store: MnemosStore, query: str) -> str | None:
+    """Full session id for `query`, or None (with a message) if it is unknown or ambiguous.
+
+    Accepts the 8-char prefix the other haze views print, because requiring the full uuid while
+    displaying only the prefix is what produced typo'd lookups in the first place. Returns None
+    rather than guessing: the alternative — what this replaced — was scoring a session that does
+    not exist as `0.00 CLEAR`.
+    """
+    with store._conn() as conn:
+        rows = [r[0] for r in conn.execute(
+            "SELECT id FROM claude_sessions WHERE id = ? OR id LIKE ? || '%'",
+            (query, query)).fetchall()]
+    if not rows:
+        print(f"No ingested session matches '{query}'.\n"
+              f"  `mnemos haze --recent 10` lists what is ingested; "
+              f"`mnemos ingest-claude --all` ingests more.", file=sys.stderr)
+        return None
+    exact = [r for r in rows if r == query]
+    if exact:
+        return exact[0]
+    if len(rows) > 1:
+        print(f"'{query}' is ambiguous — matches {len(rows)} sessions:\n  "
+              + "\n  ".join(rows), file=sys.stderr)
+        return None
+    return rows[0]
+
+
 def cmd_haze(store: MnemosStore, args) -> int:
     if not store.exists():
         print('No Mnemos database. Run `mnemos init` first.')
@@ -573,6 +600,17 @@ def cmd_haze(store: MnemosStore, args) -> int:
     recent = getattr(args, 'recent', 10)
 
     if session:
+        # FAILED OPEN until 2026-07-26: an unknown session id went straight to compute_haze,
+        # which found no turns and returned all-zeros — printing `0.00 CLEAR (0 turns)`, the
+        # BEST POSSIBLE score, for a session that does not exist. A typo was rewarded with a
+        # perfect result, silently. Worse, the natural thing to type is the 8-char prefix every
+        # other view prints (`haze --recent`, the tables above), and that is exactly what
+        # produced a false clean report on this repo's own session.
+        # So: resolve a prefix if it is unambiguous, and REFUSE otherwise. A measurement tool
+        # must never answer a question it was not actually asked.
+        session = _resolve_session(store, session)
+        if session is None:
+            return 2
         haze = compute_haze(store, session)
         if quiet:
             return 0
@@ -744,6 +782,12 @@ def cmd_divergence(store: MnemosStore, args) -> int:
     store.ensure_schema()
     session = getattr(args, 'session', None)
     if session:
+        # Same fail-open as haze had: an unknown id reported "0 corrections" at rc=0 — a clean
+        # bill of health for a session that does not exist. Shares _resolve_session so the two
+        # views cannot drift on what counts as a valid session.
+        session = _resolve_session(store, session)
+        if session is None:
+            return 2
         units = session_divergences(store, session)
         print(f'DIVERGENCE  {session[:8]}  ({len(units)} corrections)')
         if not units:

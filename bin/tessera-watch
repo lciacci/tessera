@@ -64,7 +64,14 @@ def p1_hook_drift(root: Path) -> tuple[bool, str]:
 
 
 def p3_compaction(root: Path) -> tuple[bool, str]:
-    """Real (auto) compaction_fired count — the Mnemos kill/keep trial's event trigger.
+    """Real (auto) compaction_fired count — the trigger for the COMPACTION-RECOVERY trial.
+
+    Scoped in the name (renamed from "P3 mnemos-trial" 2026-07-26). Mnemos is three layers
+    with three separate verdicts, and lumping them under one label let the least testable
+    layer hold the others hostage: session-continuity (Stop-hook checkpoint + SessionStart
+    reload) is independently demonstrated and NOT on trial — design-principles has said so
+    since 2026-07-09 — and the analysis layer (haziness/correction/divergence) is producing
+    data. Only compaction recovery is untested. This predicate gates that half alone.
 
     Excludes `trigger: manual` — a hand-run `/compact` is a *test* of the recovery layer,
     not evidence about it. Counting tests as evidence would let three deliberate test
@@ -131,7 +138,7 @@ def p3_compaction(root: Path) -> tuple[bool, str]:
     #                       INSTRUMENT, not about Mnemos. Snooze it if that is understood.
     if real >= COMPACTION_MIN:
         return True, (f"{real} real compaction_fired{note} "
-                      f"(≥{COMPACTION_MIN} → judge the Mnemos trial)")
+                      f"(≥{COMPACTION_MIN} → judge the COMPACTION-RECOVERY half)")
     if unknown and real == 0:
         return True, (
             f"{unknown} compaction event(s) fired but NONE were classifiable, and 0 real ones "
@@ -141,7 +148,7 @@ def p3_compaction(root: Path) -> tuple[bool, str]:
             f"Mnemos trial cannot conclude on this instrument. Judge the compaction half on a "
             f"real Claude Code CLI session, or re-instrument. Snooze once understood.")
     return False, (f"{real} real compaction_fired{note} "
-                   f"(≥{COMPACTION_MIN} → judge the Mnemos trial)")
+                   f"(≥{COMPACTION_MIN} → judge the COMPACTION-RECOVERY half)")
 
 
 def p4_downstream(root: Path) -> tuple[bool, str]:
@@ -622,7 +629,7 @@ def _resolve_label(query: str) -> str | None:
 
 PREDICATES = {
     "P1 hook-drift": p1_hook_drift,
-    "P3 mnemos-trial": p3_compaction,
+    "P3 mnemos-compaction-trial": p3_compaction,
     "P4 downstream-drift": p4_downstream,
     "P5 skill-routing": p5_skills,
     "P6 escalations": p6_escalations,
