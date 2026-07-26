@@ -6,7 +6,7 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-07-26: gate logs repo-anchored, spec 11 chaos probes watched RED, and the falsifier found to be 0-for-3)
+## Handoff — pick up here (2026-07-26: gate logs repo-anchored, spec 11 chaos probes watched RED, and the falsifier fixed — it was 0-for-3, now returns verdicts by file)
 
 *(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
 Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering.)*
@@ -216,10 +216,31 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    **B vs `adr-gate`** (decide if B replaces that skill's intent or if it wires as a Stop hook
    too — avoid two mechanisms for one job); sqlfluff blocking flip (settempo not there); **G-a
    fires correctly** (reads the fire-log tail, self-clears after 3 runs — do NOT "fix"); trim
-   backlog (ADR-0008); uuid prefix-resolve; historical `--reclassify --all`.
+   backlog (ADR-0008); uuid prefix-resolve; historical `--reclassify --all`;
+   **`tessera-verify stats` does not break out `verdict_channel`** (the field exists and is the
+   number that says whether the file fix is holding — right now you have to read the log by
+   hand); **spend-guard matching needs a design gate** (observatory 2026-07-26 — it matches
+   command TEXT, so it over-denies prose and, more seriously, under-denies anything assembled at
+   runtime; naive tightening worsens one half and naive loosening is unavailable because a
+   PreToolUse hook never sees the expanded command).
 
 ### What happened (2026-07-26)
 
+- **`tessera-verify` fixed — verdicts now travel by FILE** (`a73d529`). It was 0-for-3 on real
+  attempts, and the cause was not that it failed: it did the work every time, then its own
+  `verify-scan` Stop hook fired in the spawned session and that skip acknowledgment *became* the
+  final message `VERDICT_RE` reads. The verifier now writes `tessera-verdicts.json` in its
+  worktree (authoritative), message-scraping stays as a fallback, and `verdict_channel` is
+  recorded on **every** judged run so a drift back to the fragile channel is visible rather than
+  inferred from rising NO_VERDICT. **Proven, not just shipped:** a live `--self-test` returned
+  `verdict_channel: "file"` + `REFUTED`. **The fix nearly reintroduced its own bug** —
+  `make_worktree` copies untracked files IN, so a stale verdict file in the repo root would have
+  been read as this run's answer (a false CONFIRMED from a verifier that wrote nothing); guarded
+  by an unlink before every spawn, and the regression test removes the guard and watches the
+  false CONFIRMED appear. Also fixed a dangling-worktree-record leak the self-test exposed.
+  **Still only n=1, and writing the file is an instruction to a model** — what changed
+  structurally is that a file cannot be overwritten after the fact, not that it cannot be
+  skipped.
 - **Item 3 closed — session-keyed logs anchored to the repo** (`5de7924`). The todo named
   `emit.py`; the sweep found **12 relative-path sites**. Sorted by a rule worth keeping: **the
   anchor must match the key.** `.tessera/logs/<session>.jsonl` is keyed by
