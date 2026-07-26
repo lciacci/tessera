@@ -16,6 +16,7 @@ is "the file did not ship", so the test asserts exactly that. It runs in the sui
 doccheck/pre-commit, because it scaffolds a project (subprocess); doccheck stays pure-read.
 """
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -67,6 +68,45 @@ def test_local_only_wired_hooks_ship_and_the_rule_is_not_vacuous(tmp_path):
     surface.unlink()
     assert any("tessera-decision-surface.sh" in r for r in _missing(target)), \
         "rule did not fire on a deleted local-only file — the check is vacuous"
+
+
+def _degraded_callers(target: Path) -> list[str]:
+    """Shipped hooks that invoke the spec-11 degraded reporter."""
+    scripts = target / ".claude" / "scripts"
+    return [p.name for p in sorted(scripts.glob("*.sh"))
+            if "tessera-degraded" in p.read_text(errors="replace")]
+
+
+def _reporter_resolves(target: Path) -> bool:
+    """The resolution order the hooks actually use: project bin/, then project scripts/."""
+    return any((target / d / "tessera-degraded").is_file() and
+               os.access(target / d / "tessera-degraded", os.X_OK)
+               for d in ("bin", "scripts"))
+
+
+def test_hooks_that_report_degraded_ship_the_reporter(tmp_path):
+    """Spec 11, one layer down from the rule above: a hook can ship its own file and still be
+    half-shipped, because its REPORTER did not come with it.
+
+    Every spec-11 bail-out is `degraded ...; exit 0`. If bin/tessera-new-project stops copying
+    tessera-degraded, the resolver finds nothing, the function returns 0, and every one of those
+    bail-outs silently reverts to the bare `exit 0` it replaced — the framework ships the guards
+    without the thing that reports the guards failing. That is the exact "ship both halves or
+    neither" violation spec 11 was written about, and it would leave no trace: the hooks still
+    exist, still run, still exit 0. Asserts the real scaffold output, not a grep of cp lines.
+    """
+    target = _scaffold(tmp_path)
+    callers = _degraded_callers(target)
+    assert callers, "precondition: the scaffold must ship at least one degraded-reporting hook"
+    assert _reporter_resolves(target), (
+        f"{len(callers)} shipped hook(s) call tessera-degraded ({', '.join(callers)}) but the "
+        f"reporter is not in the scaffolded project — every 'I could not do my job' bail-out is "
+        f"silently a bare exit 0. Add it to bin/tessera-new-project.")
+
+    # Not vacuous: remove the reporter and the rule must fire.
+    (target / "scripts" / "tessera-degraded").unlink()
+    assert not _reporter_resolves(target), \
+        "rule did not fire with the reporter deleted — the check is vacuous"
 
 
 if __name__ == "__main__":

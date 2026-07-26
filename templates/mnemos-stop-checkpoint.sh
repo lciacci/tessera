@@ -22,9 +22,24 @@ esac
 # Captures final session state so the next session can resume cleanly.
 # No set -euo pipefail: hook scripts must be defensive, not strict.
 
+# Spec 11: report "I could not do my job". Binary lookup only — the destination comes from
+# the hook JSON, so the ADR-0004 global tier ($HOME) is harmless here. Resolved from $0
+# captured before any cd. Inlined, not sourced: a shared lib is one more file that can go
+# missing on the path whose job is reporting missing files (pattern #1).
+_HOOKDIR=$(cd "$(dirname "$0")" 2>/dev/null && pwd)
+degraded() {
+  for _c in "$_HOOKDIR/../../bin/tessera-degraded" "$_HOOKDIR/../../scripts/tessera-degraded"; do
+    if [ -x "$_c" ]; then "$_c" "$@" >/dev/null 2>&1 || true; return 0; fi
+  done
+  command -v tessera-degraded >/dev/null 2>&1 && tessera-degraded "$@" >/dev/null 2>&1
+  return 0
+}
+
 INPUT=$(cat 2>/dev/null || true)
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null || echo ".")
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || echo "")
 
+# QUIET: no .mnemos/ means this project does not use Mnemos. Genuinely nothing to do.
 if [ ! -d "$CWD/.mnemos" ]; then
   exit 0
 fi
@@ -49,6 +64,18 @@ fi
 
 if [ -n "$MNEMOS_CMD" ]; then
   $MNEMOS_CMD checkpoint --force >/dev/null 2>&1 && exit 0
+  # LOUD: the managed runner exists but could not write a checkpoint.
+  degraded --component mnemos-checkpoint --reason checkpoint-failed --session "$SESSION_ID" \
+    --project "$CWD" --detail "$MNEMOS_CMD checkpoint --force failed; falling back to the inline writer"
+else
+  # LOUD — and this is F-001's exact shape. No managed runner anywhere, so the inline
+  # python3 block below writes a checkpoint ANYWAY, on an unmanaged interpreter. It does
+  # not fail; it silently SUCCEEDS, which is strictly harder to detect. The whole Mnemos
+  # trial was confounded by this once ("the graph is empty" read as unused, not
+  # unreachable). Going quiet here — as this hook did until spec 11 — is what let that run
+  # for weeks. tessera-watch P9 covers the interpreter separately; this covers the event.
+  degraded --component mnemos-checkpoint --reason toolchain-unreachable --session "$SESSION_ID" \
+    --project "$CWD" --detail "no .venv/bin/mnemos and no mnemos on PATH; the checkpoint took the unmanaged inline fallback"
 fi
 
 python3 -c "

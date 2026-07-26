@@ -42,6 +42,7 @@ INGEST_STALE_MIN_AGE_H = 1     # transcripts younger than this may be a live ses
 INGEST_STALE_MAX_AGE_D = 7     # older than this is history, not a live pipe problem
 INGEST_MIN_BYTES = 10_000      # skip 2-turn husk transcripts
 FALLBACK_STREAK = 3            # consecutive regex-only ingests before surfacing
+DEGRADED_WINDOW_DAYS = 7       # a degraded event is an INCIDENT, not a standing state (P13)
 
 
 def p1_hook_drift(root: Path) -> tuple[bool, str]:
@@ -533,6 +534,62 @@ def p12_skill_registry_drift(root: Path, global_dir: Path | None = None) -> tupl
     return False, "repo skills/ == global mirror"
 
 
+def p13_degraded(root: Path, now: datetime | None = None) -> tuple[bool, str]:
+    """A component reported that it COULD NOT DO ITS JOB (spec 11).
+
+    The exit condition of spec 11 is binary: break a component on purpose and Tessera
+    says so within one session, without a human asking. `tessera-degraded` writes the
+    event; this is the half that makes it reach a human, via the SessionStart surface.
+
+    WINDOWED ON PURPOSE, and the reason is a lesson paid for elsewhere in this repo:
+    iCPG's drift backlog reached 700 undisposed rows because nothing could ever leave
+    the open set, and a counter that only increments is indistinguishable from a broken
+    detector. A `degraded` event is an INCIDENT, not a standing state — "the guard was
+    missing last Tuesday" is history; "the guard is missing now" is the alarm. So this
+    asks about the recent past only, and needs no disposition verb to stay honest.
+
+    `ts` may legitimately be empty: tessera-degraded runs with shell builtins only and
+    `date` is not guaranteed (chaos probe 5 hides it). Those fall back to the log file's
+    mtime rather than being dropped — losing the loudest events to a missing clock would
+    be this spec's own failure mode.
+    """
+    now = now or datetime.now(timezone.utc)
+    logs = root / ".tessera" / "logs"
+    if not logs.is_dir():
+        return False, "no .tessera/logs/"
+
+    recent: list[str] = []
+    for log in logs.glob("*.jsonl"):
+        if log.name == "watch.jsonl":
+            continue
+        try:
+            mtime = datetime.fromtimestamp(log.stat().st_mtime, timezone.utc)
+        except OSError:
+            continue
+        for line in log.read_text(errors="replace").splitlines():
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if event.get("type") != "degraded":
+                continue
+            stamp = event.get("ts") or ""
+            try:
+                when = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+            except ValueError:
+                when = mtime          # blank//unparseable ts — see docstring
+            if (now - when).days <= DEGRADED_WINDOW_DAYS:
+                data = event.get("data") or {}
+                recent.append(f"{data.get('component', '?')}/{data.get('reason', '?')}")
+
+    if not recent:
+        return False, f"no degraded events in {DEGRADED_WINDOW_DAYS}d"
+    unique = sorted(set(recent))
+    return True, (f"{len(recent)} degraded event(s) in {DEGRADED_WINDOW_DAYS}d "
+                  f"({', '.join(unique[:4])}{'…' if len(unique) > 4 else ''}) — a component "
+                  f"could not do its job; see .tessera/logs/ and docs/contracts/degraded-event.md")
+
+
 def _resolve_label(query: str) -> str | None:
     """Unique predicate whose label contains `query` (case-insensitive), or None."""
     matches = [label for label in PREDICATES if query.lower() in label.lower()]
@@ -550,6 +607,7 @@ PREDICATES = {
     "P9 interpreter-drift": p9_interpreter_drift,
     "P11 ingest-pipe": p11_ingest_pipe,
     "P12 skill-registry-drift": p12_skill_registry_drift,
+    "P13 degraded": p13_degraded,
     "G-a graduation:snooze": g_a_consecutive,
 }
 

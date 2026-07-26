@@ -67,6 +67,13 @@ chmod +x "$TARGET/.claude/scripts/tessera-decision-surface.sh"
 # where PATH is not set — delete it once install.sh's PATH check is green everywhere.
 cp "$TESSERA_ROOT"/bin/tessera-escalate "$TARGET/scripts/tessera-escalate"
 chmod +x "$TARGET/scripts/tessera-escalate"
+# Spec 11 degraded reporter. Same bridge shape as tessera-escalate above, but this one is
+# NOT optional: every hook shipped below resolves it as scripts/tessera-degraded, and
+# without it each "I could not do my job" bail-out silently reverts to exit 0 — i.e. the
+# harness ships the guards without the thing that reports the guards failing, which is the
+# "ship both halves or neither" violation this spec was written about.
+cp "$TESSERA_ROOT"/bin/tessera-degraded "$TARGET/scripts/tessera-degraded"
+chmod +x "$TARGET/scripts/tessera-degraded"
 
 # Spend guard (spec 06). The hook wrapper FAILS OPEN when guard.py is absent — so shipping
 # tessera-spend-guard.sh without scripts/spend/ ships a hook that silently protects nothing
