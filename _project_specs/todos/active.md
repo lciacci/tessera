@@ -6,7 +6,7 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-07-26: gate logs repo-anchored, spec 11 chaos probes watched RED, and the falsifier fixed — it was 0-for-3, now returns verdicts by file)
+## Handoff — pick up here (2026-07-26: spec 11 step 2 SHIPPED — all 8 chaos probes GREEN, the bar is met; gate logs repo-anchored; falsifier fixed, was 0-for-3)
 
 *(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
 Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering.)*
@@ -32,10 +32,21 @@ sites, not the 1 the todo named**) and **spec 11 step 1 done — the chaos suite
 RED baseline is watched** (8 probes, all 5 components, 7 RED / 1 green). Deliberately no
 mechanism: criterion 5 again.
 
-Suite green, doccheck **29/29**, chaos 7 RED by design, watch quiet but for snoozed P7, findings
-backlog empty across all 5 downstreams, no escalations. **Pushed — `4a12630..0a95e5b`, in sync.**
-Note a second session was committing to this repo concurrently (ADR-0013/scryer, iCPG drift);
-`git fetch` before assuming your in-context copy of any doc is current.
+**Then spec 11 STEP 2 shipped (second session, same day) and all 8 probes went GREEN — spec 11's
+bar is met for this repo.** `bin/tessera-degraded` (POSIX sh, builtins only — it reports on
+broken infrastructure so it cannot assume working infrastructure) + `tessera-watch` **P13**
+(7-day window: a degraded event is an incident, not a standing state) + ~31 bail-outs classified
+loud/quiet. Chaos is now folded into `run-tests.sh`, so a red there means the framework has
+stopped reporting its own failure. **Probes 4 and 8 needed the PROBE fixed first** — `run_wired`
+synthesized its own command string with the fail-open `exit 0` hardcoded, so it tested a replica
+and no shipped change could ever turn it green. Corrected to read the real `settings.json`, and
+**confirmed still-RED before the fix landed** so the detector was not edited into accepting it.
+
+Suite green (452 incl. chaos), doccheck **29/29**, **chaos 8/8 GREEN**, watch quiet but for
+snoozed P7, findings backlog empty across all 5 downstreams, no escalations. **Pushed — through
+`41ad037`, in sync.** Note two sessions were committing here concurrently (ADR-0013/scryer +
+iCPG drift + spec 11 step 2 in one, the verify fix in the other); `git fetch` before assuming
+your in-context copy of any doc is current, and prefer hunk-level staging over `git add -A`.
 
 ### Standing patterns
 
@@ -94,8 +105,8 @@ Add a line only when a lesson recurs; the value is that the list is short enough
 
 ### Open, in priority order
 
-1. **Spec 11 — fail-open sweep. STEP 1 DONE 2026-07-26: the chaos suite exists and the RED
-   baseline is WATCHED.** `chaos/test_chaos.py` + `bin/tessera-chaos` (top-level `chaos/`, not
+1. **Spec 11 — STEPS 1+2 DONE 2026-07-26, all 8 probes GREEN; open: (a) fleet rollout, (b) a 3rd session re-reads the run_wired fix.**
+   *(Step 1)* `chaos/test_chaos.py` + `bin/tessera-chaos` (top-level `chaos/`, not
    `scripts/chaos/` — `pytest scripts/` would collect these red-by-design probes into the main
    suite, and `--ignore`ing them would collide with `ignored-test-suites-are-run`; outside
    `tessera-test` on purpose — the probes are legitimately red, and a permanently-red main
@@ -110,11 +121,32 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    a whole component** — the default `global` distribution ships no local mnemos hooks, so the
    mnemos probe skipped and component 4/5 was uncovered while the run read as fine (fixed with
    `--frozen`). *The fail-open suite's first fail-open was its own.*
-   **NEXT — step 2, and criterion 5 says it should be a DIFFERENT session than the one that
-   just wrote the probes:** build `tessera-degraded` (~20 lines, appends a `degraded` event to
-   the existing session-log channel) + `tessera-watch` **P13** (~15 lines), classify the ~15
-   bail-outs inside the five components (could-not-do-my-job → loud; nothing-to-do → quiet),
-   then watch the same 8 probes go green and fold them into `run-tests.sh`.
+   **STEP 2 DONE 2026-07-26 (different session, criterion 5 satisfied) — ALL 8 PROBES GREEN.**
+   Shipped `bin/tessera-degraded` (POSIX sh, shell builtins only — no jq/sed/grep/awk/python,
+   because it reports on broken infrastructure and may not assume working infrastructure; `date`
+   and `mkdir` optional, since probe 5 hides both), `tessera-watch` **P13** (7-day window — a
+   degraded event is an *incident*, not a standing state, so it needs no disposition verb; the
+   anti-pattern is item 6's iCPG counter), ~31 bail-outs classified, and the chaos suite folded
+   into `run-tests.sh`. Contract: `docs/contracts/degraded-event.md`.
+   **The finding worth keeping:** probes 4 and 8 could not be fixed from the Tessera side —
+   `run_wired` *synthesized* the command under test with the fail-open `exit 0` hardcoded, so
+   both asserted against a replica and probe 8 edited `settings.json` without ever reading it
+   back. Pattern #9 violated one layer inside the suite built to enforce it. Corrected to read
+   the real settings, **then confirmed STILL RED before any settings change** — the detector was
+   not edited into accepting the fix.
+   **STILL OPEN, and both are recorded in the spec but were NOT in this list until now — the
+   spec is not a surfaced channel, this file is (principle #17):**
+   - **(a) Downstream rollout (§4 of the spec).** The 5 downstreams have **neither**
+     `tessera-degraded` **nor** the new wired form with the `hook-unavailable` else-branch.
+     `bin/tessera-new-project` ships both to NEW projects only; existing ones need
+     `tessera-sync-harness`. Until then the fleet's guards still fail silently — i.e. "ship
+     both halves or neither" is currently violated *by time*, the exact way item 2 records it
+     happening before. Sequence with item 2, same fleet, same tool.
+   - **(b) Criterion 5 is now partially self-referential.** Steps 1 and 2 were different
+     sessions, but the step-2 session also corrected `run_wired`, so for probes 4 and 8 the
+     probe author and the mechanism author are the same. Mitigated by the RED-before-GREEN
+     check above, but **a third session re-reading that correction is worth more than the
+     note** — it is the cheapest remaining check on the whole spec.
 2. **Push mechanism (framework→downstream).** Split into two, Part A DONE:
    - **Part A — `tessera-sync-harness --patch-settings` (SHIPPED + APPLIED TO ALL 5).** Anchors
      *existing* cwd-relative hook commands in a downstream `settings.json`.
