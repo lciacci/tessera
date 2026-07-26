@@ -105,7 +105,7 @@ Add a line only when a lesson recurs; the value is that the list is short enough
 
 ### Open, in priority order
 
-1. **Spec 11 — STEPS 1+2 DONE 2026-07-26, all 8 probes GREEN; open: (a) fleet rollout, (b) a 3rd session re-reads the run_wired fix.**
+1. **Spec 11 — STEPS 1+2 DONE + fleet rolled out 2026-07-26; open: (a2) NO TOOL updates a wired command BODY (hand-patched 5 repos), (b) a 3rd session re-reads the run_wired fix, and the fleet is UNPUSHED.**
    *(Step 1)* `chaos/test_chaos.py` + `bin/tessera-chaos` (top-level `chaos/`, not
    `scripts/chaos/` — `pytest scripts/` would collect these red-by-design probes into the main
    suite, and `--ignore`ing them would collide with `ignored-test-suites-are-run`; outside
@@ -136,12 +136,28 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    not edited into accepting the fix.
    **STILL OPEN, and both are recorded in the spec but were NOT in this list until now — the
    spec is not a surfaced channel, this file is (principle #17):**
-   - **(a) Downstream rollout (§4 of the spec).** The 5 downstreams have **neither**
-     `tessera-degraded` **nor** the new wired form with the `hook-unavailable` else-branch.
-     `bin/tessera-new-project` ships both to NEW projects only; existing ones need
-     `tessera-sync-harness`. Until then the fleet's guards still fail silently — i.e. "ship
-     both halves or neither" is currently violated *by time*, the exact way item 2 records it
-     happening before. Sequence with item 2, same fleet, same tool.
+   - ~~**(a) Downstream rollout (§4 of the spec).**~~ **DONE 2026-07-26 — all 5 downstreams.**
+     `tessera-sync-harness --update-stale` back-filled `scripts/tessera-degraded`, the
+     decision-surface hook, `gate/paths.py`, and refreshed the gate/spend hooks to their
+     spec-11 versions. **howler excluded `--exclude spend`** — its guard is a documented
+     deliberate defer closable only from a howler session, and bundling it into a sync once
+     already installed it by accident; `scripts/spend/` confirmed still absent after. Gate
+     suite green (29) in all five. **Verified on the real path, not asserted:** conclave's
+     actual hook driven with `jq` hidden wrote a real `degraded` event into conclave's own
+     `.tessera/logs/`. Commits `bdc531f` / `6610ba1` / `5fbeffc` / `47a11a8` / `ca2f447`,
+     then `d27caee` / `9277c62` / `d9e2d90` / `bbec874` / `847e3f7`. **NOT PUSHED — local
+     only in all five, awaiting a deliberate call** (same status the Part A anchoring rollout
+     carried; see item 2).
+   - **(a2) NEW GAP, and it is a tooling gap, not a fleet gap.** The `hook-unavailable`
+     else-branch lives in the **wired command body** in `settings.json`, and **no tool can
+     put it there**: `tessera-sync-harness` only ADDS files, and `--patch-settings` is
+     anchor-only by deliberate design (bundling once installed a deferred component). So the
+     fleet fix above was applied **by hand**, which closes today's hole and guarantees the
+     next one — a repo scaffolded before the *next* command-body change will drift exactly
+     the same way, silently. **The fix is a command-body updater**, whose natural home is
+     `scripts/hooks/anchor_settings.py` (it already rewrites existing commands and already
+     has a doccheck detector keeping fixer and detector aligned). Until it exists, every
+     command-body change is a manual 5-repo edit that nothing verifies.
    - **(b) Criterion 5 is now partially self-referential.** Steps 1 and 2 were different
      sessions, but the step-2 session also corrected `run_wired`, so for probes 4 and 8 the
      probe author and the mechanism author are the same. Mitigated by the RED-before-GREEN
