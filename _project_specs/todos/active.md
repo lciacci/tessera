@@ -6,12 +6,17 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-07-26: spec 11 step 2 SHIPPED — all 8 chaos probes GREEN, the bar is met; gate logs repo-anchored; falsifier fixed, was 0-for-3)
+## Handoff — pick up here (2026-07-26 late: SPEC 11 CLOSED — 8/8 green, mechanized, fleet rolled, criterion 5 independently confirmed; watch fires ZERO; P3 needs a design call)
 
 *(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
 Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering.)*
 
 ### THE ONE THING TO KNOW
+
+**START HERE: the ranked next-session priorities are A–E, at the top of "Open, in priority
+order" below.** A is a decision only Lorenzo can make (retire or retarget P3); B–D are work.
+The numbered items 1–7 beneath them are the durable backlog; 1 and 3 are CLOSED.
+
 **`bin/tessera-verify` was 0-for-3 on real attempts; it is now fixed and proven at n=1.** The
 tool had done the work every time — planted landmines, executed, reverted — and then **its own
 `verify-scan` Stop hook fired and that skip acknowledgment became its final message**, which is
@@ -42,11 +47,43 @@ synthesized its own command string with the fail-open `exit 0` hardcoded, so it 
 and no shipped change could ever turn it green. Corrected to read the real `settings.json`, and
 **confirmed still-RED before the fix landed** so the detector was not edited into accepting it.
 
-Suite green (452 incl. chaos), doccheck **29/29**, **chaos 8/8 GREEN**, watch quiet but for
-snoozed P7, findings backlog empty across all 5 downstreams, no escalations. **Pushed — through
-`41ad037`, in sync.** Note two sessions were committing here concurrently (ADR-0013/scryer +
-iCPG drift + spec 11 step 2 in one, the verify fix in the other); `git fetch` before assuming
-your in-context copy of any doc is current, and prefer hunk-level staging over `git add -A`.
+**LATE-SESSION ADDENDUM — spec 11 fully closed, and three things found after it.**
+
+- **Criterion 5 confirmed by a third session**, and it found a **second scope hole**: two-tier
+  ADR-0004 commands were excluded from reporting, so under the DEFAULT `global` distribution —
+  where no local copy ever ships — all 7 mnemos hooks were fail-silent in every downstream.
+  Fixed, rolled, pushed. The scope-completeness test had inherited the same exclusion it was
+  meant to police, which is why it could not see the hole either.
+- **`decision_surface` gained the AMENDMENT EDGE** (`scripts/decision_amendments.py`). It now
+  lists which LATER records revisit each surfaced ADR. Built because this session read ADR-0008's
+  verdict, acted on it, and missed a later observatory entry deferring the whole question — the
+  hook fired, showed the ADR, and had no edge that could say it had been revisited. Every one of
+  the 14 ADRs is referenced later in the observatory, so amendment is the norm. **`REVISITED`
+  means "a later record mentions this", NOT "this is void"** — deciding which needs reading.
+- **`code-review` skill renamed `tessera-code-review`** — it was SHADOWING the native
+  `/code-review`, silently: typing `/code-review ultra` loaded the local skill instead of
+  launching the cloud reviewer. Renamed as an INTERIM; its fate belongs to **ADR-0014 / D1**.
+
+**MNEMOS, reframed — read this before judging it.** Diffing our history against the Maggy import
+(`ad19913`): **we never broke it.** `checkpoint.py`, `fatigue.py`, `signals.py`, `consolidation.py`,
+`models.py`, `redact.py`, `auto_nodes.py` are all UNCHANGED; every line we added is the analysis
+layer. **Maggy shipped it half-wired** — its own CHANGELOG calls compact-recovery "the PRIMARY
+re-injection point" and no hook entry in Maggy's settings.json ever referenced it. All four Mnemos
+failures were INTEGRATION (F-001's interpreter, the dead ingest, the PreToolUse channel, the
+two-tier silence) — **zero in `scripts/mnemos/`.** It IS producing: 517 checkpoints, 645 nodes,
+haziness across 8+ sessions. Only compaction recovery is untested.
+
+**And the finding that matters most for self-evaluation:** haziness scored THIS session `clear`
+(0.01) despite five confident-wrong assertions, each corrected. Cause is **detection recall**, not
+weighting: 408 user turns, **1 correction detected, 0 typed**, `classifier_status="ran"`. Across 8
+sessions: 2010 user turns, **5 detections**. The corrections arrive as QUESTIONS ("am I missing
+your point?", "is that right?") and the detector is tuned for the declarative register. Haziness
+measures *did the tools error*, not *was the reasoning wrong* — and this session pulled those
+fully apart. Note the bands were re-anchored under this same dead signal, so fixing recall
+re-opens P10.
+
+Suite green, doccheck **31/31**, **chaos 8/8**, **`tessera-watch` fires ZERO** (P3 + P7 snoozed),
+findings backlog empty, no escalations. **All six repos pushed and level with origin.**
 
 ### Standing patterns
 
@@ -105,7 +142,48 @@ Add a line only when a lesson recurs; the value is that the list is short enough
 
 ### Open, in priority order
 
-1. **Spec 11 — DONE + mechanized + fleet rolled out and PUSHED 2026-07-26; one open: (b) a 3rd session should re-read the run_wired correction.**
+**NEXT-SESSION PRIORITIES (2026-07-26 late). Items 1 and 3 below are CLOSED; the live work is:**
+
+**A. P3 — a DESIGN CALL, not a wait.** P3 is snoozed 90d on proof: the `payload_probe` answered
+   and this harness sends PreCompact `{}` — `{"len": 2, "keys": []}`, no trigger, no session_id.
+   **The snooze is a holding action, not a resolution.** Its revisit trigger ("a payload_probe
+   showing any keys") can almost certainly never fire here, so in 90 days P3 returns with the
+   identical message and nothing will have changed. **P3 is a TRIAL GATE, not a health monitor** —
+   it counts down to a decision, and that decision (judge the compaction half on a real Claude
+   Code CLI) has been made and the venue has moved. A trial gate whose trial relocated has no job
+   left here. **Proposed (Lorenzo's call): RETIRE P3, replace with a predicate that can fire in
+   this venue** — e.g. a `compaction_fired` with no `restore_injected` following it, which is real
+   compaction health and detectable now (log currently 3 fired / 4 restored, so it would be quiet
+   and honest rather than quiet and vacuous). Precedent: three predicates already retired for
+   measuring the wrong thing.
+
+**B. Correction-detection recall — the self-evaluation thread's real bottleneck.** 2010 user
+   turns across 8 sessions, 5 detections. Corrections arrive interrogatively; the detector is
+   tuned for the declarative register. `scripts/mnemos/eval_correction.py` is the existing
+   silver-label harness and THIS session is a labelled example (5 known confident-wrong episodes,
+   each corrected). **P10 gate applies: any detector change must re-run the eval and re-open bands
+   and weight on the new numbers** — and note the bands were anchored under the dead signal, so
+   they are suspect independently.
+
+**C. iCPG — diagnosed today, untouched.** 700 drift rows are 154 distinct; every dimension scores
+   the ABSENCE of edge types nothing writes (5 of 6 edge types have no writer; `test(0.30)` is a
+   constant on 701/701; usage drift is literally `grep -rl` over an unfiltered tree incl. `.venv`).
+   See item 6 for the ordered fix. **`scripts/icpg/` has zero tests and collides with
+   `scripts/polyphony/` on `store.py`/`models.py`**, so a suite needs its own process line.
+
+**D. ADR-0014 / decision D1 — the review backend seam.** Proposed, unanswered. Decides whether
+   review is model-portable (conclave / open-weight / Codex) or Claude-only-by-choice, and it owns
+   the fate of `tessera-code-review`'s 978 lines. Option D ("declare Claude-only, deliberately")
+   is explicitly on the table — the repo has drifted into it while keeping portable-looking
+   artifacts that do not run.
+
+**E. Smaller, known:** item 2 Part B (pending-record channel — needs its 3-decision design gate);
+   item 4 (third hook layer still unchecked: `templates/` ↔ `~/.claude/templates/`); item 5's
+   fatigue/intent half (the PreToolUse channel is fixed, so `mnemos-pre-edit`'s feature has never
+   actually been judged with its output reaching the model).
+
+
+1. ~~**Spec 11 — fail-open sweep.**~~ **CLOSED 2026-07-26.** Both open items resolved same day: the command-body tooling gap (`scripts/hooks/report_settings.py`) and the criterion-5 re-read, which a third session ran and **confirmed the run_wired correction legitimate** — with better evidence than the original (AST comparison of probes 4/8 docstring-stripped is byte-identical; the OLD test against the NEW template still fails 2, proving insensitivity in both directions). **It also found a second scope hole, now fixed:** two-tier ADR-0004 commands were excluded from reporting, so under the default `global` distribution — where no local copy ever ships — all 7 mnemos hooks were fail-silent in every downstream. Fleet rolled and pushed. Kept below as the reference record, not as open work.
    *(Step 1)* `chaos/test_chaos.py` + `bin/tessera-chaos` (top-level `chaos/`, not
    `scripts/chaos/` — `pytest scripts/` would collect these red-by-design probes into the main
    suite, and `--ignore`ing them would collide with `ignored-test-suites-are-run`; outside
