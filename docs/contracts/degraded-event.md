@@ -36,12 +36,17 @@ change any control flow — a hook that failed open still fails open. It only ma
 
 ## Producers
 
-`bin/tessera-degraded`, invoked from the five spec-11 components. Downstream projects receive a
+`bin/tessera-degraded`, invoked two ways (A and B below). Downstream projects receive a
 copy at *their own* scripts/ directory, under the same name — shipped by
 `bin/tessera-new-project`, the same bridge shape as `tessera-escalate`. (Written without
 backticks on purpose: it is a downstream location, and doccheck's `referenced-paths-exist`
 correctly reads a backticked path as a claim about *this* repo.) Hooks resolve, in order: the
 project's `bin/`, then its scripts/ directory, then PATH.
+
+Two distinct producer paths, and the difference matters:
+
+**A. From inside a hook that ran** — the hook started, then hit a bail-out it could not recover
+from. Emitted by the hook script itself.
 
 | Component | Reasons currently emitted |
 |---|---|
@@ -49,6 +54,22 @@ project's `bin/`, then its scripts/ directory, then PATH.
 | `spend-backstop` | `jq-unavailable`, `backstop-missing`, `no-python3`, `cwd-unreachable` |
 | `gate-scan` | `jq-unavailable`, `no-transcript-path`, `scanner-missing`, `no-python3`, `cwd-unreachable` |
 | `mnemos-checkpoint` | `toolchain-unreachable`, `checkpoint-failed` |
+
+**B. From the wired command, when the hook NEVER RAN** — reason is always `hook-unavailable`.
+No code inside a hook can report this, because the hook did not execute; the branch lives in the
+`settings.json` command string and is written by `scripts/hooks/report_settings.py`.
+
+The component is derived from the script name, so **B covers every wired hook**, not only the
+five spec-11 components: `gate-scan`, `spend-guard`, `spend-backstop`, `decision-surface`,
+`watch-surface`, `findings-surface`, `subagent-route-hook`, `tier-classify-hook`, and all seven
+`mnemos-*` hooks. Scope is deliberately not an allowlist — see `needs_reporting`'s docstring.
+
+**Two-tier (ADR-0004) commands are in scope too, since 2026-07-26.** The branch is appended after
+the whole `if/elif/fi`, so it fires only when the local AND global tiers have both failed. They
+were excluded at first on the premise that the global copy makes a missing local file
+recoverable — but under the **default `global` distribution no local copy is ever shipped**, so
+that branch is the only tier, not a redundancy. The exclusion left all 7 mnemos hooks
+fail-silent in every default downstream.
 
 ## Why the producer is POSIX `sh` with no external tools
 

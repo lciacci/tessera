@@ -104,7 +104,9 @@ happens *because there is no session id* has no file to write into. Recorded in 
 
 **Still open:** downstream rollout (§4 below) — the fleet has neither `tessera-degraded` nor the
 new wired form. `bin/tessera-new-project` ships both to NEW projects; existing ones need
-`tessera-sync-harness`. **Plus one hole found by the criterion-5 re-read (2026-07-26): the
+`tessera-sync-harness`. *(Rollout DONE 2026-07-26 — all five downstreams carry `tessera-degraded`
+and the reporting command bodies, committed and pushed.)* **~~Plus one hole found by the
+criterion-5 re-read (2026-07-26)~~ — FIXED same day (`7656c29`), see criterion 5: the
 two-tier ADR-0004 mnemos commands are excluded from reporting, and under the default `global`
 distribution — where no local copy is ever shipped — that leaves every mnemos hook fail-silent
 downstream.** Details and the verified one-line fix under success criterion 5.
@@ -332,8 +334,19 @@ else — the two-tier command already ends `fi; exit 0`, and `_ANCHORED` matches
 distinct script because the `$HOME` path is unanchored) produces a correct branch, verified both
 directions — reports `mnemos-stop-checkpoint / hook-unavailable` when both tiers are gone, and
 stays **silent** when the global tier is present (a real global copy still `exec`s and no event
-is written). Not fixed here: this session was scoped to judging the correction, and the fix
-belongs with the downstream rollout below.
+is written). ~~Not fixed here: this session was scoped to judging the correction, and the fix
+belongs with the downstream rollout below.~~
+
+**FIXED 2026-07-26, immediately after this re-read, exactly as prescribed below** (`7656c29`).
+Exclusion dropped; fixer run over `.claude/settings.json` and the template (7 commands); the unit
+test inverted to `test_two_tier_fallback_command_IS_in_scope`; rolled to all five downstreams and
+pushed. **The scope-completeness test also had to be widened** — it skipped two-tier commands
+too, so it had inherited the same exclusion it was meant to police, which is why it could not see
+the hole either. Verified on the real path: conclave's shipped `mnemos-stop-checkpoint` command,
+driven with `HOME` pointed at a nonexistent directory so both tiers fail, now writes a
+`degraded` event naming itself; before, that produced rc=0, empty stdout, empty stderr, nothing
+logged. **Both probe residuals recorded below were fixed in the same change**: `assert_reported`
+now requires the expected component, and `run_wired` rejects an empty `script_name`.
 
 **It is a one-line predicate change but NOT a one-line fix** — recorded so the next session does
 not discover it mid-flight. Because the predicate is *shared*, widening it immediately makes
