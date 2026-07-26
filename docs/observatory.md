@@ -763,6 +763,16 @@ Both were found by adversarial verification, **not** by the framework. **The rea
     (`len` + JSON `keys`, no content/secrets) alongside every `unknown` `compaction_fired`, so the *next* such
     event answers the remaining unknown: does the harness send an empty stdin, or a payload with no `trigger` key?
     Diagnostic only — P3 already ignores `unknown` events, so this cannot contaminate the verdict.
+  - **ANSWERED 2026-07-26 — it is the first: an EMPTY payload.** The probe fired and recorded
+    `"payload_probe": {"len": 2, "keys": []}` — two characters, zero keys, i.e. `{}`. The harness
+    sends PreCompact **nothing at all**: no `trigger`, no `session_id`, no `cwd`.
+    **This closes the re-instrumentation option, and closes it as PROOF rather than as a guess.**
+    `unknown` is not a tagger bug and cannot be fixed by reading the payload harder — there is no
+    payload. P3 can never count an event here, so its ≥3 bar is *unreachable*, not merely unmet.
+    P3 was snoozed 90d on this evidence, with an EVENT-based revisit trigger rather than a date:
+    a `compaction_fired` whose `payload_probe` shows any keys at all, or judging the
+    compaction-recovery half on a real Claude Code CLI session (where the docs say `trigger` is
+    sent). Session-continuity is unaffected and not on trial — 517 checkpoints and counting.
   - **DECISION (Lorenzo, 2026-07-16): the compaction-recovery verdict moves to a real Claude Code CLI venue;
     the fatigue verdict stays here.** P3 will not reach ≥3 *real* (`auto`) events in this harness — 0 ever, and a
     ~200k overfill produced none — so the compaction half is **structurally un-completable here**. Counting

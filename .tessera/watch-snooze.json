@@ -1,4 +1,9 @@
 {
+  "P3 mnemos-compaction-trial": {
+    "reason": "UNREACHABLE ON THIS HARNESS, PROVEN not assumed: the payload_probe added to learn what PreCompact receives has answered \u2014 {len:2, keys:[]}, i.e. the harness sends an EMPTY JSON object. No trigger, no session_id, nothing. So 'unknown' is not a tagger bug and cannot be re-instrumented away; there is nothing in the payload to read. P3 needs >=3 non-manual events and can never count one here. Revisit trigger is an EVENT not this date: a compaction_fired entry whose payload_probe shows any keys at all, or judging the compaction-recovery half on a real Claude Code CLI session where the docs say trigger IS sent. Session-continuity is NOT affected and is not on trial (517 checkpoints).",
+    "snoozed_at": "2026-07-26T23:42:27.888905+00:00",
+    "until": "2026-10-24T23:42:27.888905+00:00"
+  },
   "P7 gate-labels": {
     "reason": "backlog is dead data (52 unlabeled across 19 sessions won't be hand-labeled); real fix is passive detector upgrade, spec 13. Resurface if still unaddressed.",
     "snoozed_at": "2026-07-17T01:43:12.908690+00:00",

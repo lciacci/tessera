@@ -89,8 +89,12 @@ below) for the whole trial — also fixed.
   Claude Code `{trigger}` — hence `unknown`. An `auto` (context-full) event has still never been seen, and
   a ~200k overfill produced none, so P3 can't complete here. **DECISION: judge the compaction-recovery half
   on a real Claude Code CLI session; the fatigue half is judged here (it works).** PreCompact now logs a
-  key-only `payload_probe` on `unknown` events to learn what the harness sends. See `docs/observatory.md`
-  → "Mnemos compaction vehicle" (2026-07-16 update).
+  key-only `payload_probe` on `unknown` events to learn what the harness sends. **ANSWERED 2026-07-26:
+  `{"len": 2, "keys": []}` — the harness sends an EMPTY payload (`{}`), no `trigger`, no `session_id`,
+  nothing.** So `unknown` cannot be re-instrumented away; there is nothing to read. P3's ≥3 bar is
+  **unreachable here, proven not assumed**, and P3 is snoozed 90d on that evidence with an *event*
+  revisit trigger (a `payload_probe` showing any keys, or a real Claude Code CLI session). See
+  `docs/observatory.md` → "Mnemos compaction vehicle".
 
 **Original 07-15 reading (kept for the trail, now corrected above):** a session deliberately overfilled to
 ~200k tokens produced **zero** `compaction_fired` events, and `fatigue.json` read all-`None` (fatigue
