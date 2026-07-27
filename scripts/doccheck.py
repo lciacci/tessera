@@ -1792,7 +1792,56 @@ def check_adr_execution_recorded() -> list[str]:
                            f"on disk — the cut was recorded, not made")
     return bad
 
+def check_tier_vocabulary_is_consistent() -> list[str]:
+    """The tier list the classifier PARSES must match its own header and the router's arms.
+
+    Found 2026-07-27, and it had already done its damage: `tier-classify-hook`'s header said
+    "classifies each prompt into CLAUDE_HAIKU / CLAUDE_SONNET / CLAUDE_OPUS" while the parse
+    regex, the few-shot examples, and `subagent-route-hook`'s case arms had all carried FABLE
+    since it was added. Reading the header, I told Lorenzo the classifier had three tiers and
+    that Fable had never shipped. He remembered otherwise and was right.
+
+    WHY THIS ONE IS MECHANICAL, when A6 rejected two handoff checks as judgement-in-a-regex:
+    the subject is not prose. It is a regex ALTERNATION (`grep -oE 'A|B|C'`) compared against
+    `case` arms — two closed lists of exact strings, both machine-extractable. That is the same
+    shape as `retired figures`, which shipped, and the opposite of "is this status consistent",
+    which failed open.
+
+    The header is the drifting half BY CONSTRUCTION: adding a tier means editing the prompt,
+    the regex, and the router — all load-bearing, all fail loudly if wrong — while the comment
+    is the one place that can rot silently. A stale comment in a routing hook is not cosmetic;
+    it is read as the spec by the next person, which is exactly what happened.
+    """
+    hook = ROOT / "hooks" / "tier-classify-hook"
+    router = ROOT / "hooks" / "subagent-route-hook"
+    if not hook.exists():
+        return ["hooks/tier-classify-hook missing — the tier vocabulary has no definition"]
+    text = hook.read_text()
+
+    # The parse regex is the authority: it is what actually produces a tier.
+    m = re.search(r"grep -oE '([A-Z|]+)'", text)
+    if not m:
+        return ["hooks/tier-classify-hook: no tier-parsing `grep -oE` found — "
+                "the vocabulary is no longer machine-readable, so this check is blind"]
+    parsed = set(m.group(1).split("|"))
+
+    bad = []
+    header = "\n".join(text.splitlines()[:20])
+    for tier in sorted(parsed):
+        if f"CLAUDE_{tier}" not in header:
+            bad.append(f"hooks/tier-classify-hook: parses {tier} but the header comment "
+                       f"omits CLAUDE_{tier} — the comment understates the vocabulary")
+
+    if router.exists():
+        arms = set(re.findall(r"CLAUDE_([A-Z]+)\)", router.read_text()))
+        for tier in sorted(parsed - arms):
+            bad.append(f"hooks/subagent-route-hook: no case arm for CLAUDE_{tier}, but "
+                       f"tier-classify-hook can emit it — subagents silently get no override")
+    return bad
+
+
 CHECKS = {
+    "tier-vocabulary-is-consistent": check_tier_vocabulary_is_consistent,
     "handoff-retires-its-own-figures": check_handoff_retires_its_own_figures,
     "drift-dimensions-have-producers": check_drift_dimensions_have_producers,
     "chaos-suite-is-reachable": check_chaos_suite_is_reachable,

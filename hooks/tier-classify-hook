@@ -2,7 +2,7 @@
 # UserPromptSubmit hook — cache-only Claude effort-tier classifier.
 #
 # Combo B: classifies each prompt into CLAUDE_HAIKU / CLAUDE_SONNET /
-# CLAUDE_OPUS via local qwen (Ollama) and caches the tier to
+# CLAUDE_OPUS / CLAUDE_FABLE via local qwen (Ollama) and caches the tier to
 # ~/.claude/routing-cache.json, which subagent-route-hook reads to set a
 # spawned subagent's model. Unlike route-task-hook this does NOT delegate to
 # other providers and runs no minimax pre-analysis — safe for framework-dev.
