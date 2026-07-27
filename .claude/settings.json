@@ -74,6 +74,11 @@
             "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-pre-edit.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/mnemos-pre-edit.sh\"; fi; for d in bin scripts; do r=\"${CLAUDE_PROJECT_DIR:-.}/$d/tessera-degraded\"; [ -x \"$r\" ] && exec \"$r\" --component mnemos-pre-edit --reason hook-unavailable --detail \"wired hook mnemos-pre-edit.sh is missing or not executable; it has never run\"; done; exit 0",
             "timeout": 5,
             "statusMessage": "Checking fatigue + intent context..."
+          },
+          {
+            "type": "command",
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/icpg-inject-context.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/icpg-inject-context.sh\"; fi; for d in bin scripts; do r=\"${CLAUDE_PROJECT_DIR:-.}/$d/tessera-degraded\"; [ -x \"$r\" ] && exec \"$r\" --component icpg-inject-context --reason hook-unavailable --detail \"wired hook icpg-inject-context.sh is missing or not executable; it has never run\"; done; exit 0",
+            "timeout": 5
           }
         ]
       },

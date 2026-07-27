@@ -1,4 +1,39 @@
 #!/bin/bash
+# ██ DO NOT WIRE — NON-FUNCTIONAL, AND ITS DESIGN IS WRONG FOR THIS REPO. ██
+#
+# Audited 2026-07-27 while wiring its sibling. Broken in three independent places, verified by
+# running it, not by reading it:
+#
+#   1. Line ~43: `json.loads(sys.stdin)` — loads the FILE OBJECT, not its text, and the
+#      condition `if sys.stdin.read()` has already consumed stdin. Always raises, always caught
+#      by the bare `except: pass`, so FILE_PATH is ALWAYS empty and the hook exits at the
+#      `[ -z "$FILE_PATH" ]` guard. It can never reach any of its own logic.
+#      (Its sibling icpg-inject-context has the CORRECT form — `json.loads(sys.stdin.read())`.)
+#   2. `icpg query intent <file>` does not exist. Real choices: context, blast, constraints,
+#      risk, prior.
+#   3. `icpg record --reason "<text>" --file <p> --auto-invariants` does not exist. Real
+#      signature is `--reason <REASONNODE-ID> [--base] [--edge-type]` — `--reason` takes an ID,
+#      not free text; there is no --file and no --auto-invariants.
+#
+# Driven for real with a valid Edit payload: zero output, zero exit code, reasons 10 -> 10.
+# A total silent no-op. Bug 1 masks 2 and 3, so wiring it would have produced a hook that runs
+# clean and does nothing — the shape this repo keeps paying for.
+#
+# ██ AND EVEN REPAIRED, IT SHOULD NOT BE WIRED HERE. ██ It auto-creates a ReasonNode from the
+# file's last COMMIT MESSAGE. That is git-history bootstrap under another name — exactly what
+# produced the 10 `source='inferred'` reasons whose scopes are one commit's file list, which is
+# the defect priority item 1 exists to resolve. Wiring it would generate MORE inferred intent and
+# make the scope-quality problem worse while looking like progress on it.
+#
+# The recording half this repo actually needs is AUTHORED intent — `icpg create "<goal>" --scope
+# ...` invoked deliberately (the `/icpg-intent` command), which is a workflow change, not a hook.
+# See docs/design-principles.md -> "Q1 (does the agent populate ReasonNodes?) has never been
+# exercised at all" and _project_specs/todos/active.md priority item 1.
+#
+# Kept, not deleted: the intended FLOW below is still the right shape, and it is the only written
+# record of it (ADR-0007 — harvest before you cut).
+#
+# ── original header ──
 # iCPG PreToolUse Hook — auto-records intent ReasonNode before Edit/Write.
 #
 # Flow:
