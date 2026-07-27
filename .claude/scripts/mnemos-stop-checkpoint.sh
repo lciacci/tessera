@@ -81,7 +81,13 @@ elif command -v mnemos >/dev/null 2>&1; then
 fi
 
 if [ -n "$MNEMOS_CMD" ]; then
-  $MNEMOS_CMD checkpoint --force >/dev/null 2>&1 && exit 0
+  # --task-id carries the LIVE session so the checkpoint's goal is this session's,
+  # not whichever goal happens to be newest. $SESSION_ID was already parsed above
+  # and used only for `degraded` reporting; the checkpoint never received it, so
+  # write_checkpoint had no way to tell "my task" from "some task" and fell back to
+  # recency alone (2026-07-27: 44 bulk-imported goals then took all 8 slots).
+  # Empty is fine — the flag is optional and selection degrades to recency.
+  $MNEMOS_CMD checkpoint --force ${SESSION_ID:+--task-id "$SESSION_ID"} >/dev/null 2>&1 && exit 0
   # LOUD: the managed runner exists but could not write a checkpoint.
   degraded --component mnemos-checkpoint --reason checkpoint-failed --session "$SESSION_ID" \
     --project "$CWD" --detail "$MNEMOS_CMD checkpoint --force failed; falling back to the inline writer"

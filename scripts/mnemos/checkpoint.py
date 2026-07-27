@@ -18,6 +18,41 @@ from .store import MnemosStore
 # delivery. The restore blob had outgrown its own delivery channel.
 MAX_CHECKPOINT_GOALS = 8
 
+# `bridge-icpg` runs backgrounded on EVERY SessionStart and imports active iCPG
+# ReasonNodes as GoalNodes with origin='loaded' and the sentinel task 'icpg-bridge'.
+# They are historical intents, never "what this session is doing".
+BRIDGE_ORIGIN = 'loaded'
+
+
+def _select_goals(goals: list, task_id: str | None) -> tuple[list, int, int]:
+    """Goals for the render: this task's first, then recency, bridge imports never.
+
+    Returns (shown, bridged_excluded, older_omitted).
+
+    FOUND 2026-07-27, by reading what a live compaction actually delivered. Sorting
+    by `created_at` alone is a proxy for relevance, and it held only while nothing
+    wrote goals in bulk. A re-bootstrap regenerates every ReasonNode id, so the
+    bridge's content-keyed dedup missed all 43, minted them at import time, and
+    **44 goals sharing one timestamp took all 8 slots** — the checkpoint's stated
+    goal became "Phase 3: scaffold .tessera/", from the project's opening days.
+
+    Constraints stayed correct through the same import (3 new vs 53) because their
+    dedup key is the invariant text, which survives a rebuild. Same bridge, two
+    keys, one of them coupled to a regenerated id. That is the actual bug, and the
+    ordering here is the guard against its next variant.
+
+    Excluded, not evicted: nodes stay in the store (ADR-0007) and the count is
+    STATED, so an exclusion cannot read as an empty backlog.
+    """
+    bridged = sum(1 for n in goals if n.origin == BRIDGE_ORIGIN)
+    live = [n for n in goals if n.origin != BRIDGE_ORIGIN]
+    live.sort(key=lambda n: n.created_at or '', reverse=True)
+    if task_id:
+        # Stable, so recency still orders within each group.
+        live.sort(key=lambda n: n.task_id != task_id)
+    shown = live[:MAX_CHECKPOINT_GOALS]
+    return shown, bridged, len(live) - len(shown)
+
 
 def write_checkpoint(
     store: MnemosStore,
@@ -36,26 +71,20 @@ def write_checkpoint(
 
     Returns the created CheckpointNode.
     """
-    # Determine task_id from active GoalNodes, most recent first.
-    #
-    # Sort by recency, NOT the store's ORDER BY activation_weight: in a real graph
-    # every goal carries weight 1.0, so that ordering is a no-op and a naive head
-    # slice keeps arbitrary rows — dropping the live goal to keep 'what is sqlfluffy'.
-    #
-    # Caps the RENDER only. Nodes stay in the store (ADR-0007: never subtract from a
-    # knowledge artifact), and the omitted count is STATED, not silently truncated.
-    goal_nodes = store.get_by_type('goal')
-    goal_nodes.sort(key=lambda n: n.created_at or '', reverse=True)
-    shown = goal_nodes[:MAX_CHECKPOINT_GOALS]
+    all_goals = store.get_by_type('goal')
+    shown, bridged, omitted = _select_goals(all_goals, task_id)
     if not task_id and shown:
         task_id = shown[0].task_id
     task_id = task_id or 'unknown'
 
-    # Gather goal
     goal_text = '; '.join(n.content for n in shown) or 'No active goal'
-    omitted = len(goal_nodes) - len(shown)
+    notes = []
     if omitted:
-        goal_text += (f' [+{omitted} older goal(s) omitted from this checkpoint; '
+        notes.append(f'+{omitted} older goal(s) omitted')
+    if bridged:
+        notes.append(f'{bridged} bridged iCPG intent(s) excluded')
+    if notes:
+        goal_text += (f' [{"; ".join(notes)} from this checkpoint; '
                       '`mnemos nodes --type goal` lists all]')
 
     # Gather constraints (never evicted)

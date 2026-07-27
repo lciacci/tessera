@@ -72,8 +72,70 @@ def test_no_goals_is_not_an_omission_notice():
     assert 'omitted' not in cp.goal
 
 
+def _add_bridged(store, content, created_at):
+    """What `bridge-icpg` writes: origin='loaded', sentinel task, import-time stamp."""
+    store.create_node(MnemoNode(
+        type='goal', task_id='icpg-bridge', origin='loaded',
+        content=content, created_at=created_at,
+    ))
+
+
+def test_a_bulk_bridge_import_cannot_evict_the_live_goal():
+    """THE DEFECT, 2026-07-27, observed in a real compaction's restore payload.
+
+    `bridge-icpg` runs backgrounded on every SessionStart. A re-bootstrap
+    regenerates every iCPG ReasonNode id, so its content-keyed dedup missed all
+    43, minted them at import time, and 44 goals sharing one `created_at` took
+    every slot. The checkpoint's stated goal became 'Phase 3: scaffold
+    .tessera/' — the project's opening days — while the live goal sat below the
+    cut. Recency was a proxy for relevance and a bulk write broke it.
+    """
+    store = _store()
+    _add_goal(store, 'the-live-goal', '2026-07-27T19:47:00+00:00')
+    for i in range(44):                       # newer than the live goal, all at once
+        _add_bridged(store, f'Phase 3 scaffold {i}', '2026-07-27T19:50:00+00:00')
+
+    cp = write_checkpoint(store)
+    assert 'the-live-goal' in cp.goal, cp.goal
+    assert 'Phase 3' not in cp.goal, cp.goal
+    # Excluded, never silently: an exclusion that reads as an empty backlog is
+    # the bug one level up.
+    assert '44 bridged iCPG intent(s) excluded' in cp.goal, cp.goal
+
+
+def test_the_live_sessions_goal_outranks_a_newer_one_from_another_session():
+    """`--task-id` carries the session actually being checkpointed. Without it the
+    newest goal wins, and 'newest' is not 'mine' — a concurrent session, or an
+    ingest of someone else's transcript, silently reassigns what I was doing."""
+    store = _store()
+    store.create_node(MnemoNode(
+        type='goal', task_id='my-session', origin='session-goal',
+        content='what I am actually doing', created_at='2026-07-27T10:00:00+00:00',
+    ))
+    _add_goal(store, 'a-newer-unrelated-goal', '2026-07-27T23:00:00+00:00')
+
+    cp = write_checkpoint(store, task_id='my-session')
+    assert cp.goal.startswith('what I am actually doing'), cp.goal
+    assert cp.task_id == 'my-session', cp.task_id
+    # the newer one is still carried — ranked, not dropped
+    assert 'a-newer-unrelated-goal' in cp.goal, cp.goal
+
+
+def test_without_a_task_id_selection_degrades_to_recency():
+    """The flag is optional: an older hook, or a harness that sends no session_id,
+    must keep working rather than lose its goal entirely."""
+    store = _store()
+    _add_goal(store, 'older', '2026-07-01T00:00:00+00:00')
+    _add_goal(store, 'newer', '2026-07-26T00:00:00+00:00')
+    cp = write_checkpoint(store)
+    assert cp.goal.startswith('newer'), cp.goal
+
+
 if __name__ == '__main__':
     test_cap_limits_and_states_the_omission()
     test_cap_keeps_the_NEWEST_goals_not_arbitrary_rows()
     test_no_goals_is_not_an_omission_notice()
+    test_a_bulk_bridge_import_cannot_evict_the_live_goal()
+    test_the_live_sessions_goal_outranks_a_newer_one_from_another_session()
+    test_without_a_task_id_selection_degrades_to_recency()
     print('ok')

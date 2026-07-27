@@ -518,6 +518,42 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   alone fires 829 times** on the same collisions. The extractor work was needed to make the
   hearing fair, not to reach the answer.
 
+### The checkpoint's goal was 40 sessions stale, and `created_at` was the proxy that let it happen *(2026-07-27)*
+
+- **Status:** Fixed. Found by *reading what a live compaction actually delivered*, not by audit.
+- **What was observed.** Layer 3's post-compaction restore block stated the goal as
+  *"Phase 3: scaffold `.tessera/` profile and config structure"* — the project's opening days.
+  Layer 2, nine minutes earlier, had stated this session's real goal. Two checkpoints, and the
+  **newer** one carried the **older** goal.
+- **Mechanism.** `bridge-icpg` runs backgrounded on every SessionStart. A re-bootstrap earlier
+  that session regenerated all 43 iCPG ReasonNode ids; the bridge dedups on `content`, which
+  embeds `[iCPG:<id>]`, so **every one missed the cache** and was minted fresh at import time.
+  44 goals sharing one `created_at` took all 8 checkpoint slots.
+- **The load-bearing detail: constraints came through the same import CORRECTLY** — 3 new against
+  53 existing — because their dedup key is the invariant text, which survives a rebuild. One
+  bridge, two keys, and only the one coupled to a regenerated id broke. That asymmetry is what
+  identifies the bug; a count of "how many nodes did the bridge add" would have shown both halves
+  growing and explained nothing.
+- **Why the guard already in place did not catch it.** The 2026-07-26 fix replaced weight-sort
+  with `created_at`-sort precisely because equal weights made ordering arbitrary — and it was
+  right. But `created_at` is *also* a proxy for relevance, and it holds only while nothing writes
+  goals in bulk. It survived one day. `test_checkpoint_goal_cap.py` passed throughout: it asserts
+  the cap holds and the NEWEST goal survives, and the newest goals were exactly the wrong ones.
+  **A test that asserts "newest survives" cannot see that newest stopped meaning relevant.**
+- **Fix.** `_select_goals()` excludes `origin='loaded'` outright (bridge imports are historical
+  intents, never current work) and ranks the live session's own goals first — the hook already
+  parsed `session_id` for `degraded` reporting and simply never passed it, while `--task-id`
+  existed on the CLI the whole time. Exclusions are stated in the goal text, not silent.
+- **A prediction of mine that the live data refuted, kept because it changed the design.** I
+  reasoned the `--task-id` match would never hit, since checkpoint runs *before* ingest in the
+  Stop chain, so the current session's goal node would not exist yet. Wrong: **Stop fires per
+  turn, not per session**, so ingest has run many times by then and the goal is present. Verified
+  against the live database — the goal field now leads with this session's actual opening prompt.
+- **Three copies, and only two synced.** The hook exists at `.claude/scripts/` (source, per
+  `hook_distro: source`), `templates/` (what ships downstream), and `~/.claude/templates/` (the
+  ADR-0004 global fallback). `./install.sh` propagates to the third but **not** the second;
+  doccheck's `hooks-match-templates` caught the gap. Standing pattern #5 with a third half.
+
 ### A disposition verb that did not move the headline — `icpg status` disagreed with its own list *(2026-07-27)*
 
 - **Status:** Fixed, regression-tested (`test_stats_headline_agrees_with_the_list_it_summarises`,
