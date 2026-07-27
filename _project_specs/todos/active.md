@@ -52,9 +52,16 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
 > Going from 3 events to 121 gives 121 self-reports. **Volume does not fix provenance.**
 
 
-**START HERE: the ranked next-session priorities are A–E, at the top of "Open, in priority
-order" below.** A is a decision only Lorenzo can make (retire or retarget P3); B–D are work.
-The numbered items 1–7 beneath them are the durable backlog; 1 and 3 are CLOSED.
+**START HERE (rewritten 2026-07-26 — most of A–F closed that day).** In "Open, in priority
+order" below, **CLOSED: A (ADR-0015), A2, A3, A4, A5, B1, F.** What is actually open:
+  - **A-live — T2 needs DATA, and it arrives only as a BYPRODUCT of substantive work.** Not a
+    task you can sit and watch. Do the real next job; the receipt is owed at its Stop.
+  - **B2 — correction recall.** BLOCKED on labels from a judgement that did not propose the
+    hypothesis (see B; I proposed it, retracted it, then produced supporting labels).
+  - **A5b — the per-bail-out spec-11 audit. DO NOT re-open it with a `grep -c degraded` count**;
+    that measure produced three wrong findings on 2026-07-26.
+  - **C (iCPG), D (ADR-0014 — Lorenzo's decision), E (smaller known items).**
+The numbered items 1–7 beneath them are the durable backlog; 1, 3, 4 are CLOSED.
 
 **`bin/tessera-verify` was 0-for-3 on real attempts; it is now fixed and proven at n=1.** The
 tool had done the work every time — planted landmines, executed, reverted — and then **its own
@@ -112,14 +119,17 @@ failures were INTEGRATION (F-001's interpreter, the dead ingest, the PreToolUse 
 two-tier silence) — **zero in `scripts/mnemos/`.** It IS producing: 517 checkpoints, 645 nodes,
 haziness across 8+ sessions. Only compaction recovery is untested.
 
-**And the finding that matters most for self-evaluation:** haziness scored THIS session `clear`
-(0.01) despite five confident-wrong assertions, each corrected. Cause is **detection recall**, not
-weighting: 408 user turns, **1 correction detected, 0 typed**, `classifier_status="ran"`. Across 8
-sessions: 2010 user turns, **5 detections**. The corrections arrive as QUESTIONS ("am I missing
-your point?", "is that right?") and the detector is tuned for the declarative register. Haziness
-measures *did the tools error*, not *was the reasoning wrong* — and this session pulled those
-fully apart. Note the bands were re-anchored under this same dead signal, so fixing recall
-re-opens P10.
+**And the finding that matters most for self-evaluation** — ⚠ **NUMBERS CORRECTED 2026-07-26,
+see B.** haziness scored that session `clear` (0.01) despite five confident-wrong assertions,
+each corrected. **The per-turn counts below divided by TOOL-RESULT rows** (`role='user'` carries
+them in Claude Code transcripts): "408 user turns" and "2010 across 8 sessions" are ~19x the real
+human-turn counts, and on eligible turns the detector runs at **17–20%, not ~0**. So "detection
+recall" was **not** established as the cause, and "corrections arrive as QUESTIONS" remains an
+unverified hypothesis — one I proposed, retracted, then found self-labelled support for.
+What survives, and is the real point: **haziness measures *did the tools error*, not *was the
+reasoning wrong*.** A session can be `clear` and still be full of confidently wrong claims. Also
+still true: the bands were re-anchored on a distribution that includes budget-exhausted sessions
+(now known to report FLOORS), so band work re-opens P10.
 
 Suite green, doccheck **31/31**, **chaos 8/8**, **`tessera-watch` fires ZERO** (P3 + P7 snoozed),
 findings backlog empty, no escalations. **All six repos pushed and level with origin.**
@@ -352,7 +362,12 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    could refute me.** Needs labels from a judgement that did not propose the hypothesis, then
    re-run `eval_correction.py` and re-open bands AND weight per P10.
 
-**B-old. Correction-detection recall — the self-evaluation thread's real bottleneck.** 2010 user
+**B-old. SUPERSEDED BY B — every number below is RETRACTED. Kept only for the trail.**
+   ⚠ **"2010 user turns / 5 detections" divided by TOOL-RESULT ROWS** (`role='user'` carries them
+   in Claude Code transcripts). On eligible turns the detector runs at **17–20%**. The claim that
+   "corrections arrive interrogatively" is an UNVERIFIED hypothesis I proposed, retracted, then
+   found self-labelled support for — do not treat it as a finding. **Quote nothing from here.**
+   *Original text:* 2010 user
    turns across 8 sessions, 5 detections. Corrections arrive interrogatively; the detector is
    tuned for the declarative register. `scripts/mnemos/eval_correction.py` is the existing
    silver-label harness and THIS session is a labelled example (5 known confident-wrong episodes,
@@ -372,7 +387,8 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    is explicitly on the table — the repo has drifted into it while keeping portable-looking
    artifacts that do not run.
 
-**F. THE DECIDED-BUT-NOT-BUILT GAP — two instances in one day, and nothing detects it.**
+**F. ~~THE DECIDED-BUT-NOT-BUILT GAP~~ — CLOSED 2026-07-26, see A4.** ADRs now carry an append-only `- **Executed:**` line, doccheck `adr-execution-recorded` verifies the named paths exist, and `decision_surface.py` prints `NOT EXECUTED` / `PARTIALLY EXECUTED` before you edit a governed file. **The backfill immediately caught ADR-0008 as `partially` — the review-skill cut is still not done.** The two instances below are kept as the evidence that motivated the fix, not as open work.
+**F-original (the trail): two instances in one day, and nothing detected it.**
    An accepted decision that was never carried into the machinery is **indistinguishable from one
    that was**. Both of today's worst bugs are this:
    - **ADR-0008** ruled CUT-the-bulk on the `code-review` skill (2026-07-14). The prep step ran
