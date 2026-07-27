@@ -99,9 +99,23 @@ def test_declared_dimension_vocabulary_is_exactly_the_fed_two():
     see it come back. `ownership` was worse still — it read edges UNTYPED, so it
     tripped neither this suite nor doccheck. Source is the only place a dead
     dimension is visible on the day it is re-added rather than never.
+
+    THE PATTERN MUST NOT KEY ON THE SCORER'S NAME (fixed 2026-07-27, found by
+    `bin/tessera-verify` the same hour this test was written). It used to require a
+    `_check_` prefix — `r"\\(\\s*'(\\w+)',\\s*_check_"` — so the falsifier re-added
+    `('usage', _usage_score(store, sym))` returning None and **34 tests stayed
+    green**. Renaming one function walked past the only guard that can see a
+    silent dimension, which is precisely the failure class this test exists for.
+    doccheck's `drift-dimensions-have-producers` is no backstop: it scans EDGE
+    TYPES read by `drift.py`, and `usage` never read one.
+
+    A live re-add under any name is still caught observationally (the falsifier
+    confirmed: a scorer returning 1.0 trips two other tests here). This guard is
+    for the always-`None` case, which is the one nothing else can see.
     """
+    # Match ANY callable in the scored tuple, not one naming convention.
     declared = set(re.findall(
-        r"\(\s*'(\w+)',\s*_check_", inspect.getsource(check_symbol_drift)
+        r"\(\s*'(\w+)',\s*[\w.]+\(", inspect.getsource(check_symbol_drift)
     ))
     assert declared == {'changed', 'decision'}, (
         f"scored dimensions changed: {sorted(declared)}. Adding one means adding "

@@ -518,6 +518,37 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   alone fires 829 times** on the same collisions. The extractor work was needed to make the
   hearing fair, not to reach the answer.
 
+### The declared-vocabulary guard keyed on a NAMING CONVENTION — one rename walked past it *(2026-07-27)*
+
+- **Status:** Fixed same hour. Kept because it is standing pattern #1's third instance in this
+  one subsystem, and the first two were also found by `bin/tessera-verify`.
+- **What happened:** ADR-0017 retired `usage` and added an assertion to
+  `test_drift.py` that the dimension stays gone. The Stop hook's verify-scan fired on a false
+  positive (it named `scripts/doccheck.py`, which this session only *ran*), but the claims were
+  worth falsifying anyway, so they went to the falsifier. Verdicts: CONFIRMED / CONFIRMED /
+  **PARTIAL**.
+- **The hole.** The guard read
+  `re.findall(r"\(\s*'(\w+)',\s*_check_", inspect.getsource(check_symbol_drift))` — keyed on the
+  `_check_` prefix. The falsifier re-added `('usage', _usage_score(store, sym))` returning `None`
+  and **all 34 tests stayed green**. Renaming one function evaded the only guard that can see a
+  silent dimension.
+- **Why that shape specifically is the dangerous one, and why nothing else covered it.** A
+  dimension that *fires* is caught observationally — the falsifier confirmed a scorer returning
+  1.0 trips two other tests under any name. A dimension that returns `None` forever reaches no
+  output, so only source inspection can see it. That is the exact failure class this test was
+  invented for after `ownership` slipped both guards. doccheck's
+  `drift-dimensions-have-producers` is **not** a backstop: it scans EDGE TYPES read by
+  `drift.py`, and `usage` never read one — it produced no finding under either landmine.
+- **Fix:** match any callable in the scored tuple — `r"\(\s*'(\w+)',\s*[\w.]+\("` — not one
+  naming convention. Verified by replanting the landmine and watching the fixed guard fail it,
+  then reverting.
+- **The reusable lesson, sharper than the existing one.** Standing pattern #1 says *test a new
+  check against the failures you did not just fix*. This adds: **a guard that reads source must
+  not key on a convention the code is free to break.** The convention was mine, held everywhere
+  in the file, and looked like a safe anchor — which is what made it invisible. Both prior
+  instances in this subsystem had the same shape (an untyped edge read; a presence-scored
+  dimension), and all three were found by the falsifier rather than the suite.
+
 ### Is the SYMBOL the right unit for a shell-heavy repo? — corpus coverage bought files, not symbols *(2026-07-27)*
 
 - **Status:** Open. Logged as its own entry because ADR-0017's stopping rule forbade a step 3;
