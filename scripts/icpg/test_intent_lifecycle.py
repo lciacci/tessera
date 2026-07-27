@@ -133,5 +133,42 @@ def test_fulfil_refuses_an_ambiguous_prefix(tmp_path):
     assert len(store.list_reasons(status='executing')) == 2
 
 
+def test_recording_the_same_symbols_twice_does_not_duplicate_edges(tmp_path):
+    """FOUND BY REVIEW 2026-07-27, an hour after the Stop recorder was wired.
+
+    `create_edge` uses `INSERT OR IGNORE`, which READS as deduplicating. It was
+    not: the only UNIQUE column was `id`, a fresh uuid4 per call, so the conflict
+    clause could never fire and every re-record appended a row. Harmless while
+    `record` was manual and had never actually run — the recorder made it live,
+    because Stop fires per TURN, so one session would append the same edges dozens
+    of times. Measured on the live graph at 995 rows / 891 distinct after three
+    runs.
+
+    ADR-0013's drift-backlog defect (700 rows = 154 distinct x 31 scans) in a
+    second table. The lesson is that the first fix was applied to the row it was
+    found on rather than to the pattern, so the same bug shipped twice.
+    """
+    from .models import Edge
+    store = _store(tmp_path)
+    r = ReasonNode(goal='g', owner='t', status='executing')
+    store.create_reason(r)
+    edge = dict(from_id=r.id, to_id='sym-1', edge_type='CREATES')
+
+    store.create_edge(Edge(**edge))
+    after_first = len(store.get_edges_from(r.id, 'CREATES'))
+    for _ in range(5):                      # five more Stops, same symbols
+        store.create_edge(Edge(**edge))
+    after_repeats = len(store.get_edges_from(r.id, 'CREATES'))
+
+    assert after_first == 1
+    assert after_repeats == 1, (
+        f'{after_repeats} edges for one (from,to,type) — INSERT OR IGNORE is '
+        'keying on the uuid again, so every Stop re-appends'
+    )
+    # A different edge type on the same pair is a DIFFERENT fact, not a duplicate.
+    store.create_edge(Edge(from_id=r.id, to_id='sym-1', edge_type='MODIFIES'))
+    assert len(store.get_edges_from(r.id)) == 2
+
+
 if __name__ == '__main__':
     raise SystemExit(pytest.main([__file__, '-q']))

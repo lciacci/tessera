@@ -172,8 +172,58 @@ class ICPGStore:
             )
         if 'note' not in cols:
             conn.execute('ALTER TABLE drift_events ADD COLUMN note TEXT')
+        self._dedupe_edges(conn)
         conn.commit()
         self._migrated = True
+
+    @staticmethod
+    def _dedupe_edges(conn: sqlite3.Connection) -> None:
+        """One edge per (from, to, type). Collapse existing duplicates, then enforce.
+
+        FOUND BY REVIEW 2026-07-27, an hour after `icpg-stop-record.sh` was wired.
+        `create_edge` used `INSERT OR IGNORE`, which reads as deduplicating — but the
+        only UNIQUE column was `id`, a fresh uuid4 per call, so the conflict clause
+        could never fire. Every re-record of the same symbol appended a new row.
+
+        Harmless while `record` was manual and had in fact never run. The recorder
+        made it live: Stop fires per TURN, so a single session would have appended
+        the same ~32 edges dozens of times. Measured at 995 rows / 891 distinct
+        after three runs.
+
+        This is ADR-0013's drift-backlog defect exactly — 700 rows that were 154
+        distinct drifts re-inserted across 31 scans — in a second table, and the
+        fix that closed it there (`drift_dimensions_key` + collapse) is the one
+        applied here. Worth naming: the same bug shipped twice because the first
+        fix was applied to the row it was found on, not to the pattern.
+        """
+        # `_migrate` runs from `_conn`, so it fires on any database this store opens
+        # — including partially-built ones that have `drift_events` but no `edges`
+        # yet. Guarded rather than assumed: the existing suite caught this as
+        # `no such table: edges` on four tests, which is the cheap version of a
+        # migration that raises on someone's real graph.
+        if not conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='edges'"
+        ).fetchone():
+            return
+
+        dupes = conn.execute(
+            'SELECT COUNT(*) - COUNT(DISTINCT from_id || "|" || to_id || "|" || edge_type) '
+            'FROM edges'
+        ).fetchone()[0]
+        if dupes:
+            # Keep the earliest row per triple: created_at is the honest first-seen.
+            conn.execute("""
+                DELETE FROM edges WHERE id NOT IN (
+                    SELECT id FROM (
+                        SELECT id, MIN(created_at)
+                        FROM edges GROUP BY from_id, to_id, edge_type
+                    )
+                )
+            """)
+        conn.execute(
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_edges_triple '
+            'ON edges(from_id, to_id, edge_type)'
+        )
 
     @staticmethod
     def _backfill_keys(conn: sqlite3.Connection) -> None:

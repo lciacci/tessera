@@ -25,6 +25,11 @@ esac
 # QUIET: no .icpg/ means this project does not use iCPG. Genuinely nothing to do.
 [ -d .icpg ] || exit 0
 
+# Read the hook payload BEFORE anything else consumes stdin — `source` below
+# distinguishes a new session from a mid-session compaction, and without it this
+# hook re-anchors the base on every compaction.
+INPUT=$(cat 2>/dev/null || true)
+
 degraded() {
   for d in bin scripts; do
     r="${CLAUDE_PROJECT_DIR:-.}/$d/tessera-degraded"
@@ -42,9 +47,22 @@ if ! BASE=$(git rev-parse HEAD 2>/dev/null); then
   exit 0
 fi
 
-# Overwrite per session on purpose: the base is "where THIS session started",
-# not the oldest unrecorded point. A session that records mid-way and continues
-# would otherwise re-record everything from the original base on every Stop.
+# A COMPACTION MUST NOT RE-ANCHOR THE BASE (found by review, 2026-07-27, hours
+# after this hook was written). SessionStart carries NO matcher, so it fires on
+# `startup`, `resume` AND `compact` — and compaction happens MID-session. The first
+# version overwrote unconditionally, with a comment claiming "per session on
+# purpose". It was per EVENT, not per session: a compaction would re-anchor to the
+# current HEAD and every symbol touched before it would never be attributed to the
+# intent that was open the whole time. Silent, and worse on long sessions — exactly
+# the ones where losing the record costs most.
+#
+# startup / resume  -> a genuinely new session, re-anchor.
+# compact           -> same session continuing, KEEP the existing base.
+SOURCE=$(printf '%s' "$INPUT" | jq -r '.source // empty' 2>/dev/null)
+if [ "$SOURCE" = "compact" ] && [ -s .icpg/.session-base ]; then
+    exit 0
+fi
+
 printf '%s\n' "$BASE" > .icpg/.session-base 2>/dev/null || \
   degraded --component icpg-session-base --reason base-unwritable \
     --detail ".icpg/.session-base could not be written; auto-recording is disabled this session"
