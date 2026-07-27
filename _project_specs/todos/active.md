@@ -181,6 +181,19 @@ scope quality, and the re-stated question is recorded there). What is actually n
 receipts stop naming `progress` now that `detect_git_commit` asks git instead of parsing the
 shell — that would be the first finding → fix → instrument-goes-quiet loop this repo has closed.
 
+**A LATE-SESSION CATCH, and it is the lesson more than the fix.** The fleet was rolled at
+`c405645`, then **A5b landed three commits later (`e0054a7`) and was not re-rolled** — so all
+five downstreams sat on a `tessera-decision-surface.sh` that could not report its own crash,
+for the rest of the session. Found by *diffing the fleet*, not by remembering. **Standing
+pattern #5: ship both halves or neither, violated by TIME as often as by a missing `cp`** —
+and the window here was three commits, not three weeks. Rolled and pushed (conclave `500af03`,
+heaviside `c989bc2`, settempo `c4c3c96`, tess-dashboard `488a0fc`, howler `5e57c16`).
+**The durable question this raises and does NOT answer: nothing tells you the fleet is behind
+except a human running `tessera-sync-harness` by hand.** P4 measures downstream against the
+GLOBAL tier, not against this repo — so it reads "in sync" while the fleet is behind tessera
+itself. That is the same reference-validation hole P14 was built to close one tier up, still
+open one tier down.
+
 **Standing caution for whoever picks this up:** five of today's findings were in code written
 earlier the same day, and every one came from RUNNING something rather than re-reading it — the
 falsifier's PARTIAL, the chaos probes' wrong first draft, the A5b probes, the malformed-row crash,
