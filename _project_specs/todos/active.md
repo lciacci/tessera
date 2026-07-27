@@ -142,12 +142,28 @@ item D (ADR-0014), A5b, A6 — and the `usage` calibration question, which turne
 threshold question at all (see **C** above: the defect was definitional, the exposed problem is
 scope quality, and the re-stated question is recorded there). What is actually next:
 
-1. **iCPG scope quality — the re-stated `usage` question.** Only **42% of tracked files sit
-   inside any reason's scope**, and **46% of symbols are CREATES-linked to a reason whose scope
-   excludes the file they live in**. That is incoherent on its face and it is what git-history
-   bootstrap produces. Decide: repair scopes, or scope the `usage` dimension to reasons whose
-   scope covers their own symbols. **Do not reach for the thresholds** — measured, they
-   discriminate (46% zero / 34% below / 19% fire).
+1. **iCPG scope quality — the re-stated `usage` question. PRE-SCOPED so this opens as a decision,
+   not an hour of re-measuring.** Only **42% of tracked files sit inside any reason's scope**, and
+   **46% of symbols are CREATES-linked to a reason whose scope excludes the file they live in** —
+   incoherent on its face, and what git-history bootstrap produces from one commit cluster.
+   **Do not reach for the thresholds**: measured, they discriminate (46% zero / 34% below / 19%
+   fire). Numbers reproducible from `_check_usage_drift` + the `CREATES` edge set.
+   **Three options, none scored — score them on evidence, per ADR-0013's own lesson:**
+   - **(a) Widen scope to what the reason actually created.** For each reason, add the files of
+     its CREATES-linked symbols to `scope`. Makes scope self-consistent by construction and is
+     mechanical. Risk: scope stops meaning "what the intent claims" and starts meaning "what it
+     touched" — which may make `usage` vacuous, since nothing would then be out of scope.
+   - **(b) Skip the dimension where its input is untrustworthy.** Score `usage` only for reasons
+     whose scope already covers their own symbols (54% today). Honest, keeps the dimension
+     meaningful, and shrinks its reach. Risk: a silent partial dimension — needs to *report* that
+     it skipped, or it becomes the "measured nothing, said nothing" shape this repo keeps finding.
+   - **(c) Retire `usage`.** It is the dimension `design-principles.md:459`'s kill/keep test names
+     explicitly ("does drift detection catch things grep wouldn't?"), and bounded to tracked files
+     it is a scope comparison over grep results. If (a) makes it vacuous and (b) halves it, that
+     is an argument. **Would leave `changed` + `decision` — and `decision` fires zero today, so
+     read what that leaves before choosing it.**
+   **Whichever is chosen, the not-vacuous rule applies:** a dimension that cannot fire is the
+   thing this session already deleted three of.
 2. **Item 2 Part B — the pending-record channel (framework→downstream).** Needs its 3-decision
    design gate before any code: where the record lives, idempotent-update semantics, the
    committed staleness marker.

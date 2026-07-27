@@ -1561,6 +1561,26 @@ this section — the dedup fix it prescribes is real but is now step 3, not step
 
 ### The spend guard matches command TEXT — it over-denies prose and under-denies assembly *(2026-07-26)*
 
+- **EVIDENCE ADDED 2026-07-27, and it sharpens the shape: the over-denial specifically punishes
+  WRITING ABOUT and TESTING the guard.** It blocked me **four times in one session** — twice
+  editing docs that described the verbs, twice running a regression matrix over `decide()` — and
+  every time for the same structural reason: `python3 - <<'PY'` is **wrapper-led**, so heredoc
+  bodies count as code rather than data, and the text contained the commands under discussion.
+  The contract's prescribed remedy (use a non-Bash tool) worked all four times, so nothing was
+  blocked outright.
+- **Why this is not just noise, and belongs in the design gate:** the activities being penalised
+  — documenting the guard, and testing it — are exactly the ones that keep it correct. A control
+  that taxes its own maintenance is one people route around, and routing around is the failure
+  mode the guard exists to prevent. **This is the strongest argument yet that the over-denial is
+  a real cost rather than a tolerable one.**
+- **It also constrains the fix.** ADR-0016 added `SELF_AUTHORIZING` and its first version matched
+  the verb *anywhere* in the command, which blocked the commit documenting the feature within a
+  minute of being written. Narrowing to **command position** (optionally behind `bash -c "`)
+  fixed that case — so command-position matching is a demonstrated, tested improvement, not a
+  hypothesis. **Whether the same narrowing is safe for `COMMITTING` is the open question**, and
+  it is not obviously yes: a boot command *is* often wrapper-led legitimately, which is why
+  quoted text is treated as code there in the first place.
+
 - **What happened:** while cleaning up after the spec-11 chaos probes, the spend guard blocked a
   **log-cleanup script** — a pure file rewrite that commits nothing — because the script's body
   contained the literal string of a spend command it was filtering for. In the same session it
