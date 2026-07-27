@@ -13,6 +13,35 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
 
 ### THE ONE THING TO KNOW
 
+> ### ⏳ COMPACTION TEST IN FLIGHT (2026-07-26) — READ THIS FIRST IF YOU JUST RESUMED
+> A **deliberate `/compact` was run to answer the Mnemos mechanism question**, which has been
+> unanswerable for 37 days. If you are reading this just after a compaction, **you are the test.**
+>
+> **PRE-COMPACTION BASELINE** (`.mnemos/compaction-log.jsonl` = 7 lines):
+> `compaction_fired manual:1 · compaction_fired unknown:2 · restore_injected:4`
+> Repo clean, level with origin.
+>
+> **WHAT TO OBSERVE — record honestly, including a null result:**
+> 1. Did a `MNEMOS SESSION RESUME` block appear in context? → **Layer 2** (SessionStart). Prior
+>    evidence n=1, from 07-11.
+> 2. Did a `CONTEXT RESTORED AFTER COMPACTION` block appear? → **Layer 3** (PreToolUse). Prior
+>    evidence **n=0** — and structurally so: all 3 past compactions predate the channel fix
+>    (`1750337`, 07-24 13:06), so Layer 3 emitted to the debug log every time. **This is the
+>    first-ever chance to observe it through a channel that works.**
+> 3. Diff the log against the baseline above: a new `compaction_fired` (expect `trigger: manual`
+>    or `unknown`) and whether `restore_injected` follows.
+>
+> **ADMISSIBILITY — do not get this wrong, it is why the trial has flapped for 37 days.**
+> A manual `/compact` is **valid evidence about MECHANISM** (does recovery work) and **invalid
+> about FREQUENCY** (does compaction happen often enough to matter). Pattern #7 bars the second,
+> not the first. P3 already excludes `manual`, so this test cannot contaminate it.
+>
+> **IF LAYER 3 SHOWS NOTHING, that is decisive too** — it means the 07-24 fix did not work and the
+> answer is DROP, not keep. Either outcome ends the argument; that is the point. **Do not
+> re-open the framing. Record the observation, then draft the ADR** (priority A below), which
+> must carry an `Executed when:` field naming its own artifacts (see item F).
+
+
 **START HERE: the ranked next-session priorities are A–E, at the top of "Open, in priority
 order" below.** A is a decision only Lorenzo can make (retire or retarget P3); B–D are work.
 The numbered items 1–7 beneath them are the durable backlog; 1 and 3 are CLOSED.
