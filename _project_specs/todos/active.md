@@ -230,13 +230,21 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    *(Leftover: an untracked `scripts/.tessera/` is still on disk — harmless now that the marker
    requires `project.yml`, but `rm -rf scripts/.tessera` when convenient.)*
 
-**A3. Nothing detects global-tier staleness (this is item 4, promoted — it just cost the fleet).**
-   `~/.claude/templates/` held **7 stale hooks and was missing `tessera-decision-surface.sh`
+**A3. ~~Nothing detects global-tier staleness~~ — FIXED 2026-07-26, `tessera-watch` P14.**
+   `~/.claude/templates/` had held **7 stale hooks and was missing `tessera-decision-surface.sh`
    entirely**; all three PreToolUse hooks had **zero** `additionalContext`, so the 07-24 channel
-   fix never reached any downstream. `./install.sh` is the only propagation and it is manual.
-   doccheck's `hooks-match-templates` covers `.claude/scripts/` ↔ `templates/` — **the third tier
-   is unguarded.** Fixed by hand this session (17/17 byte-identical); the *detector* is still
-   missing, so it will drift again. Standing pattern #5, violated by time rather than a missing `cp`.
+   fix had reached no downstream at all. Three tiers, two edges, and only the runtime edge was
+   unguarded: `.claude/scripts/` → `templates/` (P1 + doccheck, commit-blocking) →
+   `~/.claude/templates/` (**what downstream actually runs**, previously nothing).
+   P14 byte-diffs it, separates MISSING from STALE, and is gated on `.bootstrap-dir` naming this
+   repo — silent when another checkout owns the tier rather than telling it to clobber someone
+   else's install. Falsified against the real tier, not just fixtures.
+   **The durable finding is about P4, not the tier.** P4 reported "all in sync" the whole time
+   and was correct by its own definition — it measures downstream copies *against*
+   `~/.claude/templates/`, the very thing that was stale. **Uniform staleness reads as
+   agreement.** Standing pattern #1 aimed at a checker. P4's docstring now says so, and its green
+   still does not mean "downstream is current". **When a checker takes a reference, ask what
+   validates the reference.**
 
 **B. Correction-detection recall — the self-evaluation thread's real bottleneck.** 2010 user
    turns across 8 sessions, 5 detections. Corrections arrive interrogatively; the detector is

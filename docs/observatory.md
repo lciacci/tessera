@@ -1579,9 +1579,25 @@ this section — the dedup fix it prescribes is real but is now step 3, not step
   never propagated, so for the whole fleet Layer 3, the fatigue/intent injection, and the decision
   surface were emitting to the debug log or absent. `./install.sh` is the only propagation and it
   is manual, so a fix landing in `.claude/scripts/` reaches nobody until someone remembers.
-  Resolved by running it (17/17 now byte-identical). **Unresolved: nothing DETECTS this** — the
-  gap is handoff item 4, and it just cost the fleet two days of a fix that existed and did not
-  ship. Standing pattern #5, violated by time rather than by a missing `cp`.
+  Resolved by running it (17/17 now byte-identical). Standing pattern #5, violated by time
+  rather than by a missing `cp`.
+  - **DETECTOR SHIPPED same day — `tessera-watch` P14 (`p14_global_tier_drift`).** Three tiers
+    carry these hooks: `.claude/scripts/` (framework truth) → `templates/` (install payload,
+    guarded by P1 + doccheck's commit-blocking `hooks-match-templates`) → `~/.claude/templates/`
+    (**what downstream actually runs**). Only the last edge was unguarded, and it is the one
+    that matters at runtime. P14 byte-diffs it, reports MISSING and STALE separately, and is
+    gated on `~/.claude/.bootstrap-dir` naming this repo — silent when another checkout owns
+    the tier, rather than ordering it to overwrite someone else's install.
+  - **The finding underneath, which is the durable one: P4 said "all in sync" the entire time,
+    and was right by its own definition.** P4 compares downstream local copies *against*
+    `~/.claude/templates/` — so it validates against the tier that was stale. **Uniform
+    staleness reads as agreement.** Standing pattern #1 aimed at a checker: the thing that
+    would tell you the fleet is behind was measuring against the thing that was behind. P4 also
+    globs `mnemos-*.sh` only, so a missing `tessera-decision-surface.sh` was invisible to it
+    twice over. P4's docstring now says this out loud, and green there still does not mean
+    "downstream is current" — only P14 can say that.
+    **Generalisation worth carrying: when a checker takes a reference, ask what validates the
+    reference.** Three tiers meant two edges, and the unguarded one was the runtime edge.
 - **It IS producing, and this is the part the kill/keep framing kept missing:**
   ```
   Active nodes 630 · total 645 · checkpoints 517 · goal 98 / constraint 53 / result 479

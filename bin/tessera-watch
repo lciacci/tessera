@@ -199,6 +199,14 @@ def p4_downstream(root: Path) -> tuple[bool, str]:
 
     Unlike the count predicate, this one can go GREEN: sync the copies and it stops firing.
     A predicate that cannot be resolved teaches you to ignore the watcher (see P9's docstring).
+
+    ── READ WITH P14. THIS PREDICATE'S REFERENCE WAS ITSELF UNVALIDATED UNTIL 2026-07-26. ──
+    Everything here is measured AGAINST `~/.claude/templates/`. On 2026-07-26 that tier was
+    two days stale and missing a hook outright, and this predicate reported "all in sync"
+    throughout — correctly, by its own definition, because downstream copies agreed with a
+    reference that was wrong. **Uniform staleness reads as agreement.** P14 now validates the
+    reference against the framework's live hooks. Green here means "downstream matches the
+    global tier"; it has never meant "downstream is current", and only P14 can say that.
     """
     templates = Path.home() / ".claude" / "templates"
     drifted: list[str] = []
@@ -652,6 +660,68 @@ def _resolve_label(query: str) -> str | None:
     return matches[0] if len(matches) == 1 else None
 
 
+def p14_global_tier_drift(root: Path) -> tuple[bool, str]:
+    """Does the GLOBAL fallback tier match this repo's live hooks? (ADR-0004 tier 3.)
+
+    ── THE GAP THIS CLOSES, AND WHY P4 COULD NOT SEE IT ──────────────────────────────────
+
+    Three tiers carry the same hooks:
+
+        .claude/scripts/      framework truth (tessera is hook_distro `source`)
+        templates/            the install payload           <- P1 + doccheck guard this edge
+        ~/.claude/templates/  what downstream ACTUALLY RUNS <- nothing guarded this edge
+
+    On 2026-07-26 the global tier held **7 stale hooks and was missing
+    `tessera-decision-surface.sh` entirely**. All three PreToolUse hooks had ZERO
+    `additionalContext`, so the 07-24 channel fix — the one that made Layer 3, the fatigue
+    injection, and the decision surface reach the model at all — had never propagated to a
+    single downstream project. `./install.sh` is the only propagation and it is manual.
+
+    **P4 reported "all in sync" throughout.** It compares downstream LOCAL copies against
+    `~/.claude/templates/`, i.e. it validates against this tier as its reference — while
+    nothing validated the reference. Uniform staleness reads as agreement. That is standing
+    pattern #1 aimed at a checker: the thing that would tell you the fleet is behind was
+    measuring against the thing that was behind. P4 also globs `mnemos-*.sh` only, so an
+    entirely missing `tessera-*.sh` was invisible to it twice over.
+
+    Guarded by `.bootstrap-dir`: only THIS repo may assert on the global tier, since another
+    checkout may legitimately own it. Silent elsewhere rather than wrong elsewhere.
+    """
+    tier3 = Path.home() / ".claude" / "templates"
+    marker = Path.home() / ".claude" / ".bootstrap-dir"
+
+    if not tier3.is_dir():
+        return False, "no ~/.claude/templates — global fallback tier not installed"
+    owner = marker.read_text().strip() if marker.is_file() else ""
+    if owner != str(root):
+        return False, (f"global tier is owned by {owner or '<unknown>'}, not this repo — "
+                       f"not asserting on it")
+
+    live = sorted((root / ".claude" / "scripts").glob("*"))
+    missing, stale = [], []
+    for f in live:
+        if not f.is_file():
+            continue
+        counterpart = tier3 / f.name
+        if not counterpart.is_file():
+            missing.append(f.name)
+        elif counterpart.read_bytes() != f.read_bytes():
+            stale.append(f.name)
+
+    if not missing and not stale:
+        return False, f"global tier matches all {len(live)} live hooks (byte-identical)"
+
+    parts = []
+    if missing:
+        parts.append(f"MISSING from the global tier: {', '.join(missing)}")
+    if stale:
+        parts.append(f"STALE in the global tier: {', '.join(stale)}")
+    return True, (
+        f"{'; '.join(parts)}. Every downstream on the default `hook_distro: global` runs "
+        f"THIS tier, so the fix exists and has shipped to nobody. Run `./install.sh`. "
+        f"NOTE: P4 will read 'all in sync' while this is red — it measures downstream copies "
+        f"against this tier, so uniform staleness looks like agreement.")
+
 PREDICATES = {
     "P1 hook-drift": p1_hook_drift,
     "P3 mnemos-restore-integrity": p3_restore_integrity,
@@ -664,6 +734,7 @@ PREDICATES = {
     "P11 ingest-pipe": p11_ingest_pipe,
     "P12 skill-registry-drift": p12_skill_registry_drift,
     "P13 degraded": p13_degraded,
+    "P14 global-tier-drift": p14_global_tier_drift,
     "G-a graduation:snooze": g_a_consecutive,
 }
 

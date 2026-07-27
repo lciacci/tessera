@@ -538,3 +538,72 @@ def test_p3_empty_probe_does_not_fire(tmp_path):
     (_mnemos(tmp_path) / "compaction-log.jsonl").write_text(
         _compaction("unknown", probe={"len": 2, "keys": []}))
     assert tw.p3_restore_integrity(root)[0] is False
+
+
+# ── P14: the global fallback tier (ADR-0004 tier 3) ────────────────────────────────────
+#
+# The edge nothing guarded. On 2026-07-26 ~/.claude/templates/ held 7 stale hooks and was
+# missing tessera-decision-surface.sh outright, so the 07-24 channel fix had reached NO
+# downstream project — while P4 reported "all in sync", because P4 measures downstream
+# copies AGAINST this tier. Uniform staleness reads as agreement.
+
+
+def _tier3(tmp_path, home, *, files, owner=None):
+    """Build a fake repo + fake ~/.claude/templates and point Path.home() at it."""
+    root = tmp_path / "repo"
+    (root / ".claude" / "scripts").mkdir(parents=True)
+    for name, body in files["live"].items():
+        (root / ".claude" / "scripts" / name).write_text(body)
+    tier3 = home / ".claude" / "templates"
+    tier3.mkdir(parents=True)
+    for name, body in files["global"].items():
+        (tier3 / name).write_text(body)
+    (home / ".claude" / ".bootstrap-dir").write_text(str(owner if owner else root))
+    return root
+
+
+def test_p14_quiet_when_the_global_tier_matches(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    root = _tier3(tmp_path, home, files={"live": {"a.sh": "x"}, "global": {"a.sh": "x"}})
+    monkeypatch.setattr(tw.Path, "home", staticmethod(lambda: home))
+    fired, detail = tw.p14_global_tier_drift(root)
+    assert fired is False and "byte-identical" in detail
+
+
+def test_p14_fires_on_a_stale_global_copy(tmp_path, monkeypatch):
+    """THE regression: the fix exists in the repo and has shipped to nobody."""
+    home = tmp_path / "home"
+    root = _tier3(tmp_path, home, files={"live": {"a.sh": "NEW"}, "global": {"a.sh": "old"}})
+    monkeypatch.setattr(tw.Path, "home", staticmethod(lambda: home))
+    fired, detail = tw.p14_global_tier_drift(root)
+    assert fired is True and "STALE" in detail and "a.sh" in detail
+    assert "P4 will read 'all in sync'" in detail, (
+        "must warn that the sibling predicate is green against a stale reference")
+
+
+def test_p14_fires_on_a_hook_missing_from_the_global_tier(tmp_path, monkeypatch):
+    """tessera-decision-surface.sh was absent entirely — and P4's mnemos-*.sh glob could
+    never have seen it, so 'missing' needs its own assertion, not just 'differs'."""
+    home = tmp_path / "home"
+    root = _tier3(tmp_path, home, files={"live": {"a.sh": "x", "b.sh": "y"},
+                                         "global": {"a.sh": "x"}})
+    monkeypatch.setattr(tw.Path, "home", staticmethod(lambda: home))
+    fired, detail = tw.p14_global_tier_drift(root)
+    assert fired is True and "MISSING" in detail and "b.sh" in detail
+
+
+def test_p14_stays_silent_when_another_repo_owns_the_global_tier(tmp_path, monkeypatch):
+    """Silent elsewhere rather than wrong elsewhere — another checkout may legitimately own
+    the tier, and this predicate must not order it to overwrite someone else's install."""
+    home = tmp_path / "home"
+    root = _tier3(tmp_path, home, files={"live": {"a.sh": "NEW"}, "global": {"a.sh": "old"}},
+                  owner=tmp_path / "some-other-repo")
+    monkeypatch.setattr(tw.Path, "home", staticmethod(lambda: home))
+    fired, detail = tw.p14_global_tier_drift(root)
+    assert fired is False and "owned by" in detail
+
+
+def test_p14_quiet_when_the_tier_is_not_installed(tmp_path, monkeypatch):
+    home = tmp_path / "home"; home.mkdir()
+    monkeypatch.setattr(tw.Path, "home", staticmethod(lambda: home))
+    assert tw.p14_global_tier_drift(tmp_path)[0] is False
