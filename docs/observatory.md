@@ -1618,8 +1618,12 @@ this section — the dedup fix it prescribes is real but is now step 3, not step
 
 ### A Tessera skill silently shadowed a built-in command *(2026-07-26, observed live)*
 
-- **Status:** OPEN. Cause understood and the workaround is known; the *check* is the open part,
-  and it is harder to ground than it first looks (below).
+- **Status:** **INSTANCE CLOSED 2026-07-27 (the skill was CUT by ADR-0014, so the collision is
+  moot rather than solved); the CLASS is still OPEN and still unguarded.** The check is the open
+  part and is harder to ground than it first looks (below) — there is no enumerable source of
+  built-in command names inside the repo, so a hardcoded list would be proxy predicate #4.
+  *(Status corrected 2026-07-27: the body recorded the closure and this header still read a flat
+  OPEN — the index-vs-body drift this repo fixed in two handoff items the same morning.)*
 - **What happened.** `/code-review ultra review-base-20260726` was typed to launch the cloud
   ultrareview. It did not launch. Tessera ships a skill named **`code-review`**, which shadowed
   the built-in command of the same name; the arguments `ultra review-base-20260726` were handed
