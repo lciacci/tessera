@@ -98,14 +98,16 @@ def test_events_on_missing_log_is_empty(tmp_path):
 
 
 def test_escalated_matches_on_session_id(tmp_path):
-    (tmp_path / "esc-1.json").write_text(json.dumps({"id": "esc-1", "session_id": SID}))
+    (tmp_path / "esc-1.json").write_text(json.dumps(
+        {"id": "esc-1", "session_id": SID, "category": "spend_unauthorized"}))
     assert _escalated(SID, tmp_path) is True
     assert _escalated("other-session", tmp_path) is False
 
 
 def test_escalated_survives_a_corrupt_packet(tmp_path):
     (tmp_path / "bad.json").write_text("{ not json")
-    (tmp_path / "esc-1.json").write_text(json.dumps({"id": "esc-1", "session_id": SID}))
+    (tmp_path / "esc-1.json").write_text(json.dumps(
+        {"id": "esc-1", "session_id": SID, "category": "spend_unauthorized"}))
     assert _escalated(SID, tmp_path) is True
 
 
@@ -196,3 +198,34 @@ def test_old_sessions_are_pruned(tmp_path, monkeypatch):
     backstop._bump_fires("newest")
     assert len(json.loads(path.read_text())) <= backstop.KEEP_SESSIONS
     assert "newest" in json.loads(path.read_text())
+
+
+# ── ADR-0016: the third disposition, and the escalation category ──────────────────────
+
+def test_an_unrelated_packet_no_longer_clears_a_spend_denial(tmp_path):
+    """THE TIGHTENING. _escalated() cleared on ANY packet, reasoning that an agent which
+    escalated *something* while blocked had not routed around. Defensible, and the effect
+    was a bypass nobody chose: this repo raises packets for all sorts of things, and each
+    one silenced the spend backstop for that session by accident."""
+    (tmp_path / "esc-1.json").write_text(json.dumps(
+        {"id": "esc-1", "session_id": SID, "category": "design_question"}))
+    assert _escalated(SID, tmp_path) is False
+
+
+def test_a_spend_packet_still_clears(tmp_path):
+    (tmp_path / "esc-1.json").write_text(json.dumps(
+        {"id": "esc-1", "session_id": SID, "category": "spend_unauthorized"}))
+    assert _escalated(SID, tmp_path) is True
+
+
+def test_a_dismissal_after_the_denial_disposes_it():
+    """The false-positive exit the contract promised and nothing could hear."""
+    events = [DENIED, {"type": "spend_dismissed", "ts": "2030-01-01T00:00:00Z"}]
+    assert undispositioned(events, escalated=False) == []
+
+
+def test_a_dismissal_BEFORE_the_denial_does_not_dispose_it():
+    """Same rule as a grant: a dismissal recorded earlier says nothing about a later
+    denial. Otherwise one dismissal silences the rest of the session."""
+    events = [{"type": "spend_dismissed", "ts": "2000-01-01T00:00:00Z"}, DENIED]
+    assert len(undispositioned(events, escalated=False)) == 1

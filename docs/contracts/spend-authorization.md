@@ -116,6 +116,57 @@ If a false positive still blocks non-spend work, **use a non-Bash tool** (Write/
 external spend and are not gated). Do **not** grant yourself a spend envelope you do not need,
 and do not reword a genuine spend command to slip past the pattern.
 
+## Self-authorization is refused — enforced, not requested *(ADR-0016, 2026-07-27)*
+
+**That last sentence used to be the only thing stopping self-authorization.** Driving the real
+hook with `bin/tessera-authorize grant …` returned **rc=0, allow**. There is no tty check, and
+`granted_by` is `os.environ["USER"]` — the same value whichever party typed it. The
+deny-by-default control on external spend had an authorization verb the agent could invoke on
+itself, held back by prose. That is principle #17 on the highest-stakes gate in the repo.
+
+The `grant` and `dismiss` verbs are now on the guard's deny list and are refused
+**unconditionally** — including while an envelope is live, since otherwise a live envelope
+would let the agent grant itself a bigger or longer one. This is a distinct policy branch, not
+a `COMMITTING` pattern, for exactly that reason.
+
+**Enforcement is structural.** PreToolUse fires on the *agent's* Bash calls only; a human in
+their own terminal never passes through this hook, so the human path is untouched. `show` and
+`revoke` are deliberately **not** blocked — `revoke` reduces authorization, and a spend gate
+must never be able to block the exit.
+
+**Known ceiling, inherited:** the pattern matches command text, so a runtime-assembled
+invocation slips past, as it does for every other pattern here. It stops the mistake, which is
+what this guard is for.
+
+**A false positive it caused immediately, and the fix:** the first version matched the verb
+*anywhere* in the command, and blocked the very commit documenting this feature — a
+`python3 - <<PY` heredoc is wrapper-led, so its body is code and nothing is stripped. It now
+matches only in **command position** (optionally behind `bash -c "`), because naming is not
+invoking. A guard that blocks writing about itself is one people learn to route around.
+
+## Dismissing a false positive
+
+The backstop's report invites *"if the denial was a FALSE POSITIVE, say so plainly and finish —
+that is a legitimate disposition"*, and until 2026-07-27 nothing could hear it: `undispositioned()`
+cleared only on a grant-after-denial or an escalation packet, so the hook re-fired every Stop.
+Both of those exits are wrong for a false positive — a grant authorizes spend nobody requested,
+a packet manufactures the bogus escalation this contract calls worse than none.
+
+```bash
+tessera-authorize dismiss --reason "pytest fixture; no spend was attempted"
+```
+
+Writes a `spend_dismissed` **event**, never the envelope: a dismissal authorizes nothing, has no
+TTL, and cannot boot anything. Honoured when recorded **after** the last denial — the same rule
+as a grant, since a dismissal logged earlier says nothing about a later denial.
+
+**A human runs it**, by construction. If you are the agent and a denial was a false positive,
+say so in your final message and let the human decide.
+
+**Escalation packets must now be spend-shaped to clear a denial.** `_escalated()` used to accept
+any packet at all; a session raising an unrelated escalation silenced its own spend backstop by
+accident. A denial is answered by a packet *about* the denial.
+
 ## The grant
 
 `.tessera/spend-auth.json` — **gitignored**. A live authorization is run-scoped state, not a

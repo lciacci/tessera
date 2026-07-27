@@ -63,15 +63,28 @@ def _events(session_id: str, root: Path | None = None) -> list[dict]:
     return out
 
 
+SPEND_CATEGORIES = ("spend_unauthorized", "spend")
+
+
 def _escalated(session_id: str, root: Path | None = None) -> bool:
-    """Did this session raise any packet? Category is not required to be spend-shaped —
-    an agent that escalated *something* while blocked has not silently routed around."""
+    """Did this session raise a SPEND-shaped packet?
+
+    TIGHTENED 2026-07-27 (ADR-0016). This used to clear on any packet at all, reasoning that
+    "an agent that escalated *something* while blocked has not silently routed around." The
+    claim is defensible and the effect was a bypass nobody chose: a session that raises an
+    unrelated escalation silences its spend backstop by accident, and this repo raises packets
+    for all sorts of things. A denial is answered by a packet ABOUT the denial.
+    """
     for path in (root or ESCALATIONS).glob("*.json"):
         try:
-            if json.loads(path.read_text()).get("session_id") == session_id:
-                return True
+            packet = json.loads(path.read_text())
         except (OSError, json.JSONDecodeError):
             continue
+        if packet.get("session_id") != session_id:
+            continue
+        category = str(packet.get("category", "")).lower()
+        if any(category.startswith(c) for c in SPEND_CATEGORIES):
+            return True
     return False
 
 
@@ -83,6 +96,15 @@ def undispositioned(events: list[dict], escalated: bool) -> list[dict]:
     if not denials:
         return []
     last_denial = max(e.get("ts", "") for e in denials)
+    # A dismissal AFTER the last denial is the third disposition (ADR-0016): a human saying
+    # the guard was wrong. Same "after" rule as a grant — a dismissal recorded before a later
+    # denial says nothing about that denial.
+    dismissed_after = any(
+        e.get("type") == "spend_dismissed" and e.get("ts", "") >= last_denial
+        for e in events
+    )
+    if dismissed_after:
+        return []
     # A grant AFTER the last denial is the human disposing of it — the supervised path
     # working exactly as designed. Only a grant that came *later* counts; an envelope that
     # had already expired before the denial is what caused it.

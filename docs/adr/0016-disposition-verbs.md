@@ -3,7 +3,7 @@
 - **Date:** 2026-07-27
 - **Status:** Accepted
 - **Decision driver:** The same gap surfaced twice in one session from opposite directions — the spend backstop re-firing on denials it invited the model to dispose in prose, and iCPG drift's deferred `--note`/`dismissed` state (ADR-0013, ordered last). Both are "who may mark a finding closed."
-- **Executed:** not yet
+- **Executed:** 2026-07-27 (spend half) — `scripts/spend/guard.py`, `scripts/spend/authorize.py`, `scripts/spend/backstop.py`, `docs/contracts/spend-authorization.md`. Decisions 1, 2 and 5 shipped: `dismiss` verb + `spend_dismissed` honoured by `undispositioned()`, `grant`/`dismiss` on the guard's deny list as an unconditional policy branch, `_escalated()` tightened to spend-shaped. **Decisions 3 and 4 (drift `dismissed`) are NOT yet built.**
 
 ---
 
