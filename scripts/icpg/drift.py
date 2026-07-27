@@ -81,9 +81,7 @@ def check_file_drift(store: ICPGStore, file_path: str) -> list[DriftEvent]:
     """Check drift for symbols in a single file only. Fast path for hooks."""
     events = []
     for sym in store.get_symbols_for_file(file_path):
-        event = check_symbol_drift(store, sym.id)
-        if event:
-            events.append(event)
+        events.extend(check_symbol_drift(store, sym.id))
     return events
 
 
@@ -97,45 +95,64 @@ def check_all_drift(store: ICPGStore) -> list[DriftEvent]:
             sym = store._get_symbol(edge.to_id)
             if not sym:
                 continue
-            event = check_symbol_drift(store, sym.id)
-            if event:
-                events.append(event)
+            events.extend(check_symbol_drift(store, sym.id))
     return events
 
 
-def check_symbol_drift(store: ICPGStore, symbol_id: str) -> DriftEvent | None:
-    """Check a single symbol across the dimensions that have inputs."""
+def check_symbol_drift(store: ICPGStore, symbol_id: str) -> list[DriftEvent]:
+    """One event PER DIMENSION that fires. Empty list when the symbol is clean.
+
+    Returns a list, not an Optional, since ADR-0018 — see that ADR and the
+    `_build_event` note below for why a composite event was the wrong shape.
+    """
     sym = store._get_symbol(symbol_id)
     if not sym:
-        return None
+        return []
     creates_edges = store.get_edges_to(symbol_id, 'CREATES')
     if not creates_edges:
-        return None
+        return []
     reason = store.get_reason(creates_edges[0].from_id)
     if not reason:
-        return None
+        return []
 
     scored = [
         ('changed', _check_changed_drift(store, sym)),
         ('decision', _check_decision_drift(store, reason)),
     ]
-    hits = [(dim, score) for dim, score in scored if score]
-    if not hits:
-        return None
-    return _build_event(symbol_id, reason.id, hits)
+    return [
+        _build_event(symbol_id, reason.id, dim, score)
+        for dim, score in scored if score
+    ]
 
 
-def _build_event(symbol_id: str, reason_id: str, hits) -> DriftEvent:
-    dimensions = [dim for dim, _ in hits]
-    scores = [score for _, score in hits]
-    parts = ', '.join(f'{d}({s:.2f})' for d, s in hits)
+def _build_event(symbol_id: str, reason_id: str,
+                 dimension: str, score: float) -> DriftEvent:
+    """ONE dimension, ONE event, and `severity` is that dimension's real score.
+
+    It used to bundle every firing dimension into a single event and average
+    their scores. Three defects, all found on 2026-07-27 (ADR-0018):
+
+      1. `severity` averaged. A 0.8 deletion beside a 0.3 gave 0.55 — a number
+         describing neither, which is standing pattern #3 aimed at a score.
+      2. Disposition could not be attributed. Dismissing a composite credited
+         the detector error to EVERY dimension in it, so retiring `usage`
+         (ADR-0017) left `changed` reading 29 dismissals it never earned —
+         corrupting the one signal ADR-0016 built to retire a dimension.
+      3. Suppression over-reached. The dedup key includes sorted(dimensions),
+         so dismissing a symbol's `changed` finding also silenced its
+         `decision` finding. Two independent facts sharing one disposal.
+
+    One event per dimension makes all three go away by construction rather
+    than by arithmetic. Historical composite rows stay readable and are not
+    migrated — they are evidence, the same posture retired dimension names get.
+    """
     return DriftEvent(
         id=_uuid(),
         symbol_id=symbol_id,
         from_reason_id=reason_id,
-        drift_dimensions=dimensions,
-        severity=round(sum(scores) / len(scores), 2),
-        description=f'Drift detected: {parts}',
+        drift_dimensions=[dimension],
+        severity=score,
+        description=f'Drift detected: {dimension}({score:.2f})',
         detected_at=_now()
     )
 

@@ -51,25 +51,64 @@ def _linked_symbol(store, tmp_path, *, invariants=None, postconditions=None,
     return store, sym, reason, path
 
 
-# --- the constant that was 712 of 712 events -----------------------------------
+# --- helpers -------------------------------------------------------------------
+
+
+def _dims(events) -> set[str]:
+    """Every dimension a symbol fired, across its events.
+
+    Since ADR-0018 `check_symbol_drift` returns one event PER dimension, so the
+    union replaces reading a single composite event's list.
+    """
+    return {d for e in events for d in e.drift_dimensions}
 
 
 def test_no_test_dimension_is_ever_emitted(tmp_path):
     """`test(0.30)` was on 100% of stored events because nothing writes
     VALIDATED_BY. A dimension with one possible value is not a measurement."""
     store, sym, _, _ = _linked_symbol(tmp_path=tmp_path, store=_store(tmp_path))
-    event = check_symbol_drift(store, sym.id)
-    assert event is None or 'test' not in event.drift_dimensions
+    assert 'test' not in _dims(check_symbol_drift(store, sym.id))
 
 
 def test_a_clean_symbol_produces_no_event_at_all(tmp_path):
     """Pre-shrink this was impossible: every symbol scored at least test(0.30),
     so 'no drift' could not be expressed. Silence has to be reachable."""
     store, sym, _, _ = _linked_symbol(tmp_path=tmp_path, store=_store(tmp_path))
-    assert check_symbol_drift(store, sym.id) is None
+    assert check_symbol_drift(store, sym.id) == []
 
 
-def test_emitted_dimensions_stay_inside_the_fed_three(tmp_path):
+def test_each_event_carries_exactly_one_dimension_with_its_own_score(tmp_path):
+    """ADR-0018. Two dimensions firing on one symbol = TWO events, each with the
+    real score — not one event averaging them.
+
+    The old shape averaged: a 0.6 `changed` beside a 1.0 `decision` stored 0.8,
+    a severity describing neither. It also made disposal ambiguous (dismissing
+    the composite credited BOTH dimensions with the detector error, which is how
+    retiring `usage` left `changed` reading 29 dismissals it never earned) and
+    made suppression over-reach (one dedup key, so dismissing `changed` silenced
+    `decision` for the same symbol).
+    """
+    store, sym, _, path = _linked_symbol(
+        tmp_path=tmp_path, store=_store(tmp_path),
+        invariants=['file_exists("gone.txt")'],   # decision fires
+    )
+    path.write_text('def widget_handler():\n    return 2\n')  # changed fires
+
+    events = check_symbol_drift(store, sym.id)
+    assert _dims(events) == {'changed', 'decision'}
+    assert len(events) == 2, 'two dimensions must yield two disposable events'
+    assert all(len(e.drift_dimensions) == 1 for e in events)
+
+    by_dim = {e.drift_dimensions[0]: e for e in events}
+    assert by_dim['changed'].severity == 0.6
+    assert by_dim['decision'].severity == 1.0   # 1 of 1 invariant failed
+    # the averaged value the old shape would have stored, asserted absent
+    assert not any(e.severity == 0.8 for e in events)
+    # and each is separately disposable — distinct dedup keys
+    assert len({tuple(sorted(e.drift_dimensions)) for e in events}) == 2
+
+
+def test_emitted_dimensions_stay_inside_the_fed_two(tmp_path):
     """Observational guard — it only catches a dimension that actually FIRES.
 
     REFUTED AS ORIGINALLY DOCUMENTED (tessera-verify, 2026-07-27). This test used
@@ -86,9 +125,9 @@ def test_emitted_dimensions_stay_inside_the_fed_three(tmp_path):
         invariants=['file_exists("gone.txt")'],
     )
     path.write_text('def widget_handler():\n    return 2\n')
-    event = check_symbol_drift(store, sym.id)
-    assert event is not None
-    assert set(event.drift_dimensions) <= {'changed', 'decision'}
+    events = check_symbol_drift(store, sym.id)
+    assert events
+    assert _dims(events) <= {'changed', 'decision'}
 
 
 def test_declared_dimension_vocabulary_is_exactly_the_fed_two():
@@ -139,9 +178,7 @@ def test_decision_drift_reads_invariants_not_only_postconditions(tmp_path):
         tmp_path=tmp_path, store=_store(tmp_path),
         invariants=['file_exists("absent.txt")'], postconditions=[],
     )
-    event = check_symbol_drift(store, sym.id)
-    assert event is not None
-    assert 'decision' in event.drift_dimensions
+    assert 'decision' in _dims(check_symbol_drift(store, sym.id))
 
 
 def test_decision_drift_is_silent_when_the_invariant_holds(tmp_path):
@@ -152,8 +189,7 @@ def test_decision_drift_is_silent_when_the_invariant_holds(tmp_path):
         tmp_path=tmp_path, store=store,
         invariants=['file_exists("present.txt")'],
     )
-    event = check_symbol_drift(store, sym.id)
-    assert event is None or 'decision' not in event.drift_dimensions
+    assert 'decision' not in _dims(check_symbol_drift(store, sym.id))
 
 
 def test_decision_drift_still_reads_postconditions(tmp_path):
@@ -162,9 +198,7 @@ def test_decision_drift_still_reads_postconditions(tmp_path):
         tmp_path=tmp_path, store=_store(tmp_path),
         postconditions=['test_exists("tests/absent.py")'],
     )
-    event = check_symbol_drift(store, sym.id)
-    assert event is not None
-    assert 'decision' in event.drift_dimensions
+    assert 'decision' in _dims(check_symbol_drift(store, sym.id))
 
 
 # The four `usage` tests that stood here were removed with the dimension
