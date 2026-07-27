@@ -118,7 +118,9 @@ try:
 
     # Immediate: detect git commits
     resp_str = response if isinstance(response, str) else json.dumps(response)
-    commit_msg = detect_git_commit(tool, tool_input, resp_str)
+    # cwd names the repo whose HEAD to read. Passed explicitly rather than defaulted so
+    # the subject comes from the same tree .mnemos/ belongs to.
+    commit_msg = detect_git_commit(tool, tool_input, resp_str, str(mnemos_dir.parent))
     if commit_msg:
         create_commit_node(mnemos_dir, commit_msg)
 

@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import subprocess
 import time
 import uuid
@@ -99,8 +98,13 @@ def should_run(mnemos_dir: Path) -> bool:
 
 
 def detect_git_commit(tool_name: str, tool_input: dict,
-                      tool_response: str | dict) -> str | None:
-    """If this tool call was a git commit, return the commit message."""
+                      tool_response: str | dict,
+                      cwd: str | None = None) -> str | None:
+    """If this tool call was a git commit, return the commit SUBJECT (read from git).
+
+    `cwd` is optional so the existing caller keeps working; it names the repo to read
+    HEAD from, and defaults to the process cwd as before.
+    """
     if tool_name != "Bash":
         return None
 
@@ -124,19 +128,58 @@ def detect_git_commit(tool_name: str, tool_input: dict,
     if not resp_text or "nothing to commit" in resp_text:
         return None
 
-    # Extract commit message from the command
-    msg_match = re.search(r'-m\s+["\'](.+?)["\']', cmd)
-    if msg_match:
-        return msg_match.group(1)
+    # ── ASK GIT. Do not parse the command. ───────────────────────────────────────────
+    #
+    # This used to extract the message from the command TEXT, and it was wrong in both
+    # directions on the forms this repo actually uses:
+    #
+    #   git commit -m "$(cat <<'EOF' ...    ->  '$(cat <<'   (the -m regex stops at the
+    #                                            quote around the heredoc delimiter)
+    #   git commit -m "$MSG"                ->  '$MSG'       (unexpanded variable)
+    #   git commit -F - <<'MSG' ...         ->  None         (the heredoc fallback only
+    #                                            knew the literal delimiter EOF)
+    #
+    # The damage was not local. Those strings became ResultNodes, ResultNodes become the
+    # checkpoint's "Progress So Far", and the checkpoint is what a session resumes from —
+    # so a restore reported progress as `$(cat <<` eleven times. Found 2026-07-27 by T2's
+    # first `insufficient` restore receipt, which is exactly the defect that instrument
+    # was built to surface.
+    #
+    # The shell has already run by the time this executes, and git knows what was actually
+    # committed. Parsing quoting rules to recover a string the source of truth will simply
+    # hand you is work that can only be done wrong.
+    return _committed_subject(cwd or ".")
 
-    # Try heredoc pattern
-    heredoc_match = re.search(
-        r"cat\s+<<'?EOF'?\n(.+?)\nEOF", cmd, re.DOTALL
-    )
-    if heredoc_match:
-        return heredoc_match.group(1).strip().split("\n")[0]
 
-    return None
+COMMIT_FRESH_SECONDS = 120
+
+
+def _committed_subject(cwd: str) -> str | None:
+    """The subject of HEAD, if HEAD was committed just now.
+
+    The freshness check exists because `git log -1` answers about THIS repo, and a session
+    may have committed in a sibling one (this repo runs cross-repo work constantly). Without
+    it, a commit made elsewhere would attach some unrelated older subject from here — a
+    plausible-looking wrong answer, which is worse than none. Stale => None.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "log", "-1", "--format=%ct%x00%s"],
+            capture_output=True, text=True, cwd=cwd, timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0 or "\x00" not in proc.stdout:
+        return None
+
+    committed_at, _, subject = proc.stdout.strip().partition("\x00")
+    try:
+        age = time.time() - int(committed_at)
+    except ValueError:
+        return None
+    if age > COMMIT_FRESH_SECONDS:
+        return None
+    return subject.strip() or None
 
 
 def run_auto_add(mnemos_dir: Path) -> list[dict]:

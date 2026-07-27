@@ -118,13 +118,20 @@ Add a line only when a lesson recurs; the value is that the list is short enough
 
 ### Next — in priority order
 
-1. **iCPG (d): dedup on insert + event IDs + `drift list` + evidence on the report.** The whole
-   remainder of item C, and it goes first because the backlog **refills by itself**:
-   `mnemos-pre-edit.sh` runs `drift file` on every Edit/Write and `cmd_drift` persists each event
-   with a fresh UUID and no natural key. Today's purge bought one clean reading, not a clean counter.
-2. **Fix `write_checkpoint`'s progress extractor** — T2's first receipt found it emitting `$(cat <<`
-   and `$MSG` instead of commit subjects. A concrete bug with a concrete address, and the first
-   thing T2 has ever produced. Then watch whether receipts stop naming `progress`.
+1. ~~**Fix the checkpoint's progress extractor**~~ **DONE 2026-07-27.** It was not in
+   `write_checkpoint` — the corruption entered upstream, at `auto_nodes.detect_git_commit`, which
+   recovered commit messages by regexing the Bash **command text**. That cannot work: the shell
+   has already expanded and consumed the quoting before a PostToolUse hook sees anything. It now
+   asks git (`git log -1 --format=%ct%x00%s`), with a freshness window so a commit made in a
+   SIBLING repo yields nothing rather than an unrelated subject from this one. 9 self-checks
+   driving real repos through each troublesome commit form; watched RED against the old parser.
+   **WATCH NEXT: do later restore receipts stop naming `progress`?** That is the T2 loop closing
+   end to end — finding → fix → the instrument going quiet on it — and it is the first time this
+   repo will have seen that happen.
+2. **iCPG (d): dedup on insert + event IDs + `drift list` + evidence on the report.** The whole
+   remainder of item C. The backlog **refills by itself** — `mnemos-pre-edit.sh` runs `drift file`
+   on every Edit/Write and `cmd_drift` persists each event with a fresh UUID and no natural key —
+   so the purge bought one clean reading, not a clean counter.
 3. **A6 — a doccheck for the handoff itself.** Three drift shapes are now scoped (retired figure,
    phantom path, and status-contradicted-between-index-and-body, whose mechanical form is: an item
    declared closed in START HERE must have a struck-through title in its own body).

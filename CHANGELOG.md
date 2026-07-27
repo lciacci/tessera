@@ -12,6 +12,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 > 2026-07-08 and 2026-07-25. The section below covers the 2026-07-26 session; the older
 > `[Unreleased]` content follows it, unchanged.
 
+### 2026-07-27 — the checkpoint recorded its progress as `$(cat <<`
+
+T2's first `insufficient` restore receipt, one session after the instrument shipped with
+zero data, named `progress`. The bug was real and it was not where the receipt pointed.
+
+#### Fixed
+- **`auto_nodes.detect_git_commit` asks git instead of parsing the shell.** It recovered
+  commit messages by regexing the Bash **command text**, which cannot be done correctly —
+  the shell has already expanded and consumed the quoting before a PostToolUse hook sees
+  anything. On this repo's own commit forms:
+  `git commit -m "$(cat <<'EOF'` → `'$(cat <<'`; `-m "$MSG"` → `'$MSG'`;
+  `-F - <<'MSG'` → `None`. Those became ResultNodes, ResultNodes become the checkpoint's
+  "Progress So Far", and the checkpoint is what a session resumes from — so one checkpoint
+  listed `$(cat <<` eleven times as its record of the work done.
+  Now `git log -1 --format=%ct%x00%s`, with a freshness window so a commit made in a
+  **sibling** repo yields nothing rather than an unrelated older subject from this one.
+- **`scripts/mnemos/test_commit_subject.py`** — 9 self-checks that drive REAL repos through
+  each troublesome commit form, rather than asserting against a parser that was itself the
+  misunderstanding. Watched RED against the restored old parser.
+
+Amends the 2026-07-26 observatory framing: *"all four Mnemos failures were INTEGRATION, zero
+in `scripts/mnemos/`"* is now wrong by one. **"We never broke it" still holds** — this defect
+is inherited, not introduced. The core was not defect-free; it was **unexamined**, which reads
+identically from the outside until something looks.
+
 ### 2026-07-27 — iCPG's drift detector was scoring the emptiness of its own graph
 
 Six dimensions, three of which could not fire. Fourth diagnostic pass, fourth root cause —

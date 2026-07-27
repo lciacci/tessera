@@ -1739,6 +1739,22 @@ this section — the dedup fix it prescribes is real but is now step 3, not step
 
 ### Mnemos: we never broke it — we inherited it half-wired, and the half we ADDED is the half producing data *(2026-07-26)*
 
+- **AMENDED 2026-07-27: "zero in `scripts/mnemos/`" is no longer true.** A fifth Mnemos defect
+  landed, and unlike the first four it is **not** an integration failure — it is inside
+  `auto_nodes.py`, one of the seven files this entry lists as UNCHANGED since the Maggy import.
+  `detect_git_commit` recovered the commit message by regexing the Bash **command text**, which
+  cannot work: the shell has already expanded and consumed the quoting before a PostToolUse hook
+  sees anything. On this repo's own commit forms it yielded `'$(cat <<'`, `'$MSG'`, and `None`.
+  Those became ResultNodes → the checkpoint's "Progress So Far" → what a session resumes from.
+  **The headline claim of this entry survives and should not be softened: we still never broke
+  it.** This defect is inherited, not introduced. What changes is the sharper claim built on top
+  of it — *"all four failures were INTEGRATION, zero in `scripts/mnemos/`"* — which was true when
+  written and is now wrong by one. **The core is not defect-free; it was UNEXAMINED**, which is a
+  different thing and reads identically from the outside until something looks.
+  And note what did the looking: **T2's first `insufficient` receipt**, one session after the
+  instrument shipped with zero data. The entry above argues Mnemos "IS producing"; the receipt
+  is the first evidence that its *output* was being read closely enough to fault.
+
 - **Status:** OPEN, but the framing is corrected. Prompted by the fair question: *the machinery has
   been broken every time we look, so the trial has never had an honest run — what did Tessera do to
   Maggy's Mnemos that made it useless?*
