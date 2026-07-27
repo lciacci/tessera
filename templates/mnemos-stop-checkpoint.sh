@@ -39,6 +39,24 @@ INPUT=$(cat 2>/dev/null || true)
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null || echo ".")
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || echo "")
 
+# Anchor to the PROJECT ROOT, not the session cwd (2026-07-26). Any Bash `cd` moves `.cwd`,
+# and the check below reads "$CWD/.mnemos". From a subdirectory that directory is absent, so
+# this hook took the QUIET branch and wrote NO CHECKPOINT — while reporting the exact thing
+# spec 11 forbids: "nothing to do" when the truth was "I could not do my job". The silence
+# is the bug, not the miss. CLAUDE_PROJECT_DIR is preferred but EMPTY in some invocations,
+# so it cannot carry this alone. Pure parameter expansion, no dirname/sed.
+# Sets $_root. Returns via a VARIABLE, not stdout: a PreToolUse hook's bare stdout is a
+# real channel, and doccheck's pretooluse-hooks-reach-the-model rightly cannot tell a
+# function's `printf` from the hook writing to it. Also saves a subshell fork per call.
+_anchor_root() {
+    _d="$1"; _root="$1"      # fall back to the input; never yield empty
+    while [ -n "$_d" ] && [ "$_d" != "/" ]; do
+        if [ -e "$_d/.git" ] || [ -f "$_d/.tessera/project.yml" ]; then _root="$_d"; return 0; fi
+        case "$_d" in */*) _d="${_d%/*}" ;; *) break ;; esac
+    done
+}
+_anchor_root "${CLAUDE_PROJECT_DIR:-${CWD:-$PWD}}"; CWD="$_root"
+
 # QUIET: no .mnemos/ means this project does not use Mnemos. Genuinely nothing to do.
 if [ ! -d "$CWD/.mnemos" ]; then
   exit 0

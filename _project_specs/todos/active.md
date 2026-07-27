@@ -205,19 +205,30 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    evidence was never scarce, it was counted in the wrong place. Relocating would have preserved
    the category error and gathered auto-compaction events, the question that matters least.)*
 
-**A2. NEW 2026-07-26, and the only one with live blast radius: the spend guard fails OPEN on a
-   cwd shift.** `.claude/scripts/tessera-spend-guard.sh:43` sets `PROJECT_DIR="${CWD:-$PWD}"` from
-   the hook's **session cwd**, not `CLAUDE_PROJECT_DIR`. A plain `cd scripts` in a Bash call made
-   it resolve `scripts/scripts/spend/guard.py` → absent → **spend-committing commands ALLOWED**,
-   for ~13 min this session. Standing pattern #4 (a path resolved through a mutable lookup)
-   recurring inside the deny-by-default gate on external spend.
-   **Spec 11 worked** — it emitted `degraded` rather than failing silently. **But the report
-   landed in `scripts/.tessera/logs/` (cwd-relative), where `tessera-watch` P13 reading the repo
-   root will never see it.** So the alarm fired into an empty room: pattern #9 one level down, in
-   the reporter rather than the reported. Two fixes, and the second matters more than the first:
-   anchor `PROJECT_DIR` to `CLAUDE_PROJECT_DIR`, and make `tessera-degraded` write to the project
-   root rather than `$PWD` — a degraded reporter that can be silenced by `cd` is not a reporter.
-   *(An untracked `scripts/.tessera/` is left on disk as the evidence; delete once dispositioned.)*
+**A2. ~~The spend guard fails OPEN on a cwd shift~~ — FIXED 2026-07-26.** `cd scripts` made
+   `tessera-spend-guard.sh` resolve `scripts/scripts/spend/guard.py` → absent → **spend-committing
+   commands ALLOWED**. Standing pattern #4 inside the deny-by-default gate on external spend.
+   **It was a class, not one bug: SIX hooks** took `PROJECT_DIR` from the session cwd
+   (`spend-guard`, `spend-backstop`, `gate-scan`, `verify-scan`, `mnemos-stop-ingest`,
+   `mnemos-stop-checkpoint` — that last one silently wrote NO CHECKPOINT from a subdirectory
+   while reporting "nothing to do", the exact confusion spec 11 exists to forbid).
+   All six now walk up to the project root, as does `tessera-degraded` — **the half that mattered
+   more**, since its report had been landing in `scripts/.tessera/logs/` where P13 never reads.
+   Guarded by `scripts/test_hook_cwd_anchoring.py` (a regex catching any new hook that
+   reintroduces the idiom, plus behavioural tests), falsified against the pre-fix hook: it
+   allowed from `scripts/` and `scripts/spend/`, denied only from the root.
+   **THREE things worth keeping from how this went wrong:**
+   1. `CLAUDE_PROJECT_DIR` is **empty** in some invocations, so `${CLAUDE_PROJECT_DIR:-$CWD}`
+      would have been a *vacuous fix* that looked right. Walking up to a real marker is required.
+   2. **The first marker choice failed because the bug forged its own.** `.tessera/` was the
+      marker — but this very bug creates stray `.tessera/logs/` dirs in whatever cwd was current,
+      and the one under `scripts/` was found first. Marker is now `.git` (`-e`, not `-d` — a git
+      worktree's is a FILE) or a `.tessera/` that actually holds `project.yml`.
+   3. The resolver first returned via `printf`, and doccheck's `pretooluse-hooks-reach-the-model`
+      flagged it — it cannot tell a function's stdout from the hook's. Fixed by returning via a
+      variable. **The detector was right; the code was ambiguous.**
+   *(Leftover: an untracked `scripts/.tessera/` is still on disk — harmless now that the marker
+   requires `project.yml`, but `rm -rf scripts/.tessera` when convenient.)*
 
 **A3. Nothing detects global-tier staleness (this is item 4, promoted — it just cost the fleet).**
    `~/.claude/templates/` held **7 stale hooks and was missing `tessera-decision-surface.sh`
