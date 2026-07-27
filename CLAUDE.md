@@ -67,6 +67,23 @@ The `tier-classify-hook` (UserPromptSubmit) classifies each prompt into a Claude
 
 **Switching models mid-session isn't free — batch it.** Prompt caches are model-scoped: a `/model` switch invalidates the entire cached prefix (tools + system + messages), so the first turn on the new model reprocesses the whole conversation as fresh input at ~1× instead of the usual ~0.1× cache-read — roughly a 10× input-cost spike on that one turn, then back to normal. (Independent of the 5-min cache TTL.) So the flag is *advisory, not auto-switch*: obeying it every prompt and flip-flopping Opus↔Haiku turn-by-turn pays that reread tax on every switch, dwarfing any per-token savings. Right read: switch at natural breakpoints in batches — drop to the cheaper tier for a *run* of mechanical work, do it all, switch back. The flag tells you the task shape; you decide if the batch is big enough to be worth one reread.
 
+**EFFORT COSTS THE SAME REREAD — measured 2026-07-27, and this was not obvious.** `output_config.effort`
+(`low|medium|high|xhigh|max`, GA, default `high`) is absent from the prompt-caching docs'
+invalidation hierarchy, which lists model switch (invalidates all three tiers) and `thinking`
+enable/disable (preserves tools+system). The plausible inference was that effort behaves like
+`thinking` — a cheap knob you could turn mid-session where `/model` is expensive. **It does not.**
+Three requests, identical 2163-token cached prefix: cold write → **control read 2163** → same
+prefix at `effort=low` **read 0 and wrote a fresh 2163**. Full re-write, model-switch-grade.
+
+So the batching rule above governs **both** knobs, and this repo's own advisory was half-written:
+the statusline flags model mismatch and says nothing about effort, while `CLAUDE_EFFORT` is a live
+session variable (`high` in this session). **Limits of the measurement, stated because n=1:** one
+model, one prefix size, `high→low` only — untested are adjacent steps (`high→xhigh`), the reverse
+direction, and whether each level keeps its *own* entry (row 3's write suggests it does, which
+would mean returning to `high` hits rather than re-writes). Re-measure with
+`scripts/effort-cache-probe.sh` if any of those matter; it is external API behaviour, so it can
+change upstream and no doccheck assertion can guard it.
+
 ## Don't
 
 - Don't modify `.env` files or anything matching `.env.*` (also enforced by settings.json deny list)

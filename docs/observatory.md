@@ -463,6 +463,53 @@ Both were found by adversarial verification, **not** by the framework. **The rea
 - **Status:** Adopted → design principle #17
 - **When to revisit:** Closed as a pattern-on-the-radar. Follow-on audit (sweep existing CLAUDE.md "surface X" instructions against #17) tracked as FOCUS-003 in `_project_specs/todos/active.md`.
 
+### Effort changes invalidate the prompt cache — and the tier advisory's real use is session boundaries *(2026-07-27)*
+
+- **Measured, because the docs do not say.** `output_config.effort` is absent from the
+  prompt-caching invalidation hierarchy, which lists model switch (invalidates tools+system+messages)
+  and `thinking` enable/disable (preserves tools+system). The plausible reading — and the one I
+  argued for before measuring — was that effort behaves like `thinking`: a cheap knob you could
+  turn mid-session where `/model` is expensive. **Three requests said otherwise:**
+
+  | request | write | read |
+  |---|---:|---:|
+  | 1. `effort=high`, cold | 2163 | 0 |
+  | 2. `effort=high`, identical prefix (**control**) | 0 | **2163** |
+  | 3. `effort=low`, identical prefix | **2163** | **0** |
+
+  Row 3 did not merely miss the messages tier — it re-wrote the entire system prefix. Effort is
+  model-switch-grade. `scripts/effort-cache-probe.sh` reproduces it.
+- **The control is why this is a result and not a guess.** Without row 2, row 3's zero would be
+  indistinguishable from "caching never engaged" — the probe returns `VOID` in that case rather
+  than a verdict. That is the same shape as the fire-counter discriminator found earlier the same
+  day: a mechanism reporting nothing and a mechanism that is dead present identically, and only a
+  second reading separates them.
+- **Known limits, n=1:** one model, one prefix size, `high→low` only. Untested: adjacent steps
+  (`high→xhigh`), the reverse direction, and whether each level keeps its own entry — row 3's
+  *write* suggests it does, which would mean returning to `high` hits rather than re-writes. This
+  is external API behaviour: it can change upstream, and no doccheck assertion can guard it.
+
+- **The other half, and it corrects an assumption in ADR-0002.** The ADR frames the main-thread
+  tier as *"advisory (suggest `/model`)"* — i.e. mid-session switching, which the cache tax then
+  argues against, leaving the flag apparently self-defeating. **That is not how it is used.**
+  Lorenzo, asked directly (2026-07-27): the flag is a **gauge**, valuable whether or not it is
+  acted on in-session — *"I tend not to invoke it unless it's at the beginning of a session, or it
+  might prompt me to start a new session and toggle the model."*
+- **Why that resolves the tension rather than dodging it:** a new session pays a cold cache
+  anyway, so acting at a session boundary costs nothing the boundary was not already costing. The
+  flag's value is *orientation* — am I on the right model for what I am about to do — not
+  mid-flight correction. Both knobs now point the same way: model and effort are session-boundary
+  decisions, not per-turn ones.
+- **This also answers the not-vacuous question** raised against the tier advisory the same day
+  ("if nobody acts on it, 'it works' and 'it is decorative' are indistinguishable"). The answer is
+  that it is used, in a mode the design did not anticipate and the docs did not describe.
+- **What it makes actionable:** `CLAUDE_EFFORT` is a live session env var (`high` here), so a
+  mismatch between classified tier and actual effort is *readable, not predicted* — no classifier
+  change, no second dimension on an instrument whose first dimension is still mis-rating
+  discussion-heavy prompts (see the entry below). The statusline currently flags model mismatch and
+  is silent on effort. **Unbuilt; the advice attached to any such flag must say "at a session
+  boundary", never "switch now."**
+
 ### Tier classifier under-rates discussion-heavy prompts
 
 - **Source:** Tessera dogfood, 2026-06-27 — observed across a long tessera-dev session.
