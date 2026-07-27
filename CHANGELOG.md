@@ -49,6 +49,19 @@ and this one was not a missing writer.
 Fresh baseline: 217 events over 816 symbols. `decision` fires zero because all 53
 invariants currently hold — live-and-silent, which is a different fact from dead.
 
+#### Fixed (after `bin/tessera-verify` refuted the first version)
+- **The runtime guards were blind to two of the three removed dimensions.** They catch a
+  re-added `test` dimension but not `dependency`: a dimension scoring the *absence* of an
+  edge fires on every symbol and is caught by observation, while one scoring the *presence*
+  of a never-written edge returns `None` forever and never reaches the output. Now asserts
+  the **declared** vocabulary via `inspect.getsource(check_symbol_drift)`.
+- **`ownership` was caught by neither guard — a hole in the new doccheck check.** It read
+  `store.get_edges_to(sym.id)` **untyped**, named no edge type, and so passed the producer
+  scan. An untyped edge read in `drift.py` is now its own violation. Both landmines re-run
+  against the fixes; each trips the suite *and* doccheck.
+
+A check verified against the bug you remember is verified against one example.
+
 **Not fixed, and it refills the backlog on its own:** `cmd_drift` still re-inserts with a
 fresh UUID and no natural key, and `mnemos-pre-edit.sh` runs `drift file` on every edit.
 **Not settled:** iCPG's kill/keep trial — no agent has ever authored a ReasonNode, and a

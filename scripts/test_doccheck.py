@@ -1339,3 +1339,28 @@ def test_not_vacuous_against_the_real_drift_module():
     poisoned = real.replace("'CREATES'", "'DRIFTS_FROM'")
     read = doccheck._edge_types_read_by_the_detector(poisoned)
     assert "DRIFTS_FROM" in read - doccheck._edge_types_any_code_writes()
+
+
+def test_catches_an_untyped_edge_read(fake_repo):
+    """The hole tessera-verify found in this very check (2026-07-27): the removed
+    ownership dimension read `get_edges_to(sym.id)` with no type, named no edge
+    type, and so passed the producer check while tripping no runtime test either.
+    An untyped read means 'every edge type' and cannot be producer-checked."""
+    _icpg(
+        fake_repo,
+        "store.get_edges_to(symbol_id, 'CREATES')\n"
+        "edges = store.get_edges_to(sym.id)\n",
+        "edge_type='CREATES'\n",
+    )
+    bad = doccheck.check_drift_dimensions_have_producers()
+    assert any("no edge type" in v for v in bad), bad
+
+
+def test_a_typed_read_is_not_flagged_as_untyped(fake_repo):
+    """The other direction — otherwise every read trips it and the check is noise."""
+    _icpg(
+        fake_repo,
+        "store.get_edges_to(symbol_id, 'CREATES')\n",
+        "edge_type='CREATES'\n",
+    )
+    assert doccheck.check_drift_dimensions_have_producers() == []

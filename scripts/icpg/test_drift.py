@@ -14,6 +14,8 @@ is ever added without the matching run line.
 
 from __future__ import annotations
 
+import inspect
+import re
 import subprocess
 
 import pytest
@@ -72,9 +74,18 @@ def test_a_clean_symbol_produces_no_event_at_all(tmp_path):
     assert check_symbol_drift(store, sym.id) is None
 
 
-def test_dimension_vocabulary_is_exactly_the_fed_three(tmp_path):
-    """Structural guard: re-adding a dimension without a producer trips here as
-    well as in doccheck. Both, because doccheck reads source and this runs it."""
+def test_emitted_dimensions_stay_inside_the_fed_three(tmp_path):
+    """Observational guard — it only catches a dimension that actually FIRES.
+
+    REFUTED AS ORIGINALLY DOCUMENTED (tessera-verify, 2026-07-27). This test used
+    to claim "re-adding a dimension without a producer trips here as well as in
+    doccheck". False. It trips only for an ABSENCE-shaped dimension like the old
+    `test(0.30)`, which fired on every symbol. Re-adding `dependency` (scores the
+    PRESENCE of never-written REQUIRES edges) left all 13 tests green, because it
+    returns None on every symbol and never reaches the output at all. So this is
+    kept for what it does prove, and the declared-vocabulary test below covers
+    what it cannot.
+    """
     store, sym, _, path = _linked_symbol(
         tmp_path=tmp_path, store=_store(tmp_path),
         invariants=['file_exists("gone.txt")'],
@@ -83,6 +94,24 @@ def test_dimension_vocabulary_is_exactly_the_fed_three(tmp_path):
     event = check_symbol_drift(store, sym.id)
     assert event is not None
     assert set(event.drift_dimensions) <= {'changed', 'decision', 'usage'}
+
+
+def test_declared_dimension_vocabulary_is_exactly_the_fed_three():
+    """Reads what `check_symbol_drift` SCORES, not what it happened to emit.
+
+    The gap this closes was found by falsifying the test above: a dimension whose
+    edge type is never written returns None forever, so nothing observational can
+    see it come back. `ownership` was worse still — it read edges UNTYPED, so it
+    tripped neither this suite nor doccheck. Source is the only place a dead
+    dimension is visible on the day it is re-added rather than never.
+    """
+    declared = set(re.findall(
+        r"\(\s*'(\w+)',\s*_check_", inspect.getsource(check_symbol_drift)
+    ))
+    assert declared == {'changed', 'decision', 'usage'}, (
+        f"scored dimensions changed: {sorted(declared)}. Adding one means adding "
+        f"its producer first — see docs/observatory.md on the detector shrink."
+    )
 
 
 # --- the producer/reader mismatch that made decision drift dead ----------------

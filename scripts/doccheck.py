@@ -1428,6 +1428,21 @@ def _edge_types_read_by_the_detector(text: str) -> set[str]:
     return set(re.findall(r"get_edges_(?:to|from)\([^)]*?['\"]([A-Z_]+)['\"]", text))
 
 
+def _untyped_edge_reads(text: str) -> list[str]:
+    """Edge reads with no edge-type argument — invisible to the producer check.
+
+    FOUND BY FALSIFYING THIS CHECK (tessera-verify, 2026-07-27). The removed
+    `_check_ownership_drift` called `store.get_edges_to(sym.id)` untyped, so it
+    named no edge type, so it read as consuming nothing and passed. Re-adding it
+    tripped neither this check nor the runtime tests — the one dimension caught by
+    nothing. An untyped read means "every edge type", which cannot be
+    producer-checked at all; the fix is to make it say which one it means.
+    """
+    return re.findall(
+        r"get_edges_(?:to|from)\(\s*[A-Za-z_][\w.]*\s*\)", text
+    )
+
+
 def _edge_types_any_code_writes() -> set[str]:
     """Producers: an `edge_type='X'` write, or a declared `--edge-type` choice.
 
@@ -1470,13 +1485,21 @@ def check_drift_dimensions_have_producers() -> list[str]:
     if not drift.exists():
         return [f"{DRIFT_MODULE} missing — iCPG's detector has no definition"]
 
-    read = _edge_types_read_by_the_detector(drift.read_text())
+    text = drift.read_text()
+    read = _edge_types_read_by_the_detector(text)
     if not read:
         return [f"{DRIFT_MODULE} reads no edge type at all — either the detector "
                 f"stopped detecting or this check's parser drifted; both are findings"]
 
+    bad = [
+        f"{DRIFT_MODULE}: `{call}` reads edges with no edge type, so no producer "
+        f"can be checked for it — name the edge type (this is how the old "
+        f"ownership dimension slipped past every guard)"
+        for call in _untyped_edge_reads(text)
+    ]
+
     produced = _edge_types_any_code_writes()
-    return [
+    return bad + [
         f"{DRIFT_MODULE} scores `{edge}` but nothing in scripts/icpg/ writes it — "
         f"the dimension measures the graph's emptiness, not the code (add the "
         f"producer first, or drop the dimension)"

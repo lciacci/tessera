@@ -1239,6 +1239,29 @@ Both were found by adversarial verification, **not** by the framework. **The rea
     scan so it cannot vouch for itself, and **an empty read set is a violation, not a pass**
     (standing pattern #1: what tells you the check itself died). Non-vacuity is tested by
     feeding the shipped module back through the predicate with one edge type swapped.
+  - **`bin/tessera-verify` then REFUTED part of the above, and the refutation was correct.**
+    Three claims went to the falsifier: CONFIRMED / **PARTIAL** / CONFIRMED, on
+    `verdict_channel: "file"` — the second real (non-self-test) run to return a usable verdict
+    by file, so that fix now stands at n=2. What it found, by re-adding each removed dimension
+    from `git show b619755~1`:
+    - The runtime guards catch a re-added **`test`** dimension (3 of 13 fail) but **not
+      `dependency`** — all 13 stayed green. Root cause worth keeping: a dimension scoring the
+      **absence** of an edge fires on every symbol and is caught by observation; one scoring the
+      **presence** of a never-written edge returns `None` forever and never reaches the output
+      at all. Testing the emitted dimensions cannot see the second kind. **Fixed** by asserting
+      the *declared* vocabulary — `inspect.getsource(check_symbol_drift)` — so a dead dimension
+      is visible the day it is added rather than never.
+    - **`ownership` was caught by NEITHER guard**, and that was a hole in the new check itself:
+      `_check_ownership_drift` called `store.get_edges_to(sym.id)` **untyped**, so it named no
+      edge type, so the producer scan saw it consuming nothing and passed. **Fixed** — an
+      untyped edge read in `drift.py` is now its own violation, because "every edge type"
+      cannot be producer-checked. Both landmines re-run against the fixes: each now trips the
+      test suite *and* doccheck.
+    **The shape to carry:** I wrote a guard, tested it against the failure I had just removed,
+    and it passed — while being blind to two of the three dimensions that motivated the work.
+    Standing pattern #1 aimed at a brand-new check, caught within the hour only because the
+    claim was stated explicitly enough to be falsified. *A check verified against the bug you
+    remember is verified against one example.*
 
   **STILL OPEN, and do not let the purge hide it: the re-insertion defect is live and it
   refills the backlog automatically.** `mnemos-pre-edit.sh` runs `icpg drift file` on every
