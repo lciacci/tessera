@@ -272,6 +272,11 @@ def _create_commit_nodes(
     nodes = []
     now = time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime())
     latest_hash = ""
+    seen = {
+        r[0] for r in conn.execute(
+            "SELECT content FROM mnemo_nodes WHERE origin = 'auto-commit'"
+        ).fetchall()
+    }
 
     for line in lines:
         parts = line.split("|", 1)
@@ -283,9 +288,26 @@ def _create_commit_nodes(
         if len(msg) < 5:
             continue
 
+        # DEDUP ON CONTENT, not on the uuid. `INSERT OR IGNORE` here was inert:
+        # `mnemo_nodes` has `id TEXT PRIMARY KEY` as its only unique column and
+        # `node_id` is a fresh uuid4 every call, so the conflict clause could never
+        # fire and this writer — which runs per commit and per edit — appended a row
+        # each time. Measured on the live graph before the fix: 485 `auto-commit`
+        # rows for 319 distinct messages.
+        #
+        # Third instance of the same defect (drift_events, edges, here). Found by
+        # review AFTER a commit whose own message said "fix the pattern, not the
+        # row" and then fixed only the row. doccheck's
+        # `insert-or-ignore-needs-a-real-key` now fails on a fourth.
+        #
+        # Same shape as `MnemosStore.load_from_icpg`, which already dedups this
+        # table on a content key — reusing its idiom rather than adding a third.
+        if msg[:200] in seen:
+            continue
+        seen.add(msg[:200])
         node_id = str(uuid.uuid4())
         conn.execute(
-            "INSERT OR IGNORE INTO mnemo_nodes "
+            "INSERT INTO mnemo_nodes "
             "(id, type, task_id, content, activation_weight, "
             "status, origin, confidence, scope_tags, "
             "created_at, last_accessed, access_count) "
@@ -360,9 +382,20 @@ def _create_edit_summary(
         content += f" ({error_count} errors)"
 
     now = time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime())
+
+    # Same inert `INSERT OR IGNORE` as the commit path above — see the note there.
+    # Dedup on content; an identical edit summary is the same observation, not a
+    # second one.
+    existing = conn.execute(
+        "SELECT id FROM mnemo_nodes WHERE origin = 'auto-edit' AND content = ?",
+        (content,),
+    ).fetchone()
+    if existing:
+        return [{"id": existing[0], "type": "result", "content": content}]
+
     node_id = str(uuid.uuid4())
     conn.execute(
-        "INSERT OR IGNORE INTO mnemo_nodes "
+        "INSERT INTO mnemo_nodes "
         "(id, type, task_id, content, activation_weight, "
         "status, origin, confidence, scope_tags, "
         "created_at, last_accessed, access_count) "

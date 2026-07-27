@@ -1532,6 +1532,76 @@ def _edge_types_any_code_writes() -> set[str]:
     return produced
 
 
+def check_insert_or_ignore_needs_a_real_key() -> list[str]:
+    """`INSERT OR IGNORE` is a lie unless the table has a UNIQUE key it can conflict on.
+
+    THE BUG THIS EXISTS FOR, and it shipped THREE TIMES before anything generalized:
+
+      1. `drift_events` — 700 rows that were 154 distinct drifts re-inserted across
+         31 scans (ADR-0013). Fixed with `drift_dimensions_key`.
+      2. `edges` — `INSERT OR IGNORE` whose only UNIQUE column was `id`, a fresh
+         uuid4 per call, so the clause could never fire. Inert until an auto-recorder
+         started calling it per turn; 995 rows / 891 distinct when measured.
+      3. `mnemo_nodes` — the same, in the auto-node writer that runs per commit and
+         per edit. 485 `auto-commit` rows for 319 distinct messages.
+
+    Each fix was applied to the row it was found on. The commit that fixed (2) said
+    in its own message "fix the pattern, not the row" and then did not, which is how
+    (3) was still live for an independent reviewer to find hours later. This is the
+    repo's standing rule applied to code instead of docs: a defect class that has
+    recurred becomes an assertion, or the fourth instance is found the same way.
+
+    The check: for each `INSERT OR IGNORE INTO <table>` in the toolchain, the value
+    bound to that table's first column must not be a freshly generated uuid. That is
+    the exact tell — a per-call unique id makes the conflict clause unreachable.
+    An empty scan set is a violation, not a pass (standing pattern #1: what would
+    tell you this check itself died).
+    """
+    targets = [
+        Path("scripts/icpg/store.py"),
+        Path("scripts/mnemos/store.py"),
+        Path("scripts/mnemos/auto_nodes.py"),
+    ]
+    pattern = re.compile(r"INSERT\s+OR\s+IGNORE\s+INTO\s+(\w+)", re.IGNORECASE)
+    scanned = 0
+    problems: list[str] = []
+
+    for rel in targets:
+        path = ROOT / rel
+        if not path.exists():
+            problems.append(f"{rel}: named by this check but missing")
+            continue
+        text = path.read_text()
+        scanned += 1
+        for match in pattern.finditer(text):
+            table = match.group(1)
+            # Window spans BOTH SIDES of the statement. The first version looked
+            # only forward and was vacuous: the id is generated on the line ABOVE
+            # the INSERT (`node_id = str(uuid.uuid4())`), so re-introducing the real
+            # defect left the check green. Caught by re-introducing it on purpose —
+            # a guard tested only against the fixed code proves nothing.
+            window = text[max(0, match.start() - 400):match.end() + 900]
+            uuid_bound = re.search(r"(uuid\.uuid4\(\)|_uuid\(\))", window)
+            declares_unique = re.search(
+                rf"CREATE\s+UNIQUE\s+INDEX[^;]*\bON\s+{table}\b", text,
+                re.IGNORECASE,
+            )
+            if uuid_bound and not declares_unique:
+                problems.append(
+                    f"{rel}: `INSERT OR IGNORE INTO {table}` binds a fresh uuid and "
+                    f"{table} has no UNIQUE index in this file — the IGNORE can never "
+                    f"fire, so every call appends a duplicate. Give the table a real "
+                    f"natural key, or dedup explicitly before inserting."
+                )
+
+    if not scanned:
+        problems.append(
+            "insert-or-ignore scan matched no files — the check is blind, "
+            "which is indistinguishable from clean"
+        )
+    return problems
+
+
 def check_drift_dimensions_have_producers() -> list[str]:
     """Every edge type `drift.py` READS must be one some code in scripts/icpg/ WRITES.
 
@@ -1876,6 +1946,7 @@ CHECKS = {
     "test-command-is-not-a-bare-interpreter": check_test_command_is_not_a_bare_interpreter,
     "unrunnable-hooks-report-themselves": check_unrunnable_hooks_report_themselves,
     "adr-references-resolve": check_adr_references_resolve,
+    "insert-or-ignore-needs-a-real-key": check_insert_or_ignore_needs_a_real_key,
 }
 
 

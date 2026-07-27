@@ -28,7 +28,14 @@ esac
 # Read the hook payload BEFORE anything else consumes stdin — `source` below
 # distinguishes a new session from a mid-session compaction, and without it this
 # hook re-anchors the base on every compaction.
-INPUT=$(cat 2>/dev/null || true)
+#
+# `[ -t 0 ]` guard added by review: bare `cat` reads to EOF, and `2>/dev/null ||
+# true` suppresses errors, not BLOCKING. Run from a terminal — which is how these
+# hooks get debugged and how a chaos probe would exercise this one — the previous
+# form hung forever with no output. A hook that wedges is worse than one that
+# fails, because a wedge looks like the session is working.
+INPUT=""
+[ -t 0 ] || INPUT=$(cat 2>/dev/null || true)
 
 degraded() {
   for d in bin scripts; do
@@ -56,10 +63,49 @@ fi
 # intent that was open the whole time. Silent, and worse on long sessions — exactly
 # the ones where losing the record costs most.
 #
-# startup / resume  -> a genuinely new session, re-anchor.
-# compact           -> same session continuing, KEEP the existing base.
-SOURCE=$(printf '%s' "$INPUT" | jq -r '.source // empty' 2>/dev/null)
-if [ "$SOURCE" = "compact" ] && [ -s .icpg/.session-base ]; then
+# RE-ANCHOR ONLY ON `startup`. Everything else keeps the existing base.
+#
+# The first fix guarded `compact` alone and re-anchored on `resume`, reasoning that
+# a resume is "a genuinely new session". Review refuted that: a resume after an
+# abnormal end (terminal closed, crash, kill mid-turn) is exactly the case where
+# the per-turn Stop recorder never ran for the last turn — so re-anchoring there
+# destroys the record of the very work the resume exists to continue. Same loss,
+# same silence, same permanence as the compaction bug.
+#
+# Inverted to a WHITELIST rather than a blacklist of known-bad sources: an unknown
+# or future source now preserves instead of destroying.
+SOURCE=""
+if command -v jq >/dev/null 2>&1; then
+    SOURCE=$(printf '%s' "$INPUT" | jq -r '.source // empty' 2>/dev/null)
+fi
+# jq absent, or present and silent: scan the raw payload. `jq` was a NEW hard
+# dependency this hook did not previously have, and losing it silently reinstated
+# the exact defect the guard was written to prevent.
+if [ -z "$SOURCE" ]; then
+    case "$INPUT" in
+        *'"source"'*'"startup"'*) SOURCE=startup ;;
+        *'"source"'*'"resume"'*)  SOURCE=resume ;;
+        *'"source"'*'"compact"'*) SOURCE=compact ;;
+    esac
+fi
+
+if [ -z "$SOURCE" ] && [ -s .icpg/.session-base ]; then
+    # CANNOT TELL, AND THERE IS SOMETHING TO LOSE. Preserve, and say so.
+    #
+    # This repo has MEASURED its harness sending an empty `{}` payload on another
+    # event (CLAUDE.md: "no trigger, no session_id, nothing"), so an absent
+    # `source` is a real state, not a hypothetical. Preserving over-attributes at
+    # worst — `record` diffs from an older base and links MORE symbols than this
+    # session touched, which is visible in the count. Re-anchoring under-attributes
+    # SILENTLY and unrecoverably. Between a loud wrong number and a quiet missing
+    # one, take the loud one.
+    degraded --component icpg-session-base --reason source-unknown \
+      --detail "SessionStart payload carried no readable .source (jq missing or empty payload); preserving the existing base rather than re-anchoring, so this session may over-attribute rather than lose symbols"
+    exit 0
+fi
+
+# A known non-startup source with a base already stamped: same session continuing.
+if [ -n "$SOURCE" ] && [ "$SOURCE" != "startup" ] && [ -s .icpg/.session-base ]; then
     exit 0
 fi
 

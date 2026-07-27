@@ -99,6 +99,14 @@ CREATE TABLE IF NOT EXISTS drift_events (
 CREATE INDEX IF NOT EXISTS idx_edges_from ON edges(from_id);
 CREATE INDEX IF NOT EXISTS idx_edges_to ON edges(to_id);
 CREATE INDEX IF NOT EXISTS idx_edges_type ON edges(edge_type);
+-- One edge per (from, to, type). DECLARED HERE, beside its siblings, not buried in
+-- a migration helper: a reader of this table's definition is exactly who needs to
+-- see that `INSERT OR IGNORE` means something, and the absence of that line here is
+-- how the duplicate defect was introduced. `init_db()` early-returns from _migrate
+-- before reaching the collapse helper, so a freshly-init'd database used to have the
+-- schema and NO unique index — anything writing to it inserted duplicates freely.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_edges_triple
+    ON edges(from_id, to_id, edge_type);
 CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file_path);
 CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name);
 CREATE INDEX IF NOT EXISTS idx_drift_symbol ON drift_events(symbol_id);
@@ -206,9 +214,16 @@ class ICPGStore:
         ).fetchone():
             return
 
+        # SINGLE quotes. Double quotes around `|` are a SQLite misfeature — it
+        # falls back to treating an unresolvable double-quoted identifier as a
+        # string literal, and builds compiled with -DSQLITE_DQS=0 (which SQLite's
+        # own docs recommend for new applications) raise `no such column: |`
+        # instead. This runs from `_migrate`, i.e. from EVERY `_conn()`, so on such
+        # a build the exception escapes every ICPGStore method: `icpg status`,
+        # `icpg why`, the drift surface, all of it.
         dupes = conn.execute(
-            'SELECT COUNT(*) - COUNT(DISTINCT from_id || "|" || to_id || "|" || edge_type) '
-            'FROM edges'
+            "SELECT COUNT(*) - COUNT(DISTINCT from_id || '|' || to_id || '|' "
+            "|| edge_type) FROM edges"
         ).fetchone()[0]
         if dupes:
             # Keep the earliest row per triple: created_at is the honest first-seen.
@@ -374,17 +389,44 @@ class ICPGStore:
     # --- Edge CRUD ---
 
     def create_edge(self, edge: Edge) -> str:
+        """Upsert one edge per (from, to, type). Returns the SURVIVING row's id.
+
+        Two defects the review found once the unique index made `INSERT OR IGNORE`
+        actually fire — it had been inert since the table was written, so neither
+        could show up before:
+
+        1. **The return was a lie.** It returned `edge.id` unconditionally, so on an
+           existing triple the caller got a uuid for a row that was never written.
+           No current caller uses it (`bootstrap.py` and `__main__.py` both discard
+           it), but the first one that stores it as a reference gets a dangling id
+           rather than an error. Now returns the id actually in the table.
+
+        2. **Confidence became first-writer-wins.** `bootstrap.py` writes CREATES at
+           0.6 (inferred from git history); `icpg record` writes the same triple at
+           1.0 (an operator asserting it). Whichever landed second was dropped, so
+           an explicitly recorded edge kept the bootstrap's guess FOREVER — there is
+           no other writer, so nothing could correct it. `MAX(confidence)` fixes the
+           direction and is monotone: repeated recording cannot walk it back down,
+           and a 0.6 re-import cannot demote a 1.0 assertion.
+        """
         with self._conn() as conn:
             conn.execute(
-                """INSERT OR IGNORE INTO edges
+                """INSERT INTO edges
                    (id, from_id, to_id, edge_type, confidence, created_at)
-                   VALUES (?,?,?,?,?,?)""",
+                   VALUES (?,?,?,?,?,?)
+                   ON CONFLICT(from_id, to_id, edge_type) DO UPDATE SET
+                       confidence = MAX(confidence, excluded.confidence)""",
                 (
                     edge.id, edge.from_id, edge.to_id,
                     edge.edge_type, edge.confidence, edge.created_at
                 )
             )
-        return edge.id
+            row = conn.execute(
+                'SELECT id FROM edges WHERE from_id = ? AND to_id = ? '
+                'AND edge_type = ?',
+                (edge.from_id, edge.to_id, edge.edge_type)
+            ).fetchone()
+        return row['id'] if row else edge.id
 
     def get_edges_from(
         self, node_id: str, edge_type: str | None = None
