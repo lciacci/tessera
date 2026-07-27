@@ -150,7 +150,14 @@ fix provenance**, which is why T2 splits sender from receiver.
 > written, 10+ skills named here as "keep" were **cut or merged** — `codex-review`, `gemini-review`,
 > `agent-teams`, `cross-agent-delegation`, `session-management`, `code-deduplication`, `ai-models`,
 > `autonomous-testing`, `build-in-public`, and `ui-testing` (merged into `ui-web`/`ui-mobile`,
-> 2026-07-18). Kept for the reasoning trail, not as a live index. Corpus is now 47.
+> 2026-07-18). Kept for the reasoning trail, not as a live index. ~~Corpus is now 47.~~
+> **Corpus is 49 as of 2026-07-27** — the 47 figure was true on 2026-07-18 and drifted twice
+> since: `neon` + `neon-postgres` were absorbed into the repo on 07-24 (+2), and
+> `tessera-code-review` was cut on 07-27 by ADR-0014 (−1); an earlier addition accounts for the
+> remainder. **A hardcoded corpus count in prose is a doc claim that drifts on every skill
+> added or cut** — this one drifted for nine days unnoticed and was found by a sweep, not by a
+> check. Verify with `find skills -maxdepth 2 -name SKILL.md | wc -l` rather than trusting the
+> number here; it is a snapshot, like the list above it.
 
 - **Core skills** (with Mnemos marked as *on trial for crash/compaction recovery*, iCPG as *on trial as continuously-loaded intent layer*, code-graph as *on trial vs GitNexus for structural knowledge*): `base`, `iterative-development`, `mnemos*`, `icpg*`, `code-review`, `codex-review`, `gemini-review`, `workspace`, `commit-hygiene`, `code-deduplication`, `agent-teams`, `ticket-craft`, `team-coordination`, `code-graph*`, `cpg-analysis`, `security`, `credentials`, `session-management`, `project-tooling`, `existing-repo`, `cross-agent-delegation`, `polyphony` *(kept-but-not-activated — see Polyphony note below)*.
 - **All 8 language/framework skills:** Python, TypeScript, Node backend, React web, React Native, Android Java, Android Kotlin, Flutter. (Android-then-port-to-iOS plan keeps the mobile cluster relevant.)

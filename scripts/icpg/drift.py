@@ -48,6 +48,7 @@ own graph".
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
 
 from .models import DriftEvent, _now, _uuid
 from .predicates import evaluate_predicate
@@ -174,10 +175,29 @@ def _check_usage_drift(store, sym, reason) -> float | None:
     files = _tracked_files_mentioning(sym.name, store.project_dir)
     if files is None:
         return None
-    out_of_scope = [f for f in files if not _in_scope(f, reason.scope)]
+    # A symbol's OWN defining file is not "usage outside its scope" (fixed 2026-07-27).
+    # Measured before fixing: only 42% of tracked files sit inside any reason's scope, and
+    # **46% of symbols are CREATES-linked to a reason whose scope does not include the file
+    # the symbol lives in** — so for nearly half the graph the definition site was being
+    # counted as out-of-scope usage, inflating every such symbol by one. 32 of 174 firing
+    # verdicts flip on this alone. Definitional, not a calibration: the thresholds below are
+    # deliberately untouched.
+    own = _relative_to(sym.file_path, store.project_dir)
+    out_of_scope = [
+        f for f in files if f != own and not _in_scope(f, reason.scope)
+    ]
     if len(out_of_scope) <= 2:
         return None
     return min(1.0, len(out_of_scope) / 10)
+
+
+def _relative_to(file_path: str, project_dir) -> str:
+    """`git grep` yields repo-relative paths; symbols store absolute ones. Compare like
+    with like, or the exclusion above silently never matches."""
+    try:
+        return str(Path(file_path).resolve().relative_to(Path(project_dir).resolve()))
+    except (ValueError, OSError):
+        return file_path
 
 
 def _tracked_files_mentioning(name: str, project_dir) -> list[str] | None:

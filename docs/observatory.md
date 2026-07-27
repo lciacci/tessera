@@ -1370,6 +1370,37 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   *surfaces* it was dropping its output until 2026-07-24), so per FOCUS-004's rule the absence is
   **not evidence** for or against the concept. A verdict needs the recording half wired first.
 
+  **THE CALIBRATION QUESTION, ANSWERED 2026-07-27 — and the answer was not a threshold.**
+  Measured before touching anything, because the standing instruction was *state the question
+  first, do not tune `>2` and `/10` by eye*:
+  - **The distribution is not pathological, and my earlier framing of it was too harsh.**
+    Of 879 CREATES-linked symbols: **46% score zero**, 34% sit at 1–2 (below threshold), 9%
+    at 3–9, 10% saturated. The threshold *is* discriminating — mass sits on both sides of it,
+    which is exactly what a meaningless cut would not produce. "Fires on ~1 in 5" was true and
+    the inference "therefore miscalibrated" was not.
+  - **The real defect was definitional.** `usage` counted every tracked file mentioning the
+    symbol — **including the file the symbol is DEFINED in**. A symbol's own definition is not
+    usage outside its scope. **32 of 174 firing verdicts flip** on that alone. Fixed; the
+    thresholds are deliberately untouched.
+  - **What the measurement actually exposed is SCOPE QUALITY, not threshold choice.** Only
+    **42% of tracked files sit inside any reason's scope**, and **46% of symbols are
+    CREATES-linked to a reason whose scope does not include the file the symbol lives in.**
+    That is incoherent on its face — an intent that "created" a symbol in a file it does not
+    claim — and it is a property of git-history bootstrap, which derives scope from one commit
+    cluster. **No threshold can repair an input like that**, which is why tuning would have
+    been the wrong lever applied confidently.
+  - **So the open question is re-stated, not closed:** not *"are `>2` and `/10` right?"* but
+    ***"is a bootstrap-derived scope trustworthy input for a scope-comparison dimension?"***
+    On this graph, demonstrably not for ~half of it. That is answerable by fixing scopes or by
+    scoping the dimension to reasons whose scope covers their own symbols — a design question
+    with evidence attached, which is where it should have started.
+
+  **Noticed while re-scanning, recorded not fixed: a drift that STOPS drifting is never closed.**
+  Dedup refreshes an existing open row and inserts new ones, but nothing retires a row whose
+  condition no longer holds — so the backlog is monotonic between manual dispositions. Auto-closing
+  would silently erase findings, so this needs a decision rather than a patch; it is the same
+  disposition-authority question ADR-0016 answered for the other two states.
+
   **A second calibration question, deliberately left open:** `usage` now fires on 168 of 816
   symbols with 64 saturated at 1.00. It is honest — a scope comparison over tracked files — but
   its thresholds (`>2` files, `/10` saturation) were never calibrated against anything, and the

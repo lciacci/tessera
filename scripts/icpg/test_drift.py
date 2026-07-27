@@ -235,3 +235,32 @@ def test_untested_intents_clears_when_a_validated_by_edge_exists(tmp_path):
 
 if __name__ == '__main__':
     raise SystemExit(pytest.main([__file__, '-q']))
+
+
+def test_a_symbols_own_file_is_not_usage_outside_its_scope(tmp_path):
+    """FOUND BY MEASURING, 2026-07-27. `usage` asks "is this referenced outside the intent's
+    declared scope?" and counted every tracked file mentioning the name — including the file
+    the symbol is DEFINED in. On this repo only 42% of tracked files sit inside any reason's
+    scope and 46% of symbols are CREATES-linked to a reason whose scope excludes their own
+    file, so for nearly half the graph the definition site was counted as out-of-scope usage.
+
+    Definitional, not a calibration: the `>2` and `/10` thresholds are untouched.
+    """
+    _git_repo(tmp_path, {
+        'widget.py': SOURCE,
+        'a.py': 'widget_handler\n',
+        'b.py': 'widget_handler\n',
+    })
+    store = _store(tmp_path)
+    sym = next(s for s in extract_symbols(str(tmp_path / 'widget.py')))
+    store.upsert_symbol(sym)
+    # scope deliberately EXCLUDES widget.py — the shape 46% of this graph is in
+    reason = ReasonNode(goal='ship it', owner='test', scope=['docs/'])
+    store.create_reason(reason)
+    store.create_edge(Edge(from_id=reason.id, to_id=sym.id, edge_type='CREATES'))
+
+    event = check_symbol_drift(store, sym.id)
+    # a.py + b.py = 2 out-of-scope refs, at the threshold; widget.py must NOT make it 3
+    assert event is None or 'usage' not in event.drift_dimensions, (
+        "the symbol's own defining file was counted as usage outside its scope"
+    )

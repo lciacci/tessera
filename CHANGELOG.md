@@ -12,6 +12,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 > 2026-07-08 and 2026-07-25. The section below covers the 2026-07-26 session; the older
 > `[Unreleased]` content follows it, unchanged.
 
+### 2026-07-27 — `usage` drift: the question was not the threshold
+
+Measured before tuning, because the standing instruction was to state the question first
+and not pick `>2` / `/10` by eye. The measurement changed the question.
+
+#### Fixed
+- **`usage` counted a symbol's OWN defining file as usage outside its scope.** A definition
+  is not usage elsewhere. **32 of 174 firing verdicts flip** on this alone. The thresholds
+  are deliberately untouched — this is definitional, not calibration.
+
+#### Measured, and it refutes the earlier framing
+- Of 879 CREATES-linked symbols: **46% score zero**, 34% at 1–2 (below the cut), 9% at 3–9,
+  10% saturated. Mass on both sides of the threshold, which is what a *working* cut looks
+  like. "Fires on ~1 in 5, therefore miscalibrated" was a bad inference.
+- **Only 42% of tracked files sit inside any reason's scope, and 46% of symbols are
+  CREATES-linked to a reason whose scope excludes the file they live in.** That is the real
+  problem — a property of git-history bootstrap deriving scope from one commit cluster. No
+  threshold repairs an input like that.
+- **Question re-stated, still open:** not "are the thresholds right" but "is a
+  bootstrap-derived scope trustworthy input for a scope-comparison dimension?"
+
+**Recorded, not fixed:** a drift that stops drifting is never closed. Dedup refreshes open
+rows and inserts new ones; nothing retires one whose condition no longer holds, so the
+backlog is monotonic between manual dispositions. Auto-closing would erase findings, so it
+needs the same disposition-authority decision ADR-0016 made for the other two states.
+
 ### 2026-07-27 — review of the session's own diff, and the bug it found
 
 Self-review with adversarial probes, not a re-read. Its ceiling is stated in the same

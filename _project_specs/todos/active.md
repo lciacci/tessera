@@ -137,34 +137,35 @@ Add a line only when a lesson recurs; the value is that the list is short enough
 
 ### Next — in priority order
 
-**Everything on the 2026-07-27 list is CLOSED (items 1–5, plus item 8's design gate). Item C
-closed except its deferred piece, which ADR-0016 then decided too.** What remains:
+**CLOSED 2026-07-27:** items 1–5 of the earlier list, item 8's design gate (ADR-0016), item C,
+item D (ADR-0014), A5b, A6 — and the `usage` calibration question, which turned out not to be a
+threshold question at all (see **C** above: the defect was definitional, the exposed problem is
+scope quality, and the re-stated question is recorded there). What is actually next:
 
-1. **`usage` drift threshold calibration — and it now has an evidence channel it lacked.**
-   168 of 816 symbols fire, 64 saturated at 1.00, against `>2` files and `/10` saturation that
-   were never calibrated against anything. **Do NOT tune those numbers by eye** — that is how
-   three proxy predicates were born. ADR-0016 made `dismissed` mean *the detector was wrong* and
-   `icpg status` prints dismissals **by dimension** precisely so this question becomes answerable
-   from data. The work is: dismiss honestly for a while, then read the counts. One dismissal
-   exists so far (mine, 2026-07-27, on a genuinely uncalibrated `usage` hit).
-2. **Item 2 Part B — the pending-record channel (framework→downstream).** Still needs its
-   3-decision design gate before any code: where the record lives, idempotent-update semantics,
-   and the committed staleness marker. Unchanged.
-3. **B2 — correction recall.** Still BLOCKED on labels from a judgement that did not propose the
-   hypothesis. Unchanged, and the block is the point.
-4. **Minors:** `tessera-verify stats` still does not break out `verdict_channel` (now 2-for-2 on
-   the file channel, so the number is worth surfacing); concept-tags for the decision surface;
-   `rm -rf scripts/.tessera` leftover; historical `--reclassify --all`.
+1. **iCPG scope quality — the re-stated `usage` question.** Only **42% of tracked files sit
+   inside any reason's scope**, and **46% of symbols are CREATES-linked to a reason whose scope
+   excludes the file they live in**. That is incoherent on its face and it is what git-history
+   bootstrap produces. Decide: repair scopes, or scope the `usage` dimension to reasons whose
+   scope covers their own symbols. **Do not reach for the thresholds** — measured, they
+   discriminate (46% zero / 34% below / 19% fire).
+2. **Item 2 Part B — the pending-record channel (framework→downstream).** Needs its 3-decision
+   design gate before any code: where the record lives, idempotent-update semantics, the
+   committed staleness marker.
+3. **B2 — correction recall.** BLOCKED on labels from a judgement that did not propose the
+   hypothesis. The block is the finding, not an obstacle to route around.
+4. **Minors:** `tessera-verify stats` does not break out `verdict_channel` (now 2-for-2 on the
+   file channel, so the number is worth surfacing); a drift that STOPS drifting is never closed
+   (recorded in C — needs a disposition decision, not a patch); concept-tags for the decision
+   surface; `rm -rf scripts/.tessera`; historical `--reclassify --all`.
 
-**Passive, needs no action:** T2 restore receipts accrue at ~0.8/day. The one to watch is whether
-later receipts stop naming `progress` now that `detect_git_commit` asks git instead of parsing the
-shell — that would be the first time this repo has seen the loop close finding → fix → instrument
-goes quiet.
+**Passive, needs no action:** T2 restore receipts accrue at ~0.8/day. Watch whether later
+receipts stop naming `progress` now that `detect_git_commit` asks git instead of parsing the
+shell — that would be the first finding → fix → instrument-goes-quiet loop this repo has closed.
 
-**Standing caution for whoever picks this up:** four of today's findings were in code written
-earlier the same day, and every one was found by RUNNING something rather than re-reading it —
-the falsifier's PARTIAL, the chaos probes' wrong first draft, the A5b probes, and the malformed-row
-bug in the review. Self-review that does not execute anything is the weakest instrument here.
+**Standing caution for whoever picks this up:** five of today's findings were in code written
+earlier the same day, and every one came from RUNNING something rather than re-reading it — the
+falsifier's PARTIAL, the chaos probes' wrong first draft, the A5b probes, the malformed-row crash,
+and the `usage` own-file bug. **Self-review that executes nothing is the weakest instrument here.**
 
 ### T2's first real receipt: `insufficient` — and the checkpoint has a concrete bug
 
