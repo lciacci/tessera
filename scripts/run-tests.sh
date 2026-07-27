@@ -80,7 +80,14 @@ run "chaos"     "$PY" -m pytest chaos -q
 
 # mnemos ships assert-based self-checks, not pytest tests — zero `def test_`, run via -m.
 # pytest collects them as zero tests and says "no tests ran", which reads exactly like success.
-for check in test_haziness test_correction test_correction_detect test_bridge_goals test_divergence; do
+#
+# GLOBBED, not enumerated (2026-07-26). The hardcoded list meant a new self-check ran only if
+# someone remembered to append it here — and test_checkpoint_goal_cap.py was written, passed,
+# and was invisible to a GREEN `tessera-test` in the same session. Same manual-propagation
+# class as install.sh's global tier: the check that would catch the regression is itself
+# opt-in. A glob makes "I wrote a self-check" and "it runs" the same act.
+for f in scripts/mnemos/test_*.py; do
+    check="$(basename "$f" .py)"
     run "mnemos/$check" "$PY" -m "scripts.mnemos.$check"
 done
 

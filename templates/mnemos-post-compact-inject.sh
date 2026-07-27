@@ -68,8 +68,15 @@ try:
     with open(marker) as f:
         data = json.load(f)
     age = time.time() - data.get('timestamp', 0)
-    if age > 300:
-        # Stale marker (>5 min): compaction fired but no restore ran in time.
+    # 300s was MACHINE time; sessions run on HUMAN time. Observed 2026-07-26: a
+    # /compact followed by 33 min away from the terminal tripped this gate, which
+    # deleted the marker and injected NOTHING — the restore was destroyed by its
+    # own freshness check, and that silence is the fail-open (standing pattern #2).
+    # The gate also guarded the WRONG THING: the injected text is read live from
+    # checkpoint-latest.json, which the Stop hook keeps current, so marker age does
+    # NOT imply stale content. Retained only to expire a marker orphaned by a
+    # session that died — hence a TTL measured in days, not minutes.
+    if age > 86400:
         os.unlink(marker)
         record('restore_missed_stale')
         print('stale')
@@ -88,6 +95,23 @@ except FileNotFoundError:
 except Exception:
     print('error')
 ")
+
+# A stale marker means the restore was MISSED, not that nothing happened. Exiting
+# silently here is the fail-open (standing pattern #2): compaction fired, the marker
+# is now destroyed, and NOTHING told the model. Say so instead — through the same
+# additionalContext channel the real injection uses, because a PreToolUse hook's bare
+# stdout would go to the debug log and repeat the very bug this file was fixed for.
+if [ "$CONSUMED" = "stale" ]; then
+    printf '%s' "=== MNEMOS: COMPACTION DETECTED — RESTORE MISSED ===
+
+Compaction fired for this session, but the restore marker expired before any tool
+call consumed it. No checkpoint was injected.
+
+Run 'mnemos resume' to load the checkpoint, or ask the user what they were working
+on. Do NOT assume the context above is complete." \
+        | "$TOOLCHAIN_PY" -c "import json,sys; print(json.dumps({'hookSpecificOutput':{'hookEventName':'PreToolUse','additionalContext':sys.stdin.read()}}))"
+    exit 0
+fi
 
 # Only inject if we successfully consumed the marker
 if [ "$CONSUMED" != "consumed" ]; then

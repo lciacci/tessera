@@ -1529,6 +1529,38 @@ this section — the dedup fix it prescribes is real but is now step 3, not step
   the dead Stop-hook ingest, the PreToolUse bare-stdout channel, and today's two-tier hook
   silence. Four failures, zero of them in `scripts/mnemos/`. That is why the trial has never had
   an honest run, and it is why "it never fired, so kill it" was never a sound inference.
+- **UPDATE 2026-07-26 (later same day) — the "zero in `scripts/mnemos/`" tally is now WRONG, and
+  `checkpoint.py` is no longer UNCHANGED.** A real `/compact` was run as the trial's first
+  observation through a working channel. It found a fifth failure, and this one IS in the engine:
+  `checkpoint.py` joined **every** active GoalNode unbounded. Goals are never-evict AND
+  `store.extract_session_goals` mints one per ingested session, so the field grew to **98 nodes /
+  11,119 chars — 60% of an 18.2KB checkpoint**, which overflowed the SessionStart output limit.
+  The harness spilled the block to a file and delivered a 2KB preview: the model got the goal blob
+  and **not** Constraints, Progress, Key Files, or Git State. **The restore blob outgrew its own
+  delivery channel** — standing pattern #9, one layer deeper than "did it run": it ran, it
+  reached, and the payload still didn't arrive. Capped to the 8 most recent (11,119 → 872 chars,
+  −92%), render only, nodes retained per ADR-0007, omitted count stated not silently dropped.
+  Guarded by `scripts/mnemos/test_checkpoint_goal_cap.py`.
+  - The subtle half: **all 98 goals carry `activation_weight` 1.0**, so the store's
+    `ORDER BY activation_weight DESC` is a no-op and a naive head-slice keeps arbitrary rows —
+    it dropped the live goal and kept `what is sqlfluffy`. The cap sorts by recency; the test
+    asserts that specifically, and was falsified against both the uncapped and naive-cap versions
+    before being trusted.
+  - **This does not overturn the entry's thesis, it sharpens it.** The defect is still *inherited*
+    — the unbounded join is Maggy's line, untouched since `ad19913`. What changed is that it took
+    ~2 months of accumulated GoalNodes to cross the limit, so it was invisible at import and
+    arrived by TIME, not by an edit. **A latent bug in code nobody touched is still a bug in the
+    engine.** "We never touched it" was true and was never the same claim as "it is sound."
+- **Same observation, sixth failure, and the one with fleet blast radius: the GLOBAL hook tier was
+  badly stale.** `~/.claude/templates/` — which every project on the default `hook_distro: global`
+  actually executes (ADR-0004) — held **7 stale hooks and was missing `tessera-decision-surface.sh`
+  entirely**. All three PreToolUse hooks had **zero** `additionalContext`: the 07-24 channel fix
+  never propagated, so for the whole fleet Layer 3, the fatigue/intent injection, and the decision
+  surface were emitting to the debug log or absent. `./install.sh` is the only propagation and it
+  is manual, so a fix landing in `.claude/scripts/` reaches nobody until someone remembers.
+  Resolved by running it (17/17 now byte-identical). **Unresolved: nothing DETECTS this** — the
+  gap is handoff item 4, and it just cost the fleet two days of a fix that existed and did not
+  ship. Standing pattern #5, violated by time rather than by a missing `cp`.
 - **It IS producing, and this is the part the kill/keep framing kept missing:**
   ```
   Active nodes 630 · total 645 · checkpoints 517 · goal 98 / constraint 53 / result 479

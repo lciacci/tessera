@@ -12,6 +12,12 @@ from .models import CheckpointNode, _now, _uuid
 from .signals import read_recent_signals
 from .store import MnemosStore
 
+# Goals are never-evict (models.py) AND one is auto-minted per ingested session
+# (store.extract_session_goals), so the list only grows: 98 nodes / 10.9KB by
+# 2026-07-26 — 60% of the checkpoint, and what truncated the Layer-2 SessionStart
+# delivery. The restore blob had outgrown its own delivery channel.
+MAX_CHECKPOINT_GOALS = 8
+
 
 def write_checkpoint(
     store: MnemosStore,
@@ -30,14 +36,27 @@ def write_checkpoint(
 
     Returns the created CheckpointNode.
     """
-    # Determine task_id from active GoalNodes
+    # Determine task_id from active GoalNodes, most recent first.
+    #
+    # Sort by recency, NOT the store's ORDER BY activation_weight: in a real graph
+    # every goal carries weight 1.0, so that ordering is a no-op and a naive head
+    # slice keeps arbitrary rows — dropping the live goal to keep 'what is sqlfluffy'.
+    #
+    # Caps the RENDER only. Nodes stay in the store (ADR-0007: never subtract from a
+    # knowledge artifact), and the omitted count is STATED, not silently truncated.
     goal_nodes = store.get_by_type('goal')
-    if not task_id and goal_nodes:
-        task_id = goal_nodes[0].task_id
+    goal_nodes.sort(key=lambda n: n.created_at or '', reverse=True)
+    shown = goal_nodes[:MAX_CHECKPOINT_GOALS]
+    if not task_id and shown:
+        task_id = shown[0].task_id
     task_id = task_id or 'unknown'
 
     # Gather goal
-    goal_text = '; '.join(n.content for n in goal_nodes) or 'No active goal'
+    goal_text = '; '.join(n.content for n in shown) or 'No active goal'
+    omitted = len(goal_nodes) - len(shown)
+    if omitted:
+        goal_text += (f' [+{omitted} older goal(s) omitted from this checkpoint; '
+                      '`mnemos nodes --type goal` lists all]')
 
     # Gather constraints (never evicted)
     constraint_nodes = store.get_by_type('constraint')
