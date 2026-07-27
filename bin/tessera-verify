@@ -406,6 +406,16 @@ def cmd_skip(args: argparse.Namespace) -> int:
 
 def stats_summary(logs_dir: Path) -> dict:
     counts = {"confirmed": 0, "refuted": 0, "partial": 0, "no_verdict": 0, "skips": 0}
+    # Which CHANNEL each run's verdicts arrived on. A regression from `file` back to
+    # `message` is the 2026-07-26 failure — the verifier did the whole job, then its own
+    # verify-scan Stop hook overwrote the final message and `parse_verdicts` read the skip
+    # acknowledgment instead. 0 usable verdicts in 3 real attempts, and nothing said so.
+    #
+    # `unrecorded` is a DELIBERATE third bucket, not a tidy-up. `verdict_channel` was added
+    # by that fix, so every run before it has no channel field. Defaulting those to "message"
+    # would manufacture a regression signal out of history that predates the measurement —
+    # the reader would see message-channel verdicts and conclude the fix had come undone.
+    channels: dict[str, int] = {}
     for log in sorted(logs_dir.glob("*.jsonl")):
         for line in log.read_text().splitlines():
             try:
@@ -418,9 +428,12 @@ def stats_summary(logs_dir: Path) -> dict:
             if data.get("skipped"):
                 counts["skips"] += 1
                 continue
+            ch = data.get("verdict_channel") or "unrecorded"
+            channels[ch] = channels.get(ch, 0) + 1
             for claim in data.get("claims", []):
                 key = claim.get("verdict", "NO_VERDICT").lower()
                 counts[key if key in counts else "no_verdict"] += 1
+    counts["channels"] = channels
     judged = counts["confirmed"] + counts["refuted"] + counts["partial"]
     counts["author_error_rate"] = (
         (counts["refuted"] + counts["partial"]) / judged if judged else None
@@ -436,6 +449,16 @@ def cmd_stats(_args: argparse.Namespace) -> int:
         f"{s['partial']} partial / {s['no_verdict']} no-verdict; skips: {s['skips']}"
     )
     print(f"author error rate on 'it's fixed': {rate}   (2026-07-12 prior: 100%, n=3)")
+
+    ch = s["channels"]
+    if ch:
+        # Ordered file-first: `file` is the fix, `message` is the regression, and a reader
+        # scanning the line should hit the number that matters before the historical one.
+        order = sorted(ch, key=lambda k: {"file": 0, "message": 1}.get(k, 2))
+        print("verdict channel: " + " / ".join(f"{ch[k]} {k}" for k in order))
+        if ch.get("message"):
+            print("  ⚠ a run landed on the MESSAGE channel — the 2026-07-26 failure mode, "
+                  "where a Stop hook overwrites the final message and the verdicts vanish.")
     return 0
 
 

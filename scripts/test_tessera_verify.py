@@ -233,12 +233,13 @@ def test_append_event_writes_session_log(logs):
 
 # --- stats -------------------------------------------------------------------
 
-def _log_verification(logs, sid, verdicts, skipped=False):
+def _log_verification(logs, sid, verdicts, skipped=False, channel=None):
     ev = tv.build_event(
         claims=[f"c{i}" for i in range(len(verdicts))],
         verdicts=[{"verdict": v, "evidence": ""} for v in verdicts],
         session_id=sid,
         skipped=skipped,
+        verdict_channel=channel,
     )
     tv.append_event(ev)
 
@@ -259,6 +260,30 @@ def test_stats_counts_and_author_error_rate(logs):
 def test_stats_empty_logs(logs):
     s = tv.stats_summary(logs)
     assert s["author_error_rate"] is None
+
+
+def test_stats_breaks_out_the_verdict_channel(logs):
+    _log_verification(logs, "s1", ["CONFIRMED"], channel="file")
+    _log_verification(logs, "s2", ["CONFIRMED"], channel="message")
+    assert tv.stats_summary(logs)["channels"] == {"file": 1, "message": 1}
+
+
+def test_a_run_with_no_recorded_channel_is_not_counted_as_message(logs):
+    """The bucket that stops the stat from manufacturing a regression.
+
+    `verdict_channel` was added by the 2026-07-26 fix, so every run before it has no
+    channel field — 16 of them in the live log against 4 that do. Folding those into
+    `message` would render as "4 file / 16 message": a reader sees the failure mode the
+    fix was written to prevent, dominating the numbers, and concludes it came undone.
+    The absent field means *not measured*, which is the same distinction P3's `unknown`
+    and haziness's `≥` prefix both exist to preserve — a verdict must not rest on what
+    the instrument could not read.
+    """
+    _log_verification(logs, "s1", ["CONFIRMED"])  # no channel — predates the field
+    _log_verification(logs, "s2", ["CONFIRMED"], channel="file")
+    channels = tv.stats_summary(logs)["channels"]
+    assert channels == {"unrecorded": 1, "file": 1}
+    assert "message" not in channels, "an unmeasured run was counted as a regression"
 
 
 # --- worktree ----------------------------------------------------------------
