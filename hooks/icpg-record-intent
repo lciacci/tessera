@@ -33,6 +33,22 @@
 # Kept, not deleted: the intended FLOW below is still the right shape, and it is the only written
 # record of it (ADR-0007 — harvest before you cut).
 #
+# ██ THE FLOW NOW EXISTS, BUILT THE WAY THIS HEADER PRESCRIBED (2026-07-27, ADR-0019). ██
+# This file's verdict — "the recording half this repo actually needs is AUTHORED intent ...
+# which is a workflow change, not a hook" — was followed, not overruled:
+#   - AUTHORING stays deliberate: `/icpg-intent` -> `icpg create`, now opening the intent as
+#     `executing` and accepting hand-authored --invariant/--precondition/--postcondition.
+#     NOTHING auto-creates a ReasonNode. Automating step 0 would answer "does the agent state
+#     intent?" by making the question unanswerable, which is this header's objection exactly.
+#   - RECORDING is the only part hooked: `.claude/scripts/icpg-stop-record.sh` links symbols to
+#     an ALREADY-AUTHORED executing intent, keyed on the graph's own status rather than on the
+#     `.icpg/.current-intent` marker file this hook wrote (a second source of truth for a fact
+#     the database already holds).
+#   - PROMPTING replaced auto-creation: `icpg-inject-context.sh` asks, once per session and only
+#     when zero intents are executing, rather than inventing one from a commit message.
+# This file stays unwired and unwirable. It is the record of a design that was diagnosed, and
+# the diagnosis is what shaped the replacement.
+#
 # ── original header ──
 # iCPG PreToolUse Hook — auto-records intent ReasonNode before Edit/Write.
 #

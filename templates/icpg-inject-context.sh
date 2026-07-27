@@ -75,24 +75,85 @@ fi
 [ -z "$FILE_PATH" ] && exit 0
 [ ! -f "$FILE_PATH" ] && exit 0
 
+# STEP 0 of skills/icpg/SKILL.md, which calls it "non-negotiable for autonomous
+# agents": every change linked to a stated purpose, because without an intent there
+# is nothing to measure drift against. The instruction lived only in a skill that is
+# `user-invocable: false` and loads on demand — i.e. not in front of anyone at edit
+# time. Machinery, not convention (principle #17).
+#
+# Keyed on NO EXECUTING INTENT, deliberately NOT on "this file has no intent
+# context". Those differ, and the difference is the whole point: `query context`
+# answers from CREATES edges regardless of status, so a file touched by a long-since
+# FULFILLED intent still returns context. Nesting this under "no context for this
+# file" (the first version, 2026-07-27) meant it could only ever fire on files with
+# no intent history at all — and an old fulfilled intent does not excuse changing
+# code without saying why NOW.
+#
+# ASK, never block: the agent may have good reason not to state an intent, and a
+# PreToolUse hook that denied edits would be control, not instrumentation (ADR-0006).
+#
+# Gated twice, because ungated it fires on every edit and wallpaper gets ignored —
+# which is how a real signal dies:
+#   1. only when ZERO intents are executing — one open intent means a purpose is
+#      already stated and this file is simply outside its scope
+#   2. once per session — the marker holds the session id, so the next session asks
+#      again but this one does not nag
+PROMPT=""
+EXECUTING_N=$("$TOOLCHAIN_PY" -c "
+from icpg.store import ICPGStore
+print(len(ICPGStore('.').list_reasons(status='executing')))
+" 2>/dev/null || echo 1)
+SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
+if [ "$EXECUTING_N" = "0" ] && [ -n "$SESSION_ID" ] &&
+   [ "$(cat .icpg/.intent-prompted 2>/dev/null)" != "$SESSION_ID" ]; then
+  if printf '%s\n' "$SESSION_ID" > .icpg/.intent-prompted 2>/dev/null; then
+    PROMPT="⚠️ NO ACTIVE iCPG INTENT — nothing is recording why this change is being made.
+
+Step 0 of the iCPG loop states WHY before code changes. Without an intent there is
+nothing for drift detection to measure against, and the change is untraceable to a
+purpose. Either:
+
+  /icpg-intent \"<what you are trying to achieve>\" --scope <paths>
+  (or directly: icpg create \"<goal>\" --scope <paths> [--invariant '<predicate>'])
+
+...or say plainly why this one does not warrant it (trivial fix, exploration,
+answering a question). Both are fine; skipping it silently is not.
+
+Asked once per session. Close with \`icpg fulfil <id>\` — the Stop recorder only
+attributes symbols when exactly ONE intent is executing, so leaving them open is
+what silences it."
+  fi
+fi
+
 # Query existing intents
 INTENTS=$($ICPG_CMD query context "$FILE_PATH" 2>/dev/null)
-if [ -z "$INTENTS" ]; then
-  exit 0
-fi
+
+# Nothing to say about this file and no prompt owed — stay quiet.
+[ -z "$INTENTS" ] && [ -z "$PROMPT" ] && exit 0
 
 # Build context message.
 # REAL newlines via $'\n', not the literal backslash-n the inherited version used: bash does not
 # interpret "\n" inside a plain assignment, so the injected block reached the model as one line
 # with visible \n escapes. It "worked" — valid JSON, hook exit 0, content present — while being
 # markedly harder to read. The channel was right and the payload was mangled.
-CTX="iCPG Intent Context for ${FILE_PATH}:"
-CTX="$CTX"$'\n'"${INTENTS}"
+CTX=""
+if [ -n "$INTENTS" ]; then
+  CTX="iCPG Intent Context for ${FILE_PATH}:"
+  CTX="$CTX"$'\n'"${INTENTS}"
 
-# Also check for drift
-DRIFT=$($ICPG_CMD drift file "$FILE_PATH" 2>/dev/null)
-if [ -n "$DRIFT" ] && [ "$DRIFT" != "No drift detected" ]; then
-  CTX="$CTX"$'\n\n'"⚠️ DRIFT: ${DRIFT}"
+  # Also check for drift. Only meaningful where symbols are actually linked, so
+  # it stays inside the has-intents branch.
+  DRIFT=$($ICPG_CMD drift file "$FILE_PATH" 2>/dev/null)
+  if [ -n "$DRIFT" ] && [ "$DRIFT" != "No drift detected" ]; then
+    CTX="$CTX"$'\n\n'"⚠️ DRIFT: ${DRIFT}"
+  fi
+fi
+
+# The step-0 prompt goes LAST — recency matters in an injected block, and this is
+# the part asking for an action rather than reporting state.
+if [ -n "$PROMPT" ]; then
+  [ -n "$CTX" ] && CTX="$CTX"$'\n\n'
+  CTX="${CTX}${PROMPT}"
 fi
 
 # Inject as additional context

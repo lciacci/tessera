@@ -56,6 +56,23 @@ def main(argv: list[str] | None = None) -> int:
         '--infer-contracts', action='store_true',
         help='Use LLM to infer contracts'
     )
+    # The authoring tier design-principles.md names FIRST ("hand-authored for
+    # high-risk intents") and the CLI could not express until 2026-07-27. Only
+    # --infer-contracts existed, and it needs an LLM key and silently degrades to
+    # the scope->file_exists heuristic, so the top tier was unreachable: a willing
+    # agent had no way to state a precondition. Repeatable; unions with inference.
+    p_create.add_argument(
+        '--invariant', action='append', dest='invariants', default=[],
+        metavar='PREDICATE', help='Must hold throughout (repeatable)'
+    )
+    p_create.add_argument(
+        '--precondition', action='append', dest='preconditions', default=[],
+        metavar='PREDICATE', help='Must hold before the work (repeatable)'
+    )
+    p_create.add_argument(
+        '--postcondition', action='append', dest='postconditions', default=[],
+        metavar='PREDICATE', help='Must hold after the work (repeatable)'
+    )
 
     # --- record ---
     p_record = sub.add_parser(
@@ -70,6 +87,19 @@ def main(argv: list[str] | None = None) -> int:
         choices=['CREATES', 'MODIFIES'],
         help='Edge type (default: CREATES)'
     )
+
+    # --- fulfil ---
+    # The close verb. Without it `executing` accumulates forever: `create` opens an
+    # intent and nothing ever closed one, so the auto-recorder — which only acts on
+    # an UNAMBIGUOUS single executing intent — would go permanently silent after the
+    # second one. Deliberately agent-invoked, never automatic: "this intent is done"
+    # is the same kind of judgement as stating it, and auto-closing on session end
+    # would make `executing` mean "most recent session" instead of "being worked on".
+    p_fulfil = sub.add_parser(
+        'fulfil', help='Close an intent — the stated goal is done'
+    )
+    p_fulfil.add_argument('reason', help='ReasonNode ID (short prefix is fine)')
+    p_fulfil.add_argument('--note', help='What shipped')
 
     # --- query ---
     p_query = sub.add_parser('query', help='Query the reason graph')
@@ -149,6 +179,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_create(store, args)
     elif args.command == 'record':
         return cmd_record(store, args)
+    elif args.command == 'fulfil':
+        return cmd_fulfil(store, args)
     elif args.command == 'query':
         return cmd_query(store, args)
     elif args.command == 'drift':
@@ -182,14 +214,32 @@ def cmd_create(store: ICPGStore, args) -> int:
         agent=args.agent,
         task_id=args.task_id,
         parent_id=args.parent,
-        source='agent-session' if args.agent else 'manual'
+        source='agent-session' if args.agent else 'manual',
+        # ACTIVE on creation (2026-07-27). The default was 'proposed', and only
+        # `record` promoted to 'executing' — so the auto-recorder, which keys on
+        # the executing intent, could never see a freshly stated one. Record
+        # needed an executing intent and only record could make one. You do not
+        # state an intent you are not about to work on; `icpg fulfil` closes it.
+        status='executing',
     )
 
+    # Hand-authored contracts UNION with inferred ones — inference must not erase
+    # what a human or agent stated deliberately. Explicit wins on conflict by
+    # being appended last; the evaluator treats the list as a conjunction, so a
+    # duplicate predicate is harmless and a contradictory one fails loudly.
     if args.infer_contracts:
         contracts = infer_contracts(reason, project_dir=args.project)
         reason.preconditions = contracts['preconditions']
         reason.postconditions = contracts['postconditions']
         reason.invariants = contracts['invariants']
+
+    reason.invariants += [p for p in args.invariants if p not in reason.invariants]
+    reason.preconditions += [
+        p for p in args.preconditions if p not in reason.preconditions
+    ]
+    reason.postconditions += [
+        p for p in args.postconditions if p not in reason.postconditions
+    ]
 
     store.create_reason(reason)
 
@@ -254,6 +304,54 @@ def cmd_record(store: ICPGStore, args) -> int:
     print(f'Recorded {count} symbols → ReasonNode {args.reason}')
     print(f'  Files: {len(files)}')
     print(f'  Edge type: {args.edge_type}')
+    return 0
+
+
+def resolve_reason_id(store: ICPGStore, prefix: str):
+    """A ReasonNode, or an exit code. Fails LOUD — never silently no-ops.
+
+    Same contract as `_resolve_event_id`, for the same reason: `update_reason_status`
+    is an `UPDATE ... WHERE id = ?` that reports success whether or not a row matched.
+    A close verb that cheerfully closes nothing is worse than no verb, because the
+    intent stays open while the operator believes it is shut.
+    """
+    matches = [
+        r for r in store.list_reasons()
+        if r.id == prefix or r.id.startswith(prefix)
+    ]
+    if not matches:
+        print(f'Error: no ReasonNode matches {prefix!r}.', file=sys.stderr)
+        return 1
+    if len(matches) > 1:
+        print(f'Error: {prefix!r} is ambiguous ({len(matches)} matches):',
+              file=sys.stderr)
+        for r in matches[:5]:
+            print(f'  {r.id[:8]}  {r.goal[:60]}', file=sys.stderr)
+        return 1
+    return matches[0]
+
+
+def cmd_fulfil(store: ICPGStore, args) -> int:
+    if not store.exists():
+        print('Error: No .icpg/ directory. Run `icpg init` first.', file=sys.stderr)
+        return 1
+
+    match = resolve_reason_id(store, args.reason)
+    if isinstance(match, int):
+        return match
+    if match.status == 'fulfilled':
+        print(f'ReasonNode {match.id[:8]} is already fulfilled.')
+        return 0
+
+    store.update_reason_status(match.id, 'fulfilled', fulfilled_at=_now())
+    print(f'Fulfilled {match.id[:8]} — {match.goal[:60]}')
+    if args.note:
+        print(f'  {args.note}')
+    remaining = len(store.list_reasons(status='executing'))
+    # Stated because the auto-recorder only acts on exactly ONE executing intent.
+    # At 0 it records nothing; at 2+ it goes quiet rather than guess which intent
+    # a change belongs to. Either way the operator should know before the next Stop.
+    print(f'  executing intents remaining: {remaining}')
     return 0
 
 
