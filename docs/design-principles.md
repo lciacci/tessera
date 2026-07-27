@@ -99,7 +99,26 @@ Two distinct concerns that Maggy tangles together — separating them clarifies 
 
 **(2026-07-09 update — the calendar trigger is retired.)** Compaction has *never fired* since the fed baseline: max `token_utilization` 0.51 across 131 samples, never within reach of the ≈83% threshold; fatigue `flow` in 131/131. "Never aided a recovery" is therefore **untriggered**, not disconfirming — a third category beyond the unused/unreachable split the 06-26 correction drew. And the criterion was unfalsifiable as instrumented: the compaction marker was deleted on consumption and `checkpoints` carries no trigger column, so no query could distinguish "compaction never happened" from "happened twenty times." Fixed by `.mnemos/compaction-log.jsonl`. ~~**The trial is now event-triggered: judge after ≥3 recorded `compaction_fired` events, not after N days.**~~ Note also that this trial governs the *compaction-recovery* layer only — the *session-continuity* layer (Stop-hook checkpoint, SessionStart reload) is independently demonstrated and is not on trial. See observatory → "Mnemos kill/keep test was confounded — empty ≠ unused."
 
-**(2026-07-11 update — the criterion needed one more qualifier, and the layer finally ran.)** The 07-09 criterion was still gameable: a hand-run `/compact` writes a `compaction_fired` event indistinguishable from a real one, so **three deliberate tests of the recovery layer would have delivered the trial's verdict on evidence we manufactured** — the same shape as the retired P2 predicate (firing correctly on a proxy that tracks no real pain). PreCompact now records the hook's `trigger` field, and the criterion is: **judge after ≥3 _non-manual_ `compaction_fired` events.** A `trigger: manual` entry is a *test* of the layer, never evidence about it; `tessera-watch` P3 enforces the exclusion. Separately, the layer executed for the first time ever on 2026-07-11 (manual): the machinery passed all four checks and Layer 2 (`mnemos-session-start.sh` on `source=compact`) put goal, constraints, and a fresh checkpoint back into context with no re-derivation. Layer 3's *injection* remains unproven — its log line fires, but its text was never observed arriving. **The trial's clock has still not started: 0 real events.**
+**(2026-07-11 update — the criterion needed one more qualifier, and the layer finally ran.)** The 07-09 criterion was still gameable: a hand-run `/compact` writes a `compaction_fired` event indistinguishable from a real one, so **three deliberate tests of the recovery layer would have delivered the trial's verdict on evidence we manufactured** — the same shape as the retired P2 predicate (firing correctly on a proxy that tracks no real pain). PreCompact now records the hook's `trigger` field, and the criterion is: ~~**judge after ≥3 _non-manual_ `compaction_fired` events.**~~ **(RETIRED 2026-07-26 — see the update below.)** A `trigger: manual` entry is a *test* of the layer, never evidence about it; `tessera-watch` P3 enforces the exclusion. Separately, the layer executed for the first time ever on 2026-07-11 (manual): the machinery passed all four checks and Layer 2 (`mnemos-session-start.sh` on `source=compact`) put goal, constraints, and a fresh checkpoint back into context with no re-derivation. Layer 3's *injection* remains unproven — its log line fires, but its text was never observed arriving. **The trial's clock has still not started: 0 real events.**
+
+**(2026-07-26 update — the criterion was retired because it counted the WRONG EVENT. ADR-0015.)**
+Both updates above refined *how to count compaction*, and neither asked whether compaction was the
+thing to count. It was not. `mnemos-session-start.sh` gates on nothing but the checkpoint file
+existing, so the restore path runs identically on `startup`, `resume`, **and** `compact`:
+**541 checkpoints, 121 sessions, ~3 compaction events.** The mechanism did not fire 3 times — it
+fired ~121. The trial spent 37 days waiting on the rarest *trigger*, ~2% of invocations, of a
+mechanism running constantly and unwatched; and the defect eventually found (`checkpoint.py`
+joining every never-evict GoalNode until the payload overflowed its delivery channel) was
+degrading **all ~121 restores**, surfacing via compaction only by accident. That is principle-#3's
+failure in its purest form, and worse than usual: a proxy normally *correlates* with the pain,
+while this one tracked a fiftieth of it. `tessera-watch` P3 is now `p3_restore_integrity`, a
+mechanical guard rather than a verdict gate, and the trial is split into T1 (deliverability, green)
+/ T2 (sufficiency — the real question, instrument built 2026-07-26 with **zero receipts**) / T3
+(compaction frequency, demoted to informational). **No verdict on the recovery half is available
+until T2 has data.** The deeper problem the re-scope does *not* solve: `restore_injected` was a log
+line the hook wrote **about itself** — it read "delivered" four times while the model received
+nothing — so going from 3 events to 121 would only have yielded 121 self-reports. **Volume does not
+fix provenance**, which is why T2 splits sender from receiver.
 
 **Code structural and intent knowledge** — three distinct invocation patterns, not parallel always-loaded layers:
 

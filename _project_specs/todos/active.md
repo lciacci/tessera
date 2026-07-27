@@ -58,6 +58,8 @@ order" below, **CLOSED: A (ADR-0015), A2, A3, A4, A5, B1, F.** What is actually 
     task you can sit and watch. Do the real next job; the receipt is owed at its Stop.
   - **B2 — correction recall.** BLOCKED on labels from a judgement that did not propose the
     hypothesis (see B; I proposed it, retracted it, then produced supporting labels).
+  - **A6 — a doccheck for the handoff itself** (it drifted 4 ways on 2026-07-26 and
+    nothing could see it; two candidate checks scoped, plus the version NOT to build).
   - **A5b — the per-bail-out spec-11 audit. DO NOT re-open it with a `grep -c degraded` count**;
     that measure produced three wrong findings on 2026-07-26.
   - **C (iCPG), D (ADR-0014 — Lorenzo's decision), E (smaller known items).**
@@ -273,6 +275,31 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    PATH exactly as mnemos did, and no predicate mentioned it. If it broke, the intent half would
    read as "this file has no intents" rather than "the tool is gone" — **F-001's confound
    verbatim.** P9 extended (declare-then-check on `.icpg/reason.db`).
+
+**A6. NEW — the handoff has NO mechanical consistency check, and it drifted four ways today.**
+   Asked "handoff updated?" at the end of 2026-07-26 and it was not: item **F** still read
+   "nothing detects it" twenty lines from **A4** recording it FIXED that morning; **START HERE**
+   still pointed at a resolved A; and **two passages asserted retracted numbers as fact**
+   ("2010 user turns / 5 detections", "corrections arrive as QUESTIONS"). I had edited this file
+   four times that day and never re-read it end to end — the artifact-not-property error again.
+   **`doccheck` cannot see it, and that exclusion is CORRECT**: `_project_specs/` is out of scope
+   because specs describe work NOT YET BUILT, so naming an absent file is the point (doccheck.py's
+   own header says so). The consequence is that the one document whose entire job is *being true
+   on arrival* has zero automated guard.
+   **Two tractable checks — and note NEITHER requires reading prose, which is why they are worth
+   trying where a general "is this consistent?" check is not:**
+   1. **Retired-figure sentinel.** A small list of numbers/claims formally retracted (`2010 user
+      turns`, `5 detections`, `≥3 non-manual compaction_fired`, `COMPACTION_MIN`) that must not
+      appear in the handoff *unqualified* — i.e. not within N lines of RETRACTED / SUPERSEDED /
+      Original text. Cheap, precise, and it is the `adr-execution-recorded` pattern reused. Today
+      it would have caught 3 of the 4.
+   2. **Closed-item artifact check.** An entry containing `FIXED`/`CLOSED`/`DONE` + a date must
+      name a backticked path that exists — same rule as ADRs' `Executed:`. Catches "closed" items
+      whose machinery was never built.
+   **DO NOT build the obvious version**: a check that greps `open`/`closed` keywords will misfire
+   on ordinary prose and become the ignored-checker this repo keeps warning about. If neither of
+   the two above survives contact, the honest answer may be that the handoff needs a human re-read
+   at session end, not a check — say so rather than shipping a noisy one.
 
 **A5b. OPEN — the per-bail-out audit, and DO NOT re-open it with a count.**
    I counted `grep -c degraded` per hook (5 of 16), called it a spec-11 hole, and was **wrong
