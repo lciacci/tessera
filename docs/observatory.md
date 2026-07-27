@@ -1235,6 +1235,21 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   3. Five backstop tests + six P15 tests, including that a prior session at the cap cannot
      silence the next one.
 
+- **FOUND BY THE REVIVED BACKSTOP, WITHIN THE HOUR: the "false positive" disposition has no
+  recordable form.** The report ends with *"If the denial was a FALSE POSITIVE … say so plainly
+  and finish. That is a legitimate disposition"* — and `undispositioned()` clears on exactly two
+  things: a `spend_authorized` event **after** the last denial, or any escalation packet. Saying
+  it plainly clears nothing, so the hook re-fires at every Stop for the rest of the session (now
+  capped per-session, so it stops at 3 rather than forever).
+  **This is principle #17 inside the spend gate**: a disposition that rides prose is a
+  disposition the mechanism cannot hear. And the two available exits are both wrong here —
+  granting an envelope authorizes spend that was never requested, and raising a packet
+  manufactures the bogus escalation the contract itself says is worse than none.
+  **Needs a design gate before code, because a "dismiss" verb on a spend gate is exactly the
+  affordance that could silence a real denial.** Sketch: a `spend_dismissed` event carrying a
+  required reason, honoured by `undispositioned()`, emitted only by a human-invoked command —
+  never by the agent whose denial it clears. Not built; do not build it without the gate.
+
 - **Two smaller lessons from the fix itself.** The first prune sorted by count and evicted the
   entry it had just written — the freshest session is also the lowest count; caught by the test
   written for it. And a bare `47` is **valid JSON**, so the legacy shape arrived as an `int`

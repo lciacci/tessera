@@ -137,6 +137,13 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    proxies were born.
 7. **B2 — correction recall.** Still blocked on labels from a judgement that did not propose the
    hypothesis.
+8. **NEW — the spend backstop's "false positive" disposition has no recordable form.**
+   `undispositioned()` clears only on a grant-after-denial or an escalation packet, so the
+   contract's own invitation to *"say so plainly and finish"* clears nothing and the hook
+   re-fires every Stop. Both available exits are wrong for a false positive (a grant authorizes
+   unrequested spend; a packet is the bogus escalation the contract forbids). **Needs a design
+   gate** — a dismiss verb on a spend gate is the affordance that could silence a real denial.
+   See observatory → "The spend backstop's own cap became a permanent kill switch".
 
 ### T2's first real receipt: `insufficient` — and the checkpoint has a concrete bug
 
