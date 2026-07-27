@@ -44,6 +44,17 @@ if [ -f ".mnemos/checkpoint-latest.json" ]; then
             echo "You are resuming from a previous session checkpoint."
             echo "Review the goal and constraints above before proceeding."
             echo "============================="
+
+            # T2 (ADR-0015): record that a restore was OFFERED. This is the harness side
+            # of the receipt — the party that cannot mark its own homework. It claims only
+            # what is mechanically true (bytes, fields); it does NOT claim delivery, which
+            # is precisely the claim `restore_injected` was not entitled to make.
+            # Silent by construction: this hook's stdout IS the context channel.
+            # stdlib-only, so bare python3 is correct here (CLAUDE.md interpreter split).
+            for _off in "$(dirname "$0")/../../scripts/restore/offer.py" \
+                        "$PWD/scripts/restore/offer.py"; do
+                [ -f "$_off" ] && { python3 "$_off" >/dev/null 2>&1; break; }
+            done
         fi
     fi
 fi

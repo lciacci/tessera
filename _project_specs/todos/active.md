@@ -188,7 +188,22 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    (`6577f7c` + this session). Read `docs/adr/0015-restore-trial-rescope.md`, not the superseded
    reasoning below. **What is LEFT of A is exactly one thing:**
 
-   **A-live. Build T2's instrument — the only thing that can produce a verdict on Mnemos.**
+   **A-live. ~~Build T2's instrument~~ — BUILT 2026-07-26. Now it needs DATA, which only time
+   gives it.** `scripts/restore/` (offer + emit + scan), Stop hook `tessera-restore-scan.sh`,
+   contract `docs/contracts/restore-receipt.md`, 15 tests incl. the end-to-end loop.
+   Two parties: the harness logs `restore_offered` (bytes/fields — **never delivery**), the
+   model logs `restore_receipt` (sufficient/insufficient **+ mandatory evidence**), the Stop
+   scan diffs them and exits 2 on an unanswered offer. Only fires on substantive sessions
+   (≥1 edit or ≥20 turns) so `--sufficient` does not become a reflex.
+   **NEXT SESSION: this ships with ZERO receipts.** Its first evidence is your own Stop. Three
+   things to watch, and they are the ways it fails rather than the ways it works:
+   1. **Does the backstop actually fire?** It has never run against a real Stop. If it does not,
+      that is pattern #1 again — and this time inside the instrument built to answer for it.
+   2. **Is the receipt honest, or reflexive?** If every session says `sufficient` with thin
+      evidence, the instrument is decorative and the length floor did not hold.
+   3. **Do `--missing` values cluster?** A run of `progress` is an instruction to change what
+      `write_checkpoint` captures — not a reason to kill Mnemos.
+   *(Superseded by execution, kept for the trail:)*
    *Does the agent resume, after a discontinuity, without re-deriving what it was doing?* Only
    the model can answer, so it takes the **gate-event shape**: model-emitted, audited, backstopped
    by a Stop hook that diffs claimed against detected. **Until it exists no verdict is available
