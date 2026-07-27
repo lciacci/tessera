@@ -188,8 +188,25 @@ item D (ADR-0014), A5b, A6 — and the `usage` calibration question, which turne
 threshold question at all (see **C** above: the defect was definitional, the exposed problem is
 scope quality, and the re-stated question is recorded there). What is actually next:
 
-1. **iCPG corpus coverage — and this is item 1's THIRD scope. There is a binding stopping rule;
-   read it before doing anything else.**
+1. ~~**iCPG corpus coverage — item 1's THIRD scope.**~~ **CLOSED 2026-07-27 — ADR-0017.** The
+   stopping rule was followed and its *retire* branch fired. Step 1: extractor extended to `.sh`
+   and shebang-based extensionless files, corpus **84 → 261 of 261** code files. Step 2: over
+   6468 CREATES-linked symbols `usage` fired 986× and the top firers were `ok`/`run`/`err`/`ev`/
+   `read`/`check` — `git grep --fixed-strings` matches **substrings**, so `ok` hits "hook". It
+   scored name commonness, not usage. The word-boundary rescue was tested *before* retiring and
+   failed. **No step 3 was taken**: the two side-findings (46 of 78 shell files have zero symbols;
+   `icpg create` cannot hand-author contracts) went to their own observatory entry, "Is the SYMBOL
+   the right unit for a shell-heavy repo?". Drift is now `changed` + `decision`.
+
+   **One loose end, deliberately not swept — needs a call.** 205 drift events are still open and
+   165 involve the retired dimension. ADR-0016 §3 makes drift `dismissed` model-emittable, so the
+   **136 `["usage"]`-only rows** can be dismissed citing ADR-0017. The **29 `["changed","usage"]`
+   composites must not be** — dismissing those silences a live `changed` finding. Correct order:
+   re-scan first (the dedup key includes `sorted(dimensions)`, so the `changed` half re-raises as
+   its own row), *then* dispose the stale composites. The 40 `["changed"]` rows are untouched and
+   still valid.
+
+   *Original entry, kept for the trail:*
 
    **The (a)/(b)/(c) options below are RETIRED. Do not score them.** They asked how to handle
    scopes whose symbols don't match, and on 2026-07-27 the cause turned out to be one level down:

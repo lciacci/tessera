@@ -502,6 +502,51 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   code, retire it.** No fourth investigation. A dimension that has consumed three cycles without
   producing a signal has been given a fair hearing.
 
+- **CLOSED 2026-07-27 — the stopping rule was followed and the branch it named fired. `usage` is
+  RETIRED (ADR-0017).** Step 1 shipped: `symbols.py` gained `.sh`/`.bash`/`.zsh`, shebang
+  detection for extensionless executables, and a regex shell extractor — corpus **84 → 261 of
+  261 code files**. Step 2 measured over that corpus: 6468 CREATES-linked symbols, 986 fires
+  (15.2%), and the top firers were `ok` 311, `run` 262, `err` 247, `ev` 373, `read` 285,
+  `check` 271. `git grep --fixed-strings` matches **substrings**, so `ok` hit "hook" and
+  "token" in a repo whose subject is hooks: the dimension scored **name commonness**. The
+  word-boundary rescue was tested inside step 2, before retiring rather than after — `-lw` cut
+  `ev` 373→14 and left `read` 180, `run` 214, `check` 171, all still pinned at 1.00. There was
+  **no step 3**, and the two side-findings below are their own entry, not a fourth scope.
+- **The corpus fix was necessary and did not change the verdict — worth separating.** Shell
+  fired at 68.6% against python's 13.3%, which looks like the new coverage drove the result. It
+  did not: the gap is entirely name length (shell function names are 2–6 chars), and **python
+  alone fires 829 times** on the same collisions. The extractor work was needed to make the
+  hearing fair, not to reach the answer.
+
+### Is the SYMBOL the right unit for a shell-heavy repo? — corpus coverage bought files, not symbols *(2026-07-27)*
+
+- **Status:** Open. Logged as its own entry because ADR-0017's stopping rule forbade a step 3;
+  these are the two findings step 1 surfaced that are **not** part of that decision.
+- **Finding 1 — 46 of 78 shell files have ZERO symbols.** The extractor now parses every `.sh`
+  and every extensionless `bin/tessera-*`, and coverage went 84 → 261 of 261 code files. But
+  Tessera's hooks are **straight-line scripts**, not function libraries: they `set -euo pipefail`
+  and run top to bottom. Shell contributes **76 symbols of 1968**. Coverage bought *files*, not
+  *symbols*.
+- **Why this matters beyond trivia:** iCPG anchors intent to *symbols*, and `changed` — the
+  dimension that survived ADR-0017 — is a per-symbol checksum. So for 46 of 78 shell files there
+  is nothing to anchor to and nothing to checksum. The layer built to track this framework's
+  intent still cannot track the majority of its shell, and the reason is no longer extractor
+  coverage — it is that **the unit of tracking does not match the unit of authorship**.
+- **The candidate answer is already on the books, which is why this is Open and not a proposal:**
+  ADR-0013 §4 rated scryer's file-level predicate (*"this file changed since we last reconciled
+  it"*) as "Idea-only — open, do not adopt yet." A **file-level** `changed` would cover the 46.
+  That is a design decision needing its own evidence, and adopting it because one measurement
+  pointed that way would be the exact re-scoping ADR-0017's stopping rule exists to prevent.
+- **Do not read this as "shell coverage was wasted."** The 32 shell files that *do* define
+  functions are now tracked, and the extractor is what made ADR-0017's measurement fair. The
+  open question is the remaining 46.
+- **Finding 2 — `icpg create` has no flag to hand-author contracts.** `design-principles.md`
+  names three authoring tiers (hand-authored / LLM-inferred / heuristic); the CLI exposes the
+  bottom two, and `--infer-contracts` falls back to heuristic without an LLM key. This is why
+  **Q1** (does the agent populate ReasonNodes in practice?) still rests on a single non-bootstrap
+  data point. Restated here because the entry above recorded it and that entry is now closed.
+- **Revisit when:** a file-level drift predicate is proposed, or Q1's recording half is wired.
+
 ### Effort changes invalidate the prompt cache — and the tier advisory's real use is session boundaries *(2026-07-27)*
 
 - **Measured, because the docs do not say.** `output_config.effort` is absent from the

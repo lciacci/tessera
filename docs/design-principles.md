@@ -480,6 +480,20 @@ The agent-teams skill describes iCPG as tracking *ReasonNodes* (intent), *constr
     '-rl', ...])` over an unfiltered tree including `.venv/`. That is now bounded to git-tracked
     files and the dimensions that scored absent edge types are gone — so the question is
     **re-askable against a detector that measures something**, but it has not been re-answered.
+  - **(2026-07-27, later the same day — Q2 IS NOW ANSWERED for `usage`, and the answer
+    retired it. See ADR-0017.)** Re-asked properly: the extractor was first extended to shell
+    and extensionless files, taking the corpus from 84 of 260 code files to 261 of 261, so the
+    dimension was judged over the framework's own code rather than the 32% it could see. Over
+    6468 CREATES-linked symbols it fired 986 times, and the top firers were `ok`, `run`, `err`,
+    `main`, `ev`, `read`, `check` — because `git grep --fixed-strings` matches **substrings**,
+    so `ok` hits "hook" in a repo about hooks. It scored name commonness. The word-boundary
+    repair was tried before retiring and failed (`read` 180, `run` 214, still pinned at 1.00).
+    **The general answer, which is why no threshold could have saved it: `usage` WAS a
+    subprocess call to `git grep`, so "does it catch what grep wouldn't" is no by
+    construction.** Retiring it leaves `changed` (0.6%, live) and `decision` (0 fires, live
+    and silent). Thin, and **whether drift detection as a whole earns its keep is a separate
+    question this does not decide** — note it moves iCPG *toward* the deterministic predicate
+    ADR-0013 §4 judged better, not away from drift detection.
     **Q1 (does the agent populate ReasonNodes?) has never been exercised at all.** All 10
     reasons are `owner='git-history'`, `agent=NULL`, `source='inferred'` — every one derived by
     the bootstrap, none authored during work. A cause fully explains that (nothing records

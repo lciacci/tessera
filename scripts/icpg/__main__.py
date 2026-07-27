@@ -558,8 +558,10 @@ def cmd_status(store: ICPGStore) -> int:
 
     # The reason `dismissed` is its own state rather than a flavour of `resolved`: a
     # dimension accumulating dismissals is miscalibrated, and this is the only place that
-    # can be read. `usage` currently fires on ~1 in 5 symbols against thresholds nobody
-    # calibrated — these counts are the evidence that question has been waiting for.
+    # can be read. It worked: `usage` was the only dimension anyone ever dismissed (1 of
+    # 202 lifetime events), the note read "usage threshold is uncalibrated; a common
+    # symbol name in a narrow scope", and ADR-0017 retired the dimension on a measurement
+    # that reached the same verdict at scale. n=1 was enough to point at the right one.
     dismissals = store.dismissals_by_dimension()
     if dismissals:
         ranked = sorted(dismissals.items(), key=lambda kv: -kv[1])

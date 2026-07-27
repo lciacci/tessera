@@ -29,13 +29,43 @@ LANG_MAP = {
     '.lua': 'lua',
     '.vue': 'vue',
     '.svelte': 'svelte',
-    '.ex': 'elixir', '.exs': 'elixir'
+    '.ex': 'elixir', '.exs': 'elixir',
+    '.sh': 'shell', '.bash': 'shell', '.zsh': 'shell',
 }
+
+# Shebang interpreter -> language, for extensionless executables. Tessera is
+# predominantly `bin/tessera-*` and `hooks/*` with no suffix at all; without
+# this the extractor sees 32% of the repo (observatory, 2026-07-27).
+_SHEBANG_MAP = (
+    ('python', 'python'),
+    ('bash', 'shell'),
+    ('zsh', 'shell'),
+    ('sh', 'shell'),
+)
+
+
+def _language_from_shebang(path: Path) -> str | None:
+    try:
+        with path.open(encoding='utf-8') as fh:
+            first = fh.readline(200)
+    except (OSError, UnicodeDecodeError):
+        return None
+    if not first.startswith('#!'):
+        return None
+    interp = Path(first[2:].strip().split()[-1] if first[2:].strip() else '').name
+    for needle, lang in _SHEBANG_MAP:
+        if needle in interp:
+            return lang
+    return None
 
 
 def detect_language(file_path: str) -> str | None:
-    ext = Path(file_path).suffix.lower()
-    return LANG_MAP.get(ext)
+    path = Path(file_path)
+    ext = path.suffix.lower()
+    if ext:
+        return LANG_MAP.get(ext)
+    # Extensionless: ask the file. Only reached when there is no suffix to key on.
+    return _language_from_shebang(path) if path.is_file() else None
 
 
 def checksum_content(content: str) -> str:
@@ -267,10 +297,48 @@ def _extract_elixir(file_path: str, source: str) -> list[Symbol]:
     return symbols
 
 
+# --- Shell extraction (regex) ---
+
+_SHELL_PATTERNS = [
+    (r'^[ \t]*([A-Za-z_][\w:.-]*)[ \t]*\(\)[ \t]*\{', 'function'),
+    (r'^[ \t]*function[ \t]+([A-Za-z_][\w:.-]*)[ \t]*(?:\(\))?[ \t]*\{', 'function'),
+]
+
+# ponytail: body ends at the first column-0 `}`. Wrong for a nested heredoc or an
+# indented close; both are rare in this repo's shell. Falls back to the signature
+# line, which is what every other regex extractor here checksums anyway. Upgrade
+# path if drift on shell gets noisy: a real brace/quote scanner.
+_SHELL_CLOSE = re.compile(r'^\}', re.MULTILINE)
+
+
+def _extract_shell(file_path: str, source: str) -> list[Symbol]:
+    symbols = []
+    seen = set()
+    for pattern, stype in _SHELL_PATTERNS:
+        for match in re.finditer(pattern, source, re.MULTILINE):
+            name = match.group(1)
+            if name in seen:
+                continue
+            seen.add(name)
+            close = _SHELL_CLOSE.search(source, match.end())
+            end = close.end() if close else source.find('\n', match.end())
+            body = source[match.start():end if end != -1 else len(source)]
+            symbols.append(Symbol(
+                name=name,
+                file_path=file_path,
+                symbol_type=stype,
+                language='shell',
+                signature=match.group(0).strip()[:200],
+                checksum=checksum_content(body)
+            ))
+    return symbols
+
+
 # --- Public API ---
 
 EXTRACTORS = {
     'python': _extract_python,
+    'shell': _extract_shell,
     'typescript': _extract_typescript,
     'javascript': _extract_typescript,
     'go': _extract_go,

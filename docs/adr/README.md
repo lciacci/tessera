@@ -44,6 +44,7 @@ Auto-generated below as ADRs are created. Update when adding a new ADR.
 | 0014 | 2026-07-26 | The review backend seam — make review model-portable, or admit it is Claude-only | Accepted |
 | 0015 | 2026-07-26 | The Mnemos trial was scoped to the wrong event — re-scope to restore integrity | Accepted |
 | 0016 | 2026-07-27 | Disposition verbs — who may close a finding, and what stops that silencing a real one | Accepted |
+| 0017 | 2026-07-27 | `usage` drift retired — the dimension was `git grep`, so it could not answer the question that justified it | Accepted |
 
 ---
 

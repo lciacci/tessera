@@ -47,10 +47,13 @@ EDGE_TYPES = (
 )
 
 # --- Drift dimensions ---
-DRIFT_DIMENSIONS = (
-    'spec', 'decision', 'ownership',
-    'test', 'usage', 'dependency'
-)
+# LIVE dimensions only. Nothing reads this tuple — `check_symbol_drift` is the
+# real vocabulary and `test_drift.py` asserts it from source — but it sat listing
+# six names for a detector that scored three, which is the doc-drift shape this
+# repo keeps paying for. Retired names still appear in STORED events and must stay
+# readable: 'spec' and 'ownership' and 'test' and 'dependency' (2026-07-27 shrink),
+# and 'usage' (ADR-0017). Historical rows are evidence, not schema.
+DRIFT_DIMENSIONS = ('changed', 'decision')
 
 # --- Symbol types ---
 SYMBOL_TYPES = (

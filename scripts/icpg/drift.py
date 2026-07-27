@@ -14,12 +14,14 @@ events were therefore purged rather than deduplicated: deduplicating them would
 have preserved 154 distinct non-measurements. (Standing pattern #7 — a verdict
 must not rest on what the instrument could not read.)
 
+SHRUNK AGAIN 2026-07-27, three dimensions to two: `usage` is RETIRED. See ADR-0017.
+It was kept in the shrink above on the belief that `git grep` over tracked files was
+a fair test of it. It was not the threshold that was wrong — it was the question.
+
 WHAT SURVIVES, and the producer feeding each:
 
     changed   symbol checksum vs. the recorded one          <- upsert_symbol
     decision  the intent's contract predicates, re-run      <- contracts.py
-    usage     symbol referenced outside its intent's scope, <- git grep, tracked
-              over GIT-TRACKED files only                      files only
 
 WHAT LEFT, and where it went:
 
@@ -29,6 +31,28 @@ WHAT LEFT, and where it went:
     ownership   -> deleted. Needed >3 distinct reason owners on one symbol; every
                    ReasonNode here is `owner='git-history'` from the bootstrap.
     dependency  -> deleted. Needed REQUIRES edges between reasons; unwritten.
+    usage       -> RETIRED 2026-07-27, on measurement over a corpus-complete graph
+                   (the extractor was extended to shell + extensionless files
+                   first, so the dimension was judged on the whole repo and not
+                   the 32% it could previously see). 6468 CREATES-linked symbols,
+                   986 fires. The top firers were `ok`, `run`, `err`, `main`,
+                   `ev`, `read`, `check` — `_tracked_files_mentioning` matched
+                   SUBSTRINGS, so `ok` hit "hook" and "token" in a repo about
+                   hooks. The dimension measured NAME COMMONNESS, not usage.
+                   The obvious repair was tried before retiring rather than
+                   after: `git grep -lw` (word boundary) cut `ev` 373->14 but
+                   left `read` 180, `run` 214, `check` 171 — all still far past
+                   the cut of 2 and still pinned at 1.00. The repair does not
+                   repair it.
+                   The deeper reason it cannot be calibrated: `design-principles.md`
+                   asks "does drift detection catch things grep wouldn't?" and
+                   this dimension IS a subprocess call to git grep. By construction
+                   the answer is no.
+                   Lifetime record across 202 stored events: 165 involved `usage`,
+                   0 were ever resolved, and the single event any human touched was
+                   a DISMISSAL reading "usage threshold is uncalibrated; a common
+                   symbol name in a n[arrow scope]" — written before the measurement
+                   above and reaching the same conclusion from one example.
 
 Re-adding a dimension means adding its PRODUCER FIRST. doccheck's
 `drift-dimensions-have-producers` fails if this module reads an edge type that
@@ -46,9 +70,6 @@ own graph".
 """
 
 from __future__ import annotations
-
-import subprocess
-from pathlib import Path
 
 from .models import DriftEvent, _now, _uuid
 from .predicates import evaluate_predicate
@@ -97,7 +118,6 @@ def check_symbol_drift(store: ICPGStore, symbol_id: str) -> DriftEvent | None:
     scored = [
         ('changed', _check_changed_drift(store, sym)),
         ('decision', _check_decision_drift(store, reason)),
-        ('usage', _check_usage_drift(store, sym, reason)),
     ]
     hits = [(dim, score) for dim, score in scored if score]
     if not hits:
@@ -161,63 +181,6 @@ def _check_decision_drift(store, reason) -> float | None:
     return min(1.0, failed / len(predicates)) if failed else None
 
 
-def _check_usage_drift(store, sym, reason) -> float | None:
-    """Symbol referenced outside its intent's declared scope, over tracked files.
-
-    `git grep` replaced `grep -rl <name> .` on 2026-07-27. The old form walked
-    the whole tree — `.venv/`, `.git/`, `build/`, `__pycache__` — so any common
-    symbol name saturated the score inside vendored code alone, and the score
-    was `min(1.0, n/10)`, i.e. pinned at 1.00 after ten hits. Tracked-only is
-    also this repo's standing rule: `git ls-files`, never `find`.
-    """
-    if not reason.scope:
-        return None
-    files = _tracked_files_mentioning(sym.name, store.project_dir)
-    if files is None:
-        return None
-    # A symbol's OWN defining file is not "usage outside its scope" (fixed 2026-07-27).
-    # Measured before fixing: only 42% of tracked files sit inside any reason's scope, and
-    # **46% of symbols are CREATES-linked to a reason whose scope does not include the file
-    # the symbol lives in** — so for nearly half the graph the definition site was being
-    # counted as out-of-scope usage, inflating every such symbol by one. 32 of 174 firing
-    # verdicts flip on this alone. Definitional, not a calibration: the thresholds below are
-    # deliberately untouched.
-    own = _relative_to(sym.file_path, store.project_dir)
-    out_of_scope = [
-        f for f in files if f != own and not _in_scope(f, reason.scope)
-    ]
-    if len(out_of_scope) <= 2:
-        return None
-    return min(1.0, len(out_of_scope) / 10)
-
-
-def _relative_to(file_path: str, project_dir) -> str:
-    """`git grep` yields repo-relative paths; symbols store absolute ones. Compare like
-    with like, or the exclusion above silently never matches."""
-    try:
-        return str(Path(file_path).resolve().relative_to(Path(project_dir).resolve()))
-    except (ValueError, OSError):
-        return file_path
-
-
-def _tracked_files_mentioning(name: str, project_dir) -> list[str] | None:
-    """Tracked files containing `name`, or None if git could not answer.
-
-    None is "no answer", NOT "no matches" — a missing git, a timeout, or a
-    non-repo directory must not read as a clean scope. rc=1 IS an answer: git
-    grep uses it for "no matches found".
-    """
-    try:
-        result = subprocess.run(
-            ['git', 'grep', '--name-only', '--fixed-strings', '-e', name],
-            capture_output=True, text=True, timeout=5, cwd=str(project_dir)
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-        return None
-    if result.returncode not in (0, 1):
-        return None
-    return [ln.strip() for ln in result.stdout.splitlines() if ln.strip()]
-
-
-def _in_scope(path: str, scope: list[str]) -> bool:
-    return any(path.startswith(s.rstrip('/')) for s in scope)
+# `_check_usage_drift` and its helpers (`_relative_to`, `_tracked_files_mentioning`,
+# `_in_scope`) were removed here on 2026-07-27 — ADR-0017. The reasoning is preserved
+# in this module's docstring rather than in dead code; `git show` has the body.

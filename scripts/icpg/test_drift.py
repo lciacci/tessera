@@ -16,16 +16,11 @@ from __future__ import annotations
 
 import inspect
 import re
-import subprocess
 
 import pytest
 
 from icpg.coverage import untested_intents
-from icpg.drift import (
-    _in_scope,
-    _tracked_files_mentioning,
-    check_symbol_drift,
-)
+from icpg.drift import check_symbol_drift
 from icpg.models import Edge, ReasonNode, Symbol
 from icpg.store import ICPGStore
 from icpg.symbols import extract_symbols
@@ -93,10 +88,10 @@ def test_emitted_dimensions_stay_inside_the_fed_three(tmp_path):
     path.write_text('def widget_handler():\n    return 2\n')
     event = check_symbol_drift(store, sym.id)
     assert event is not None
-    assert set(event.drift_dimensions) <= {'changed', 'decision', 'usage'}
+    assert set(event.drift_dimensions) <= {'changed', 'decision'}
 
 
-def test_declared_dimension_vocabulary_is_exactly_the_fed_three():
+def test_declared_dimension_vocabulary_is_exactly_the_fed_two():
     """Reads what `check_symbol_drift` SCORES, not what it happened to emit.
 
     The gap this closes was found by falsifying the test above: a dimension whose
@@ -108,9 +103,15 @@ def test_declared_dimension_vocabulary_is_exactly_the_fed_three():
     declared = set(re.findall(
         r"\(\s*'(\w+)',\s*_check_", inspect.getsource(check_symbol_drift)
     ))
-    assert declared == {'changed', 'decision', 'usage'}, (
+    assert declared == {'changed', 'decision'}, (
         f"scored dimensions changed: {sorted(declared)}. Adding one means adding "
         f"its producer first — see docs/observatory.md on the detector shrink."
+    )
+    assert 'usage' not in declared, (
+        "`usage` was RETIRED by ADR-0017 on measurement, not deferred: it shelled "
+        "out to `git grep` for a SUBSTRING, so it scored name commonness (`ok` "
+        "matched 'hook'), and the word-boundary repair was tried and failed. "
+        "Re-adding it needs a new decision that supersedes ADR-0017, not a patch."
     )
 
 
@@ -152,52 +153,13 @@ def test_decision_drift_still_reads_postconditions(tmp_path):
     assert 'decision' in event.drift_dimensions
 
 
-# --- usage drift, bounded to tracked files -------------------------------------
-
-
-def _git_repo(tmp_path, tracked: dict[str, str]):
-    subprocess.run(['git', 'init', '-q'], cwd=tmp_path, check=True)
-    for name, body in tracked.items():
-        target = tmp_path / name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(body)
-        subprocess.run(['git', 'add', name], cwd=tmp_path, check=True)
-
-
-def test_usage_ignores_untracked_files(tmp_path):
-    """`grep -rl <name> .` counted `.venv/`, `build/`, `__pycache__`. Any common
-    name saturated the 0..1 score inside vendored code alone."""
-    _git_repo(tmp_path, {'widget.py': SOURCE})
-    vendored = tmp_path / '.venv' / 'lib'
-    vendored.mkdir(parents=True)
-    for i in range(20):
-        (vendored / f'mod{i}.py').write_text('widget_handler\n')
-    assert _tracked_files_mentioning('widget_handler', tmp_path) == ['widget.py']
-
-
-def test_usage_counts_tracked_files_out_of_scope(tmp_path):
-    _git_repo(tmp_path, {
-        'widget.py': SOURCE,
-        'a.py': 'widget_handler\n',
-        'b.py': 'widget_handler\n',
-        'c.py': 'widget_handler\n',
-    })
-    found = _tracked_files_mentioning('widget_handler', tmp_path)
-    assert set(found) == {'widget.py', 'a.py', 'b.py', 'c.py'}
-    out = [f for f in found if not _in_scope(f, ['widget.py'])]
-    assert len(out) == 3
-
-
-def test_no_answer_from_git_is_not_a_clean_scope(tmp_path):
-    """None means 'could not measure'; [] means 'measured, nothing'. Collapsing
-    them is the fail-open shape this repo keeps paying for."""
-    assert _tracked_files_mentioning('widget_handler', tmp_path) is None
-
-
-def test_no_matches_is_an_answer(tmp_path):
-    """git grep exits 1 for 'no matches' — an answer, not a failure."""
-    _git_repo(tmp_path, {'widget.py': SOURCE})
-    assert _tracked_files_mentioning('nothing_matches_this', tmp_path) == []
+# The four `usage` tests that stood here were removed with the dimension
+# (ADR-0017, 2026-07-27). They were good tests of a question that should not have
+# been asked: they proved `git grep` was bounded to tracked files and that "could
+# not measure" stayed distinct from "measured nothing" — both true, and neither
+# able to see that the thing being counted was substring collisions on short
+# names. Passing tests over a mis-posed predicate is the shape worth remembering.
+# The None-vs-[] discipline they encoded is standing pattern #2 and outlives them.
 
 
 # --- coverage, reported but never scored ---------------------------------------
@@ -235,32 +197,3 @@ def test_untested_intents_clears_when_a_validated_by_edge_exists(tmp_path):
 
 if __name__ == '__main__':
     raise SystemExit(pytest.main([__file__, '-q']))
-
-
-def test_a_symbols_own_file_is_not_usage_outside_its_scope(tmp_path):
-    """FOUND BY MEASURING, 2026-07-27. `usage` asks "is this referenced outside the intent's
-    declared scope?" and counted every tracked file mentioning the name — including the file
-    the symbol is DEFINED in. On this repo only 42% of tracked files sit inside any reason's
-    scope and 46% of symbols are CREATES-linked to a reason whose scope excludes their own
-    file, so for nearly half the graph the definition site was counted as out-of-scope usage.
-
-    Definitional, not a calibration: the `>2` and `/10` thresholds are untouched.
-    """
-    _git_repo(tmp_path, {
-        'widget.py': SOURCE,
-        'a.py': 'widget_handler\n',
-        'b.py': 'widget_handler\n',
-    })
-    store = _store(tmp_path)
-    sym = next(s for s in extract_symbols(str(tmp_path / 'widget.py')))
-    store.upsert_symbol(sym)
-    # scope deliberately EXCLUDES widget.py — the shape 46% of this graph is in
-    reason = ReasonNode(goal='ship it', owner='test', scope=['docs/'])
-    store.create_reason(reason)
-    store.create_edge(Edge(from_id=reason.id, to_id=sym.id, edge_type='CREATES'))
-
-    event = check_symbol_drift(store, sym.id)
-    # a.py + b.py = 2 out-of-scope refs, at the threshold; widget.py must NOT make it 3
-    assert event is None or 'usage' not in event.drift_dimensions, (
-        "the symbol's own defining file was counted as usage outside its scope"
-    )
