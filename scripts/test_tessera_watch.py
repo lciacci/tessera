@@ -664,3 +664,60 @@ def test_p9_icpg_branch_is_reachable_on_the_real_repo():
     assert (Path(__file__).resolve().parent.parent / ".icpg" / "reason.db").exists()
     fired, detail = tw.p9_interpreter_drift(Path(__file__).resolve().parent.parent)
     assert "icpg ok" in detail or "icpg" in detail, detail
+
+
+# ── P15: the spend backstop's own cap had become a permanent kill switch ───────────────
+#
+# `.spend-backstop-fires` was a global integer nothing reset; backstop.main() returns 0 once
+# it exceeds MAX_FIRES. Found 2026-07-27 at 47 — the backstop that catches a vanished spend
+# denial had been silently dead, and rc=0 reads exactly like "nothing to report". The counter
+# is per-session now, but a fix is not a signal: this is the paired detector, because the
+# failure it guards is the guard being off, which announces nothing by construction.
+
+def _fires_file(root, content: str):
+    (root / ".tessera").mkdir(parents=True, exist_ok=True)
+    (root / ".tessera" / ".spend-backstop-fires").write_text(content)
+
+
+def test_p15_quiet_when_the_counter_has_never_been_written(tmp_path):
+    assert tw.p15_spend_backstop_suppressed(tmp_path)[0] is False
+
+
+def test_p15_fires_on_the_legacy_global_counter(tmp_path):
+    """A bare `47` is VALID json and arrives as an int, not a parse error — the first
+    version of this predicate keyed on ValueError and reported the wrong branch."""
+    _fires_file(tmp_path, "47")
+    fired, detail = tw.p15_spend_backstop_suppressed(tmp_path)
+    assert fired is True
+    assert "legacy global counter" in detail
+
+
+def test_p15_fires_on_unparseable_state(tmp_path):
+    _fires_file(tmp_path, "{ not json")
+    assert tw.p15_spend_backstop_suppressed(tmp_path)[0] is True
+
+
+def test_p15_is_quiet_for_a_single_capped_session(tmp_path):
+    """One session at the cap is the loop-safety doing its job, not a suppressed backstop.
+    Firing here would make the predicate noise on correct behaviour."""
+    _fires_file(tmp_path, json.dumps({"s1": 9, "s2": 1}))
+    assert tw.p15_spend_backstop_suppressed(tmp_path)[0] is False
+
+
+def test_p15_fires_when_the_cap_is_hit_across_sessions(tmp_path):
+    """Chronic capping means denials are routinely undispositioned, or it is wedging."""
+    _fires_file(tmp_path, json.dumps({"s1": 9, "s2": 9, "s3": 1}))
+    fired, detail = tw.p15_spend_backstop_suppressed(tmp_path)
+    assert fired is True
+    assert "2 sessions" in detail
+
+
+def test_p15_reads_the_cap_from_the_backstop_not_a_copy(tmp_path):
+    """A mirrored constant is a second definition. If MAX_FIRES is tuned, P15 must move."""
+    spend = tmp_path / "scripts" / "spend"
+    spend.mkdir(parents=True)
+    (spend / "backstop.py").write_text("MAX_FIRES = 50\n")
+    _fires_file(tmp_path, json.dumps({"s1": 9, "s2": 9}))
+    assert tw.p15_spend_backstop_suppressed(tmp_path)[0] is False, (
+        "P15 used its own copy of the cap instead of the backstop's"
+    )

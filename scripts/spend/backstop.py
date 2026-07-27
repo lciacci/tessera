@@ -93,15 +93,53 @@ def undispositioned(events: list[dict], escalated: bool) -> list[dict]:
     return [] if granted_after else denials
 
 
-def _bump_fires() -> int:
+KEEP_SESSIONS = 20
+
+
+def _read_fires() -> dict:
+    """{session_id: count}. Anything unreadable or legacy reads as EMPTY, on purpose.
+
+    A parse failure must leave the backstop ENABLED. This mechanism's whole job is to notice
+    a spend denial that vanished; failing toward "already capped, stay quiet" would make a
+    corrupt file into a silent kill switch, which is the bug below one level down.
+    """
     try:
-        count = int(FIRE_COUNT.read_text().strip()) if FIRE_COUNT.exists() else 0
+        data = json.loads(FIRE_COUNT.read_text())
     except (OSError, ValueError):
-        count = 0
-    count += 1
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _bump_fires(session_id: str) -> int:
+    """Count fires PER SESSION, not for all time.
+
+    THE BUG THIS FIXES (found 2026-07-27, and it had been live for a long time): this file
+    held a single global integer that nothing ever reset. `MAX_FIRES` was written as
+    loop-safety — "a backstop that can wedge a session gets ripped out, and then protects
+    nothing" — which is a statement about ONE session. Against a monotonic global counter it
+    became a permanent kill switch: past 3 fires ever, `main()` returned 0 forever. It was
+    found at **47**, i.e. the spend backstop had been silently dead, and `rc=0` looks exactly
+    like "nothing to report".
+
+    Almost certainly self-inflicted by the sibling bug fixed the same day: every
+    `bin/tessera-test` run under a real session wrote four undispositioned `spend_denied`
+    events, each of which bumped this counter at the next Stop. The suite burned through the
+    cap of the mechanism that guards unsupervised spend.
+
+    Keyed by session, so the cap does the job it was written for and cannot outlive the
+    session it was protecting. A clean session never bumps at all; a new session starts at
+    zero because its key is absent. Old keys are pruned so this cannot grow forever.
+    """
+    fires = _read_fires()
+    count = int(fires.pop(session_id, 0)) + 1
+    fires[session_id] = count  # re-inserted last: dict order is recency, and JSON keeps it
+    # Prune the OLDEST keys, not the smallest counts. The first version sorted by count and
+    # evicted the session it had just recorded — the freshest entry is also the lowest one.
+    for stale in list(fires)[:max(0, len(fires) - KEEP_SESSIONS)]:
+        del fires[stale]
     try:
         FIRE_COUNT.parent.mkdir(parents=True, exist_ok=True)
-        FIRE_COUNT.write_text(str(count))
+        FIRE_COUNT.write_text(json.dumps(fires))
     except OSError:
         pass
     return count
@@ -135,7 +173,7 @@ def main(argv: list[str]) -> int:
     denials = undispositioned(_events(session_id), _escalated(session_id))
     if not denials:
         return 0
-    if _bump_fires() > MAX_FIRES:
+    if _bump_fires(session_id) > MAX_FIRES:
         return 0  # a backstop that can wedge a session gets ripped out, and then protects nothing
 
     lines = "\n".join(

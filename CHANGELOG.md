@@ -62,6 +62,23 @@ invariants currently hold — live-and-silent, which is a different fact from de
 
 A check verified against the bug you remember is verified against one example.
 
+#### Fixed — the test pollution had burned out the spend backstop
+- **`scripts/conftest.py` + `chaos/conftest.py`** — no test writes to the production audit
+  log. `scripts/spend/conftest.py` promised this in July and could not keep it for
+  `test_hook_cwd_anchoring.py`, which drives the real guard hook as a **subprocess**; a
+  subprocess inherits `CLAUDE_CODE_SESSION_ID`, so every `bin/tessera-test` appended four real
+  `spend_denied` events to the live journal. The first hypothesis ("chaos lacks a conftest")
+  was wrong — chaos measured clean; only probing each suite found the top-level file.
+- **`.tessera/.spend-backstop-fires` is now per-session.** It was a global integer nothing
+  reset, found at **47** against a `MAX_FIRES` of 3, so `backstop.main()` had been returning 0
+  on every session — the spend backstop was silently dead, and the polluted denials above are
+  almost certainly what burned it through the cap. A limit written for one session and stored
+  for all time is a kill switch. Unreadable or legacy state now reads as empty, failing toward
+  the backstop being *alive*.
+- **`tessera-watch` P15** — fires on a legacy scalar counter, or the cap reached in 2+
+  sessions; quiet for one capped session, which is the loop-safety working. Reads `MAX_FIRES`
+  from `backstop.py` rather than restating it.
+
 **Not fixed, and it refills the backlog on its own:** `cmd_drift` still re-inserts with a
 fresh UUID and no natural key, and `mnemos-pre-edit.sh` runs `drift file` on every edit.
 **Not settled:** iCPG's kill/keep trial — no agent has ever authored a ReasonNode, and a

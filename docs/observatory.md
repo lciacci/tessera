@@ -1201,6 +1201,47 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   session (the open P3 question) — it must be re-judged with Layer 3 *actually reaching the model*,
   because every prior observation of it was through a dropped channel.
 
+### The spend backstop's own cap became a permanent kill switch *(2026-07-27)*
+
+- **Status:** FIXED same day (per-session counter + `tessera-watch` **P15**). Kept because the
+  shape recurs and because of how it was found.
+
+- **What it was.** `scripts/spend/backstop.py` returns 0 once `_bump_fires()` exceeds
+  `MAX_FIRES` (3), and `.tessera/.spend-backstop-fires` held a **single global integer that
+  nothing ever reset**. Found at **47**. So the backstop that catches a spend denial nobody
+  dispositioned had been silently dead for a long time, and `rc=0` is indistinguishable from
+  "nothing to report" — standing pattern #2 in the mechanism that guards unsupervised spend.
+
+- **The cap was not wrong, its scope was.** The comment says it exists so "a backstop that can
+  wedge a session gets ripped out, and then protects nothing" — a statement about ONE session.
+  Against a monotonic global counter it outlived every session it was protecting. **A limit
+  written for a session, stored for all time, is a kill switch.**
+
+- **The cause was almost certainly the sibling bug fixed the same hour.** Every
+  `bin/tessera-test` run under a real session wrote four undispositioned `spend_denied` events
+  (a test drove the real guard hook as a subprocess, which inherits `CLAUDE_CODE_SESSION_ID`).
+  Each bumped this counter at the next Stop. **The suite burned through the cap of the
+  mechanism that guards unsupervised spend** — and neither half announced anything.
+
+- **Fixed three ways, because a fix is not a signal:**
+  1. The counter is keyed **per session** and pruned to the last 20. A clean session never
+     writes at all; a new session starts at zero because its key is absent. Unreadable or
+     legacy state reads as EMPTY, i.e. fails toward the backstop being **alive** — failing the
+     other way is how a corrupt file becomes a silent kill switch.
+  2. `tessera-watch` **P15** fires on a legacy scalar file, or on the cap being reached in 2+
+     recorded sessions (chronically undispositioned denials, or a wedging backstop). It stays
+     quiet for ONE capped session, which is the loop-safety working. It reads `MAX_FIRES` out
+     of `backstop.py` rather than restating it, so tuning the cap moves the predicate with it.
+  3. Five backstop tests + six P15 tests, including that a prior session at the cap cannot
+     silence the next one.
+
+- **Two smaller lessons from the fix itself.** The first prune sorted by count and evicted the
+  entry it had just written — the freshest session is also the lowest count; caught by the test
+  written for it. And a bare `47` is **valid JSON**, so the legacy shape arrived as an `int`
+  rather than a parse error, and P15's first version reported the wrong branch.
+
+---
+
 ### iCPG's drift detector measures the emptiness of its own graph *(2026-07-25 → 07-26; surfaced by the scryer eval, root cause found on the third pass)*
 
 - **Status:** **SHRINK EXECUTED 2026-07-27** (steps 0–2 and 4–6 of the corrected work order;
