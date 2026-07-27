@@ -518,6 +518,33 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   alone fires 829 times** on the same collisions. The extractor work was needed to make the
   hearing fair, not to reach the answer.
 
+### A disposition verb that did not move the headline — `icpg status` disagreed with its own list *(2026-07-27)*
+
+- **Status:** Fixed, regression-tested (`test_stats_headline_agrees_with_the_list_it_summarises`,
+  watched RED against the old predicate before being accepted).
+- **What happened.** ADR-0017's retirement dismissed 165 drift events. `icpg status` then printed
+  `Unresolved drift: 224` directly above `icpg drift list  # all 59`. `get_stats()` counted
+  `WHERE resolved = 0` alone; `get_unresolved_drift()` filtered `resolved = 0 AND dismissed = 0`.
+  Two definitions of "unresolved" in one file.
+- **Why it matters more than an off-by-N.** ADR-0016 built `dismissed` *as a disposition* — the
+  verb that lets a false positive leave the open set. A headline that ignores it means **disposing
+  a finding changes nothing in the number anyone looks at**, which is exactly ADR-0013's
+  only-increments counter, alive in a second function after the first was fixed. `icpg status` is
+  what SessionStart surfaces and what the checkpoint's `icpg_state` stores, so the wrong number is
+  the one with the widest reach.
+- **Why it stayed invisible for two days.** Exactly ONE event had ever been dismissed, so the two
+  counts differed by 1. The bug needed a *bulk* disposition to open a gap wide enough to see. Had
+  the 165 been dismissed a few at a time, the discrepancy would have grown slowly and looked like
+  normal backlog.
+- **The reusable form.** *A disposition verb needs a test that the headline moves* — not just that
+  the row's state changed. The regression asserts the two counts **agree**, rather than asserting
+  either number, because the failure was disagreement between a summary and the thing it
+  summarises. Both halves were individually "correct"; neither was checked against the other.
+- **Adjacent, still open:** the 59 real events now visible are dominated by symbols deleted in the
+  two detector shrinks (`_check_spec_drift`, `_check_ownership_drift`, …) — genuine `changed(0.80)`
+  findings whose disposition is `resolve` (the removal was intended), not `dismiss`. Not swept
+  here; that is a judgement per event, and auto-resolving is how a backlog gets laundered.
+
 ### The declared-vocabulary guard keyed on a NAMING CONVENTION — one rename walked past it *(2026-07-27)*
 
 - **Status:** Fixed same hour. Kept because it is standing pattern #1's third instance in this

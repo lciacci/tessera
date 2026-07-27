@@ -200,6 +200,34 @@ def test_a_resolved_drift_is_not_counted_as_a_dismissal():
     assert store.dismissals_by_dimension() == {}
 
 
+def test_stats_headline_agrees_with_the_list_it_summarises():
+    """FOUND 2026-07-27 by dismissing 165 events at once (ADR-0017's retirement).
+
+    `get_stats()['unresolved_drift']` counted `resolved = 0` ALONE while
+    `get_unresolved_drift()` filtered `resolved = 0 AND dismissed = 0`. So
+    `icpg status` printed `Unresolved drift: 224` directly above
+    `icpg drift list  # all 59`, and **dismissing a finding changed nothing in
+    the number anyone looks at** — ADR-0016 built the verb, and the headline
+    ignored it. That is ADR-0013's only-increments counter in a second function.
+
+    Invisible while exactly one event had ever been dismissed. The bug needed a
+    bulk disposition to become a gap big enough to notice, which is the argument
+    for asserting the two agree rather than asserting either number.
+    """
+    store = _store()
+    store.create_drift_event(_event(sym='sym-open'))
+    rid_dismissed = store.create_drift_event(_event(sym='sym-dismissed'))
+    rid_resolved = store.create_drift_event(_event(sym='sym-resolved'))
+    store.dismiss_drift(rid_dismissed, 'detector was wrong')
+    store.resolve_drift(rid_resolved, note='fixed')
+
+    assert store.get_stats()['unresolved_drift'] == len(store.get_unresolved_drift()), (
+        'the status headline and `drift list` must count the same set — a '
+        'disposition that does not move the headline is not a disposition'
+    )
+    assert store.get_stats()['unresolved_drift'] == 1
+
+
 def test_a_dismissed_drift_stays_suppressed_on_re_scan():
     """THE POINT of decision 4. Re-raising every scan re-litigates a closed ruling on every
     Stop — conclave F-001, which this repo already paid for once."""

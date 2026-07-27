@@ -601,8 +601,17 @@ class ICPGStore:
             reasons = conn.execute('SELECT COUNT(*) FROM reasons').fetchone()[0]
             symbols = conn.execute('SELECT COUNT(*) FROM symbols').fetchone()[0]
             edges = conn.execute('SELECT COUNT(*) FROM edges').fetchone()[0]
+            # MUST match get_unresolved_drift's predicate. It did not until
+            # 2026-07-27: this counted `resolved = 0` alone, so a DISMISSED event
+            # still read as unresolved and `icpg status` disagreed with its own
+            # `drift list` (224 vs 59). ADR-0016 made `dismissed` a disposition —
+            # a headline that ignores it means disposing a finding changes nothing
+            # anyone looks at, which is ADR-0013's only-increments counter in a
+            # second function. Invisible while exactly 1 event was dismissed;
+            # found when a retirement dismissed 165.
             drift = conn.execute(
-                'SELECT COUNT(*) FROM drift_events WHERE resolved = 0'
+                'SELECT COUNT(*) FROM drift_events '
+                'WHERE resolved = 0 AND dismissed = 0'
             ).fetchone()[0]
         return {
             'reasons': reasons,
