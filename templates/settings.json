@@ -186,6 +186,16 @@
             "statusMessage": "Loading session checkpoint + project context..."
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/icpg-session-base.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/icpg-session-base.sh\"; fi; if [ -x \"$HOME/.claude/templates/icpg-session-base.sh\" ]; then exec \"$HOME/.claude/templates/icpg-session-base.sh\"; fi; echo \"[maggy] hook script 'icpg-session-base.sh' not installed \u2014 run <maggy>/install.sh (one-time) or touch .claude/scripts/icpg-session-base.sh to silence\" >&2; exit 0",
+            "timeout": 5,
+            "statusMessage": "Recording symbols to intent graph..."
+          }
+        ]
       }
     ]
   }
