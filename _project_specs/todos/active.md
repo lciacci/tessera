@@ -6,37 +6,44 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-07-27: iCPG's detector was scoring the emptiness of its own graph — shrunk 6 dimensions to 3; then the falsifier refuted my own new guard, and chasing a polluted journal found the SPEND BACKSTOP silently dead at 47 against a cap of 3)
+## Handoff — pick up here (2026-07-27 FULL SESSION: four safety mechanisms were silently dead — the spend backstop at 47 against a cap of 3, `tessera-authorize grant` callable by the agent, the SessionStart reporters unable to report their own runner dying, and iCPG's detector scoring the emptiness of its own graph. All four fixed and guarded. ADR-0016 and ADR-0014 decided; review is now Claude-only by decision, not by drift)
 
 *(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
 Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering.)*
 
 ### THE ONE THING TO KNOW
 
-> ### ⚠ THE SPEND BACKSTOP HAD BEEN DEAD, AND THE TEST SUITE IS WHAT KILLED IT.
-> `.tessera/.spend-backstop-fires` was a **global integer nothing ever reset**, and
-> `backstop.main()` returns 0 once it passes `MAX_FIRES` (3). It was found at **47** — so the
-> mechanism that catches a spend denial nobody dispositioned had been returning "nothing to
-> report" on every session for a long time. **The cap was not wrong, its SCOPE was:** its own
-> comment scopes it to one session ("a backstop that can wedge a session gets ripped out"),
-> and stored globally it outlived every session it protected.
+> ### ⚠ FOUR SAFETY MECHANISMS WERE DEAD AT ONCE, AND EVERY ONE LOOKED HEALTHY.
+> Not a theme imposed afterwards — each was found separately, by *running* something:
 >
-> **What burned it through: `bin/tessera-test`.** `scripts/test_hook_cwd_anchoring.py` drives
-> the REAL spend-guard hook as a subprocess across 4 cwds; a subprocess inherits
-> `CLAUDE_CODE_SESSION_ID`, so every suite run appended 4 real `spend_denied` events to the
-> live journal, each bumping the counter at the next Stop. **The suite manufactured the
-> evidence that disabled the guard on unsupervised spend** — the 2026-07-12 bug returning
-> through a door that fix could not reach, and neither half announced anything.
+> 1. **The spend backstop had been dead for weeks.** `.spend-backstop-fires` was a global
+>    integer nothing reset; `main()` returns 0 past `MAX_FIRES` (3). Found at **47**. The cap
+>    was not wrong, its SCOPE was — written for one session, stored for all time, it became a
+>    kill switch. **The test suite is what killed it:** every `tessera-test` wrote four real
+>    `spend_denied` events (a test drove the guard hook as a subprocess, which inherits
+>    `CLAUDE_CODE_SESSION_ID`), each bumping the counter at the next Stop.
+> 2. **`tessera-authorize grant` was callable by the agent.** Driving the real hook returned
+>    **rc=0**. No tty check; `granted_by` is `$USER` whichever party typed it. The
+>    deny-by-default control on external spend had a self-authorization path held back only by
+>    a sentence in its own contract. **Now refused unconditionally** (ADR-0016) — PreToolUse
+>    fires only on the agent's Bash calls, so a deny-list entry is real enforcement.
+> 3. **The SessionStart reporters could not report their own runner dying.** `rm
+>    bin/tessera-watch` → a completely normal handoff printed, while P3/P4/P9/P11–P15 all went
+>    quiet at once. The `settings.json` trailing branch reports a hook SCRIPT missing; it cannot
+>    report a hook that ran perfectly with its RUNNER gone.
+> 4. **iCPG's detector scored the absence of edge types nothing writes** — `test(0.30)` constant
+>    on 712 of 712 events. Shrunk 6 dimensions → 3.
 >
-> Both fixed (`1fc15b2`, `dd833b0`) + **P15** so "backstop suppressed" can never again be
-> silent. Counter is per-session; legacy/corrupt state now fails toward the backstop being
-> ALIVE.
+> **THE COMMON SHAPE, and it is the thing to carry: none of these produced an error. They
+> produced ordinary-looking success.** A dead backend reads as an unused one; a crashed watcher
+> reads as a quiet one; a constant reads as a measurement; an uncapped counter reads as a
+> disabled-for-good-reason one.
 >
-> **AND THE FIRST HYPOTHESIS WAS WRONG, which is the reusable part.** I proposed "the chaos
-> suite lacks a conftest" — an artifact that correlated with the pain. Chaos measured
-> **clean**; probing each suite under a probe session id found a top-level file. **No count of
-> conftest files would ever have implicated it.** That is standing pattern #3 aimed at the
-> auditor, the same error A5b warns about, made by the person who had just re-read A5b.
+> **AND THE METHOD THAT FOUND THEM ALL: running something, never re-reading it.** Four findings
+> today were in code written earlier the *same day* — the falsifier's PARTIAL on my own guard,
+> the chaos probes' wrong first draft, the A5b probes, and a malformed-row crash found in
+> review. **Counting would have found none of them:** all three surfacers had ZERO
+> `tessera-degraded` calls, the exact signal the 07-26 audit misread three times.
 
 **START HERE.** The 2026-07-26 priorities below still stand (A-live/T2, A6, A5b, B2, C, D, E).
 What changed today:
@@ -71,6 +78,11 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    verified against ONE example. `drift-dimensions-have-producers` passed its own tests while
    blind to two of the three dimensions that motivated it; only `bin/tessera-verify`, given the
    claim explicitly, found it. **Test a new check against the failures you did NOT just fix.**
+   **And its purest instance to date, A5b (2026-07-27): `rm bin/tessera-watch` and SessionStart
+   printed a completely normal handoff.** Every predicate — P3, P4, P9, P11–P15 — went quiet at
+   once, because the reporter for all of them WAS the thing deleted. The `settings.json` trailing
+   branch could not cover it: that reports a hook SCRIPT missing, never a hook that ran perfectly
+   with its RUNNER gone. Fixed in three surfacers, guarded by chaos probes 9–11.
 2. **It did not break — it produced something plausible.** The fail-open class. A mechanism
    that fails open needs a paired signal that fails LOUD. Proven again 2026-07-24: a
    *wrong* error message was the only reason a session-wide cwd bug surfaced, while twelve
@@ -87,6 +99,13 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    refuted only by probing each suite and watching which one wrote to the journal.
    **When auditing, measure the property. Counting the artifact is the same error you are
    auditing for, aimed at yourself.**
+   **Corollary, from A6 (2026-07-27): a mechanical check needs a mechanical SUBJECT.** Two of
+   three candidate handoff checks were rejected on measurement — "a closed entry must name an
+   existing path" scored 12 false positives in 13, and "an item closed in the index must be
+   struck through in its body" FAILED OPEN, because the prose format it keyed on was invented one
+   day and the next section did not use it. Retired figures are a closed list of exact strings and
+   shipped; "is this status consistent" is a judgement wearing a regex. **When the subject is
+   authored prose in an unenforced format, the honest answer is a human re-read, not a check.**
 4. **An interpreter is a path, not a name** (F-001). Generalises past interpreters: any
    NAME resolved through a mutable, ordered lookup — `python3`, a `tessera-*` binary on
    PATH, a bare relative hook path against an inherited cwd — is a landmine.
@@ -118,60 +137,34 @@ Add a line only when a lesson recurs; the value is that the list is short enough
 
 ### Next — in priority order
 
-1. ~~**Fix the checkpoint's progress extractor**~~ **DONE 2026-07-27.** It was not in
-   `write_checkpoint` — the corruption entered upstream, at `auto_nodes.detect_git_commit`, which
-   recovered commit messages by regexing the Bash **command text**. That cannot work: the shell
-   has already expanded and consumed the quoting before a PostToolUse hook sees anything. It now
-   asks git (`git log -1 --format=%ct%x00%s`), with a freshness window so a commit made in a
-   SIBLING repo yields nothing rather than an unrelated subject from this one. 9 self-checks
-   driving real repos through each troublesome commit form; watched RED against the old parser.
-   **WATCH NEXT: do later restore receipts stop naming `progress`?** That is the T2 loop closing
-   end to end — finding → fix → the instrument going quiet on it — and it is the first time this
-   repo will have seen that happen.
-2. ~~**iCPG (d): dedup on insert + event IDs + `drift list` + evidence on the report.**~~
-   **DONE 2026-07-27 — item C is CLOSED.** Key is `(symbol_id, from_reason_id,
-   sorted(dimensions))`, deliberately not the description (which embeds the scores, so a 0.1
-   severity move would mint a row and the creep would continue). Migration collapses the
-   historic duplicates too — dedup-on-insert alone strands them — taking the live backlog
-   **218 → 191**; two consecutive scans now read 195 → 195. Every line carries an id, symbol
-   and file; `icpg drift list` ships; `drift resolve` takes a short prefix and **fails loud**
-   on an unknown id (it used to print "Resolved" whether or not a row matched).
-   **What is left of item C is only the deferred piece:** `--note` / a `dismissed` state,
-   which ADR-0013 orders last and which wants the same design gate as the spend backstop's
-   missing disposition verb (item 8) — the two are the same question in two subsystems.
-3. **A6 — a doccheck for the handoff itself.** Three drift shapes are now scoped (retired figure,
-   phantom path, and status-contradicted-between-index-and-body, whose mechanical form is: an item
-   declared closed in START HERE must have a struck-through title in its own body).
-4. **A5b — the per-bail-out spec-11 audit.** Needs per-hook reading. **Do not re-open it with a
-   count** — that measure produced three wrong findings, and it produced a fourth on 2026-07-27.
-5. **D / ADR-0014 — the review backend seam.** Lorenzo's decision; unchanged, still blocking
-   `tessera-code-review`'s 978 lines and ADR-0008's `partially`.
-6. **`usage` drift threshold calibration** — 168 of 816 symbols fire, 64 saturated at 1.00.
-   **State the question before touching `>2` and `/10`**; tuning by eye is how the three retired
-   proxies were born.
-7. **B2 — correction recall.** Still blocked on labels from a judgement that did not propose the
-   hypothesis.
-8. ~~**The spend backstop's "false positive" disposition has no recordable form.**~~
-   **CLOSED 2026-07-27 — ADR-0016**, together with iCPG's deferred `--note`/`dismissed`.
-   They were the same question and the answer was that they are NOT: where a detector
-   over-counts BY DESIGN the model may dispose (gate-scan), where over-firing is a DEFECT a
-   model-emitted exit is that defect's bypass (spend). Shipped: `tessera-authorize dismiss`
-   (guard-blocked, human-only by construction), `icpg drift dismiss --reason` (model-emittable,
-   drift has no safety stake), `_escalated()` tightened to spend-shaped.
-   **The bigger find, and it was incidental:** `tessera-authorize grant` was agent-callable —
-   the deny-by-default control on external spend had an authorization verb the agent could
-   invoke on itself, held back only by a sentence in its own contract. Now refused
-   unconditionally.
-   **FLEET ROLLED 2026-07-27, all five, pushed.** conclave `cb0e267`, heaviside `ad4b4d6`,
-   settempo `5093ec6`, tess-dashboard `371a8c0`, howler `15e6582`. Verified per repo rather
-   than assumed: 101 spend tests green in each, and each repo's OWN hook driven to rc=2 on a
-   self-grant and rc=0 on `terraform destroy`. **howler kept `--exclude spend`** — its guard
-   is a documented deliberate defer, a previous sync installed it by accident once, and
-   absence was confirmed AFTER the apply, not just before. So ADR-0016 does not reach howler:
-   there is no guard there to carry it, and closing that defer needs a howler session because
-   only there can you learn whether the guard blocks a real build, upload or signing step.
-   Synced with `--update-stale`, which only refreshes files byte-identical to a known tessera
-   version — proof they were never customized downstream.
+**Everything on the 2026-07-27 list is CLOSED (items 1–5, plus item 8's design gate). Item C
+closed except its deferred piece, which ADR-0016 then decided too.** What remains:
+
+1. **`usage` drift threshold calibration — and it now has an evidence channel it lacked.**
+   168 of 816 symbols fire, 64 saturated at 1.00, against `>2` files and `/10` saturation that
+   were never calibrated against anything. **Do NOT tune those numbers by eye** — that is how
+   three proxy predicates were born. ADR-0016 made `dismissed` mean *the detector was wrong* and
+   `icpg status` prints dismissals **by dimension** precisely so this question becomes answerable
+   from data. The work is: dismiss honestly for a while, then read the counts. One dismissal
+   exists so far (mine, 2026-07-27, on a genuinely uncalibrated `usage` hit).
+2. **Item 2 Part B — the pending-record channel (framework→downstream).** Still needs its
+   3-decision design gate before any code: where the record lives, idempotent-update semantics,
+   and the committed staleness marker. Unchanged.
+3. **B2 — correction recall.** Still BLOCKED on labels from a judgement that did not propose the
+   hypothesis. Unchanged, and the block is the point.
+4. **Minors:** `tessera-verify stats` still does not break out `verdict_channel` (now 2-for-2 on
+   the file channel, so the number is worth surfacing); concept-tags for the decision surface;
+   `rm -rf scripts/.tessera` leftover; historical `--reclassify --all`.
+
+**Passive, needs no action:** T2 restore receipts accrue at ~0.8/day. The one to watch is whether
+later receipts stop naming `progress` now that `detect_git_commit` asks git instead of parsing the
+shell — that would be the first time this repo has seen the loop close finding → fix → instrument
+goes quiet.
+
+**Standing caution for whoever picks this up:** four of today's findings were in code written
+earlier the same day, and every one was found by RUNNING something rather than re-reading it —
+the falsifier's PARTIAL, the chaos probes' wrong first draft, the A5b probes, and the malformed-row
+bug in the review. Self-review that does not execute anything is the weakest instrument here.
 
 ### T2's first real receipt: `insufficient` — and the checkpoint has a concrete bug
 
@@ -210,7 +203,7 @@ while blind to two of the three dimensions that motivated the work.** Caught wit
 because the claim was stated explicitly enough to falsify. *A check verified against the bug you
 remember is verified against one example.*
 
-Suite green (353 top-level, 89 spend, 14 icpg, 8 chaos), doccheck **33/33**, `tessera-watch`
+Suite green (362 top-level, 101 spend, 32 icpg, **11 chaos**), doccheck **34/34**, `tessera-watch`
 fires zero (P7 snoozed), findings backlog empty, no escalations. **Five commits, NOT PUSHED.**
 
 ---

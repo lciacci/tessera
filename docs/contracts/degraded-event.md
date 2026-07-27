@@ -54,6 +54,25 @@ from. Emitted by the hook script itself.
 | `spend-backstop` | `jq-unavailable`, `backstop-missing`, `no-python3`, `cwd-unreachable` |
 | `gate-scan` | `jq-unavailable`, `no-transcript-path`, `scanner-missing`, `no-python3`, `cwd-unreachable` |
 | `mnemos-checkpoint` | `toolchain-unreachable`, `checkpoint-failed` |
+| `tessera-watch` | `runner-missing`, `runner-crashed` |
+| `tessera-findings` | `runner-missing`, `runner-crashed` |
+| `decision-surface` | `runner-crashed` |
+
+**`runner-missing` / `runner-crashed` are a THIRD class, added 2026-07-27 by the A5b audit, and
+they are the gap B could not cover.** B reports a hook *script* that is missing or unexecutable.
+It cannot report a hook that **ran perfectly while the tool it calls is gone or crashed** — and
+that was live: `rm bin/tessera-watch` and SessionStart printed a completely normal handoff while
+P3, P4, P9 and P11–P15 all went silent at once, because the reporter for every one of them was
+the thing deleted. Probed before fixing; all three surfacers were silent.
+
+`runner-crashed` exists separately because the surfacers tested `[ $? -eq 1 ] || exit 0`, which
+put "nothing fired" (rc 0) and "a predicate raised" (rc 2) on the same branch: a crashing watcher
+read as a healthy one. Guarded by chaos probes 9–11.
+
+**Note for anyone auditing coverage: all three of these hooks had ZERO `degraded` calls before
+this.** That absence is exactly what the 2026-07-26 audit misread as missing coverage and got
+wrong three times — and here it was right, for a reason no count could distinguish. Only breaking
+the component and watching answers the question.
 
 **B. From the wired command, when the hook NEVER RAN** — reason is always `hook-unavailable`.
 No code inside a hook can report this, because the hook did not execute; the branch lives in the

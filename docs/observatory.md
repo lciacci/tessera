@@ -859,7 +859,16 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   into conclave calls; where does the router live). Until then: **noted here so it is not lost.**
 - **CANONICAL MAP (2026-07-17):** the cohesion contract is now authored — `docs/contracts/three-project-cohesion.md`
   (layering / owns-must-not, seams with owners, sequence, the 4 anti-conflation guards, and Open decisions
-  D1–D4). It is a coordination map, **not** the ADR; the ADR above is still what firms it. This observatory
+  D1–D4). It is a coordination map, **not** the ADR; the ADR above is still what firms it.
+  **D1 is DECIDED as of 2026-07-27 — ADR-0014, option D: review is Claude-only, deliberately.**
+  Chosen on evidence, not preference: the `review` orchestrator had never run (0 commits since creation) and
+  0 of 3 backends were functional — `kimi` execs a phantom path and had been broken 15 days
+  unnoticed, `codex` absent, `deepseek` sound but unkeyed. The review stack was cut. **D2–D4 stay
+  open**, and the scope limit matters: `bin/validate-plan` + `council-review` were KEPT, because
+  plan validation is a different capability that merely shares backends and ADR-0007 forbids
+  cutting the multi-model stack without its own design session. **The fact that will decide the
+  re-entry:** conclave already carries `litellm/config.yaml` with a model_list and three api_base
+  entries, so if that gateway becomes routine the cheap path back is option **B**, not C. This observatory
   entry stays the live scratchpad; the contract is the source of truth for who-owns-what.
 
 ### Haziness's correction-detector has near-zero recall — it has been silently blind  ✅ RESOLVED (Phase 1, 2026-07-17 — see UPDATE at end)
@@ -1682,6 +1691,13 @@ this section — the dedup fix it prescribes is real but is now step 3, not step
   LiteLLM, not as a separate harness"*). Cutting loses no portability; but keeping it also buys
   none, because the provider layer is **not wired to conclave's gateway or LiteLLM**. That gap is
   the real work, and it is D1 — see ADR-0014.
+- **CLOSED 2026-07-27 by ADR-0014 (option D): the skill was CUT, so the shadowing question is
+  moot rather than solved.** No skill named `code-review` or `tessera-code-review` exists in the
+  repo or the global mirror. Note what this does and does NOT settle: the *instance* is gone; the
+  **class** — a Tessera skill silently shadowing a built-in — is not, and still has no check, for
+  the reason stated above (there is no enumerable source of built-in command names inside the
+  repo, and a hardcoded list would be proxy predicate #4). If a future skill name collides, this
+  entry is the record that it was foreseen and left unguarded deliberately.
 - **What is NOT in question:** the workaround. `/ultrareview` is unshadowed and documented.
 - **When to revisit:** next time a built-in command is added that matters here, or when the
   skill corpus is next touched (ADR-0008/0009/0010 lineage) — a rename is cheapest to do while

@@ -12,6 +12,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 > 2026-07-08 and 2026-07-25. The section below covers the 2026-07-26 session; the older
 > `[Unreleased]` content follows it, unchanged.
 
+### 2026-07-27 — review of the session's own diff, and the bug it found
+
+Self-review with adversarial probes, not a re-read. Its ceiling is stated in the same
+breath: twice today independent checking refuted what my own testing had certified green.
+
+#### Fixed
+- **One malformed `drift_dimensions` row could take down the whole drift report — silently.**
+  Three places parse that column; two were guarded and `_row_to_drift` was not, so a single
+  bad row raised `JSONDecodeError` out of `get_unresolved_drift()` — killing `icpg status`
+  and `drift list`, and in the pre-edit hook path (stderr to `/dev/null`) killing the drift
+  surface with no message. One `_loads_list` helper now serves all three sites: three copies
+  of a guard is how the odd one out goes missing. Watched RED against the bare parse.
+
+#### Verified, not assumed
+- **Spend guard, 11-case matrix.** The new `self-authorizing` branch sits in front of the
+  authorization check, so every pre-existing verdict was re-checked: unauthorized boots still
+  denied, **authorized boots still allowed**, teardown never blocked, quoted mentions still
+  data, `show`/`revoke` still permitted.
+- **Backstop fire counter fails toward ALIVE** on absent file, legacy scalar, corrupt JSON, a
+  list, `null`, and junk values — and a capped prior session cannot silence a new one.
+- **The migration survives malformed data** without collapsing unrelated rows.
+
 ### 2026-07-27 — ADR-0014 decided: review is Claude-only, deliberately
 
 Decided on evidence from the ADR's own re-evaluate trigger #4, not from the armchair.
