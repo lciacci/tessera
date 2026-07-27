@@ -45,17 +45,28 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
 > review. **Counting would have found none of them:** all three surfacers had ZERO
 > `tessera-degraded` calls, the exact signal the 07-26 audit misread three times.
 
-**START HERE.** The 2026-07-26 priorities below still stand (A-live/T2, A6, A5b, B2, C, D, E).
-What changed today:
-  - **C (iCPG) is PARTLY DONE** — the detector shrink landed; **(d) dedup-on-insert is now the
-    whole remainder and should go first**, because the re-insertion defect refills the backlog
-    on its own (`mnemos-pre-edit.sh` → `drift file` persists on every edit; the count grew
-    712 → 746 during the session that diagnosed it).
-  - **A-live/T2 has its first receipt, and it is `insufficient`** — see below. The roll-to-fleet
-    condition that mattered (an `insufficient` exists) is now met; the other is the backstop
-    firing on a real Stop, which it did.
-  - **NEW, unassigned:** the drift detector's `usage` thresholds are uncalibrated (168 of 816
-    symbols fire, 64 saturated). **Do not tune `>2` and `/10` by eye.**
+**START HERE — read "Next — in priority order" below; it is the live list.** Most of the
+2026-07-26 backlog closed today.
+
+  - **CLOSED 2026-07-27:** **A6** (one check shipped, two rejected on measurement), **A5b** (the
+    reporters could not report themselves), **C** (iCPG — shrink, dedup, evidence, and the
+    `usage` question answered), **D** (ADR-0014 — review is Claude-only, the stack cut).
+  - **STILL OPEN:** **B2** (blocked on unbiased labels — the block is the finding), **E /
+    item 2 Part B** (the pending-record channel, needs its 3-decision design gate), and iCPG
+    **scope quality**, which is what the `usage` question turned into.
+  - **A-live/T2 has its first receipt, and it is `insufficient`** — and the defect it named is
+    already fixed (`detect_git_commit` parsed the shell instead of asking git). **Watch whether
+    later receipts stop naming `progress`**: that would be the first finding → fix →
+    instrument-goes-quiet loop this repo has closed.
+  - ~~usage thresholds are uncalibrated~~ — **ANSWERED, and it was not a threshold question.**
+    Measured: 46% score zero, 34% below the cut, 19% fire — the threshold discriminates. The
+    real defect was definitional (a symbol's own file counted as usage outside its scope; fixed)
+    and what it exposed was **scope quality**: only 42% of tracked files sit in any reason's
+    scope. See **C** and priority item 1, which is pre-scoped into three options.
+
+*(This block contradicted the priority list until it was re-read at session end on 2026-07-27 —
+the fourth instance of index-vs-body drift in this file in two days, and the exact reason A6
+concluded that shape needs a human re-read rather than a check.)*
 
 ### Standing patterns
 
@@ -196,6 +207,21 @@ scope quality, and the re-stated question is recorded there). What is actually n
 **Passive, needs no action:** T2 restore receipts accrue at ~0.8/day. Watch whether later
 receipts stop naming `progress` now that `detect_git_commit` asks git instead of parsing the
 shell — that would be the first finding → fix → instrument-goes-quiet loop this repo has closed.
+
+**WORTH DOING EARLY IN A SUBSTANTIVE SESSION — a hand-run `/compact`, for ONE reason.**
+Asked at the end of 2026-07-27 and deliberately NOT done then; the answer is timing, not no.
+- **It buys nothing for the trial.** ADR-0015 established the restore path is not
+  compaction-specific (it runs on every session start, ~121 times vs ~3 compactions), T1 is
+  guarded by P3 and green, T3 is blocked by the empty PreCompact payload, and **a hand-run
+  compact is a TEST of the layer, never evidence about it** (standing pattern #7).
+- **It buys exactly one thing: Layer 3 has n=0 and carries TWO unexercised fixes** — the
+  2026-07-24 `additionalContext` channel fix and the 2026-07-26 TTL fix (its 300s staleness gate
+  used to delete the marker and emit nothing). The log shows 4 `restore_injected` and 1
+  `restore_missed_stale`, **all of them from before those fixes**. Nothing has tested them.
+- **Do it EARLY in a session with real work ahead**, not at the end: compacting into a wrap-up
+  restores into nothing to resume, so it tests the plumbing and teaches nothing about
+  sufficiency. Watch for the `CONTEXT RESTORED AFTER COMPACTION` block actually arriving —
+  that text has never been observed reaching the model, once.
 
 **A LATE-SESSION CATCH, and it is the lesson more than the fix.** The fleet was rolled at
 `c405645`, then **A5b landed three commits later (`e0054a7`) and was not re-rolled** — so all
