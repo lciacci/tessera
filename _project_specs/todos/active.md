@@ -6,7 +6,7 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-07-26 latest: COMPACTION TEST RAN → the 37-day Mnemos trial was watching the WRONG EVENT; re-scoped in ADR-0015, P3 rewritten; 3 fail-opens found — a stale global hook tier, and the spend guard allowing spend on a cwd shift)
+## Handoff — pick up here (2026-07-26 FULL SESSION: the Mnemos trial was watching the wrong event — re-scoped in ADR-0015, P3 rewritten, T2 BUILT with zero receipts; SIX fail-opens found and fixed incl. a spend gate a `cd` could switch off; ADRs now record whether they were ever BUILT; correction-recall premise was a bad denominator)
 
 *(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
 Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering.)*

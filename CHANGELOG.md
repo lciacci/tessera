@@ -8,6 +8,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+> **Note:** the CHANGELOG fell behind after 6.47.0 and remains un-backfilled between
+> 2026-07-08 and 2026-07-25. The section below covers the 2026-07-26 session; the older
+> `[Unreleased]` content follows it, unchanged.
+
+### 2026-07-26 — the Mnemos trial was measuring the wrong thing, and four fail-opens under it
+
+A single deliberate `/compact` — run to answer a 37-day-old question — found two defects,
+then invalidated the question's premise.
+
+#### Added
+- **`scripts/restore/`** + **`docs/contracts/restore-receipt.md`** — T2, the restore
+  receipt. `restore_offered` is written by the harness, `restore_receipt` by the model,
+  and a Stop hook diffs them. Two parties, neither marking its own homework: the old
+  `restore_injected` was a log line the hook wrote *about itself*, and it said "delivered"
+  four times while the model received nothing.
+- **`tessera-watch` P14** — guards `~/.claude/templates/`, the tier every downstream
+  actually executes and the only one of three that nothing checked.
+- **ADR-0015** — splits the Mnemos trial into T1 (deliverability) / T2 (sufficiency) /
+  T3 (frequency). No verdict is available until T2 has data.
+- **`- **Executed:**` on ADRs**, verified by doccheck `adr-execution-recorded` — an
+  accepted ADR used to read identically whether it shipped or never shipped.
+
+#### Fixed
+- **Compaction recovery, both halves.** Layer 3's 300s staleness gate deleted the marker
+  and injected nothing; Layer 2 delivered an 18.2KB checkpoint that the harness truncated
+  to a 2KB preview, because `checkpoint.py` joined every never-evict GoalNode (11,119 →
+  872 chars, −92%).
+- **The spend gate could be switched off by `cd`.** Six hooks took their project dir from
+  the session cwd; a `cd scripts` made the guard resolve a path that did not exist and
+  **allow** spend-committing commands.
+- **`tessera-degraded` wrote cwd-relative**, so a correctly-reported fail-open landed
+  where `tessera-watch` P13 would never read it.
+- **P9 gained its second consumer** — nothing watched `icpg`, so the intent half of
+  `mnemos-pre-edit` could die silently and read as "this file has no intents".
+- **Budget-exhausted haziness scores are now marked as FLOORS** — the classifier stops at
+  180s and the remaining turns were recorded as non-corrections without being classified.
+
+#### Changed
+- **`run-tests.sh` globs the mnemos self-checks** instead of enumerating them; a new check
+  had passed while invisible to a green `tessera-test`.
+- **P3 is `p3_restore_integrity`**, a mechanical guard rather than a verdict gate;
+  `COMPACTION_MIN` retired.
+
+## [Unreleased — 2026-07-08 and earlier]
+
 > **Note:** this CHANGELOG fell behind after 6.47.0 — ADR-0004 (hook distribution)
 > and the FABLE effort tier shipped without entries. This section covers the
 > 2026-07-08 session only; earlier gaps are un-backfilled.
