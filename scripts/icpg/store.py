@@ -14,6 +14,22 @@ ICPG_DIR = '.icpg'
 DB_NAME = 'reason.db'
 
 
+def _loads_list(raw) -> list:
+    """A JSON list column, or [] if it is unreadable. One definition, three call sites.
+
+    Three places parse `drift_dimensions`; two guarded it and one did not, which is how a
+    single malformed row could raise out of `get_unresolved_drift()` — taking down
+    `icpg status` and `drift list`, and in the pre-edit hook path (stderr to /dev/null)
+    taking down the drift surface SILENTLY. Three copies of a guard is how the odd one out
+    goes missing, so there is now one.
+    """
+    try:
+        value = json.loads(raw or '[]')
+    except (ValueError, TypeError):
+        return []
+    return value if isinstance(value, list) else []
+
+
 def _opt(row: sqlite3.Row, column: str):
     """A column that may be absent on a row read before the migration ran."""
     try:
@@ -171,10 +187,7 @@ class ICPGStore:
             'SELECT id, drift_dimensions FROM drift_events'
         ).fetchall()
         for row in rows:
-            try:
-                dims = json.loads(row['drift_dimensions'] or '[]')
-            except ValueError:
-                dims = []
+            dims = _loads_list(row['drift_dimensions'])
             conn.execute(
                 'UPDATE drift_events SET drift_dimensions_key = ? WHERE id = ?',
                 (json.dumps(sorted(dims)), row['id'])
@@ -484,11 +497,7 @@ class ICPGStore:
                 'SELECT drift_dimensions FROM drift_events WHERE dismissed = 1'
             ).fetchall()
         for row in rows:
-            try:
-                dims = json.loads(row['drift_dimensions'] or '[]')
-            except ValueError:
-                continue
-            for dim in dims:
+            for dim in _loads_list(row['drift_dimensions']):
                 counts[dim] = counts.get(dim, 0) + 1
         return counts
 
@@ -661,7 +670,7 @@ class ICPGStore:
             id=row['id'],
             symbol_id=row['symbol_id'],
             from_reason_id=row['from_reason_id'],
-            drift_dimensions=json.loads(row['drift_dimensions']),
+            drift_dimensions=_loads_list(row['drift_dimensions']),
             severity=row['severity'],
             description=row['description'],
             resolved=bool(row['resolved']),

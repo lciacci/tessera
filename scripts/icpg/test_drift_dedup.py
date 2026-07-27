@@ -241,3 +241,21 @@ def test_a_new_dimension_is_a_new_question_not_a_suppressed_one():
 
 if __name__ == '__main__':
     raise SystemExit(pytest.main([__file__, '-q']))
+
+
+def test_a_malformed_dimensions_column_does_not_take_down_the_report():
+    """FOUND BY REVIEW 2026-07-27, in this session's own code. Three places parse
+    `drift_dimensions`; two guarded the parse and `_row_to_drift` did not, so ONE malformed
+    row raised JSONDecodeError out of `get_unresolved_drift()` — taking down `icpg status`
+    and `drift list`, and in the pre-edit hook path (stderr to /dev/null) taking down the
+    drift surface SILENTLY. A bad row should cost that row's dimensions, not the report."""
+    project = Path(tempfile.mkdtemp())
+    (project / '.icpg').mkdir()
+    _legacy_db(project / '.icpg' / 'reason.db', [
+        ('bad', 's1', 'r1', 'NOT JSON', 0.5, 'd', 0, '2026-07-01T00:00:00+00:00'),
+        ('good', 's2', 'r1', json.dumps(['usage']), 0.5, 'd', 0, '2026-07-02T00:00:00+00:00'),
+    ])
+    rows = ICPGStore(str(project)).get_unresolved_drift()
+    assert len(rows) == 2, "a malformed row must not remove the readable ones"
+    assert {r.id for r in rows} == {'bad', 'good'}
+    assert next(r for r in rows if r.id == 'bad').drift_dimensions == []
