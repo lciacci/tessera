@@ -98,5 +98,12 @@ means only that the payload survives delivery.
 2. **Downstream coverage is unproven.** `offer.py` resolves via `$PWD/scripts/restore/` in the
    ADR-0004 global tier, so a downstream project records offers only once `scripts/restore/`
    is synced there. The trial runs in this repo first.
-3. **Zero receipts so far.** This contract ships with no data. Its own first evidence arrives
-   at the next substantive session's Stop.
+3. **Zero receipts so far, and data arrives only as a BYPRODUCT of work.** The backstop fires
+   only on a substantive session (≥1 edit or ≥20 assistant turns), so there is no way to
+   "collect receipts" as an activity — you do the real next job and the receipt is owed at its
+   Stop. **Verified 2026-07-26:** the session that built T2 was itself substantive (1,574
+   assistant turns, 143 edits) yet produced **no** `restore_offered`, because it started before
+   `offer.py` existed; `scan.py` correctly stayed silent, since no offer means nothing owed.
+   That confirms the "nothing to do" branch on real data and puts **n=1 at the next session,
+   not that one.** If a later substantive session *does* get an offer and the Stop hook still
+   says nothing, that is the failure this contract exists to make visible.

@@ -214,10 +214,24 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    downstream app has none of that. **Tessera data can validate the MECHANISM; it cannot answer
    whether checkpoints suffice in general** — a week of green receipts here partly means "the
    handoff works", not "Mnemos works".
+   **HOW T2 GETS DATA — it is a BYPRODUCT of work, never a task.** The backstop fires only on a
+   SUBSTANTIVE session (**≥1 file edit OR ≥20 assistant turns**), so "sit and watch whether T2
+   fires" is incoherent: a session that does nothing produces nothing. **Do whatever the real
+   next job is; the receipt is owed at that session's Stop.** Any of B2 / C / D generates it.
+   **VERIFIED 2026-07-26, and it is why n is still 0:** the session that BUILT T2 was itself
+   substantive (1,574 assistant turns, 143 edits) but has **no `restore_offered`** — it started
+   before `offer.py` existed, so SessionStart never wrote one. `restore/scan.py` correctly
+   returned silent: no offer means nothing owed. That is the "nothing to do" branch confirmed on
+   real data, and it means **the next session is n=1**, not this one.
    **NEXT SESSION: this ships with ZERO receipts.** Its first evidence is your own Stop. Three
    things to watch, and they are the ways it fails rather than the ways it works:
-   1. **Does the backstop actually fire?** It has never run against a real Stop. If it does not,
-      that is pattern #1 again — and this time inside the instrument built to answer for it.
+   1. **Does the backstop actually fire?** It has never run against a real Stop — every check so
+      far was hand-driven. **If the session does ≥1 edit and the Stop hook stays silent, THAT is
+      the finding**: pattern #1 landing inside the instrument built to answer for pattern #1.
+      Diagnose in this order — (a) is there a `restore_offered` in
+      `.tessera/logs/<session>.jsonl`? if not, SessionStart's offer call did not run; (b) does
+      `python3 scripts/restore/scan.py <transcript> <session>` exit 1 by hand? if yes, the
+      wrapper or the settings wiring is the break, not the scanner.
    2. **Is the receipt honest, or reflexive?** If every session says `sufficient` with thin
       evidence, the instrument is decorative and the length floor did not hold.
    3. **Do `--missing` values cluster?** A run of `progress` is an instruction to change what
