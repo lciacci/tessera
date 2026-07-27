@@ -1521,6 +1521,48 @@ this section — the dedup fix it prescribes is real but is now step 3, not step
   skill corpus is next touched (ADR-0008/0009/0010 lineage) — a rename is cheapest to do while
   the corpus is already open.
 
+### Correction recall: the premise was a bad denominator, and the real defect is budget-exhaustion *(2026-07-26)*
+
+- **Status:** OPEN, re-framed. The "recall crisis" was largely an artifact; a different, sharper
+  defect is real and needs no labelling judgement to fix.
+- **THE PREMISE WAS WRONG. "5 detections / 2010 user turns" divided by TOOL-RESULT ROWS.**
+  Claude Code transcripts carry tool results as `role='user'`, so the raw count is ~19x the human
+  turns. `_correction_density` already filters correctly (`event_type='user'` AND
+  `tool_use_id IS NULL`) — the handoff figure did not. On eligible turns only:
+  ```
+  ran               918 eligible  157 det  17.1%
+  (null, pre-16)    479 eligible   96 det  20.0%
+  budget-exhausted  170 eligible    5 det   2.94%
+  recent 8          154 eligible    5 det   3.2%
+  ```
+  **The detector is not silent. It runs at ~17–20% of human turns.** Any future claim about recall
+  must state which denominator it used — this one cost a whole re-framing.
+- **THE REAL DEFECT: `CorrectionDetector` has a 180s wall-clock budget, and past it every
+  remaining turn returns False.** Those turns are not *measured as* non-corrections; they are
+  **unmeasured and recorded as non-corrections.** 24 sessions are `budget-exhausted` and detect at
+  2.94% vs 17.1% — ~6x suppression — and haziness then scores them as if the number were real,
+  with `correction_density` carrying the largest weight (0.30).
+  **This is P3's `unknown` lesson in a different organ: a verdict must never rest on an event whose
+  provenance the instrument could not read.** The fix is not the knob (raising 180s only moves the
+  cliff). It is that a budget-exhausted session must not report a composite as though measured —
+  mark it, or withhold it, exactly as P3 excludes unclassifiable events from BOTH counts.
+  **Consequence to check before trusting any band: the 07-20 band re-anchoring used a distribution
+  that includes these 24 sessions.**
+- **The recall question that remains, and why I did not act on it.** Eval baseline (n=114):
+  **precision 0.32, recall 0.53.** Precision is the weaker half. On this session I could
+  hand-label ~6 turns as corrections against 1 detection — including *"it's not just compaction
+  tho, it's failure too, right or no?"*, which overturned the trial's entire framing, and
+  *"I take umbrage with the 16 days"*, an explicit objection. That suggests weak recall on the
+  interrogative/polite register.
+  **I did NOT change the detector on those labels, deliberately.** I proposed that same hypothesis
+  earlier in the session, retracted it for thin evidence, and then produced labels supporting it —
+  with a stake in the answer. That is motivated labelling, and the silver set exists precisely so
+  the labels are not mine-in-the-moment. **Adding self-labelled turns to the silver set to justify
+  a change I already proposed would corrupt the one instrument that could refute me.**
+- **When to revisit:** fix budget-exhaustion first (no labels needed). For recall, the turns need
+  labelling by a judgement that is not the one that proposed the hypothesis — then re-run
+  `eval_correction.py` and re-open bands AND weight per P10.
+
 ### Fatigue/intent re-judged, and a proxy I used while auditing for proxies *(2026-07-26)*
 
 - **Status:** item 5 CLOSED. The feature is LIVE and its silence is honest. One real gap found

@@ -318,7 +318,27 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    still does not mean "downstream is current". **When a checker takes a reference, ask what
    validates the reference.**
 
-**B. Correction-detection recall — the self-evaluation thread's real bottleneck.** 2010 user
+**B. RE-FRAMED 2026-07-26 — the "5 / 2010" premise was a bad denominator; the real defect is
+   budget-exhaustion.** `role='user'` carries TOOL RESULTS in Claude Code transcripts, so the raw
+   count was ~19x the human turns. On eligible turns the detector runs at **17-20%**, not ~0.
+   **Do not repeat the old figure.** Any recall claim must state its denominator.
+   **B1 (do this first, no labelling judgement needed): budget-exhausted sessions report
+   unmeasured turns as non-corrections.** `CorrectionDetector` has a 180s wall-clock budget; past
+   it every remaining turn returns False. 24 sessions affected, detecting at 2.94% vs 17.1%.
+   Haziness then scores them as if real, with `correction_density` at weight 0.30. **This is P3's
+   `unknown` lesson in another organ — a verdict must not rest on what the instrument could not
+   read.** Fix is NOT the knob (raising 180s moves the cliff): a budget-exhausted session must
+   mark or withhold its composite, as P3 excludes unclassifiable events from both counts.
+   **Also check: the 07-20 band re-anchoring used a distribution containing these 24 sessions.**
+   **B2 (blocked on unbiased labels): recall on the interrogative register.** Eval baseline
+   n=114, **precision 0.32 / recall 0.53** — precision is the weaker half. This session
+   hand-labels ~6 corrections against 1 detection, including the turn that overturned the trial
+   framing. **I did not act on it: I proposed that hypothesis, retracted it, then produced the
+   labels supporting it. Self-labelling into the silver set would corrupt the one instrument that
+   could refute me.** Needs labels from a judgement that did not propose the hypothesis, then
+   re-run `eval_correction.py` and re-open bands AND weight per P10.
+
+**B-old. Correction-detection recall — the self-evaluation thread's real bottleneck.** 2010 user
    turns across 8 sessions, 5 detections. Corrections arrive interrogatively; the detector is
    tuned for the declarative register. `scripts/mnemos/eval_correction.py` is the existing
    silver-label harness and THIS session is a labelled example (5 known confident-wrong episodes,
