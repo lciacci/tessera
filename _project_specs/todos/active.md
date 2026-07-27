@@ -63,7 +63,10 @@ order" below, **CLOSED: A (ADR-0015), A2, A3, A4, A5, B1, F.** What is actually 
   - **A5b — the per-bail-out spec-11 audit. DO NOT re-open it with a `grep -c degraded` count**;
     that measure produced three wrong findings on 2026-07-26.
   - **C (iCPG), D (ADR-0014 — Lorenzo's decision), E (smaller known items).**
-The numbered items 1–7 beneath them are the durable backlog; 1, 3, 4 are CLOSED.
+The numbered items 1–7 beneath them are the durable backlog. **CLOSED: 1, 3, 4, 5.** **MIXED —
+read the body, not this line: 2** (Part A shipped, Part B needs a design gate) and **6** (the
+scryer evaluation is done; the iCPG work it uncovered is item C and is the live one). **7** is
+the minors bag and is never "closed".
 
 **`bin/tessera-verify` was 0-for-3 on real attempts; it is now fixed and proven at n=1.** The
 tool had done the work every time — planted landmines, executed, reverted — and then **its own
@@ -436,10 +439,13 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    **Do not build (iii) reflexively** — "has this been done?" is judgement, and judgement is where
    the retired proxies came from. (i) is exact and nearly free; start there.
 
-**E. Smaller, known:** item 2 Part B (pending-record channel — needs its 3-decision design gate);
-   item 4 (third hook layer still unchecked: `templates/` ↔ `~/.claude/templates/`); item 5's
-   fatigue/intent half (the PreToolUse channel is fixed, so `mnemos-pre-edit`'s feature has never
-   actually been judged with its output reaching the model).
+**E. Smaller, known:** item 2 Part B (pending-record channel — needs its 3-decision design gate)
+   is the only one left here. **Items 4 and 5 were listed as open in this line while their own
+   closures sat twenty lines above** (A3/P14 and A5 respectively) — corrected 2026-07-27, and it
+   is the third drift shape A6 has now seen: not a stale figure and not a phantom path, but a
+   *status contradicted between the index and the body*. The mechanical form of it: an item
+   declared closed in START HERE must have a struck-through title in its own body. Items 1/3/6
+   did; 4/5 did not, which is exactly why the contradiction survived four edits.
 
 
 1. ~~**Spec 11 — fail-open sweep.**~~ **CLOSED 2026-07-26.** Both open items resolved same day: the command-body tooling gap (`scripts/hooks/report_settings.py`) and the criterion-5 re-read, which a third session ran and **confirmed the run_wired correction legitimate** — with better evidence than the original (AST comparison of probes 4/8 docstring-stripped is byte-identical; the OLD test against the NEW template still fails 2, proving insensitivity in both directions). **It also found a second scope hole, now fixed:** two-tier ADR-0004 commands were excluded from reporting, so under the default `global` distribution — where no local copy ever ships — all 7 mnemos hooks were fail-silent in every downstream. Fleet rolled and pushed. Kept below as the reference record, not as open work.
@@ -561,14 +567,21 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    shape and belongs to item 1's sweep. Shipping also exposed a **pattern-#5 half-ship**: the new
    `paths.py` was not in `tessera-new-project`'s copy set, so every scaffolded project's gate
    recorder would `ModuleNotFoundError` — caught by `test_new_project_gate_copies`, fixed.
-4. **Third hook layer still unchecked** — nothing compares `templates/` ↔ `~/.claude/templates/`,
-   the layer `install.sh` writes. P4 covers downstream↔global; doccheck `hooks-match-templates`
-   covers `templates/`↔`.claude/scripts/`. Last uncovered seam. (install.sh synced it this
-   session, but nothing *checks* it.)
-5. **Re-judge Mnemos compaction recovery AND the fatigue/intent feature.** Both PreToolUse hooks
-   were silent to the model the whole trial (fixed `[HEAD]`). Every prior observation of Layer 3
-   "not reaching the model" and of the fatigue-injection was through a dropped channel — same
-   shape as F-001 (empty ≠ unused). P3's verdict must be re-formed with Layer 3 actually landing.
+4. ~~**Third hook layer still unchecked**~~ — **CLOSED 2026-07-26 by `tessera-watch` P14, see A3.**
+   The seam is guarded, and by something stronger than this item asked for: P14 byte-diffs
+   `.claude/scripts/` (framework truth) against `~/.claude/templates/` directly, rather than
+   `templates/` ↔ global as worded here — so it cannot be fooled by both copies being equally
+   stale. `bin/tessera-watch:686`. The other two edges keep their existing guards (P1 + doccheck
+   `hooks-match-templates`). Gated on `.bootstrap-dir` naming this repo, so it is silent rather
+   than wrong when another checkout owns the tier.
+5. ~~**Re-judge Mnemos compaction recovery AND the fatigue/intent feature.**~~ **CLOSED
+   2026-07-26 — both halves, in different places.** Fatigue/intent: **A5** — live, verified with
+   its output actually landing, and FLOW-silence is honest (warnings fire at 0.60+). Compaction
+   recovery: **ADR-0015** dissolved the question rather than answering it — the restore path is
+   not compaction-specific, so it splits into T1 (deliverability, P3, green), T2 (sufficiency,
+   the real question, instrument built and awaiting data — see **A-live**), T3 (frequency,
+   informational, blocked by the empty PreCompact payload). **Do not re-open this as "re-judge
+   compaction"**; that framing is the category error ADR-0015 retired.
    See observatory → "PreToolUse hooks' bare stdout never reached the model".
 6. ~~**Evaluate scryer**~~ — DONE 2026-07-25, ADR-0013: **Watching**, no dependency (Tauri GUI,
    FSL license, near-total overlap with iCPG). Two patterns adopted idea-only. **The eval's real
