@@ -322,7 +322,7 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    budget-exhaustion.** `role='user'` carries TOOL RESULTS in Claude Code transcripts, so the raw
    count was ~19x the human turns. On eligible turns the detector runs at **17-20%**, not ~0.
    **Do not repeat the old figure.** Any recall claim must state its denominator.
-   **B1 (do this first, no labelling judgement needed): budget-exhausted sessions report
+   **B1 — DONE 2026-07-26.** `mnemos haze` now marks these `\u2265N.NN band?` in the table and prints a FLOOR banner in `--session` detail; `unmeasured_reason()` in haziness.py is the single predicate, self-checked in `test_haziness.py`. **Real blast radius was 13 sessions, not 24** — 11 of the 24 are synthetic `tessera-verify` worktrees. **STILL OPEN: the 07-20 band re-anchoring used a distribution containing them, so the bands themselves are uncalibrated against this.** Original finding:  budget-exhausted sessions report
    unmeasured turns as non-corrections.** `CorrectionDetector` has a 180s wall-clock budget; past
    it every remaining turn returns False. 24 sessions affected, detecting at 2.94% vs 17.1%.
    Haziness then scores them as if real, with `correction_density` at weight 0.30. **This is P3's

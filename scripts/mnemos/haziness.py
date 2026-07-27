@@ -109,6 +109,41 @@ def dominant_dim(result: dict) -> str:
 # --- dim computations ---------------------------------------------------
 
 
+
+# ── Is this session's correction_density a MEASUREMENT or a FLOOR? (B1, 2026-07-26) ──
+#
+# `CorrectionDetector` runs on a 180s wall-clock budget. Past it, `is_correction` returns
+# False for every remaining turn — so those turns are not measured as non-corrections, they
+# are UNMEASURED AND RECORDED AS non-corrections. 24 sessions detect at 2.94% against a
+# 17.1% baseline on sessions where the classifier finished.
+#
+# This is P3's `unknown` lesson in a different organ: a verdict must never rest on an event
+# whose provenance the instrument could not read. The fix is NOT raising the budget — that
+# only moves the cliff. It is that such a session must not present its composite as measured.
+#
+# correction_density carries the largest weight (0.30), and every unmeasured turn can only
+# push it DOWN, so the honest statement is a direction, not an error bar: **the composite is
+# a FLOOR.** The true value is >= what is shown.
+_UNMEASURED = {
+    "budget-exhausted": "classifier hit its wall-clock budget; the remaining turns were "
+                        "recorded as non-corrections without being classified",
+    "disabled-mid:consecutive-nulls": "classifier was disabled mid-session after repeated "
+                                      "null responses",
+}
+
+
+def unmeasured_reason(classifier_status: str | None) -> str | None:
+    """Why this session's correction_density is a FLOOR rather than a measurement.
+
+    None means it is trustworthy. `regex-only:*` is deliberately NOT here: the regex ran over
+    every turn, so it is a weaker detector but a complete pass — a different defect (recall),
+    not an incomplete measurement.
+    """
+    if not classifier_status:
+        return None
+    return _UNMEASURED.get(classifier_status)
+
+
 def _correction_density(turns: list[dict]) -> float:
     eligible = [
         t for t in turns

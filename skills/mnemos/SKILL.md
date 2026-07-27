@@ -186,6 +186,16 @@ credentials) are redacted before anything touches disk.
 | orphan_tool_use_rate | 0.15 | Tool calls with no matching result |
 | backtrack_norm | 0.10 | `git revert`/`reset --hard`/`restore` calls |
 
+**A `≥` prefix and a `?` on the band mean the score is a FLOOR, not a measurement** (added
+2026-07-26). `CorrectionDetector` runs on a 180s wall clock; past it every remaining turn
+returns False, so those turns are **unmeasured and recorded as non-corrections**. 13 real
+sessions detect at 2.94% against a 17.1% baseline on sessions where it finished. Since
+`correction_density` carries the largest weight (0.30) and every unmeasured turn can only push
+it *down*, the true haze is **≥** what is shown. **Never band-calibrate on a flagged session** —
+this is P3's `unknown` lesson in another organ: a verdict must not rest on what the instrument
+could not read. (`regex-only:*` is NOT flagged: a weaker detector over a *complete* pass is a
+recall problem, not an incomplete measurement.)
+
 The composite maps to a band: `clear` < 0.05 ≤ `cloudy` < 0.12 ≤ `hazy` < 0.20 ≤ `lost` —
 re-anchored to the dogfood distribution's ~p50/p90/max on 2026-07-20 (P10 adjudication; the
 original 0.25/0.50/0.75 labeled every session ever ingested 'clear'). Density caveat: measured

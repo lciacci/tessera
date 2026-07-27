@@ -16,7 +16,7 @@ from .divergence import (
     aggregate, recent_divergences, session_divergences,
 )
 from .fatigue import compute_fatigue, read_fatigue_file
-from .haziness import WEIGHTS, band, compute_haze, dominant_dim
+from .haziness import WEIGHTS, band, compute_haze, dominant_dim, unmeasured_reason
 from .models import FatigueState, MnemoNode, _now, _uuid
 from .signals import get_session_stats
 from .store import MnemosStore
@@ -614,7 +614,10 @@ def cmd_haze(store: MnemosStore, args) -> int:
         haze = compute_haze(store, session)
         if quiet:
             return 0
-        _print_haze_detail(haze)
+        with store._conn() as conn:
+            _st = conn.execute('SELECT classifier_status FROM claude_sessions WHERE id = ?',
+                               (session,)).fetchone()
+        _print_haze_detail(haze, _st['classifier_status'] if _st else None)
         if explain:
             _explain_haze(store, session)
         return 0
@@ -623,6 +626,7 @@ def cmd_haze(store: MnemosStore, args) -> int:
         if slug:
             rows = conn.execute(
                 """SELECT s.id, s.project_path, s.turn_count, s.last_ingested_at,
+                          s.classifier_status,
                           h.composite, h.correction_density, h.redo_ratio,
                           h.first_try_error_rate, h.orphan_tool_use_rate,
                           h.backtrack_norm
@@ -635,6 +639,7 @@ def cmd_haze(store: MnemosStore, args) -> int:
         else:
             rows = conn.execute(
                 """SELECT s.id, s.project_path, s.turn_count, s.last_ingested_at,
+                          s.classifier_status,
                           h.composite, h.correction_density, h.redo_ratio,
                           h.first_try_error_rate, h.orphan_tool_use_rate,
                           h.backtrack_norm
@@ -669,10 +674,24 @@ def cmd_haze(store: MnemosStore, args) -> int:
             comp_str = f'{comp:.2f}'
             band_str = band(comp)
             dom_str = dom
+            # A budget-exhausted session's density is a FLOOR — unclassified turns were
+            # recorded as non-corrections, and every one can only push it DOWN. Marking it
+            # is the whole point: an unmeasured number that reads as measured is how the
+            # 07-20 band re-anchoring got a distribution it could not see was skewed.
+            if unmeasured_reason(r['classifier_status']):
+                comp_str = f'\u2265{comp:.2f}'
+                band_str = band(comp) + '?'
         proj = (r['project_path'] or '')[-40:]
         print(f'{r["id"][:8]:10s} {proj:40s} {r["turn_count"]:>6d} '
               f'{comp_str:>6s} {band_str:>7s} {dom_str:>20s} '
               f'{r["last_ingested_at"]}')
+    floors = sum(1 for r in rows if unmeasured_reason(r['classifier_status']))
+    if floors:
+        print()
+        print(f'  \u2265 / band? on {floors} row(s): correction_density is a FLOOR, not a '
+              f'measurement — the classifier stopped early and the remaining turns were '
+              f'recorded as non-corrections. The true haze is >= shown. Exclude these from '
+              f'any band calibration (`mnemos haze --session <id>` names the reason).')
     return 0
 
 
@@ -682,11 +701,17 @@ def _print_haze_line(haze: dict) -> None:
           f'[{dominant_dim(haze)} dominant, {haze["turns_analyzed"]} turns]')
 
 
-def _print_haze_detail(haze: dict) -> None:
+def _print_haze_detail(haze: dict, classifier_status: str | None = None) -> None:
     comp = haze['composite']
+    reason = unmeasured_reason(classifier_status)
+    prefix = '\u2265' if reason else ''
     print(f'HAZE {haze["session_id"][:8]}  '
-          f'{comp:.2f} {band(comp).upper()}  '
+          f'{prefix}{comp:.2f} {band(comp).upper()}{"?" if reason else ""}  '
           f'({haze["turns_analyzed"]} turns)')
+    if reason:
+        print(f'  !! FLOOR, NOT A MEASUREMENT: {reason}.')
+        print('     correction_density (weight 0.30) can only be understated, so the true '
+              'haze is >= this. Do not use this session for band calibration.')
     print()
     for name, weight in WEIGHTS.items():
         val = haze.get(name, 0.0)
