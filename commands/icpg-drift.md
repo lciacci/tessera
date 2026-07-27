@@ -18,42 +18,44 @@ Run a full drift scan and display all unresolved drift events, grouped by dimens
 icpg drift check
 ```
 
-### 2. Also show existing unresolved drift
+### 2. List the unresolved backlog WITH ids
 
 ```bash
-icpg status
+icpg drift list     # every open event and the id `resolve` needs
+icpg status         # counts, top 5, and the coverage line
 ```
 
 ### 3. Display results
 
+Each line is already adjudicable — id, severity, symbol, file, dimensions, repeat count:
+
 ```
-DRIFT REPORT
-═══════════════
+UNRESOLVED DRIFT (12):
+  1a0a1f74  [1.00] validateToken (src/auth/service.ts) — changed(0.60), usage(1.00)  ×3
+  0b8a6016  [0.60] UserService (src/users/service.ts) — decision(0.60)
 
-{N} unresolved drift events across {M} symbols
+BY DIMENSION (three — the ones with producers):
+  Changed:   {count}    checksum differs from the recorded one
+  Decision:  {count}    contract predicates no longer hold
+  Usage:     {count}    referenced outside the intent's scope (tracked files only)
 
-BY SEVERITY:
-  [0.85] spec(0.9) + decision(0.8) — validateToken drifted from "JWT auth"
-  [0.60] ownership(0.7) + test(0.5) — UserService has 4 owners, tests stale
-  ...
-
-BY DIMENSION:
-  Spec drift:       {count} events
-  Decision drift:   {count} events
-  Ownership drift:  {count} events
-  Test drift:       {count} events
-  Usage drift:      {count} events
-  Dependency drift: {count} events
-
-TOP ACTIONS:
-  1. Fix spec drift in validateToken — checksum changed without MODIFIES edge
-  2. Add tests for UserService — VALIDATED_BY tests are missing
-  3. Assign single owner to PaymentProcessor — 5 different owners
+SEPARATELY, not a drift dimension:
+  Intents w/o tests: {n}/{m}    graph coverage, reported by `icpg status`
 ```
+
+**Do not report ownership, dependency or test drift** — those dimensions were removed on
+2026-07-27 because they scored the absence of edge types nothing writes (`test` was a
+constant `0.30` on 712 of 712 events). A `×N` suffix means the same drift was seen N
+times, not N separate problems.
 
 ### 4. Offer resolution
 
 For each event, suggest:
-- `icpg drift resolve <id>` to mark resolved
+- `icpg drift resolve <id>` to mark resolved — a short prefix works; an unknown id exits 2
 - Create a new MODIFIES ReasonNode if the change was intentional
-- Write missing tests if test drift detected
+- For `decision` drift, check whether the intent's invariant should be updated or the code
+  should be — the predicate names a file that no longer exists at that path
+
+**Resolving is a judgement, so do not batch it.** A resolved drift that recurs comes back
+as a new event, which is the correct behaviour and also means a careless sweep hides
+nothing permanently — but it does cost the record of who decided what.

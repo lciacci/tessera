@@ -2,6 +2,7 @@
 
 - **Date:** 2026-07-25
 - **Status:** Watching
+- **Executed:** 2026-07-27 — `scripts/icpg/store.py`, `scripts/icpg/__main__.py`, `scripts/icpg/test_drift_dedup.py`, `scripts/icpg/drift.py`, `scripts/icpg/coverage.py`. Both adopted concepts shipped: dedup-on-insert with the event IDs surfaced (`icpg drift list`, short-prefix `resolve`), and evidence on the report. The CORRECTION block's ordering was followed, and a step it did not anticipate ran first — the detector was shrunk from six dimensions to three, because deduplicating would otherwise have produced 154 correctly-deduplicated *non-measurements*. The deferred `--note` / `dismissed` state is **not yet**.
 - **Decision driver:** New tool surfaced. Standing handoff item #6 ("Evaluate scryer — https://github.com/aklos/scryer. Run `/evaluate-framework`. Unread as of 2026-07-24").
 
 > **Watching for:** (a) FSL-1.1-MIT converts to MIT (2028, two years from each release), or the project relicenses earlier; (b) a headless mode — the model core, extraction, and MCP server usable without the Tauri desktop app; (c) a second maintainer, or corp/foundation backing.

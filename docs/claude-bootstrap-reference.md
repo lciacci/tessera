@@ -164,7 +164,14 @@ icpg bootstrap
 - `icpg query constraints <file>` — What invariants must hold?
 - `icpg drift file <file>` — Has this file drifted from its intent?
 
-**6-Dimension Drift Detection:** spec drift, decision drift, ownership drift, test drift, usage drift, dependency drift.
+**Drift Detection — 3 dimensions, corrected 2026-07-27.** ~~6-Dimension: spec, decision,
+ownership, test, usage, dependency.~~ Three of those scored the *absence* of edge types
+nothing in the codebase writes: `test` returned a constant `0.30` on 712 of 712 stored
+events, and `ownership`/`dependency` never fired once. Live dimensions are **changed**
+(checksum), **decision** (contract predicates), and **usage** (references outside scope,
+over git-tracked files only). "No linked tests" is now reported as coverage by
+`icpg status`, not scored as drift. See `docs/observatory.md` → "iCPG's drift detector
+measures the emptiness of its own graph".
 
 ## Agent Teams
 

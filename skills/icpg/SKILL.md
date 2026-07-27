@@ -1,6 +1,6 @@
 ---
 name: icpg
-description: Intent-Augmented Code Property Graph — tracks WHY code exists via ReasonNodes with formal contracts, 6-dimension drift detection, and 3 canonical pre-task queries for autonomous development
+description: Intent-Augmented Code Property Graph — tracks WHY code exists via ReasonNodes with formal contracts, drift detection over the 3 dimensions that have producers, and 3 canonical pre-task queries for autonomous development
 when-to-use: "Before any code change — query the reason graph for intent, constraints, and risk"
 user-invocable: false
 effort: high
@@ -89,28 +89,55 @@ created it, or when an invariant is violated.
 ## Six Edge Types
 
 ```
-CREATES      Reason  → Symbol   (this intent created this function)
-MODIFIES     Reason  → Symbol   (this intent changed this function)
-REQUIRES     Reason  → Reason   (B depends on A being done first)
-DUPLICATES   Reason  → Reason   (these two goals overlap)
-VALIDATED_BY Reason  → Test     (this test proves the intent was satisfied)
-DRIFTS_FROM  Symbol  → Reason   (this symbol no longer does what it was made for)
+CREATES      Reason  → Symbol   (this intent created this function)        ← written
+MODIFIES     Reason  → Symbol   (this intent changed this function)        ← written by
+                                                                             `icpg record`,
+                                                                             wired to no hook
+REQUIRES     Reason  → Reason   (B depends on A being done first)          ← NO WRITER
+DUPLICATES   Reason  → Reason   (these two goals overlap)                  ← NO WRITER
+VALIDATED_BY Reason  → Test     (this test proves the intent was satisfied) ← NO WRITER
+DRIFTS_FROM  Symbol  → Reason   (this symbol no longer does what it was made for) ← NO WRITER
 ```
+
+**Four of the six have no producer anywhere in the codebase**, and the drift detector used
+to score their absence — see the drift section below. The enum is the design; the arrows
+are what is actually fed. Keep them distinct when reasoning about what this graph knows.
 
 ---
 
-## 6-Dimension Drift Model
+## 3-Dimension Drift Model *(was 6 — shrunk 2026-07-27)*
 
-| Dimension | What It Means | Detection |
-|-----------|--------------|-----------|
-| **Spec drift** | Symbol checksum changed without a MODIFIES edge | Compare stored vs current checksum |
-| **Decision drift** | Postconditions no longer hold | Evaluate predicates against codebase |
-| **Ownership drift** | >3 different owners without coherent oversight | Count unique owners on edges |
-| **Test drift** | VALIDATED_BY tests missing or failing | Check test file existence + run |
-| **Usage drift** | Symbol used outside original scope | Grep for imports beyond scope |
-| **Dependency drift** | Downstream REQUIRES reasons have drifted | Traverse REQUIRES edges |
+| Dimension | What It Means | Detection | Fed by |
+|-----------|--------------|-----------|--------|
+| **Changed** | Symbol checksum differs from the recorded one | Compare stored vs current checksum | `upsert_symbol` |
+| **Decision** | Contract predicates no longer hold | Evaluate invariants + postconditions | `contracts.py` |
+| **Usage** | Symbol referenced outside its intent's scope | `git grep` over **tracked files only** | git |
 
-Run `icpg drift check` to scan all dimensions. Each produces a 0-1 severity score.
+Run `icpg drift check` to scan; each dimension produces a 0-1 severity score, and the
+event's severity is their mean.
+
+### Why three and not six — read this before adding a fourth
+
+The other three dimensions scored **the absence of an edge type nothing writes.**
+`REQUIRES`, `DUPLICATES`, `VALIDATED_BY` and `DRIFTS_FROM` appear only in the enum and on
+the read side; no code in `scripts/icpg/` produces them. So:
+
+- **Test drift** returned a constant `0.30` for every symbol on every scan — **712 of 712**
+  stored events carried it. A dimension with one possible value is not a measurement.
+- **Ownership** (needs >3 distinct reason owners) and **dependency** (needs REQUIRES edges)
+  **never fired once**, in either direction.
+- **Usage** shelled out to `grep -rl <name> .` over an unfiltered tree including `.venv/`,
+  so any common symbol name saturated the score inside vendored code alone.
+
+**"No linked tests" is still reported — as coverage, not drift.** `icpg status` prints
+`Intents w/o tests: N/M` from `scripts/icpg/coverage.py`. Reporting an absent edge is
+honest; *scoring* it as though the code had drifted was not.
+
+**Adding a dimension means adding its PRODUCER first.** doccheck's
+`drift-dimensions-have-producers` fails the commit if `drift.py` reads an edge type nothing
+writes — including reading edges *untyped*, which is how the ownership dimension slipped
+past every guard. See `docs/observatory.md` → "iCPG's drift detector measures the emptiness
+of its own graph".
 
 ---
 
@@ -141,9 +168,21 @@ icpg query blast <reason-id>               # Full blast radius
 
 ### Drift
 ```bash
-icpg drift check          # Full scan across all dimensions
-icpg drift resolve <id>   # Mark drift event resolved
+icpg drift check          # Full scan; dedups against open events, does not re-insert
+icpg drift file <path>    # Fast single-file scan (what the PreToolUse hook runs)
+icpg drift list           # Unresolved events WITH their IDs — start here to adjudicate
+icpg drift resolve <id>   # Mark resolved; a short prefix works, unknown id exits 2
 ```
+
+Every drift line carries `<id>  [severity] symbol (file) — dimensions  ×seen_count`.
+The id is the argument `resolve` needs; before 2026-07-27 no command printed one, so the
+verb was unreachable without opening SQLite by hand and 700 rows accumulated unread.
+
+**Repeats refresh, they do not accumulate.** The natural key is `(symbol, reason,
+sorted(dimensions))` — deliberately not the description, which embeds the scores, so a
+severity moving by 0.1 would otherwise mint a new row. `seen_count` counts the repeats;
+`detected_at` stays *first* seen and `last_seen` moves. A drift that was **resolved** and
+then recurs gets a NEW row — that is news, not a merge into something already closed.
 
 ### Status
 ```bash
