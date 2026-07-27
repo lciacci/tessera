@@ -111,8 +111,17 @@ def main(argv: list[str] | None = None) -> int:
     d_file = d_sub.add_parser('file', help='Check drift for a single file (fast)')
     d_file.add_argument('file_path', help='File path to check')
     d_sub.add_parser('list', help='List unresolved drift events with their IDs')
-    d_resolve = d_sub.add_parser('resolve', help='Resolve a drift event')
+    d_resolve = d_sub.add_parser(
+        'resolve', help='The drift was REAL and the code or intent was fixed'
+    )
     d_resolve.add_argument('event_id', help='Drift event ID (short prefix is fine)')
+    d_resolve.add_argument('--note', help='what was done about it')
+    d_dismiss = d_sub.add_parser(
+        'dismiss', help='The drift was NEVER REAL — a detector false positive'
+    )
+    d_dismiss.add_argument('event_id', help='Drift event ID (short prefix is fine)')
+    d_dismiss.add_argument('--reason', required=True,
+                           help='why the detector was wrong — this is the record')
 
     # --- bootstrap ---
     p_boot = sub.add_parser(
@@ -417,30 +426,54 @@ def cmd_drift(store: ICPGStore, args) -> int:
             print(_drift_line(store, event, event_id, show_file=False))
         return 0
 
+    elif args.drift_action == 'dismiss':
+        match = _resolve_event_id(store, args.event_id)
+        if isinstance(match, int):
+            return match
+        store.dismiss_drift(match.id, args.reason)
+        print(f'Dismissed drift event {match.id[:8]} — detector false positive\n'
+              f'  reason: {args.reason}\n'
+              f'  it stays suppressed until the evidence changes (a severity move or a '
+              f'new dimension re-opens it)')
+        return 0
+
     elif args.drift_action == 'resolve':
         # FAIL LOUD ON A BAD ID. This used to UPDATE ... WHERE id = ? and print
         # "Resolved drift event X" whether or not any row matched — the same fail-open
         # that let `mnemos haze --session` score an unknown id as 0.00 CLEAR, the best
         # possible result, for a session that did not exist.
-        matches = [
-            e for e in store.get_unresolved_drift()
-            if e.id == args.event_id or e.id.startswith(args.event_id)
-        ]
-        if not matches:
-            print(f'No unresolved drift event matching {args.event_id!r}. '
-                  f'List them with `icpg drift list`.', file=sys.stderr)
-            return 2
-        if len(matches) > 1:
-            print(f'{args.event_id!r} is ambiguous ({len(matches)} matches): '
-                  f'{", ".join(e.id[:8] for e in matches[:5])}', file=sys.stderr)
-            return 2
-        store.resolve_drift(matches[0].id)
-        print(f'Resolved drift event {matches[0].id[:8]}')
+        match = _resolve_event_id(store, args.event_id)
+        if isinstance(match, int):
+            return match
+        store.resolve_drift(match.id, getattr(args, 'note', None))
+        print(f'Resolved drift event {match.id[:8]}')
         return 0
 
     else:
         print('Specify: drift check, drift file <path>, or drift resolve <id>')
         return 1
+
+
+def _resolve_event_id(store: ICPGStore, prefix: str):
+    """A DriftEvent, or an exit code. Fails loud — never silently no-ops.
+
+    `resolve` used to `UPDATE ... WHERE id = ?` and print "Resolved drift event X" whether or
+    not a row matched. That is the same fail-open that let `mnemos haze --session` score an
+    unknown session as `0.00 CLEAR`, the best possible result, for a session that did not exist.
+    """
+    matches = [
+        e for e in store.get_unresolved_drift()
+        if e.id == prefix or e.id.startswith(prefix)
+    ]
+    if not matches:
+        print(f'No unresolved drift event matching {prefix!r}. '
+              f'List them with `icpg drift list`.', file=sys.stderr)
+        return 2
+    if len(matches) > 1:
+        print(f'{prefix!r} is ambiguous ({len(matches)} matches): '
+              f'{", ".join(e.id[:8] for e in matches[:5])}', file=sys.stderr)
+        return 2
+    return matches[0]
 
 
 def _drift_line(store: ICPGStore, event, event_id: str,
@@ -520,7 +553,20 @@ def cmd_status(store: ICPGStore) -> int:
         for d in drift[:5]:
             print(_drift_line(store, d, d.id))
         print(f'\n  icpg drift list      # all {len(drift)}, with IDs')
-        print(f'  icpg drift resolve <id>')
+        print(f'  icpg drift resolve <id>            # was real, and is fixed')
+        print(f'  icpg drift dismiss <id> --reason   # detector was wrong')
+
+    # The reason `dismissed` is its own state rather than a flavour of `resolved`: a
+    # dimension accumulating dismissals is miscalibrated, and this is the only place that
+    # can be read. `usage` currently fires on ~1 in 5 symbols against thresholds nobody
+    # calibrated — these counts are the evidence that question has been waiting for.
+    dismissals = store.dismissals_by_dimension()
+    if dismissals:
+        ranked = sorted(dismissals.items(), key=lambda kv: -kv[1])
+        print('\nDismissed as detector error, by dimension:')
+        for dim, n in ranked:
+            print(f'  {dim:<10} {n}')
+        print('  (a dimension climbing this list is miscalibrated, not busy)')
 
     return 0
 

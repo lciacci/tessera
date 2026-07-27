@@ -180,5 +180,64 @@ def test_migration_is_idempotent():
     assert len(ICPGStore(str(project)).get_unresolved_drift()) == 1
 
 
+
+# ── ADR-0016: dismissed = the detector was wrong, and it stays quiet ───────────────────
+
+def test_dismissed_is_not_resolved():
+    """Two different facts. `resolved` = real drift, fixed. `dismissed` = never real.
+    Merging them throws away the only signal that can retire a dimension."""
+    store = _store()
+    rid = store.create_drift_event(_event())
+    store.dismiss_drift(rid, 'usage threshold is noise on a common name')
+    assert _open_rows(store) == []
+    assert store.dismissals_by_dimension() == {'usage': 1}
+
+
+def test_a_resolved_drift_is_not_counted_as_a_dismissal():
+    store = _store()
+    rid = store.create_drift_event(_event())
+    store.resolve_drift(rid, note='renamed the symbol')
+    assert store.dismissals_by_dimension() == {}
+
+
+def test_a_dismissed_drift_stays_suppressed_on_re_scan():
+    """THE POINT of decision 4. Re-raising every scan re-litigates a closed ruling on every
+    Stop — conclave F-001, which this repo already paid for once."""
+    store = _store()
+    rid = store.create_drift_event(_event(severity=0.5))
+    store.dismiss_drift(rid, 'false positive')
+    store.create_drift_event(_event(severity=0.5, at='2026-07-28T00:00:00+00:00'))
+    assert _open_rows(store) == [], "a dismissed drift came back on an unchanged reading"
+
+
+def test_a_severity_move_re_opens_a_dismissed_drift():
+    """The dismissal was about a particular reading. New evidence, new question."""
+    store = _store()
+    rid = store.create_drift_event(_event(severity=0.5))
+    store.dismiss_drift(rid, 'false positive at this level')
+    store.create_drift_event(_event(severity=0.9))
+    rows = _open_rows(store)
+    assert len(rows) == 1
+    assert rows[0].severity == 0.9
+
+
+def test_re_opening_keeps_the_dismissal_note():
+    """The same row is re-opened rather than a new one minted, so the record of why it was
+    once dismissed travels with it."""
+    store = _store()
+    rid = store.create_drift_event(_event(severity=0.5))
+    store.dismiss_drift(rid, 'thresholds are uncalibrated')
+    store.create_drift_event(_event(severity=0.9))
+    assert _open_rows(store)[0].id == rid
+
+
+def test_a_new_dimension_is_a_new_question_not_a_suppressed_one():
+    store = _store()
+    rid = store.create_drift_event(_event(dims=('usage',)))
+    store.dismiss_drift(rid, 'noise')
+    store.create_drift_event(_event(dims=('usage', 'changed')))
+    assert len(_open_rows(store)) == 1
+
+
 if __name__ == '__main__':
     raise SystemExit(pytest.main([__file__, '-q']))

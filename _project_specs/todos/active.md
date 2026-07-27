@@ -151,13 +151,19 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    proxies were born.
 7. **B2 — correction recall.** Still blocked on labels from a judgement that did not propose the
    hypothesis.
-8. **NEW — the spend backstop's "false positive" disposition has no recordable form.**
-   `undispositioned()` clears only on a grant-after-denial or an escalation packet, so the
-   contract's own invitation to *"say so plainly and finish"* clears nothing and the hook
-   re-fires every Stop. Both available exits are wrong for a false positive (a grant authorizes
-   unrequested spend; a packet is the bogus escalation the contract forbids). **Needs a design
-   gate** — a dismiss verb on a spend gate is the affordance that could silence a real denial.
-   See observatory → "The spend backstop's own cap became a permanent kill switch".
+8. ~~**The spend backstop's "false positive" disposition has no recordable form.**~~
+   **CLOSED 2026-07-27 — ADR-0016**, together with iCPG's deferred `--note`/`dismissed`.
+   They were the same question and the answer was that they are NOT: where a detector
+   over-counts BY DESIGN the model may dispose (gate-scan), where over-firing is a DEFECT a
+   model-emitted exit is that defect's bypass (spend). Shipped: `tessera-authorize dismiss`
+   (guard-blocked, human-only by construction), `icpg drift dismiss --reason` (model-emittable,
+   drift has no safety stake), `_escalated()` tightened to spend-shaped.
+   **The bigger find, and it was incidental:** `tessera-authorize grant` was agent-callable —
+   the deny-by-default control on external spend had an authorization verb the agent could
+   invoke on itself, held back only by a sentence in its own contract. Now refused
+   unconditionally.
+   **STILL OPEN, deliberately:** the fleet has its own `scripts/spend/` copies and has NOT
+   been rolled. Do it as a deliberate act, not a side effect.
 
 ### T2's first real receipt: `insufficient` — and the checkpoint has a concrete bug
 

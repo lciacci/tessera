@@ -71,7 +71,13 @@ CREATE TABLE IF NOT EXISTS drift_events (
     detected_at TEXT NOT NULL,
     last_seen TEXT,
     seen_count INTEGER DEFAULT 1,
-    drift_dimensions_key TEXT
+    drift_dimensions_key TEXT,
+    -- ADR-0016: `resolved` means the drift was REAL and the code or intent was fixed.
+    -- `dismissed` means it was never real — a detector false positive. Kept distinct
+    -- because dismissal counts per dimension are the only evidence able to say whether a
+    -- dimension is miscalibrated, which is the open question about `usage`.
+    dismissed INTEGER DEFAULT 0,
+    note TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_edges_from ON edges(from_id);
@@ -144,6 +150,12 @@ class ICPGStore:
             )
             self._backfill_keys(conn)
             self._collapse_existing_duplicates(conn)
+        if 'dismissed' not in cols:
+            conn.execute(
+                'ALTER TABLE drift_events ADD COLUMN dismissed INTEGER DEFAULT 0'
+            )
+        if 'note' not in cols:
+            conn.execute('ALTER TABLE drift_events ADD COLUMN note TEXT')
         conn.commit()
         self._migrated = True
 
@@ -370,10 +382,42 @@ class ICPGStore:
         """
         key = self._drift_key(event)
         with self._conn() as conn:
+            # A DISMISSED drift stays suppressed while the evidence is unchanged (ADR-0016).
+            # Re-raising it every scan would re-litigate a closed ruling on every Stop —
+            # conclave F-001 exactly, which this repo already paid for once and fixed with the
+            # gate_disposition ledger. A severity move re-opens it; a new dimension produces a
+            # different key and therefore a new row on its own.
+            dismissed = conn.execute(
+                """SELECT id, severity, seen_count FROM drift_events
+                   WHERE dismissed = 1 AND symbol_id = ? AND from_reason_id = ?
+                   AND drift_dimensions_key = ?""",
+                (event.symbol_id, event.from_reason_id, key)
+            ).fetchone()
+            if dismissed:
+                if dismissed['severity'] == event.severity:
+                    conn.execute(
+                        'UPDATE drift_events SET last_seen = ?, seen_count = ? WHERE id = ?',
+                        (event.detected_at, (dismissed['seen_count'] or 1) + 1,
+                         dismissed['id'])
+                    )
+                    return dismissed['id']
+                # Evidence moved — the dismissal was about a different reading. Re-open the
+                # SAME row rather than minting one, so the note recording why it was once
+                # dismissed travels with it.
+                conn.execute(
+                    """UPDATE drift_events
+                       SET dismissed = 0, severity = ?, description = ?, last_seen = ?,
+                           seen_count = ?
+                       WHERE id = ?""",
+                    (event.severity, event.description, event.detected_at,
+                     (dismissed['seen_count'] or 1) + 1, dismissed['id'])
+                )
+                return dismissed['id']
+
             existing = conn.execute(
                 """SELECT id, seen_count FROM drift_events
-                   WHERE resolved = 0 AND symbol_id = ? AND from_reason_id = ?
-                   AND drift_dimensions_key = ?""",
+                   WHERE resolved = 0 AND dismissed = 0 AND symbol_id = ?
+                   AND from_reason_id = ? AND drift_dimensions_key = ?""",
                 (event.symbol_id, event.from_reason_id, key)
             ).fetchone()
             if existing:
@@ -405,17 +449,48 @@ class ICPGStore:
     def get_unresolved_drift(self) -> list[DriftEvent]:
         with self._conn() as conn:
             rows = conn.execute(
-                'SELECT * FROM drift_events WHERE resolved = 0 '
+                'SELECT * FROM drift_events WHERE resolved = 0 AND dismissed = 0 '
                 'ORDER BY severity DESC'
             ).fetchall()
         return [self._row_to_drift(r) for r in rows]
 
-    def resolve_drift(self, event_id: str) -> None:
+    def resolve_drift(self, event_id: str, note: str | None = None) -> None:
+        """The drift was REAL and the code or intent was fixed."""
         with self._conn() as conn:
             conn.execute(
-                'UPDATE drift_events SET resolved = 1 WHERE id = ?',
-                (event_id,)
+                'UPDATE drift_events SET resolved = 1, note = ? WHERE id = ?',
+                (note, event_id)
             )
+
+    def dismiss_drift(self, event_id: str, reason: str) -> None:
+        """The drift was NEVER REAL — a detector false positive (ADR-0016).
+
+        Distinct from `resolve` because the counts are the point: a dimension accumulating
+        dismissals is miscalibrated, and that is the only evidence able to answer whether
+        `usage`'s thresholds earn their place. Merging the two states would throw away the
+        one signal that can retire a dimension.
+        """
+        with self._conn() as conn:
+            conn.execute(
+                'UPDATE drift_events SET dismissed = 1, note = ? WHERE id = ?',
+                (reason, event_id)
+            )
+
+    def dismissals_by_dimension(self) -> dict[str, int]:
+        """Why `dismissed` is its own state: the detector-quality signal, countable."""
+        counts: dict[str, int] = {}
+        with self._conn() as conn:
+            rows = conn.execute(
+                'SELECT drift_dimensions FROM drift_events WHERE dismissed = 1'
+            ).fetchall()
+        for row in rows:
+            try:
+                dims = json.loads(row['drift_dimensions'] or '[]')
+            except ValueError:
+                continue
+            for dim in dims:
+                counts[dim] = counts.get(dim, 0) + 1
+        return counts
 
     # --- Composite queries ---
 

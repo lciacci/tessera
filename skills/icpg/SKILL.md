@@ -171,8 +171,22 @@ icpg query blast <reason-id>               # Full blast radius
 icpg drift check          # Full scan; dedups against open events, does not re-insert
 icpg drift file <path>    # Fast single-file scan (what the PreToolUse hook runs)
 icpg drift list           # Unresolved events WITH their IDs — start here to adjudicate
-icpg drift resolve <id>   # Mark resolved; a short prefix works, unknown id exits 2
+icpg drift resolve <id>   # The drift was REAL and is fixed; short prefix ok, unknown id exits 2
+icpg drift dismiss <id> --reason "<why>"   # The drift was NEVER REAL — detector error
 ```
+
+**`resolve` and `dismiss` are different facts, and the split is the point (ADR-0016).**
+`resolved` = real, and the code or intent was fixed. `dismissed` = the detector was wrong.
+`icpg status` prints dismissals **by dimension**, and that count is the only evidence able to
+say whether a dimension is miscalibrated — a dimension climbing that list is not busy, it is
+wrong. `usage` currently fires on ~1 in 5 symbols against thresholds nobody calibrated, and
+this is the question that has been waiting for evidence.
+
+**A dismissed drift stays suppressed while the evidence is unchanged.** A severity move
+re-opens the same row (so the note saying why it was once dismissed travels with it); a new
+dimension is a different key and therefore a new event. Re-raising it every scan would
+re-litigate a closed ruling on every Stop — conclave F-001, which this repo has already paid
+for once.
 
 Every drift line carries `<id>  [severity] symbol (file) — dimensions  ×seen_count`.
 The id is the argument `resolve` needs; before 2026-07-27 no command printed one, so the

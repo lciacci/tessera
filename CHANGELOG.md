@@ -12,6 +12,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 > 2026-07-08 and 2026-07-25. The section below covers the 2026-07-26 session; the older
 > `[Unreleased]` content follows it, unchanged.
 
+### 2026-07-27 — disposition verbs (ADR-0016), and a spend gate that enforced nothing
+
+The same gap surfaced twice from opposite directions: the spend backstop re-firing on
+denials it invited the model to dispose in prose, and iCPG drift's deferred dismissed
+state. They looked like one question and the repo's own contracts say they are not.
+
+#### Added
+- **`tessera-authorize dismiss --reason`** — writes a `spend_dismissed` event (never the
+  envelope: it authorizes nothing, has no TTL, cannot boot anything), honoured by
+  `undispositioned()` when recorded after the last denial. The false-positive exit the
+  backstop's report has always promised and nothing could hear.
+- **`icpg drift dismiss <id> --reason`** and `--note` on `resolve`. `resolved` = real and
+  fixed; `dismissed` = the detector was wrong. `icpg status` prints dismissals **by
+  dimension** — the only evidence able to say whether a dimension is miscalibrated, which
+  is the open question about `usage`.
+- **ADR-0016** — the decision record, with the alternatives that were rejected.
+
+#### Changed — the agent can no longer authorize its own spend
+- **`grant` and `dismiss` are on the spend guard's deny list**, refused through a new
+  `self-authorizing` policy branch that is **not** gated on the envelope: a committing
+  command is allowed while an envelope is live, and if `grant` were merely gated a live
+  envelope would let the agent extend its own. `show` and `revoke` stay allowed — `revoke`
+  reduces authorization and a spend gate must never block the exit.
+- **`_escalated()` requires a spend-shaped category.** It cleared on any packet at all, so
+  a session raising an unrelated escalation silenced its own spend backstop by accident.
+- **A dismissed drift stays suppressed** while the evidence is unchanged; a severity move
+  re-opens the same row, a new dimension is a new event.
+
+**The finding behind it:** `tessera-authorize grant` was agent-callable. Driving the real
+hook with it returned `rc=0`. No tty check, and `granted_by` is `$USER` whichever party
+typed it — the deny-by-default control on external spend had an authorization verb the
+agent could invoke on itself, held back only by a sentence in its own contract.
+
+**And a false positive shipped and caught within the minute:** the first pattern matched the
+verb anywhere in the command text and blocked the doc edit describing the feature (a
+`python3 - <<PY` heredoc is wrapper-led, so its body is code and nothing is stripped).
+Narrowed to command position, optionally behind `bash -c "`. A guard that blocks writing
+about itself is one people learn to route around.
+
 ### 2026-07-27 — iCPG drift: dedup on insert, and a report a human can act on
 
 Closes item C. `create_drift_event` INSERTed unconditionally with a fresh UUID on every
