@@ -110,8 +110,9 @@ def main(argv: list[str] | None = None) -> int:
     d_sub.add_parser('check', help='Run full drift scan')
     d_file = d_sub.add_parser('file', help='Check drift for a single file (fast)')
     d_file.add_argument('file_path', help='File path to check')
+    d_sub.add_parser('list', help='List unresolved drift events with their IDs')
     d_resolve = d_sub.add_parser('resolve', help='Resolve a drift event')
-    d_resolve.add_argument('event_id', help='Drift event ID')
+    d_resolve.add_argument('event_id', help='Drift event ID (short prefix is fine)')
 
     # --- bootstrap ---
     p_boot = sub.add_parser(
@@ -381,15 +382,23 @@ def cmd_drift(store: ICPGStore, args) -> int:
             print('No drift detected.')
             return 0
 
-        # Save new events
-        for event in events:
-            store.create_drift_event(event)
+        # Dedup happens here: a repeat refreshes its open row instead of minting one.
+        ids = [store.create_drift_event(event) for event in events]
 
         print(f'DRIFT DETECTED ({len(events)} events):')
+        for event, event_id in zip(events, ids):
+            print(_drift_line(store, event, event_id))
+        return 0
+
+    elif args.drift_action == 'list':
+        events = store.get_unresolved_drift()
+        if not events:
+            print('No unresolved drift.')
+            return 0
+        print(f'UNRESOLVED DRIFT ({len(events)}):')
         for e in events:
-            dims = ', '.join(e.drift_dimensions)
-            print(f'  [{e.severity:.2f}] {e.description}')
-            print(f'         Dimensions: {dims}')
+            print(_drift_line(store, e, e.id))
+        print('\nResolve with: icpg drift resolve <id>')
         return 0
 
     elif args.drift_action == 'file':
@@ -398,30 +407,62 @@ def cmd_drift(store: ICPGStore, args) -> int:
         if not events:
             return 0
 
-        # Persist events
-        for event in events:
-            store.create_drift_event(event)
+        # Persist (dedup-aware — this path runs on EVERY Edit/Write via
+        # mnemos-pre-edit.sh, which is what inflated the backlog 4.5x)
+        ids = [store.create_drift_event(event) for event in events]
 
         basename = Path(resolved).name
         print(f'DRIFT: {len(events)} symbols drifted in {basename}')
-        for e in events:
-            sym = store._get_symbol(e.symbol_id)
-            name = sym.name if sym else '???'
-            dims = ', '.join(
-                f'{d}({s:.2f})'
-                for d, s in zip(e.drift_dimensions, _drift_scores(e))
-            )
-            print(f'  [{e.severity:.2f}] {name} — {dims}')
+        for event, event_id in zip(events, ids):
+            print(_drift_line(store, event, event_id, show_file=False))
         return 0
 
     elif args.drift_action == 'resolve':
-        store.resolve_drift(args.event_id)
-        print(f'Resolved drift event {args.event_id}')
+        # FAIL LOUD ON A BAD ID. This used to UPDATE ... WHERE id = ? and print
+        # "Resolved drift event X" whether or not any row matched — the same fail-open
+        # that let `mnemos haze --session` score an unknown id as 0.00 CLEAR, the best
+        # possible result, for a session that did not exist.
+        matches = [
+            e for e in store.get_unresolved_drift()
+            if e.id == args.event_id or e.id.startswith(args.event_id)
+        ]
+        if not matches:
+            print(f'No unresolved drift event matching {args.event_id!r}. '
+                  f'List them with `icpg drift list`.', file=sys.stderr)
+            return 2
+        if len(matches) > 1:
+            print(f'{args.event_id!r} is ambiguous ({len(matches)} matches): '
+                  f'{", ".join(e.id[:8] for e in matches[:5])}', file=sys.stderr)
+            return 2
+        store.resolve_drift(matches[0].id)
+        print(f'Resolved drift event {matches[0].id[:8]}')
         return 0
 
     else:
         print('Specify: drift check, drift file <path>, or drift resolve <id>')
         return 1
+
+
+def _drift_line(store: ICPGStore, event, event_id: str,
+                show_file: bool = True) -> str:
+    """One adjudicable line: id, severity, symbol, file, dimensions, repeat count.
+
+    The old output was `[0.65] Drift detected: test(0.30), usage(1.00)` — a score with
+    no referent. The top five events were byte-identical (they were the SAME drift,
+    21 times), so there was nothing in the report a human could act on, and the backlog
+    accumulated in silence for weeks. Two things were missing and both are here now:
+    WHICH symbol, and the id that `icpg drift resolve` has always required and that no
+    command ever printed.
+    """
+    sym = store._get_symbol(event.symbol_id)
+    name = sym.name if sym else '???'
+    where = f' ({sym.file_path})' if sym and show_file else ''
+    dims = ', '.join(
+        f'{d}({s:.2f})' for d, s in zip(event.drift_dimensions, _drift_scores(event))
+    )
+    seen = getattr(event, 'seen_count', 1) or 1
+    repeat = f'  ×{seen}' if seen > 1 else ''
+    return f'  {event_id[:8]}  [{event.severity:.2f}] {name}{where} — {dims}{repeat}'
 
 
 def _drift_scores(event) -> list[float]:
@@ -477,8 +518,9 @@ def cmd_status(store: ICPGStore) -> int:
     if drift:
         print(f'\nTop drift events:')
         for d in drift[:5]:
-            dims = ', '.join(d.drift_dimensions)
-            print(f'  [{d.severity:.2f}] {d.description} ({dims})')
+            print(_drift_line(store, d, d.id))
+        print(f'\n  icpg drift list      # all {len(drift)}, with IDs')
+        print(f'  icpg drift resolve <id>')
 
     return 0
 

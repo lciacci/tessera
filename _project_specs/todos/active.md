@@ -128,10 +128,17 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    **WATCH NEXT: do later restore receipts stop naming `progress`?** That is the T2 loop closing
    end to end — finding → fix → the instrument going quiet on it — and it is the first time this
    repo will have seen that happen.
-2. **iCPG (d): dedup on insert + event IDs + `drift list` + evidence on the report.** The whole
-   remainder of item C. The backlog **refills by itself** — `mnemos-pre-edit.sh` runs `drift file`
-   on every Edit/Write and `cmd_drift` persists each event with a fresh UUID and no natural key —
-   so the purge bought one clean reading, not a clean counter.
+2. ~~**iCPG (d): dedup on insert + event IDs + `drift list` + evidence on the report.**~~
+   **DONE 2026-07-27 — item C is CLOSED.** Key is `(symbol_id, from_reason_id,
+   sorted(dimensions))`, deliberately not the description (which embeds the scores, so a 0.1
+   severity move would mint a row and the creep would continue). Migration collapses the
+   historic duplicates too — dedup-on-insert alone strands them — taking the live backlog
+   **218 → 191**; two consecutive scans now read 195 → 195. Every line carries an id, symbol
+   and file; `icpg drift list` ships; `drift resolve` takes a short prefix and **fails loud**
+   on an unknown id (it used to print "Resolved" whether or not a row matched).
+   **What is left of item C is only the deferred piece:** `--note` / a `dismissed` state,
+   which ADR-0013 orders last and which wants the same design gate as the spend backstop's
+   missing disposition verb (item 8) — the two are the same question in two subsystems.
 3. **A6 — a doccheck for the handoff itself.** Three drift shapes are now scoped (retired figure,
    phantom path, and status-contradicted-between-index-and-body, whose mechanical form is: an item
    declared closed in START HERE must have a struck-through title in its own body).

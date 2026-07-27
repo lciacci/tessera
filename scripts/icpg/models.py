@@ -124,3 +124,7 @@ class DriftEvent:
     severity: float = 0.5
     resolved: bool = False
     detected_at: str = field(default_factory=_now)
+    # Dedup bookkeeping (2026-07-27). `detected_at` keeps meaning FIRST seen; a repeat
+    # refreshes these instead of minting a row. See ICPGStore.create_drift_event.
+    last_seen: str | None = None
+    seen_count: int = 1

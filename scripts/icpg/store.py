@@ -13,6 +13,14 @@ from .models import DriftEvent, Edge, ReasonNode, Symbol
 ICPG_DIR = '.icpg'
 DB_NAME = 'reason.db'
 
+
+def _opt(row: sqlite3.Row, column: str):
+    """A column that may be absent on a row read before the migration ran."""
+    try:
+        return row[column]
+    except (IndexError, KeyError):
+        return None
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS reasons (
     id TEXT PRIMARY KEY,
@@ -60,7 +68,10 @@ CREATE TABLE IF NOT EXISTS drift_events (
     severity REAL DEFAULT 0.5,
     description TEXT,
     resolved INTEGER DEFAULT 0,
-    detected_at TEXT NOT NULL
+    detected_at TEXT NOT NULL,
+    last_seen TEXT,
+    seen_count INTEGER DEFAULT 1,
+    drift_dimensions_key TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_edges_from ON edges(from_id);
@@ -81,6 +92,7 @@ class ICPGStore:
         self.project_dir = Path(project_dir).resolve()
         self.icpg_dir = self.project_dir / ICPG_DIR
         self.db_path = self.icpg_dir / DB_NAME
+        self._migrated = False
 
     def init_db(self) -> None:
         """Create .icpg/ directory and initialize schema."""
@@ -99,7 +111,103 @@ class ICPGStore:
         conn.row_factory = sqlite3.Row
         conn.execute('PRAGMA journal_mode=WAL')
         conn.execute('PRAGMA foreign_keys=ON')
+        self._migrate(conn)
         return conn
+
+    def _migrate(self, conn: sqlite3.Connection) -> None:
+        """Idempotent ADD COLUMN for databases created before dedup existed.
+
+        Run from `_conn` rather than `init_db` because `init_db` is only called by
+        `icpg init`; every existing `.icpg/reason.db` would otherwise keep the old shape
+        and the dedup columns would read as missing at runtime. Once per process, and a
+        no-op after the first connection.
+        """
+        if self._migrated:
+            return
+        cols = {r[1] for r in conn.execute('PRAGMA table_info(drift_events)')}
+        if not cols:
+            # No table yet — this is init_db's own first connection, and the CREATE
+            # TABLE that follows already has the columns. Deliberately does NOT set
+            # `_migrated`: the next connection must re-check, or a store constructed
+            # before its schema would skip the migration forever.
+            return
+        if 'last_seen' not in cols:
+            conn.execute('ALTER TABLE drift_events ADD COLUMN last_seen TEXT')
+            conn.execute('UPDATE drift_events SET last_seen = detected_at')
+        if 'seen_count' not in cols:
+            conn.execute(
+                'ALTER TABLE drift_events ADD COLUMN seen_count INTEGER DEFAULT 1'
+            )
+        if 'drift_dimensions_key' not in cols:
+            conn.execute(
+                'ALTER TABLE drift_events ADD COLUMN drift_dimensions_key TEXT'
+            )
+            self._backfill_keys(conn)
+            self._collapse_existing_duplicates(conn)
+        conn.commit()
+        self._migrated = True
+
+    @staticmethod
+    def _backfill_keys(conn: sqlite3.Connection) -> None:
+        """Compute the natural key for rows written before it existed.
+
+        In Python rather than SQL because the key is `json.dumps(sorted(dimensions))`
+        and must match `_drift_key` EXACTLY — a second definition in SQL is how a fixer
+        and its detector drift apart.
+        """
+        rows = conn.execute(
+            'SELECT id, drift_dimensions FROM drift_events'
+        ).fetchall()
+        for row in rows:
+            try:
+                dims = json.loads(row['drift_dimensions'] or '[]')
+            except ValueError:
+                dims = []
+            conn.execute(
+                'UPDATE drift_events SET drift_dimensions_key = ? WHERE id = ?',
+                (json.dumps(sorted(dims)), row['id'])
+            )
+
+    @staticmethod
+    def _collapse_existing_duplicates(conn: sqlite3.Connection) -> None:
+        """One-time: fold pre-existing duplicate OPEN rows into their oldest survivor.
+
+        Dedup-on-insert alone would leave the historic duplicates stranded — a later scan
+        matches ONE of them and refreshes it, and the other copies sit unreachable forever.
+        The backlog would stop growing while staying unreadable, which is the failure this
+        work is about, frozen rather than fixed.
+
+        The survivor is the OLDEST row per key, so `detected_at` keeps meaning "first
+        seen"; `seen_count` sums, `last_seen` takes the newest. Resolved rows are left
+        alone entirely — someone adjudicated those, and merging into them would resurrect
+        a closed finding.
+        """
+        groups: dict[tuple, list] = {}
+        rows = conn.execute(
+            """SELECT id, symbol_id, from_reason_id, drift_dimensions_key,
+                      detected_at, last_seen, seen_count
+               FROM drift_events WHERE resolved = 0
+               ORDER BY detected_at ASC"""
+        ).fetchall()
+        for row in rows:
+            key = (row['symbol_id'], row['from_reason_id'],
+                   row['drift_dimensions_key'])
+            groups.setdefault(key, []).append(row)
+
+        for members in groups.values():
+            if len(members) < 2:
+                continue
+            survivor, duplicates = members[0], members[1:]
+            total = sum((m['seen_count'] or 1) for m in members)
+            newest = max((m['last_seen'] or m['detected_at']) for m in members)
+            conn.execute(
+                'UPDATE drift_events SET seen_count = ?, last_seen = ? WHERE id = ?',
+                (total, newest, survivor['id'])
+            )
+            conn.executemany(
+                'DELETE FROM drift_events WHERE id = ?',
+                [(m['id'],) for m in duplicates]
+            )
 
     # --- ReasonNode CRUD ---
 
@@ -235,17 +343,61 @@ class ICPGStore:
 
     # --- DriftEvent CRUD ---
 
+    @staticmethod
+    def _drift_key(event: DriftEvent) -> str:
+        """What counts as 'the same drift'. Chosen 2026-07-27, and it is a judgement.
+
+        NOT the description: it embeds the scores (`usage(1.00)`), so a severity that
+        moved by 0.1 would mint a new row and the backlog would keep creeping — the
+        defect wearing a smaller hat. A symbol drifting the same WAY is one event whose
+        severity and last-seen update in place.
+
+        Dimensions are sorted so ordering in the detector cannot fork the key.
+        """
+        return json.dumps(sorted(event.drift_dimensions))
+
     def create_drift_event(self, event: DriftEvent) -> str:
+        """Record a drift, or refresh the OPEN one it repeats. Returns the surviving id.
+
+        THE DEFECT THIS CLOSES: this used to INSERT unconditionally with a fresh UUID on
+        every scan, and `mnemos-pre-edit.sh` runs a scan on every Edit/Write. 700 rows
+        were ~154 distinct drifts re-inserted across 31 scans; one pair appeared 21 times.
+        A counter that only climbs is indistinguishable from a broken detector, which is
+        why nobody adjudicated the backlog for weeks.
+
+        Scoped to OPEN events on purpose: a drift that was resolved and then recurs is
+        NEWS, and must not be silently folded back into the row someone already closed.
+        """
+        key = self._drift_key(event)
         with self._conn() as conn:
+            existing = conn.execute(
+                """SELECT id, seen_count FROM drift_events
+                   WHERE resolved = 0 AND symbol_id = ? AND from_reason_id = ?
+                   AND drift_dimensions_key = ?""",
+                (event.symbol_id, event.from_reason_id, key)
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    """UPDATE drift_events
+                       SET severity = ?, description = ?, last_seen = ?,
+                           seen_count = ?
+                       WHERE id = ?""",
+                    (event.severity, event.description, event.detected_at,
+                     (existing['seen_count'] or 1) + 1, existing['id'])
+                )
+                return existing['id']
+
             conn.execute(
                 """INSERT INTO drift_events
                    (id, symbol_id, from_reason_id, drift_dimensions,
-                    severity, description, resolved, detected_at)
-                   VALUES (?,?,?,?,?,?,?,?)""",
+                    drift_dimensions_key, severity, description, resolved,
+                    detected_at, last_seen, seen_count)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,1)""",
                 (
                     event.id, event.symbol_id, event.from_reason_id,
-                    json.dumps(event.drift_dimensions), event.severity,
-                    event.description, int(event.resolved), event.detected_at
+                    json.dumps(event.drift_dimensions), key, event.severity,
+                    event.description, int(event.resolved), event.detected_at,
+                    event.detected_at
                 )
             )
         return event.id
@@ -438,5 +590,7 @@ class ICPGStore:
             severity=row['severity'],
             description=row['description'],
             resolved=bool(row['resolved']),
-            detected_at=row['detected_at']
+            detected_at=row['detected_at'],
+            last_seen=_opt(row, 'last_seen'),
+            seen_count=_opt(row, 'seen_count') or 1,
         )

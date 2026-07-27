@@ -12,6 +12,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 > 2026-07-08 and 2026-07-25. The section below covers the 2026-07-26 session; the older
 > `[Unreleased]` content follows it, unchanged.
 
+### 2026-07-27 — iCPG drift: dedup on insert, and a report a human can act on
+
+Closes item C. `create_drift_event` INSERTed unconditionally with a fresh UUID on every
+scan, and a scan runs on every Edit/Write, so ~154 distinct drifts had become 700 rows.
+
+#### Added
+- **`icpg drift list`** and short-prefix `drift resolve`. The resolve verb has existed
+  since the module was written and was unreachable: no command printed the id it needs.
+- **`last_seen` / `seen_count` / `drift_dimensions_key`** columns, via an idempotent
+  migration that also **collapses pre-existing duplicates** — dedup-on-insert alone
+  strands them, and the backlog would stop growing while staying unreadable. Live DB:
+  **218 → 191**, survivor is the oldest row per key so `detected_at` still means
+  first-seen, resolved rows untouched.
+- **12 tests** (`scripts/icpg/test_drift_dedup.py`), including the migration driven
+  against a real pre-dedup schema.
+
+#### Changed
+- **Dedup key is `(symbol_id, from_reason_id, sorted(dimensions))`** — deliberately NOT
+  the description ADR-0013 proposed, which embeds the scores, so a severity moving 0.1
+  would mint a new row and the creep would continue. Scoped to OPEN events: a drift that
+  was resolved and recurs is news, not a merge into the closed row.
+- **Every drift line carries an id, the symbol and the file.** The old output was
+  `[0.65] Drift detected: test(0.30), usage(1.00)` — a score with no referent, which is
+  why nobody adjudicated the backlog.
+- **`drift resolve` fails loud** on an unknown id (rc=2). It used to `UPDATE … WHERE id = ?`
+  and print "Resolved" whether or not a row matched — the same fail-open that let
+  `mnemos haze --session` score an unknown session as `0.00 CLEAR`.
+
+Verified on the property: two consecutive full scans now read 195 → 195.
+
 ### 2026-07-27 — the checkpoint recorded its progress as `$(cat <<`
 
 T2's first `insufficient` restore receipt, one session after the instrument shipped with

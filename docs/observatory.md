@@ -1319,6 +1319,33 @@ Both were found by adversarial verification, **not** by the framework. **The rea
     claim was stated explicitly enough to be falsified. *A check verified against the bug you
     remember is verified against one example.*
 
+  **RE-INSERTION CLOSED 2026-07-27 (step 3 of the corrected order, the remainder after the
+  shrink).** `create_drift_event` now dedups on insert against a natural key, and the report
+  became adjudicable for the first time:
+  - **The key is `(symbol_id, from_reason_id, sorted(dimensions))` — a judgement, and the
+    reason it is not the description.** ADR-0013 proposed keying on the description, but the
+    description embeds the scores (`usage(1.00)`), so a severity drifting by 0.1 would mint a
+    new row and the backlog would keep creeping — the same defect wearing a smaller hat. A
+    symbol drifting the same WAY is one event whose severity and last-seen refresh in place.
+  - **Scoped to OPEN events.** A drift that was resolved and then recurs is NEWS and gets a new
+    row; folding it into the closed one would silently resurrect an adjudicated finding.
+  - **The migration collapses history, not just future inserts.** Dedup-on-insert alone strands
+    the existing duplicates — a later scan refreshes ONE copy and the rest sit unreachable
+    forever, so the backlog stops growing while staying unreadable. The survivor is the OLDEST
+    row per key (so `detected_at` still means first-seen), `seen_count` sums, resolved rows are
+    untouched. On the live DB: **218 → 191**.
+  - **Every drift line now carries an id, the symbol, and the file.** `icpg drift resolve` has
+    existed since the module was written and was unreachable because nothing printed its
+    argument; `icpg drift list` and short-prefix resolution close that. And `resolve` **fails
+    loud** on an unknown id (rc=2) — it used to `UPDATE ... WHERE id = ?` and print "Resolved"
+    whether or not a row matched, the same fail-open that let `mnemos haze --session` score an
+    unknown session as `0.00 CLEAR`.
+  - **Verified on the property, not the code:** two consecutive full scans over the live graph
+    now read 195 → 195. Before, each scan added ~150 rows.
+  - 12 tests (`test_drift_dedup.py`), including the migration against a real pre-dedup schema.
+
+  **Original finding, kept — this is what it looked like before the fix:**
+
   **STILL OPEN, and do not let the purge hide it: the re-insertion defect is live and it
   refills the backlog automatically.** `mnemos-pre-edit.sh` runs `icpg drift file` on every
   Edit/Write and `cmd_drift` persists every event with a fresh UUID and no natural key — the
