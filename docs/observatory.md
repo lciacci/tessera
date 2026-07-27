@@ -463,6 +463,45 @@ Both were found by adversarial verification, **not** by the framework. **The rea
 - **Status:** Adopted → design principle #17
 - **When to revisit:** Closed as a pattern-on-the-radar. Follow-on audit (sweep existing CLAUDE.md "surface X" instructions against #17) tracked as FOCUS-003 in `_project_specs/todos/active.md`.
 
+### iCPG cannot see 68% of this repo — the scope-quality question was downstream of a corpus question *(2026-07-27)*
+
+- **Found by authoring one intent and running the loop**, which is the cheapest probe available and
+  had never been run: `icpg create` → do the work → `icpg record`. Record returned
+  **`Recorded 0 symbols`** for a changed file that is full of `def`s.
+- **Cause:** `symbols.py` dispatches on file *extension* via `LANG_MAP`. `bin/tessera-verify` has
+  none. Neither `.sh` nor extensionless files are in the map at all.
+
+  | | in repo | iCPG sees |
+  |---|---:|---|
+  | `.py` | 168 | 84 |
+  | `.sh` | 57 | **0** |
+  | extensionless executables | 35 | **0** |
+
+  **84 of 260 code files — 32%.** Every tracked symbol is `.py`. Tessera is predominantly shell
+  and extensionless executables, so the framework is largely invisible to the layer built to
+  track its intent.
+- **THE NUMBER THAT DECIDES ITEM 1: 46 of 56 scope entries across all reasons point at files iCPG
+  cannot parse. Three point at files it can.** The scopes name `.sh` hooks,
+  `hooks/tier-classify-hook`, `.claude/settings.json`, `pyproject.toml`, `design-principles.md` —
+  none can hold a symbol, ever.
+- **So "46% of symbols are CREATES-linked to a reason whose scope excludes their file" is not
+  evidence of incoherent claims.** It follows mechanically from scopes naming files that cannot
+  contain symbols. The scope vocabulary (any repo path) and the symbol vocabulary (in practice,
+  `.py`) barely intersect. Every prior reading of that figure attributed to *bootstrap scope
+  quality* what was actually *extractor coverage*.
+- **Second finding, same run: the contract tier the design doc names first has no interface.**
+  `--infer-contracts` produced `preconditions: []`, `postconditions: []`, and invariants that are
+  the scope restated as `file_exists()` — the heuristic fallback, because inference needs an LLM
+  key. `design-principles.md` describes "hand-authored for high-risk intents, LLM-inferred, or
+  heuristic"; the CLI exposes the bottom two. There is no flag to author a precondition.
+- **THE CHURN THIS ENTRY EXISTS TO STOP.** Item 1 has been re-scoped three times and decided zero:
+  thresholds → scope quality → corpus coverage. Each step was evidence-driven and correct, and
+  collectively it is a regress that will produce a fourth. **The stopping rule is recorded in
+  `active.md` item 1 and is binding: extend the extractor once, re-measure once, then DECIDE —
+  and if `usage` still fails to discriminate over a corpus that includes the framework's own
+  code, retire it.** No fourth investigation. A dimension that has consumed three cycles without
+  producing a signal has been given a fair hearing.
+
 ### Effort changes invalidate the prompt cache — and the tier advisory's real use is session boundaries *(2026-07-27)*
 
 - **Measured, because the docs do not say.** `output_config.effort` is absent from the

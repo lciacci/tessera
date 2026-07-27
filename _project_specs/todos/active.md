@@ -48,6 +48,41 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
 **START HERE — read "Next — in priority order" below; it is the live list.** Most of the
 2026-07-26 backlog closed today.
 
+> ### ▶ NEXT SESSION: two instructions, both deliberate
+>
+> **1. Run `/compact` EARLY, before the work — not at the end.** Requested 2026-07-27. Layer 3 of
+> the compaction-recovery path has **n=0 and carries two unexercised fixes** (the 07-24
+> `additionalContext` channel fix and the 07-26 TTL fix); all 5 logged events predate both.
+> Compacting into a wrap-up tests the plumbing and teaches nothing about sufficiency — do it with
+> real work still ahead, and watch for the `CONTEXT RESTORED AFTER COMPACTION` block **actually
+> arriving**, which has never once been observed. Full reasoning further down under "WORTH DOING
+> EARLY".
+>
+> **1b. P13 will be red, and it is CORRECT — do not snooze it.** Two `degraded` events from
+> 2026-07-27 (`spend-guard/deny-list-bypassable`, `.../self-authorizing-deny-list-bypassable`)
+> record a real degradation: the deny list ADR-0016 called unconditional was bypassable by five
+> plain literals. The remedy shipped the same day and is *partial by design* (the launcher tail is
+> open and documented in the contract). The events are true, the fix is real, and they age out on
+> their own in 7 days. **Snoozing a true signal because it is inconvenient is the one thing the
+> predicate exists to prevent.** G-a will clear with it — P14 was the other half and is already
+> fixed (`./install.sh` shipped `icpg-inject-context.sh` to the global tier).
+>
+> **2. Item 1 is the iCPG extractor, and it has a BINDING STOPPING RULE.** Read item 1 before
+> touching it. The question has been re-scoped three times and decided zero; the rule is one
+> bounded change, one re-measurement, then a decision either way — explicitly including
+> retirement. **There is no step 3.** If the extractor work surfaces another cause, that is a new
+> observatory entry, not a fourth re-scope of item 1.
+
+**Afternoon of 2026-07-27 (same session, continued):** the spend guard's deny list was found
+**bypassable by five plain literals** (`python3 bin/tessera-authorize grant` and friends) one day
+after ADR-0016 declared it unconditional — fixed, and the launcher enumeration measured as a
+treadmill (7 more forms pass). `tessera-authorize dismiss` **ran for the first time**, closing all
+three of ADR-0016's open triggers. Effort-vs-cache **measured**: effort invalidates like `/model`,
+refuting the inference that it was the cheap knob. The `CLAUDE_EFFORT` statusline flag was
+proposed and **declined** — recorded as declined, not unbuilt. `verdict_channel` shipped in
+`tessera-verify stats` (4 file / 16 unrecorded / 0 message). And the first non-bootstrap iCPG
+ReasonNode was authored, which is what surfaced item 1's real cause.
+
   - **CLOSED 2026-07-27:** **A6** (one check shipped, two rejected on measurement), **A5b** (the
     reporters could not report themselves), **C** (iCPG — shrink, dedup, evidence, and the
     `usage` question answered), **D** (ADR-0014 — review is Claude-only, the stack cut).
@@ -153,28 +188,50 @@ item D (ADR-0014), A5b, A6 — and the `usage` calibration question, which turne
 threshold question at all (see **C** above: the defect was definitional, the exposed problem is
 scope quality, and the re-stated question is recorded there). What is actually next:
 
-1. **iCPG scope quality — the re-stated `usage` question. PRE-SCOPED so this opens as a decision,
-   not an hour of re-measuring.** Only **42% of tracked files sit inside any reason's scope**, and
-   **46% of symbols are CREATES-linked to a reason whose scope excludes the file they live in** —
-   incoherent on its face, and what git-history bootstrap produces from one commit cluster.
-   **Do not reach for the thresholds**: measured, they discriminate (46% zero / 34% below / 19%
-   fire). Numbers reproducible from `_check_usage_drift` + the `CREATES` edge set.
-   **Three options, none scored — score them on evidence, per ADR-0013's own lesson:**
-   - **(a) Widen scope to what the reason actually created.** For each reason, add the files of
-     its CREATES-linked symbols to `scope`. Makes scope self-consistent by construction and is
-     mechanical. Risk: scope stops meaning "what the intent claims" and starts meaning "what it
-     touched" — which may make `usage` vacuous, since nothing would then be out of scope.
-   - **(b) Skip the dimension where its input is untrustworthy.** Score `usage` only for reasons
-     whose scope already covers their own symbols (54% today). Honest, keeps the dimension
-     meaningful, and shrinks its reach. Risk: a silent partial dimension — needs to *report* that
-     it skipped, or it becomes the "measured nothing, said nothing" shape this repo keeps finding.
-   - **(c) Retire `usage`.** It is the dimension `design-principles.md:459`'s kill/keep test names
-     explicitly ("does drift detection catch things grep wouldn't?"), and bounded to tracked files
-     it is a scope comparison over grep results. If (a) makes it vacuous and (b) halves it, that
-     is an argument. **Would leave `changed` + `decision` — and `decision` fires zero today, so
-     read what that leaves before choosing it.**
-   **Whichever is chosen, the not-vacuous rule applies:** a dimension that cannot fire is the
-   thing this session already deleted three of.
+1. **iCPG corpus coverage — and this is item 1's THIRD scope. There is a binding stopping rule;
+   read it before doing anything else.**
+
+   **The (a)/(b)/(c) options below are RETIRED. Do not score them.** They asked how to handle
+   scopes whose symbols don't match, and on 2026-07-27 the cause turned out to be one level down:
+   **`symbols.py` dispatches on file extension, `.sh` and extensionless files are not in
+   `LANG_MAP`, and iCPG therefore sees 84 of 260 code files — 32% of the repo.** 46 of 56 scope
+   entries point at files it cannot parse; three point at files it can. The "46% incoherent"
+   figure follows mechanically from scopes naming files that can never hold a symbol. See
+   `docs/observatory.md` → "iCPG cannot see 68% of this repo".
+
+   **THE STOPPING RULE — binding, because this question has been re-scoped three times
+   (thresholds → scope quality → corpus coverage) and decided zero times.** Each deferral was
+   evidence-driven and correct; collectively they are a regress that will otherwise produce a
+   fourth.
+
+   - **Step 1 — ONE bounded change.** Extend `LANG_MAP`/`detect_language` to cover `.sh` and
+     shebang-based extensionless files, re-bootstrap or re-record, re-run drift. Bounded: extractor
+     only. Do **not** widen it into "and also fix scopes / contracts / the CREATES edge set."
+   - **Step 2 — DECIDE, on that one measurement.** Does `usage` discriminate over a corpus that
+     includes the framework's own code? If **yes**, keep it and close item 1. If **no**, RETIRE it
+     — `design-principles.md:459`'s kill test ("does drift detection catch things grep wouldn't?")
+     has then been asked against a fair corpus and answered.
+   - **No step 3.** If step 1 surfaces a further cause, that is a *separate observatory entry*,
+     not a re-scope of item 1. **A dimension that has consumed three investigation cycles without
+     producing a signal has had a fair hearing; the honest close is retirement, not a fourth
+     look.** Retiring leaves `changed` + `decision`, and `decision` fires zero — read that as the
+     real cost before choosing, but do not let it buy another cycle.
+
+   **This IS the decision ADR-0013 deferred, and that matters twice over.** ADR-0013 logged
+   *"retiring iCPG's dimensions is a bigger decision than this ADR should make"* and *"Retiring it
+   is a separate decision needing its own evidence"* — so the rule above is not a new question, it
+   is the staged close of an already-open one, with the evidence ADR-0013 said it needed.
+   **It also removes the main objection to retiring:** ADR-0013 already records the candidate
+   replacement — scryer's two deterministic predicates ("this file changed since we last
+   reconciled it"), marked *idea-only, open*. So the retire branch does not leave a hole; it leaves
+   `changed` + `decision` **plus a documented alternative to evaluate**. Standing pattern #3 is the
+   reason to prefer it: a weighted composite is a proxy, "this file changed" is the pain.
+
+   **Second finding from the same run, tracked separately (do NOT fold into the rule above):**
+   `icpg create` has no flag to hand-author contracts. `--infer-contracts` needs an LLM key and
+   otherwise degrades to scope-restated-as-`file_exists()`; `preconditions`/`postconditions` come
+   back empty. `design-principles.md` names hand-authoring as the first of three tiers and it is
+   unreachable. Small, self-contained, and independent of the `usage` decision.
 2. **Item 2 Part B — the pending-record channel (framework→downstream).** Needs its 3-decision
    design gate before any code: where the record lives, idempotent-update semantics, the
    committed staleness marker.
