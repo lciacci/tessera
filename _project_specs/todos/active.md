@@ -195,6 +195,25 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    model logs `restore_receipt` (sufficient/insufficient **+ mandatory evidence**), the Stop
    scan diffs them and exits 2 on an unanswered offer. Only fires on substantive sessions
    (≥1 edit or ≥20 turns) so `--sufficient` does not become a reflex.
+   **ROLL-TO-FLEET TRIGGER — both conditions, and (2) is the one that matters:**
+   1. The backstop has fired on a **real** Stop (not hand-driven), and
+   2. **at least one `insufficient` receipt exists.**
+   (2) applies this repo's own not-vacuous rule to the instrument: a mechanism that has only
+   ever produced `sufficient` has not been *shown capable* of the other answer, and until then
+   "all sufficient" and "the receipt is decorative" are indistinguishable. Rolling is two halves
+   via `tessera-sync-harness` — `scripts/restore/` **and** the Stop wiring in each downstream
+   `settings.json`. Both or neither (pattern #5).
+   **Rate, so "wait" has a size:** tessera runs ~1.1 sessions/day (16 in the last 14d), 72% of
+   them substantive → **~0.8 receipts/day**. First backstop fire: next session. ~5–6 receipts in
+   a week. Enough for "does it fire" and "is it reflexive"; NOT enough for `--missing` clustering
+   (~15–20).
+   **SELECTION BIAS, and it flatters T2 — do not read tessera receipts as a general verdict.**
+   This repo has `_project_specs/todos/active.md`, a hand-maintained handoff the SessionStart
+   surfacer prints verbatim, plus standing patterns and the decision-surface hook. Restore is
+   *easy* here because a second, human-curated channel does much of the checkpoint's job. A
+   downstream app has none of that. **Tessera data can validate the MECHANISM; it cannot answer
+   whether checkpoints suffice in general** — a week of green receipts here partly means "the
+   handoff works", not "Mnemos works".
    **NEXT SESSION: this ships with ZERO receipts.** Its first evidence is your own Stop. Three
    things to watch, and they are the ways it fails rather than the ways it works:
    1. **Does the backstop actually fire?** It has never run against a real Stop. If it does not,
