@@ -201,6 +201,27 @@ as a grant, since a dismissal logged earlier says nothing about a later denial.
 **A human runs it**, by construction. If you are the agent and a denial was a false positive,
 say so in your final message and let the human decide.
 
+**FIRST REAL RUN: 2026-07-27, and the human path is now tested end to end.** ADR-0016 named three
+open triggers on this verb; all three are answered:
+
+- **`spend_dismissed` is off n=0.** Event written with `dismissed_by: lorenzociacci` — the field
+  is correct, and it is the one thing separating this from a grant.
+- **The backstop went silent, and silent for the RIGHT REASON.** `rc=0`, no stderr.
+- **Blocking the agent did not break the human.** One `!`-prefixed command, no friction.
+
+**The prose exit had already been shown insufficient in the same session**, which is the ADR's
+premise confirmed on live data rather than argued: the agent dispositioned the same two denials in
+its final message exactly as the paragraph above instructs, and the hook re-fired at the next Stop,
+because nothing can hear prose.
+
+> **The fire counter is the discriminator, and this was nearly missed.** A dispositioned backstop
+> and an *exhausted* one both present as `rc=0` with no output. They are distinguishable, but only
+> by a side effect: `main()` returns before `_bump_fires()` when `undispositioned()` is empty, so a
+> genuine dismissal leaves the counter UNCHANGED (2 → 2) while a cap-exhausted one increments
+> (2 → 3). Checking `rc` alone cannot tell a working control from a dead one — the same
+> ordinary-looking success this repo keeps paying for. **Read `.tessera/.spend-backstop-fires`, not
+> just the exit code.**
+
 **Escalation packets must now be spend-shaped to clear a denial.** `_escalated()` used to accept
 any packet at all; a session raising an unrelated escalation silenced its own spend backstop by
 accident. A denial is answered by a packet *about* the denial.
