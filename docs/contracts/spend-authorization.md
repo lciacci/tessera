@@ -138,6 +138,23 @@ must never be able to block the exit.
 invocation slips past, as it does for every other pattern here. It stops the mistake, which is
 what this guard is for.
 
+**That sentence was read as covering more than it did, and the gap was live for one day
+(2026-07-27).** `bin/tessera-verify`, working on an unrelated claim, found `python3
+bin/tessera-authorize grant` returned **ALLOW** — and so did `.venv/bin/python …`, `env …`,
+`command …`, and `uv run …`. Five bypasses of a control this document called "refused
+unconditionally", every one a plain static literal you could type by hand. **A runtime-assembled
+invocation is a ceiling; a statically-visible one is a hole, and the paragraph above made the
+second look like the first.** `INVOKED_SCRIPT` already carried the interpreter group
+`SELF_AUTHORIZING` was missing — two patterns in one file, one of them right, and nothing
+compared them. Fixed by adding a bounded launcher group; regression-tested in both directions
+(`test_an_interpreter_prefix_does_not_launder_self_authorization`,
+`test_the_launcher_group_does_not_block_ordinary_interpreter_calls`).
+
+**Still open, and deliberately not patched:** stacking four or more launchers (`env env env env
+…`) exceeds the `{0,3}` bound and passes. That is evasion, not mistake, and this guard is scoped
+to the latter — but the fix direction is the design gate in `docs/observatory.md` → "The spend
+guard matches command TEXT", not a bigger number.
+
 **A false positive it caused immediately, and the fix:** the first version matched the verb
 *anywhere* in the command, and blocked the very commit documenting this feature — a
 `python3 - <<PY` heredoc is wrapper-led, so its body is code and nothing is stripped. It now

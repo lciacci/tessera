@@ -1561,6 +1561,32 @@ this section — the dedup fix it prescribes is real but is now step 3, not step
 
 ### The spend guard matches command TEXT — it over-denies prose and under-denies assembly *(2026-07-26)*
 
+- **THE UNDER-DENIAL HALF STOPPED BEING HYPOTHETICAL (2026-07-27), and it was not assembly — it
+  was a plain literal.** This entry said "nothing currently tests the under-denial direction at
+  all" and framed the risk as *runtime-assembled* commands. `bin/tessera-verify`, working an
+  unrelated claim, found five bypasses that need no assembly at all: `python3
+  bin/tessera-authorize grant` returned **ALLOW**, as did `.venv/bin/python …`, `env …`,
+  `command …`, and `uv run …`. Static text, typed by hand, against the control ADR-0016 had
+  declared refused *unconditionally* one day earlier.
+- **Why it survived: the contract's own hedge absorbed it.** "Known ceiling, inherited — a
+  runtime-assembled invocation slips past" reads like it covers this. It does not. **A ceiling is
+  a class of thing you have decided not to catch; a hole is a member of the class you claimed to
+  catch. A hedge phrased broadly enough will launder the second into the first,** and that is the
+  transferable lesson — this repo's docs are full of honest, carefully-scoped limitations, and
+  each one is a place a real defect can hide in plain sight.
+- **And the comparison nobody ran:** `INVOKED_SCRIPT`, twenty lines below in the same file,
+  already carried the interpreter group `SELF_AUTHORIZING` lacked. Two patterns, one file, one of
+  them right. Standing pattern #1's newest instance — the thing that would have caught it was
+  sitting next to it.
+- **Fixed narrowly, and the fix does NOT close the entry.** A bounded launcher group closes the
+  five literals, regression-tested in both directions; stacking 4+ launchers still passes and is
+  recorded as an accepted limit. **The design gate this entry asks for is still open**, and
+  ADR-0006's tier ranking sharpens what it should ask: a deny-list is tier 4 (a channel — "works
+  until it doesn't, and then it manufactures false confidence", which is precisely what happened
+  here). More tier-4 patches buy less each time. **The gate's real question is whether a tier-1
+  (bad state unrepresentable) or tier-2 (out-of-band bound) form of this control exists** — not
+  which regex to write next.
+
 - **EVIDENCE ADDED 2026-07-27, and it sharpens the shape: the over-denial specifically punishes
   WRITING ABOUT and TESTING the guard.** It blocked me **four times in one session** — twice
   editing docs that described the verbs, twice running a regression matrix over `decide()` — and
