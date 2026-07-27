@@ -490,6 +490,37 @@ findings backlog empty, no escalations. **All six repos pushed and level with or
    **a mechanical check needs a mechanical subject.** Retired figures are a closed list of exact
    strings; "is this item's status consistent" is a judgement wearing a regex.
 
+**A5b. ~~The per-bail-out audit~~ — DONE 2026-07-27. One real gap, a CLASS with three
+   instances, found by reading and confirmed by probing.**
+
+   **The answer to "is any bail-out covered by NOTHING?" is YES, and it was the reporters
+   themselves.** The `settings.json` trailing branch reports a hook SCRIPT that is missing or
+   unexecutable. It cannot report a hook that ran perfectly and whose **RUNNER** is gone or
+   crashed. Probed by hand before fixing anything, and all three were silent:
+   - `rm bin/tessera-watch` → SessionStart printed a completely normal handoff. **Every
+     predicate — P3, P4, P9, P11, P12, P13, P14, P15 — goes quiet at once, and the silence is
+     indistinguishable from a clean session.** The worst instance in the repo: the thing that
+     would tell you is the thing that broke.
+   - `bin/tessera-watch` exiting 2 → identical. `[ $? -eq 1 ] || exit 0` put "nothing fired"
+     and "a predicate raised" on the same branch, so a crashing watcher read as a healthy one.
+   - `bin/tessera-findings` deleted, and `decision_surface.py` crashing → both silent. The
+     decision-surface hook has now been able to ship silent in **two different ways**.
+   All three fixed, and guarded by **chaos probes 9, 10 and 11** — watched RED against the
+   unfixed hooks first, which is this suite's founding discipline.
+
+   **A finding about the probes, which is the more transferable half:** the first version
+   deleted the runner from a scaffolded downstream — and **no downstream has `bin/tessera-watch`
+   or `bin/tessera-findings`, nor wires the surfacers at all.** They are tessera-only hooks. The
+   probe would have asserted on something that was never there, which is exactly how a probe
+   skipped and hid a whole component on this suite's first run. They now install a working
+   runner, prove the surfacer is QUIET, and only then break it.
+
+   **The method held: reading found the candidates, probing confirmed them, and counting would
+   have found none of it** — all three hooks had *zero* `tessera-degraded` calls, which is the
+   signal the 07-26 audit misread as "missing coverage" and got wrong three times. Absence of a
+   call means nothing on its own; only "break it and see" answers the question.
+
+*(Original entry, kept for the trail:)*
 **A5b. OPEN — the per-bail-out audit, and DO NOT re-open it with a count.**
    I counted `grep -c degraded` per hook (5 of 16), called it a spec-11 hole, and was **wrong
    three times over**: coverage is DISTRIBUTED — toolchain bail-outs → P9, never-ran → the

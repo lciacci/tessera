@@ -12,6 +12,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 > 2026-07-08 and 2026-07-25. The section below covers the 2026-07-26 session; the older
 > `[Unreleased]` content follows it, unchanged.
 
+### 2026-07-27 — A5b: the reporters could not report themselves
+
+The per-bail-out audit, done by reading each hook and then breaking it, never by counting.
+88 bail-out sites across 16 wired hooks; one real gap, a class with three instances.
+
+**The `settings.json` trailing branch reports a hook SCRIPT that is missing or
+unexecutable. It cannot report a hook that ran perfectly and whose RUNNER is gone.**
+
+#### Fixed
+- **`tessera-watch-surface.sh`** — `rm bin/tessera-watch` and SessionStart printed a
+  completely normal handoff. Every predicate (P3, P4, P9, P11–P15) goes quiet at once and
+  the silence is indistinguishable from a clean session. Also `[ $? -eq 1 ] || exit 0` put
+  "nothing fired" and "a predicate crashed" on the same branch, so a crashing watcher read
+  as a healthy one. Both now report `degraded`.
+- **`tessera-findings-surface.sh`** — same two shapes; the downstream-findings channel
+  silently stops surfacing, and "nothing open" is what a healthy empty backlog looks like.
+- **`tessera-decision-surface.sh`** — a crash in `decision_surface.py` was
+  indistinguishable from "this file has no governing decisions". That hook had already
+  shipped silent once (the 07-24 bare-stdout bug); it could do it a second way.
+
+#### Added
+- **chaos probes 9, 10, 11** (11 total), watched RED against the unfixed hooks first.
+  Their first draft deleted the runner from a scaffolded downstream — and no downstream
+  has these runners or wires these surfacers at all. They are tessera-only hooks, so the
+  probe would have asserted on something that was never there: the same shape that let a
+  probe skip and hide a whole component on this suite's first run. They now install a
+  working runner, prove silence, then break it.
+
+**Counting would have found none of this.** All three hooks had *zero* `tessera-degraded`
+calls — the signal the 07-26 audit misread as missing coverage and got wrong three times.
+
 ### 2026-07-27 — a doccheck for the handoff (A6), and two candidates rejected on measurement
 
 The handoff drifted four ways in one day and nothing could see it. `doccheck` excludes

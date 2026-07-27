@@ -369,3 +369,87 @@ def test_probe_8_typo_in_a_wired_hook_path_is_silent(toy):
     r = run_wired(toy, "tessera-gate-scn.sh", hook_input(toy))
     assert r.returncode == 0 and r.stdout == "", "setup wrong — expected the silent skip"
     assert_reported(toy, "a wired hook path is typo'd, so the hook has never run", "gate-scan")
+
+
+# ─────────────────────────────────────────────────────────────────────────────────────
+# COMPONENT 6/6: the SessionStart surfacers — "the reporter's own runner is gone"
+#
+# Added by the A5b audit (2026-07-27). The settings.json trailing branch reports a hook
+# SCRIPT that is missing or unexecutable — it cannot report a hook that ran perfectly and
+# whose RUNNER is gone. Probed by hand first, and all three were silent: SessionStart
+# printed a completely normal handoff while the observatory watcher did not exist.
+# ─────────────────────────────────────────────────────────────────────────────────────
+
+def _tessera_like(toy: Path, runner: str, hook: str) -> Path:
+    """Give the toy the piece a DOWNSTREAM never has: a framework runner + its surfacer.
+
+    Found while writing these probes, and it is the finding, not a fixture detail: no
+    downstream has `bin/tessera-watch` or `bin/tessera-findings`, and none wires the
+    surfacers — they are tessera-only hooks. A probe that just deleted the runner from a
+    scaffolded downstream would have been asserting on something that was never there,
+    which is the shape that let a probe skip and hide a whole component in the first run
+    of this suite. So the baseline is established explicitly: install a working runner,
+    prove the surfacer is QUIET, then break it.
+    """
+    (toy / "bin").mkdir(exist_ok=True)
+    r = toy / "bin" / runner
+    r.write_text("#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n")   # rc 0 = nothing fired
+    r.chmod(0o755)
+    dst = toy / ".claude" / "scripts" / hook
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_text((REPO / ".claude" / "scripts" / hook).read_text())
+    dst.chmod(0o755)
+    return dst
+
+
+def test_probe_9_watch_surfacer_with_no_watcher_is_silent(toy):
+    """`rm bin/tessera-watch → does anything say so?`
+
+    The worst instance in the repo, because tessera-watch IS the reporting mechanism for
+    P3, P4, P9, P11, P12, P13, P14 and P15. Delete it and every predicate goes quiet at
+    once — and the silence is indistinguishable from a clean session. The thing that would
+    tell you is the thing that broke: standing pattern #1, in the watcher itself.
+    """
+    hook = _tessera_like(toy, "tessera-watch", "tessera-watch-surface.sh")
+    assert not degraded_events(toy), "baseline wrong — a WORKING watcher must be silent"
+    run_hook(hook, hook_input(toy))
+    assert not degraded_events(toy), "a quiet watcher must not report itself degraded"
+
+    (toy / "bin" / "tessera-watch").unlink()
+    r = run_hook(hook, hook_input(toy))
+    assert r.returncode == 0, "setup wrong — expected the silent bail-out"
+    assert_reported(toy, "the observatory watcher is gone and no predicate can fire",
+                    "tessera-watch")
+
+
+def test_probe_10_watch_surfacer_treats_a_crash_as_nothing_to_report(toy):
+    """`bin/tessera-watch exits 2 → does anything say so?`
+
+    Subtler than deletion and likelier: the surfacer tested `[ $? -eq 1 ] || exit 0`, so
+    rc=0 (nothing fired, correct silence) and rc=2 (a predicate raised) took the SAME
+    branch. A crashing watcher read as a healthy one.
+    """
+    hook = _tessera_like(toy, "tessera-watch", "tessera-watch-surface.sh")
+    watcher = toy / "bin" / "tessera-watch"
+    watcher.write_text("#!/usr/bin/env python3\nimport sys\nsys.exit(2)\n")
+    watcher.chmod(0o755)
+    r = run_hook(hook, hook_input(toy))
+    assert r.returncode == 0, "setup wrong — expected the silent bail-out"
+    assert_reported(toy, "a crashing watcher must not read as a quiet one", "tessera-watch")
+
+
+def test_probe_11_findings_surfacer_with_no_runner_is_silent(toy):
+    """`rm bin/tessera-findings → does anything say so?`
+
+    This is the framework's channel for learning from its own downstreams. Gone, the
+    backlog silently stops surfacing and every session reads as "nothing open" — which is
+    also exactly what a healthy empty backlog looks like.
+    """
+    hook = _tessera_like(toy, "tessera-findings", "tessera-findings-surface.sh")
+    run_hook(hook, hook_input(toy))
+    assert not degraded_events(toy), "baseline wrong — a working runner must be silent"
+
+    (toy / "bin" / "tessera-findings").unlink()
+    r = run_hook(hook, hook_input(toy))
+    assert r.returncode == 0, "setup wrong — expected the silent bail-out"
+    assert_reported(toy, "the findings backlog cannot surface", "tessera-findings")

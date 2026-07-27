@@ -1,5 +1,18 @@
 #!/usr/bin/env bash
 
+# Spec 11 / A5b: report "I could not do my job" instead of exiting 0 into the dark.
+# Resolved BEFORE the anchoring cd so $0-relative resolution cannot be broken by it.
+# Inlined rather than sourced: a shared lib is one more file that can go missing on the
+# very path that exists to report missing files (pattern #1).
+_HOOKDIR=$(cd "$(dirname "$0")" 2>/dev/null && pwd)
+degraded() {
+  for _c in "$_HOOKDIR/../../bin/tessera-degraded" "$_HOOKDIR/../../scripts/tessera-degraded"; do
+    if [ -x "$_c" ]; then "$_c" "$@" >/dev/null 2>&1 || true; return 0; fi
+  done
+  command -v tessera-degraded >/dev/null 2>&1 && tessera-degraded "$@" >/dev/null 2>&1
+  return 0
+}
+
 # Anchor to the project root: hook commands inherit the SESSION cwd, which may be
 # another repo entirely (2026-07-24 — a cd into a downstream split this repo's gate
 # log 4/2 and silently no-op'd twelve hooks). $0 is a fact this script always has.
@@ -109,9 +122,29 @@ fi
 
 # Observatory triggers. Silent when nothing fires; --log appends every run to the fire-log
 # (which G-a reads), so the log stays honest whether or not anything printed.
-[ -x "bin/tessera-watch" ] || exit 0
+# A5b (2026-07-27): these two lines used to be bare `|| exit 0`, and the audit's probes
+# proved what that meant — DELETE `bin/tessera-watch`, or make it crash, and SessionStart
+# prints a perfectly normal handoff and says NOTHING. Every predicate goes quiet at once
+# (P3, P4, P9, P13, P14, P15), and the thing that would tell you is the thing that broke.
+# Standing pattern #1 in its purest form, in the repo's own watcher.
+#
+# The settings.json trailing branch cannot cover this: it reports THIS SCRIPT missing, not
+# the runner this script calls.
+if [ ! -x "bin/tessera-watch" ]; then
+  degraded --component tessera-watch --reason runner-missing \
+    --detail "bin/tessera-watch is absent or not executable; NO observatory predicate can fire"
+  exit 0
+fi
 out=$(bin/tessera-watch --log 2>/dev/null)
-[ $? -eq 1 ] || exit 0
+rc=$?
+# rc 1 = something fired, 0 = nothing fired (correct silence). Anything else is a CRASH,
+# and conflating it with 0 is how a broken watcher reads as a clean session.
+if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
+  degraded --component tessera-watch --reason runner-crashed \
+    --detail "bin/tessera-watch exited $rc; predicates were not evaluated this session"
+  exit 0
+fi
+[ "$rc" -eq 1 ] || exit 0
 echo "=== OBSERVATORY WATCH (silent+checkable triggers past threshold) ==="
 echo "$out"
 exit 0
