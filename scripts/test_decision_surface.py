@@ -144,3 +144,31 @@ def test_adr_reference_check_is_not_vacuous(tmp_path):
     assert ours.findall("cites ADR-0099") == ["0099"], "a dangling Tessera id must be caught"
     on_disk = {p.name[:4] for p in (ds.ROOT / "docs" / "adr").glob("0*.md")}
     assert "0099" not in on_disk, "precondition: ADR-0099 must not exist for this to bite"
+
+
+# ── execution warning: "decided" and "done" are different facts ────────────────────────
+
+def test_not_yet_warns_loudly():
+    """The failure this exists to stop: an unshipped ADR read as settled. On 2026-07-26 a
+    session read ADR-0008's verdict and acted on it; the cut had sat unexecuted 12 days."""
+    w = ds._execution_warning("- **Status:** Accepted\n- **Executed:** not yet\n")
+    assert "NOT EXECUTED" in w and "settled" in w
+
+
+def test_partially_executed_carries_the_remainder():
+    w = ds._execution_warning(
+        "- **Status:** Accepted\n- **Executed:** partially — the cut is DEFERRED to D1\n")
+    assert "PARTIALLY EXECUTED" in w and "DEFERRED to D1" in w
+
+
+def test_a_shipped_adr_is_annotated_silently():
+    """A shipped ADR needs no annotation — noise on every hit is how a real warning gets
+    skipped (the same reasoning that stopped P3 firing forever on an unfixable state)."""
+    assert ds._execution_warning(
+        "- **Status:** Accepted\n- **Executed:** 2026-07-26 — `bin/thing`\n") == ""
+
+
+def test_an_adr_with_no_executed_line_is_silent_here():
+    """doccheck's adr-execution-recorded is what demands the line; this renderer must not
+    also shout about it, or one omission produces two different complaints."""
+    assert ds._execution_warning("- **Status:** Accepted\n") == ""

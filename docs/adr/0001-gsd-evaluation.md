@@ -2,6 +2,7 @@
 
 - **Date:** 2026-06-22
 - **Status:** Accepted
+- **Executed:** 2026-06-24 — coexistence shipped, not a fork: `.claude/settings.json` merges with GSD's global hooks per the ADR's own reading of Claude Code semantics; `docs/observatory.md` carries the re-evaluate triggers.
 - **Decision driver:** New tool surfaced during install — Tessera install of Phase 4 (first test session) revealed that the user's existing global `~/.claude/` setup contained GSD's hook infrastructure. Surface evaluation became necessary before continuing install.
 
 ---

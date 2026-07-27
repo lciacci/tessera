@@ -1557,6 +1557,68 @@ def check_adr_references_resolve() -> list[str]:
             for num, where in sorted(cited.items()) if num not in on_disk]
 
 
+
+_ADR_EXECUTED = re.compile(r"^- \*\*Executed:\*\* *(.+)$", re.M)
+_ADR_STATUS = re.compile(r"^- \*\*Status:\*\* *(.+)$", re.M)
+_BACKTICKED = re.compile(r"`([^`]+)`")
+_PATH_EXT = (".py", ".sh", ".md", ".json", ".yml", ".yaml", ".jsonl", ".toml")
+
+
+def _looks_like_path(token: str) -> bool:
+    """Path-shaped, not merely backticked. `bin/tessera-hooks` yes, `hook_distro` no."""
+    return "/" in token or token.endswith(_PATH_EXT)
+
+
+def check_adr_execution_recorded() -> list[str]:
+    """Every Accepted ADR must say whether it was actually BUILT — and name artifacts
+    that exist.
+
+    An accepted ADR reads identically whether it shipped or never shipped. That gap bit
+    twice on 2026-07-26: ADR-0008's cut sat unexecuted for 12 days while a session read
+    the verdict and recommended acting on it, and P3's counting ran 10 days past the
+    decision that superseded it. `decision_amendments.py` already surfaces when an ADR was
+    REVISITED; nothing surfaced that one was decided and never done.
+
+    This does NOT license editing ADRs. The decision text stays immutable — that is what
+    stops revisionism, and it has already earned its keep (ADR-0007 is legible precisely
+    because nobody rewrote it). `Executed:` is APPEND-ONLY and records a fact that did not
+    exist when the decision was made.
+
+    The artifact check is the load-bearing half. Without it `Executed:` is just another
+    doc claim and drifts like every other one — which is this checker's entire subject.
+    Accepted values:
+        - **Executed:** not yet
+        - **Executed:** n/a — <why nothing ships>
+        - **Executed:** <date> — `path/one`, `path/two`
+    Only Accepted ADRs are required to carry it: Proposed is undecided, Watching decided
+    NOT to adopt, Superseded is history.
+    """
+    bad = []
+    for adr in sorted((ROOT / "docs" / "adr").glob("0*.md")):
+        text = adr.read_text()
+        status = (_ADR_STATUS.search(text) or [None, ""])[1] if _ADR_STATUS.search(text) else ""
+        if not status.strip().lower().startswith("accepted"):
+            continue
+        m = _ADR_EXECUTED.search(text)
+        if not m:
+            bad.append(f"{_rel(adr)}: Accepted but no `- **Executed:**` line — a decided-"
+                       f"but-never-built ADR is indistinguishable from a shipped one")
+            continue
+        value = m.group(1).strip()
+        if value.lower().startswith(("not yet", "n/a")):
+            continue
+        # Backticks also wrap IDENTIFIERS (`hook_distro`, `skillOverrides`), which are not
+        # artifacts. Only path-shaped tokens are verifiable, and asserting on the rest would
+        # push authors to drop backticks from real prose to appease the checker.
+        paths = [p for p in _BACKTICKED.findall(value) if _looks_like_path(p)]
+        if not paths:
+            bad.append(f"{_rel(adr)}: Executed claims completion but names no artifact in "
+                       f"backticks — nothing to verify, so nothing is proven")
+        for p in paths:
+            if not (ROOT / p.rstrip("/")).exists():
+                bad.append(f"{_rel(adr)}: Executed names `{p}`, which does not exist")
+    return bad
+
 CHECKS = {
     "chaos-suite-is-reachable": check_chaos_suite_is_reachable,
     "session-logs-are-repo-anchored": check_session_logs_are_repo_anchored,
@@ -1575,6 +1637,7 @@ CHECKS = {
     "template-names-findings-channel": check_downstream_template_names_the_findings_channel,
     "no-upstream-clone-instructions": check_no_upstream_clone_instructions,
     "adr-index-complete": check_adr_index_complete,
+    "adr-execution-recorded": check_adr_execution_recorded,
     "compaction-threshold-qualified": check_compaction_threshold_qualified,
     "gate-recording-not-recall": check_gate_recording_not_claimed_as_recall,
     "tessera-yml-is-tracked": check_tessera_yml_is_tracked,

@@ -2,6 +2,7 @@
 
 - **Date:** 2026-07-11
 - **Status:** Accepted
+- **Executed:** 2026-07-09 — 07 (escalation) first, as ordered: `bin/tessera-escalate`, `docs/contracts/escalation.md`. Roadmap reordering recorded in `_project_specs/00-autonomous-engineering-roadmap.md`.
 - **Decision driver:** Project decision — "the framework was built human-in-the-loop first, deliberately. Is that phase over?" Raised by Lorenzo after the gate-recording backstop closed the last principle-#17 violation.
 
 ---

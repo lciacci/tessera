@@ -2,6 +2,7 @@
 
 - **Date:** 2026-07-22
 - **Status:** Accepted (supersedes ADR-0011)
+- **Executed:** 2026-07-21 — `scripts/sql/lint.sh` wired warn-only into `.githooks/pre-commit`; `skills/sqlfluff/SKILL.md` carries the guidance.
 - **Decision driver:** Human disposition. ADR-0011 concluded "Watching" on 2026-07-21. Lorenzo's instruction was to *implement* sqlfluff across Tessera and downstream projects — the evaluation had answered a question that was not the one being asked.
 
 ---

@@ -2,6 +2,7 @@
 
 - **Date:** 2026-07-26
 - **Status:** Accepted
+- **Executed:** 2026-07-26 — T1 as `bin/tessera-watch` P14/P3, T2 as `scripts/restore/` + `docs/contracts/restore-receipt.md`. **T2 has ZERO receipts so far** — built, not yet evidenced.
 - **Decision driver:** The first `/compact` observed through a working channel (2026-07-26) found
   two defects and, in diagnosing them, invalidated the trial's founding premise. Supersedes the
   framing of `tessera-watch` **P3** (`p3_compaction`) and the "compaction vehicle" observatory

@@ -2,6 +2,7 @@
 
 - **Date:** 2026-06-26
 - **Status:** Accepted
+- **Executed:** 2026-06-27 — `hooks/tier-classify-hook`, `hooks/subagent-route-hook`, `hooks/route-task-hook`. Dispatch-time hooks, no running agent, exactly as decided.
 - **Decision driver:** Project decision — "should an agent recommend and change the model based on the work needed?"
 
 > This is an internal architecture decision, not an external-tool evaluation, so

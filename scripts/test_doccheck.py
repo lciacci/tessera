@@ -1197,3 +1197,68 @@ def test_run_tests_sh_also_satisfies_chaos_reachability(fake_repo):
     rt.write_text('#!/bin/bash\nrun "chaos" "$PY" -m pytest chaos -q\n')
     rt.chmod(0o755)
     assert doccheck.check_chaos_suite_is_reachable() == []
+
+
+# ── adr-execution-recorded: decided-but-never-built must not read as shipped ───────────
+#
+# An accepted ADR looked identical whether it shipped or never shipped. That gap bit twice
+# on 2026-07-26: ADR-0008's cut sat unexecuted 12 days while a session acted on its verdict,
+# and P3 kept counting 10 days past the decision that superseded it. decision_amendments.py
+# already surfaces REVISITED; nothing surfaced decided-and-never-done.
+
+
+def _adr(repo, name, status, executed=None, body="# ADR\n"):
+    d = repo / "docs" / "adr"
+    d.mkdir(parents=True, exist_ok=True)
+    text = f"# ADR-{name}\n\n- **Date:** 2026-07-26\n- **Status:** {status}\n"
+    if executed is not None:
+        text += f"- **Executed:** {executed}\n"
+    (d / f"{name}-x.md").write_text(text + "\n" + body)
+
+
+def test_accepted_adr_without_an_executed_line_is_flagged(fake_repo):
+    _adr(fake_repo, "0099", "Accepted")
+    bad = doccheck.check_adr_execution_recorded()
+    assert any("no `- **Executed:**`" in b for b in bad), bad
+
+
+def test_executed_naming_a_missing_artifact_is_flagged(fake_repo):
+    """The load-bearing half. Without it, `Executed:` is just another doc claim — which is
+    this checker's entire subject."""
+    _adr(fake_repo, "0099", "Accepted", "2026-07-26 — `bin/never-built`")
+    assert any("does not exist" in b for b in doccheck.check_adr_execution_recorded())
+
+
+def test_executed_naming_a_real_artifact_passes(fake_repo):
+    (fake_repo / "bin").mkdir(exist_ok=True)
+    (fake_repo / "bin" / "real-thing").write_text("x")
+    _adr(fake_repo, "0099", "Accepted", "2026-07-26 — `bin/real-thing`")
+    assert doccheck.check_adr_execution_recorded() == []
+
+
+def test_not_yet_is_explicit_and_allowed(fake_repo):
+    """`not yet` is the POINT: decided-but-not-built becomes visible instead of inferable."""
+    _adr(fake_repo, "0099", "Accepted", "not yet")
+    assert doccheck.check_adr_execution_recorded() == []
+
+
+def test_completion_claimed_with_no_artifact_is_flagged(fake_repo):
+    """'Executed: done' proves nothing and must not satisfy the check."""
+    _adr(fake_repo, "0099", "Accepted", "2026-07-26 — shipped it, trust me")
+    assert any("names no artifact" in b for b in doccheck.check_adr_execution_recorded())
+
+
+def test_backticked_identifiers_are_not_treated_as_artifacts(fake_repo):
+    """`hook_distro` / `skillOverrides` are identifiers, not paths. Asserting on them would
+    push authors to strip backticks from real prose to appease the checker."""
+    (fake_repo / "bin").mkdir(exist_ok=True)
+    (fake_repo / "bin" / "real-thing").write_text("x")
+    _adr(fake_repo, "0099", "Accepted", "2026-07-26 — `bin/real-thing` sets `hook_distro`")
+    assert doccheck.check_adr_execution_recorded() == []
+
+
+@pytest.mark.parametrize("status", ["Proposed", "Watching", "Superseded by ADR-0008"])
+def test_non_accepted_adrs_are_not_required_to_have_executed(fake_repo, status):
+    """Proposed is undecided, Watching decided NOT to adopt, Superseded is history."""
+    _adr(fake_repo, "0099", status)
+    assert doccheck.check_adr_execution_recorded() == []

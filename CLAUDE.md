@@ -72,7 +72,7 @@ The `tier-classify-hook` (UserPromptSubmit) classifies each prompt into a Claude
 - Don't modify `.env` files or anything matching `.env.*` (also enforced by settings.json deny list)
 - Don't add packages without checking if existing deps cover the need
 - Don't put secrets in any committed file
-- Don't edit ADRs once accepted. Write a superseding ADR instead. The original stays as historical record.
+- Don't edit ADRs once accepted. Write a superseding ADR instead. The original stays as historical record. **One exception, and it is not an edit to the decision: the `- **Executed:**` line is APPEND-ONLY and you keep it current.** The rule was conflating two things — *what was decided* (immutable; rewriting it is revisionism) and *whether it was ever built* (a fact that does not exist yet when the ADR is written). An accepted ADR used to read identically whether it shipped or never shipped, and that bit twice on 2026-07-26: ADR-0008's cut sat unexecuted for 12 days while a session read the verdict and acted on it, and P3 kept counting 10 days past the decision superseding it. Values are `not yet`, `n/a — <why nothing ships>`, or `<date> — \`path/one\`, \`path/two\`. doccheck's `adr-execution-recorded` **verifies the named paths exist** — without that it is just another doc claim, and drifting doc claims are the thing this repo keeps paying for. `not yet` being explicit is the point: decided-but-not-built becomes visible instead of inferable.
 - Don't put consequential decisions in commit messages alone — capture them in the design doc, an ADR, or the observatory
 - Don't reorder or renumber compounding principles in `docs/design-principles.md`. Principles are referenced by number throughout the doc; renumbering breaks the trail.
 

@@ -2,6 +2,7 @@
 
 - **Date:** 2026-07-20
 - **Status:** Accepted
+- **Executed:** 2026-07-17 — `bin/tessera-sync-skills` (repo → global mirror) plus `bin/tessera-watch` P12, which fires on mirror drift and did so this session.
 - **Refines:** ADR-0009 (leaves curation untouched; fixes what curation selects *from*). Closes ADR-0007 finding #7 (the de-dup) and ADR-0008's "delivery mechanism NOT decided."
 - **Decision drivers:** two observatory entries — "Skill registry — which copy is the source of truth" and "Skill-body delivery has no copy mechanism — and a skill claimed it did." Adjudicated with Lorenzo 2026-07-20.
 

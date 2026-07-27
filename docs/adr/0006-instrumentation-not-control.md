@@ -2,6 +2,7 @@
 
 - **Date:** 2026-07-12
 - **Status:** Accepted
+- **Executed:** 2026-07-26 — the retarget landed as spec 11, now 8/8 green: `bin/tessera-degraded`, `chaos/test_chaos.py`. The adversary is `bin/tessera-verify` (spec 12), fixed to a file channel the same day.
 - **Decision driver:** Lorenzo, after a 90-minute F-001 session became fixes-on-fixes: *"is there any point to building something like Tessera? … burn it down or add the adversarial mechanisms and refine?"*
 - **Amends:** ADR-0005's readiness assessment. Does **not** supersede its Tier-1 reordering.
 

@@ -2,6 +2,7 @@
 
 - **Date:** 2026-07-16
 - **Status:** Accepted
+- **Executed:** 2026-07-16 — `bin/tessera-new-project` emits the `skillOverrides` map from the downstream profile. Curation, not copying, as decided. Skill-BODY delivery remains an open question in `docs/observatory.md`.
 - **Refines:** ADR-0008 (its *delivery mechanism*, not its verdict). ADR-0008's corpus verdict (keep 46, remove 10) and its reframe *prune → profile-gated delivery* both stand. This ADR corrects **how** that delivery works — the "ship the skills downstream" framing rested on a false premise about how Claude Code loads skills.
 - **Decision driver:** ADR-0008 named the structural gap as "`bin/tessera-new-project` ships **zero** skills," and framed the fix as *building skill delivery* — a copier that lays the KEEP set into each downstream, profile-selected. Before building it, FOCUS-004 verified the actual Claude Code skill-load semantics (skills.md / settings.md, confirmed 2026-07-16). The premise was wrong in a way that makes the fix an order of magnitude cheaper.
 

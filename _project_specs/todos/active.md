@@ -220,6 +220,23 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    evidence was never scarce, it was counted in the wrong place. Relocating would have preserved
    the category error and gathered auto-compaction events, the question that matters least.)*
 
+**A4. ~~Decided-but-not-built is undetectable (item F)~~ — FIXED 2026-07-26.** ADRs now carry an
+   append-only `- **Executed:**` line: `not yet` / `n/a — <why>` / `<date> — \`artifacts\``.
+   **The immutability rule was conflating two facts** — *what was decided* (immutable; rewriting
+   it is revisionism, and ADR-0007 is legible precisely because nobody did) and *whether it was
+   ever built* (a fact that does not exist when the ADR is written). CLAUDE.md now carves that
+   one exception explicitly.
+   doccheck `adr-execution-recorded` **verifies the named paths exist** — the load-bearing half,
+   since without it the line is just another doc claim, which is this checker's whole subject.
+   `decision_surface.py` prints `⏳ NOT EXECUTED` / `⏳ PARTIALLY EXECUTED` before you edit a
+   governed file, and is deliberately SILENT on shipped ADRs (noise on every hit is how a real
+   warning gets skipped).
+   **Backfilled all 11 accepted ADRs from verified artifacts, and it immediately paid:**
+   **ADR-0008 is `partially` — the review-skill cut is still not done and is deferred to
+   ADR-0014/D1.** That is the exact decision a session acted on while missing the deferral.
+   *Detector note: the first version flagged `hook_distro` and `skillOverrides` — backticked
+   IDENTIFIERS, not paths. Fixed in the detector, not by stripping backticks from real prose.*
+
 **A2. ~~The spend guard fails OPEN on a cwd shift~~ — FIXED 2026-07-26.** `cd scripts` made
    `tessera-spend-guard.sh` resolve `scripts/scripts/spend/guard.py` → absent → **spend-committing
    commands ALLOWED**. Standing pattern #4 inside the deny-by-default gate on external spend.

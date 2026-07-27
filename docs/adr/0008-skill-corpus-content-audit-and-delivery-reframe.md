@@ -2,6 +2,7 @@
 
 - **Date:** 2026-07-14
 - **Status:** Accepted
+- **Executed:** partially — 2026-07-16 de-eagering shipped (`CLAUDE.md`, `skills/security/SKILL.md` kept on-demand). **The review-skill cut is NOT done and is DEFERRED to ADR-0014/D1** — it sat unexecuted for 12 days and a session acted on the verdict while missing the later deferral. This field exists because of that.
 - **Supersedes:** ADR-0007 (its *conclusions* — the cut-heavy tally, the specific cut list, and the "compaction premise falsified" claim). ADR-0007 stays as the immutable record of the reachability error; **its corrections and lessons are carried forward here unchanged.**
 - **Decision driver:** ADR-0007 ended by saying, in its own words, that **the audit had never been run** — that what ran was a *reachability sweep* mislabelled as a content audit, and that the real, read-heavy audit was still owed. FOCUS-004 (2026-07-14) ran it: all 56 `SKILL.md` bodies read in the main thread, judged on content only. The result contradicts ADR-0007's tally strongly enough to require a new ADR rather than an amendment.
 

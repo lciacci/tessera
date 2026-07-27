@@ -2,6 +2,7 @@
 
 - **Date:** 2026-06-26
 - **Status:** Accepted
+- **Executed:** 2026-06-28 — `install.sh` self-hosts; `templates/settings.json` + `commands/initialize-project.md` ship the payload. No maggy dependency remains.
 - **Decision driver:** Project decision — "should the bootstrap dir have its own version? Tessera should eventually not need maggy files/repo."
 
 > Internal architecture decision (not an external-tool evaluation), so it uses the

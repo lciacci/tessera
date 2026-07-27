@@ -2,6 +2,7 @@
 
 - **Date:** 2026-06-30
 - **Status:** Accepted
+- **Executed:** 2026-06-30 — `bin/tessera-hooks` (freeze/thaw/status), the two-tier fallback in `templates/tessera/settings.base.json`, `hook_distro` in `.tessera/project.yml`. Tier-3 drift went unguarded until `bin/tessera-watch` P14 (2026-07-26).
 - **Decision driver:** Project decision — "formalize moving Tessera hooks global vs. staying contained, and a formal way to enact it at inception and at inflection." Graduates observatory entry F-003 (Downstream script drift) to a decision, as that entry pre-committed.
 
 > Internal architecture decision (not an external-tool evaluation), so it uses the
