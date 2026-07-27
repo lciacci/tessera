@@ -150,10 +150,31 @@ compared them. Fixed by adding a bounded launcher group; regression-tested in bo
 (`test_an_interpreter_prefix_does_not_launder_self_authorization`,
 `test_the_launcher_group_does_not_block_ordinary_interpreter_calls`).
 
-**Still open, and deliberately not patched:** stacking four or more launchers (`env env env env
-…`) exceeds the `{0,3}` bound and passes. That is evasion, not mistake, and this guard is scoped
-to the latter — but the fix direction is the design gate in `docs/observatory.md` → "The spend
-guard matches command TEXT", not a bigger number.
+**Still open, and the enumeration is now MEASURED to be a treadmill.** Immediately after the five
+forms above were closed, seven more were probed and every one passed: `script -q /dev/null …`,
+`stdbuf -o0 …`, `nohup …`, `time …`, `nice …`, `xargs -I{} …`, and `script … python3 …`. The
+launcher set is every exec-wrapper on the system; it cannot be enumerated. Stacking 4+ launchers
+also exceeds the `{0,3}` bound.
+
+**Do not read this as "evasion only, therefore fine."** `time`, `nohup` and `nice` are typed by
+habit, not by an adversary — so the enumeration does not fully cover even the *mistake* case this
+guard is scoped to. The honest status is: five common forms closed, an unbounded tail open.
+
+**The tradeoff is now stated precisely, and it is the design gate, not a patch.** Two directions,
+both with measured costs:
+
+| direction | catches | breaks |
+|---|---|---|
+| **enumerate launchers** (today) | the forms on the list | nothing — but the tail is unbounded |
+| **match the verb anywhere in quote-stripped text** | every launcher, no list | writing about the guard inside a wrapper-led heredoc — the documented false positive that hit 4× in one session |
+
+Quoted prose (`git commit -m "… tessera-authorize grant …"`) survives *both*, because quotes are
+stripped before the check. The casualty of direction 2 is specifically a `python3 - <<'PY'`
+heredoc whose body discusses the verb — i.e. maintaining this contract. See `docs/observatory.md`
+→ "The spend guard matches command TEXT". **ADR-0006's tier ranking is the tiebreaker: both
+directions are tier 4, so neither is the answer — the question is whether a tier-1 or tier-2 form
+exists.** `isatty()` is not it: the agent allocates a pty with `script -q /dev/null` or
+`pty.spawn`, both verified 2026-07-27.
 
 **A false positive it caused immediately, and the fix:** the first version matched the verb
 *anywhere* in the command, and blocked the very commit documenting this feature — a
