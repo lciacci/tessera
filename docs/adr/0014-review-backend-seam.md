@@ -1,7 +1,7 @@
 # ADR-0014: The review backend seam — make review model-portable, or admit it is Claude-only
 
 - **Date:** 2026-07-26
-- **Status:** Proposed
+- **Status:** Accepted (Lorenzo, 2026-07-27) — **Option D: review is Claude-only, deliberately**
 - **Decision driver:** Observatory **Open decision D1**, reached from two directions on 2026-07-26.
   (1) Tessera's `code-review` skill was found **shadowing Claude Code's native `/code-review`**,
   which forced the question of the skill's fate — and the observatory explicitly defers that to D1,
@@ -9,9 +9,51 @@
   happens when Tessera runs in concert with **conclave**, or against **open-weight models**, or for
   a user who wants **Codex instead of Claude**?
 
-> **SKELETON — not a decision yet.** Sections 1–3 record what is already true and were written from
-> reading the code and docs. Sections 4–6 are the open work and are deliberately unanswered. Do not
-> mark this Accepted until §5's options are chosen on evidence.
+- **Executed:** 2026-07-27 — `skills/council-review/SKILL.md`, `templates/tessera/skill-profiles.json`, `docs/design-principles.md` updated; removed: `bin/review`, `bin/kimi`, `bin/research`, `skills/tessera-code-review/`.
+
+> **DECIDED 2026-07-27 — Option D, on evidence gathered by running the ADR's own re-evaluate
+> trigger #4.** The skeleton below is preserved as written; §5's table stays *unscored* because
+> the scoring is here, not there.
+>
+> **What the evidence showed.** Trigger #4 said "exercise `bin/review`'s existing backends."
+> They do not run:
+> - **`kimi`** execs `$HOME/.local/bin/kimi`, which does not exist. Recorded broken on
+>   2026-07-12 and **still broken fifteen days later** — inside the review stack whose
+>   portability is this ADR's subject.
+> - **`codex`** is not on PATH and `OPENAI_API_KEY` is unset.
+> - **`deepseek`** is sound code (urllib → `api.deepseek.com`) with `DEEPSEEK_API_KEY` unset —
+>   **dormant, not dead**, which is the one correction to a flatter reading.
+> - **`bin/review` had never run.** Zero commits touching it since creation.
+>
+> **Nobody noticed because a dead backend is indistinguishable from an unused one** — this
+> repo's signature failure, applied to an architecture exactly as §"The question" predicted.
+>
+> So the ADR's own words were righter than it knew: the repo *"has drifted into [Claude-only]
+> while keeping portable-looking artifacts that do not run."* Not "do not run" — **never ran**.
+> Choosing D makes the real state explicit, and ADR-0006 ranks pruning tier 1 precisely because
+> **deleted machinery cannot fail silently**, which is the failure already in progress.
+>
+> **The one fact arguing against D, recorded because it will matter at the re-evaluate:**
+> LiteLLM is *not* hypothetical. conclave already carries `litellm/config.yaml` with a
+> `model_list` and three `api_base` entries, so option B's cost is largely paid next door. If
+> the conclave gateway becomes routine, B is the cheap re-entry — not C.
+>
+> **§4 question 4 resolved: the 978 lines are CUT**, not thinned. ADR-0008's verdict, finally
+> executed after thirteen days. Harvested first per ADR-0007: the ADR gate was already split
+> out as `skills/adr-gate/` in July, the review frameworks were already recorded in
+> design-principles §Pass 4.3, and the one idea *not* recorded anywhere — review's position in
+> the TDD loop (RED → GREEN → REFACTOR → **REVIEW** → FIX → VALIDATE → COMMIT) — was harvested
+> to design-principles before the delete. The remaining ~900 lines were vendor-CLI setup and
+> five GitHub Actions variants: **harness-layer** content, which §2 shows buys no provider
+> portability either way.
+>
+> **SCOPE LIMIT, deliberate and load-bearing.** The prune stops at *review*. `bin/deepseek`,
+> `bin/validate-plan`, `council-review` and `scripts/test_council.py` are **kept**: plan
+> validation is a different capability that happens to share backends, it degrades honestly
+> (`exit 2`, no verdict — built 2026-07-13), and **ADR-0007 says explicitly "do not cut the
+> multi-model stack… do not re-litigate it without the design session."** This ADR was scoped to
+> review, so it does not overrule that. `validate-plan`'s roster never included `kimi`, so the
+> cut does not touch it — verified by running `scripts/test_council.py`, which stays green.
 
 ---
 

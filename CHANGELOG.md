@@ -12,6 +12,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 > 2026-07-08 and 2026-07-25. The section below covers the 2026-07-26 session; the older
 > `[Unreleased]` content follows it, unchanged.
 
+### 2026-07-27 — ADR-0014 decided: review is Claude-only, deliberately
+
+Decided on evidence from the ADR's own re-evaluate trigger #4, not from the armchair.
+
+#### Removed
+- **`bin/review`** — the multi-model review orchestrator. It had **never run** (0 commits
+  since creation) and 0 of its 3 backends were functional: `kimi` execs a path that does not
+  exist and had been **broken for 15 days unnoticed**, `codex` is absent with no key, and
+  `deepseek` is sound code with no key set — dormant, not dead.
+- **`bin/kimi`** (phantom path), **`bin/research`** (points at the same phantom `~/bin/`).
+- **`skills/tessera-code-review/`** — 978 lines, ~900 of them vendor-CLI setup and five
+  GitHub Actions variants. Harness-layer content, which ADR-0014 §2 shows buys no provider
+  portability either way. **This closes ADR-0008's thirteen-day-old `partially`** — the exact
+  entry the `Executed:` field was invented to be able to close.
+
+#### Changed
+- **`adr-execution-recorded` learned that execution can be a PRUNE.** It assumed execution
+  always creates artifacts, so a decision executed by deletion could not record itself: every
+  path it named was correctly absent and read as a false claim. `Executed:` now supports
+  `removed:`, whose paths must be **absent** — the stronger assertion, since it verifies a cut
+  was made rather than merely recorded.
+
+**Scope limit, deliberate:** the prune stops at review. `bin/deepseek`, `bin/validate-plan`,
+`council-review` and `scripts/test_council.py` are kept — plan validation is a different
+capability that merely shares backends, and ADR-0007 says not to cut the multi-model stack
+without the design session. Harvested before cutting, per ADR-0007.
+
+**For the re-evaluate:** LiteLLM is not hypothetical — conclave already carries
+`litellm/config.yaml` with a model_list and three api_base entries. If that gateway becomes
+routine, option B is the cheap re-entry, not C.
+
 ### 2026-07-27 — A5b: the reporters could not report themselves
 
 The per-bail-out audit, done by reading each hook and then breaking it, never by counting.

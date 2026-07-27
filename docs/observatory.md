@@ -835,7 +835,7 @@ Both were found by adversarial verification, **not** by the framework. **The rea
     *generation* (Phase 2) the effect is real but weak under 3-seed variance (87% vs 82%). Ships a typed-finding
     schema (0 contaminated / 551). Meant to graduate into the tool backing Tessera's `/arbiter`
     (design-principles → "Pr-arbiter ↔ /arbiter integration").
-  - **Tessera** — the framework that operationalizes both: its `council-review` / `validate-plan` / `bin/review`
+  - **Tessera** — the framework that operationalizes both: its `council-review` / `validate-plan` / `review`
     layer, and eventually the models behind it.
 - **The load-bearing insight — why "route, don't judge" does NOT kill Tessera's fan-out:**
   conclave measured **select-best** (pick one best answer; saturates as models converge → route). **Review is
@@ -1658,7 +1658,7 @@ this section — the dedup fix it prescribes is real but is now step 3, not step
   would be silent and broad), **`workspace`**, **`credentials`**. Five to watch, not 51 to rename.
   No check is claimed for these — the oracle problem above is unchanged; this is a named watch
   list, which is what the observatory is for.
-- **RENAME EXECUTED 2026-07-26** → `skills/tessera-code-review/`. Global mirror re-synced via
+- **RENAME EXECUTED 2026-07-26** → `tessera-code-review` (the skill was then CUT 2026-07-27, ADR-0014). Global mirror re-synced via
   `bin/tessera-sync-skills` (ADR-0010: repo is truth; the old dir was deleted by the sync, not by
   hand). Also updated: the skill's own `name:` frontmatter, `templates/tessera/skill-profiles.json`,
   and the `Skill(...)` permission entry in `.claude/settings.local.json`. `.claude/skills` is a
@@ -1675,9 +1675,9 @@ this section — the dedup fix it prescribes is real but is now step 3, not step
   stated reasons have both moved: (i) "superseded by native `/code-review`" still holds and is
   stronger; but (ii) "the multi-engine bulk needs Node (**absent**)" is **no longer true** — Node
   and npx are installed (fnm); only the `codex`/`gemini` CLIs are still missing. More importantly,
-  `bin/review` already exists as an API-based multi-model review orchestrator (deepseek/kimi/codex),
+  the `review` orchestrator existed as an API-based multi-model runner (deepseek/kimi/codex) — **cut 2026-07-27**, having never run and with 0 of 3 backends functional —
   which means the portability the skill *appears* to protect is really a **provider-layer** concern
-  that `bin/review` owns — while the skill's content is **harness-adapter** layer, the thing
+  that the `review` orchestrator owned — while the skill's content is **harness-adapter** layer, the thing
   design-principles §"Primary harness" strips (*"Codex stays available as a model provider via
   LiteLLM, not as a separate harness"*). Cutting loses no portability; but keeping it also buys
   none, because the provider layer is **not wired to conclave's gateway or LiteLLM**. That gap is

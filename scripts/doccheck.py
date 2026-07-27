@@ -1767,13 +1767,29 @@ def check_adr_execution_recorded() -> list[str]:
         # Backticks also wrap IDENTIFIERS (`hook_distro`, `skillOverrides`), which are not
         # artifacts. Only path-shaped tokens are verifiable, and asserting on the rest would
         # push authors to drop backticks from real prose to appease the checker.
-        paths = [p for p in _BACKTICKED.findall(value) if _looks_like_path(p)]
-        if not paths:
+        # A decision whose execution is a PRUNE names paths that must NOT exist. This check
+        # assumed execution always CREATES, so ADR-0014 — whose whole execution was deleting a
+        # dead review stack — could not record itself honestly: every artifact it named was
+        # correctly absent and read as a false claim. Found 2026-07-27 while accepting it.
+        #
+        # `- **Executed:** <date> — `a`, `b`; removed: `c`, `d``
+        #
+        # The removed half is the STRONGER assertion: it verifies the prune actually happened,
+        # which is exactly the "decided but never built" gap this field exists for. Without it,
+        # a cut that was recorded and never made would have been invisible.
+        created_part, _, removed_part = value.partition("removed:")
+        created = [p for p in _BACKTICKED.findall(created_part) if _looks_like_path(p)]
+        removed = [p for p in _BACKTICKED.findall(removed_part) if _looks_like_path(p)]
+        if not created and not removed:
             bad.append(f"{_rel(adr)}: Executed claims completion but names no artifact in "
                        f"backticks — nothing to verify, so nothing is proven")
-        for p in paths:
+        for p in created:
             if not (ROOT / p.rstrip("/")).exists():
                 bad.append(f"{_rel(adr)}: Executed names `{p}`, which does not exist")
+        for p in removed:
+            if (ROOT / p.rstrip("/")).exists():
+                bad.append(f"{_rel(adr)}: Executed says it removed `{p}`, but it is still "
+                           f"on disk — the cut was recorded, not made")
     return bad
 
 CHECKS = {

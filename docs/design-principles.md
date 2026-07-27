@@ -744,6 +744,21 @@ This is *typical web-app security*, not *healthcare data handling*. Healthcare l
 - **Multi-engine as first-class:** Claude/Codex/Gemini/dual/all. This is Maggy's implementation of the `/arbiter` pattern we'd designed.
 - **ADR gate** (the `adr-gate` skill, split out of `code-review` per ADR-0008) — forces architectural traceability by injecting linked ADRs into review context, drafting new ones for undocumented decisions. Genuinely valuable for healthcare audit trails.
 - **Decision extraction:** review findings auto-create ADRs or log to `decisions.md`. Connects to iCPG ReasonNodes.
+- **Review's position in the loop** *(harvested 2026-07-27, ADR-0014, before the skill was cut)*:
+  RED → GREEN → REFACTOR → **REVIEW** → FIX → VALIDATE → COMMIT. The placement is the idea:
+  review sits *after* refactor and *before* validate, because it catches the classes tests
+  cannot — security, performance, architecture, maintainability — and fixing what it finds must
+  still pass the gate. This is the only part of the 978-line skill not already recorded in this
+  section, which is itself the evidence ADR-0008's audit was right about where the value was.
+
+> **THE SKILL IS CUT (2026-07-27, ADR-0014).** the `tessera-code-review` skill is gone. Its
+> genuinely Tessera-specific part — the ADR gate — was already split out as `skills/adr-gate/`
+> in 2026-07-16; the frameworks above were already harvested here in this pass; and the
+> remaining ~900 lines were vendor-CLI setup (`npm install -g @openai/codex`,
+> `@google/gemini-cli`) plus five GitHub Actions workflow variants. That is **harness-layer**
+> content, which ADR-0014 §2 shows buys no provider portability — so keeping it bought nothing
+> and cutting it costs nothing. It had already caused one live bug by shadowing Claude Code's
+> native `/code-review`.
 
 **Concerns matching the pattern from earlier passes:**
 

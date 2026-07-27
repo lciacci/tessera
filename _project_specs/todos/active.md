@@ -645,11 +645,31 @@ findings backlog empty, no escalations. **All six repos pushed and level with or
       **Do not tune `>2` and `/10` by eye**; that is how three proxy predicates were born.
    3. **The authoring half of the trial is untouched and is the bigger question** — see below.
 
-**D. ADR-0014 / decision D1 — the review backend seam.** Proposed, unanswered. Decides whether
-   review is model-portable (conclave / open-weight / Codex) or Claude-only-by-choice, and it owns
-   the fate of `tessera-code-review`'s 978 lines. Option D ("declare Claude-only, deliberately")
-   is explicitly on the table — the repo has drifted into it while keeping portable-looking
-   artifacts that do not run.
+**D. ~~ADR-0014 / decision D1~~ — DECIDED 2026-07-27: option D, review is Claude-only,
+   deliberately.** Chosen on evidence from the ADR's own re-evaluate trigger #4 ("exercise
+   bin/review's backends"): `kimi` execs a phantom path and had been **broken 15 days
+   unnoticed**, `codex` is absent, `deepseek` is sound but unkeyed (dormant, not dead), and
+   **`bin/review` had never run** — 0 commits since creation. The repo had not degraded its
+   portability; it never had any. Nobody noticed because *a dead backend is indistinguishable
+   from an unused one*.
+   **Executed, not just recorded:** cut `bin/review`, `bin/kimi`, `bin/research` and
+   `skills/tessera-code-review/` (978 lines) — which also closes **ADR-0008's thirteen-day-old
+   `partially`**, the exact entry the `Executed:` field was invented to be able to close.
+   Harvested first per ADR-0007: the ADR gate was already `skills/adr-gate/`, the frameworks
+   were already in design-principles §4.3, and the one unrecorded idea (review's position in the
+   TDD loop) went to design-principles before the delete.
+   **SCOPE LIMIT — the prune stops at review.** `bin/deepseek`, `bin/validate-plan`,
+   `council-review` and `scripts/test_council.py` are KEPT: plan validation is a different
+   capability that merely shares backends, it degrades honestly (exit 2, no verdict), and
+   **ADR-0007 says "do not cut the multi-model stack… do not re-litigate without the design
+   session."** This ADR was scoped to review and does not overrule that.
+   **The fact that will matter at the re-evaluate:** LiteLLM is not hypothetical — conclave
+   already carries `litellm/config.yaml` with a model_list and three api_base entries. If that
+   gateway becomes routine, option **B** is the cheap re-entry, not C.
+   **A checker gap found while executing:** `adr-execution-recorded` assumed execution always
+   CREATES artifacts, so a decision whose execution is a PRUNE could not record itself honestly.
+   It now supports `removed:` and asserts those paths are ABSENT — the stronger half, since it
+   verifies a cut was made rather than merely recorded.
 
 **F. ~~THE DECIDED-BUT-NOT-BUILT GAP~~ — CLOSED 2026-07-26, see A4.** ADRs now carry an append-only `- **Executed:**` line, doccheck `adr-execution-recorded` verifies the named paths exist, and `decision_surface.py` prints `NOT EXECUTED` / `PARTIALLY EXECUTED` before you edit a governed file. **The backfill immediately caught ADR-0008 as `partially` — the review-skill cut is still not done.** The two instances below are kept as the evidence that motivated the fix, not as open work.
 **F-original (the trail): two instances in one day, and nothing detected it.**

@@ -1428,3 +1428,30 @@ def test_not_vacuous_against_the_real_handoff():
     lines = poisoned.splitlines()
     hits = [f for f in doccheck.RETIRED_FIGURES if any(f in l for l in lines)]
     assert hits, "no retired figure appears in the handoff at all — the check has no subject"
+
+
+def test_executed_can_record_a_PRUNE(fake_repo):
+    """A decision whose execution is a DELETION names paths that must NOT exist. The check
+    assumed execution always creates, so ADR-0014 — whose entire execution was cutting a dead
+    review stack — could not record itself: every artifact it named was correctly absent and
+    read as a false claim. Found 2026-07-27 while accepting it."""
+    _adr(fake_repo, "0102", "Accepted", "2026-07-27 — removed: `bin/gone`")
+    assert doccheck.check_adr_execution_recorded() == []
+
+
+def test_a_prune_that_never_happened_is_caught(fake_repo):
+    """The stronger half: it verifies the cut was MADE, not merely recorded — exactly the
+    decided-but-never-built gap this field exists for."""
+    (fake_repo / "bin").mkdir(exist_ok=True)
+    (fake_repo / "bin" / "still-here").write_text("#!/bin/sh\n")
+    _adr(fake_repo, "0103", "Accepted", "2026-07-27 — removed: `bin/still-here`")
+    bad = doccheck.check_adr_execution_recorded()
+    assert any("still on disk" in v for v in bad), bad
+
+
+def test_a_mixed_executed_line_checks_both_halves(fake_repo):
+    """Created artifacts must exist AND removed ones must not, in the same line."""
+    (fake_repo / "bin").mkdir(exist_ok=True)
+    (fake_repo / "bin" / "made").write_text("#!/bin/sh\n")
+    _adr(fake_repo, "0104", "Accepted", "2026-07-27 — `bin/made`; removed: `bin/absent`")
+    assert doccheck.check_adr_execution_recorded() == []

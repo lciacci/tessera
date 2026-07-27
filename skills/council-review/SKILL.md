@@ -10,7 +10,9 @@ effort: high
 # Council of Experts — Multi-Model Validation
 
 > **⚠️ Status (2026-07-15, ADR-0008 FIX).** Command paths corrected `~/bin/` → `bin/`
-> (`bin/validate-plan` and `bin/review` are real and on PATH; `~/bin/` is empty).
+> (`bin/validate-plan` is real and on PATH; `~/bin/` is empty. **`bin/review` was CUT
+> 2026-07-27, ADR-0014** — review is Claude-only by decision, so this skill covers PLAN
+> validation only.)
 > **Not yet provisioned here, and deliberately not rewritten:** `~/.claude/council.yaml`
 > (absent — the binaries do not read it), a `claude-fable-5` wrapper (absent — Claude is the
 > host), and the **Codex** reviewer (`codex` absent). The real roster + config mechanism is a
@@ -44,13 +46,14 @@ bin/validate-plan --threshold 2 ~/.claude/plans/<plan-file>.md
 ### Architecture Decisions (auto_review_architecture)
 When making architectural changes (new services, API redesigns, database schema changes), run:
 ```bash
-bin/review --all "Review this architecture: <summary>"
+# Architecture review: use Claude Code's native /code-review (ADR-0014).
+# bin/review was cut — it had no working backend and had never run.
 ```
 
 ### PR Review (auto_review_prs)
 Before marking a PR as done, run:
 ```bash
-bin/review --all --file <changed-files>
+# Changed-file review: native /code-review (ADR-0014).
 ```
 
 ## Configuration
@@ -91,6 +94,9 @@ Use `POST /api/models/health` to verify all models are responding.
 
 ## How This Skill is Used
 
-This skill is loaded by Claude Code on session start. It provides the behavioral rules for when to invoke multi-model validation. The actual execution happens via `bin/validate-plan` and `bin/review` (real, on PATH).
+This skill is loaded by Claude Code on session start. It provides the behavioral rules for when to invoke multi-model validation. The actual execution happens via `bin/validate-plan` (real, on PATH). **Code review is NOT
+in scope here** — ADR-0014 declared it Claude-only and cut `bin/review`; use the native
+`/code-review`. What survives is the multi-model PLAN validation council, kept deliberately
+per ADR-0007 pending the conclave design.
 
 **Do not skip council validation for CLAUDE-tier tasks.** The whole point is that architecture and security decisions get independent verification before execution.

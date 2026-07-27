@@ -96,7 +96,7 @@ headroom with a labeled defect set, not repeating the press number.
 Do **not** resolve these in this map. They are the ADR's job.
 
 - **D1 — Routing home.** Does Tessera call conclave's gateway directly? Do the `bin/` council
-  wrappers (`bin/validate-plan`, `bin/review`) collapse into conclave calls? Where does the router
+  wrappers (`bin/validate-plan`, and the `review` orchestrator **cut 2026-07-27 per ADR-0014**) collapse into conclave calls? Where does the router
   live — Tessera policy, conclave substrate, or a thin seam between?
 - **D2 — The review gate.** Adopt the S2 union-recall divergence variant as Tessera's
   "is review-fan-out worth it?" gate, and on what labeled corpus is "true finding" scored?
@@ -121,7 +121,7 @@ Three things, from the observatory thread (`docs/observatory.md` → "Tessera �
   is converging"; ADR-0002 (routing via dispatch-time hooks — the routing-decision home);
   ADR-0006 (instrumentation-not-control — why the guards gate builds on instruments, not headlines);
   `.claude/skills/council-review/SKILL.md` (its pending roster/config decision points here — see below);
-  `bin/validate-plan`, `bin/review`.
+  `bin/validate-plan` (the `review` orchestrator was cut 2026-07-27, ADR-0014 — review is Claude-only).
 - **Conclave:** `../conclave/docs/INTEGRATION.md` (stub), `../conclave/docs/design.md`
   § "External validation + scope" (the route-don't-judge null + Phase-0 local-30B≈80B result).
 - **pr-arbiter:** `../pr-arbiter/README.md`, `../pr-arbiter/PHASE_2_FINAL.md` (the variance result +
