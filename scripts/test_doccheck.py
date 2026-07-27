@@ -1364,3 +1364,67 @@ def test_a_typed_read_is_not_flagged_as_untyped(fake_repo):
         "edge_type='CREATES'\n",
     )
     assert doccheck.check_drift_dimensions_have_producers() == []
+
+
+# ── handoff-retires-its-own-figures (A6) ──────────────────────────────────────────────
+#
+# The handoff drifted four ways in one day (2026-07-26) and nothing could see it. doccheck
+# excludes _project_specs/ because specs describe work NOT YET BUILT — naming an absent file
+# is the point there — so the handoff, whose whole job is being true on arrival, had zero
+# automated guard. Two other candidate shapes were prototyped and rejected ON MEASUREMENT;
+# see RETIRED_FIGURES' comment. This is the one that survived.
+
+def _handoff(fake_repo, body: str):
+    d = fake_repo / "_project_specs" / "todos"
+    d.mkdir(parents=True)
+    (d / "active.md").write_text(body)
+
+
+def test_catches_a_retired_figure_stated_as_live(fake_repo):
+    """THE REAL HIT on its first run: the 2026-07-12 backlog still said "Fires at ≥3
+    non-manual compaction_fired" 15 days after ADR-0015 retired that criterion."""
+    _handoff(fake_repo, "- **Mnemos verdict.** Fires at **≥3 non-manual** compaction events.\n")
+    bad = doccheck.check_handoff_retires_its_own_figures()
+    assert any("≥3 non-manual" in v for v in bad), bad
+
+
+def test_a_qualified_figure_is_fine(fake_repo):
+    """The trail is kept on purpose — a retracted number may appear, but must read as dead."""
+    _handoff(fake_repo, "⚠ RETIRED by ADR-0015, kept for the trail.\n"
+                        "*Original text:* Fires at **≥3 non-manual** compaction events.\n")
+    assert doccheck.check_handoff_retires_its_own_figures() == []
+
+
+def test_the_marker_must_be_NEAR_the_figure(fake_repo):
+    """A retraction 50 lines away does not qualify a claim a reader meets here."""
+    _handoff(fake_repo, "SUPERSEDED — see ADR-0015.\n" + ("filler\n" * 20)
+                        + "Fires at **≥3 non-manual** compaction events.\n")
+    assert doccheck.check_handoff_retires_its_own_figures() != []
+
+
+def test_a_missing_handoff_is_a_violation_not_a_pass(fake_repo):
+    """It is the SessionStart channel. Absent must not read as clean."""
+    assert doccheck.check_handoff_retires_its_own_figures() != []
+
+
+def test_an_empty_figure_list_cannot_pass_silently(fake_repo, monkeypatch):
+    """Standing pattern #1 aimed at this check: with nothing to look for it would be green
+    forever while incapable of flagging anything — a vacuously-green check, which is the
+    exact bug found inside `unrunnable-hooks-report-themselves`."""
+    _handoff(fake_repo, "clean\n")
+    monkeypatch.setattr(doccheck, "RETIRED_FIGURES", {})
+    bad = doccheck.check_handoff_retires_its_own_figures()
+    assert any("cannot fail" in v for v in bad), bad
+
+
+def test_not_vacuous_against_the_real_handoff():
+    """Feed the SHIPPED handoff back through the predicate with a retraction marker stripped.
+    A fresh check's green is not evidence until something has been seen to make it red."""
+    real = (doccheck.ROOT / doccheck.HANDOFF).read_text()
+    assert doccheck.check_handoff_retires_its_own_figures() == [], "live handoff should be clean"
+    poisoned = real.replace("RETIRED", "xx").replace("SUPERSEDED", "xx") \
+                   .replace("retired", "xx").replace("superseded", "xx") \
+                   .replace("Original text", "xx").replace("kept for the trail", "xx")
+    lines = poisoned.splitlines()
+    hits = [f for f in doccheck.RETIRED_FIGURES if any(f in l for l in lines)]
+    assert hits, "no retired figure appears in the handoff at all — the check has no subject"

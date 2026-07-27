@@ -12,6 +12,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 > 2026-07-08 and 2026-07-25. The section below covers the 2026-07-26 session; the older
 > `[Unreleased]` content follows it, unchanged.
 
+### 2026-07-27 — a doccheck for the handoff (A6), and two candidates rejected on measurement
+
+The handoff drifted four ways in one day and nothing could see it. `doccheck` excludes
+`_project_specs/` on purpose — specs describe work NOT YET BUILT, so naming an absent file
+is the point there — which left the one document whose whole job is *being true on arrival*
+with no automated guard.
+
+#### Added
+- **doccheck `handoff-retires-its-own-figures`** (34 checks). A hand-curated list of formally
+  retracted figures, each of which must carry a retraction marker within 4 lines of any
+  appearance. **It caught a real one on its first run:** the 2026-07-12 backlog still stated
+  *"Fires at ≥3 non-manual `compaction_fired`"* as a live trigger, 15 days after ADR-0015
+  retired it. Whole-file scope on purpose — an archived criterion stated as live is exactly
+  the trap — and zero false positives once that one was fixed.
+
+#### Rejected, after prototyping against the live file
+- **"a closed entry must name an existing path"** — 12 false positives in 13 entries. Closed
+  handoff items cite commits, ADRs and watcher predicates, not paths. The ADR `Executed:`
+  line works only because it is a structured field with a stated contract.
+- **"an item closed in START HERE must be struck through in its body"** — **fails open.**
+  Scoped to the newest section it found no closed-list at all: the phrasing it keys on was
+  invented on 07-26 and the very next section did not use it. It would have caught the
+  historical case and nothing after.
+
+**The durable lesson is narrower than "check the handoff": a mechanical check needs a
+mechanical subject.** Retired figures are a closed list of exact strings; "is this item's
+status consistent" is a judgement wearing a regex. Those two shapes need a human re-read at
+session end, which is what A6 itself proposed as the fallback.
+
 ### 2026-07-27 — disposition verbs (ADR-0016), and a spend gate that enforced nothing
 
 The same gap surfaced twice from opposite directions: the spend backstop re-firing on

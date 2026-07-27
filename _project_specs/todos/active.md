@@ -458,6 +458,38 @@ findings backlog empty, no escalations. **All six repos pushed and level with or
    the two above survives contact, the honest answer may be that the handoff needs a human re-read
    at session end, not a check — say so rather than shipping a noisy one.
 
+   **RESOLVED 2026-07-27 — ONE of the three shipped, and the other two were rejected on
+   MEASUREMENT rather than taste.** All three were prototyped against the live file first,
+   which is the only reason the answer is trustworthy.
+
+   ✅ **SHIPPED: doccheck `handoff-retires-its-own-figures`** (34 checks). A hand-curated list of
+   formally retracted figures — `2010 user turns`, `5 detections`, `COMPACTION_MIN`,
+   `≥3 non-manual` — each of which must carry a retraction marker within 4 lines. Zero false
+   positives across the whole file, and **it caught a real one on its first run**: the 07-12
+   backlog still stated *"Fires at ≥3 non-manual `compaction_fired`"* as a **live trigger, 15
+   days after ADR-0015 retired it**. A reader landing there would have believed P3 still counts
+   to three. Whole-file scope on purpose — an archived criterion stated as live is exactly the
+   trap. Watched RED against the pre-fix file, and guarded against vacuity two ways (an empty
+   figure list is itself a violation; a missing handoff is a violation, not a pass).
+
+   ❌ **REJECTED — "a closed entry must name an existing path": 12 false positives in 13
+   entries.** Closed handoff items legitimately cite commits (`cb0e267`), ADRs, and watcher
+   predicates — not paths. The ADR `Executed:` line works *only* because it is a **structured
+   field with a stated contract**; handoff prose has none, and demanding one would push authors
+   to fabricate paths to appease the checker.
+
+   ❌ **REJECTED — "an item closed in START HERE must be struck through in its body": it FAILS
+   OPEN, and I proved it against my own file.** Scoped to the newest section it found no
+   closed-list at all, because the `CLOSED: 1, 3, 4` phrasing it keys on was invented on 07-26
+   and **the very next section (07-27, mine) did not use it**. It would have caught the
+   historical case and nothing after it. A check over unenforced prose format goes quietly
+   green — the fail-open class, in the check written to stop drift.
+
+   **So A6's own fallback is the answer for those two shapes: they need a human re-read at
+   session end, not a check.** The durable lesson is narrower than "check the handoff":
+   **a mechanical check needs a mechanical subject.** Retired figures are a closed list of exact
+   strings; "is this item's status consistent" is a judgement wearing a regex.
+
 **A5b. OPEN — the per-bail-out audit, and DO NOT re-open it with a count.**
    I counted `grep -c degraded` per hook (5 of 16), called it a spec-11 hole, and was **wrong
    three times over**: coverage is DISTRIBUTED — toolchain bail-outs → P9, never-ran → the
@@ -2365,7 +2397,13 @@ without re-deriving?* That is FOCUS-004's job. **P3 remains at 0 real.**
   is the only net when a post-compaction turn has no SessionStart.** Cheap check first: does
   PreToolUse stdout reach the model at all?
 
-- **Mnemos compaction-recovery verdict.** Fires at **≥3 non-manual `compaction_fired`**
+- **Mnemos compaction-recovery verdict.** ⚠ **RETIRED 2026-07-27 — the ≥3 threshold below is
+  SUPERSEDED by ADR-0015 and P3 no longer counts toward it.** The trial was watching the wrong
+  event: the restore path is not compaction-specific, so it ran ~121 times against ~3
+  compactions. Kept for the trail; do not read the criterion below as live. *(Found by
+  doccheck's `handoff-retires-its-own-figures` on its first run — a stale trigger stated as
+  current, 15 days after the decision that retired it.)*
+  *Original text:* Fires at **≥3 non-manual `compaction_fired`**
   (currently **0 real**; one `manual` test, correctly excluded). Watcher **P3**. When it fires:
   did `restore_injected` follow each one, and did the restored checkpoint let work resume
   without re-deriving? An **empty log is not a signal** (untested ≠ useless), and a

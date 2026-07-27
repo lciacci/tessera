@@ -1421,6 +1421,77 @@ def check_session_logs_are_repo_anchored() -> list[str]:
     return bad
 
 
+HANDOFF = "_project_specs/todos/active.md"
+
+# Figures and criteria this repo has FORMALLY RETRACTED. Each must not appear in the handoff
+# without a retraction marker near it. Hand-curated on purpose: the value is that the list is
+# short enough to read, and every entry names where it was retired.
+#
+# WHY THIS IS THE ONLY A6 CHECK THAT SHIPPED. Two other shapes were prototyped against the live
+# file and BOTH were rejected on measurement, not taste:
+#   · "a closed entry must name an existing path" -> 12 false positives in 13 entries. Closed
+#     handoff items legitimately cite commits, ADRs and watcher predicates, not paths. The ADR
+#     `Executed:` line works only because it is a STRUCTURED FIELD with a stated contract;
+#     handoff prose has none.
+#   · "an item closed in START HERE must be struck through in its body" -> FAILS OPEN. Scoped to
+#     the newest section it found no closed-list at all, because the phrasing it keys on was
+#     invented one day and the very next section did not use it. A check over unenforced prose
+#     format goes quietly green.
+# A6 said to say so rather than ship a noisy check. Those two shapes need a human re-read.
+RETIRED_FIGURES = {
+    "2010 user turns": "retracted 2026-07-26 — divided by TOOL-RESULT rows, ~19x the real count",
+    "5 detections": "retracted 2026-07-26 — same bad denominator",
+    "COMPACTION_MIN": "retired by ADR-0015 — P3 no longer counts compaction events",
+    "≥3 non-manual": "retired by ADR-0015 — the trial watched the wrong event",
+}
+_RETRACTION_MARKER = re.compile(
+    r"RETRACTED|SUPERSEDED|superseded|Original text|kept for the trail|"
+    r"Quote nothing|RETIRED|retired|do not repeat|Do not repeat",
+    re.IGNORECASE,
+)
+_RETRACTION_WINDOW = 4
+
+
+def check_handoff_retires_its_own_figures() -> list[str]:
+    """A number this repo has retracted must not read as live in the handoff.
+
+    THE FAILURE THIS CATCHES, measured on its first run: the 2026-07-12 backlog still stated
+    "Fires at ≥3 non-manual compaction_fired" as a current trigger — 15 days after ADR-0015
+    retired it. A reader landing there would have believed P3 still counts to three.
+
+    The handoff is the one document whose entire job is being TRUE ON ARRIVAL, and it is the
+    only one `doccheck` can meaningfully assert on inside `_project_specs/` — that directory is
+    otherwise excluded because specs describe work NOT YET BUILT, where naming an absent file is
+    the point. On 2026-07-26 this file drifted four ways in a single day and nothing could see it.
+
+    Deliberately NOT scoped to the newest section: an archived criterion stated as live is
+    exactly the trap, and whole-file scope measured ZERO false positives once the one real hit
+    was fixed. The cost is that retiring a figure means qualifying its old occurrences once,
+    which is the intended behaviour rather than a burden.
+    """
+    handoff = ROOT / HANDOFF
+    if not handoff.is_file():
+        return [f"{HANDOFF} missing — the handoff is the SessionStart channel"]
+    if not RETIRED_FIGURES:
+        return ["RETIRED_FIGURES is empty — this check cannot fail, so it proves nothing"]
+
+    lines = handoff.read_text().splitlines()
+    bad = []
+    for figure, why in RETIRED_FIGURES.items():
+        for i, line in enumerate(lines):
+            if figure not in line:
+                continue
+            window = "\n".join(
+                lines[max(0, i - _RETRACTION_WINDOW):i + _RETRACTION_WINDOW + 1]
+            )
+            if not _RETRACTION_MARKER.search(window):
+                bad.append(
+                    f"{HANDOFF}:{i + 1}: states {figure!r} with no retraction marker "
+                    f"within {_RETRACTION_WINDOW} lines — {why}"
+                )
+    return bad
+
+
 DRIFT_MODULE = "scripts/icpg/drift.py"
 
 
@@ -1706,6 +1777,7 @@ def check_adr_execution_recorded() -> list[str]:
     return bad
 
 CHECKS = {
+    "handoff-retires-its-own-figures": check_handoff_retires_its_own_figures,
     "drift-dimensions-have-producers": check_drift_dimensions_have_producers,
     "chaos-suite-is-reachable": check_chaos_suite_is_reachable,
     "session-logs-are-repo-anchored": check_session_logs_are_repo_anchored,
