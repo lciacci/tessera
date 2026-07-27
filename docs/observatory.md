@@ -290,8 +290,29 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   - **Layer 3 remains unproven.** It logged `restore_injected` and consumed the marker correctly, but its `CONTEXT RESTORED AFTER COMPACTION` text was never *observed* reaching the model. The plumbing ran; the injection is unconfirmed. Operationally moot (Layer 2 had already delivered — exactly the redundancy the design is for), but do not record it as proven.
   - **Prerequisite fix, same day:** PreCompact now reads the hook's stdin and records `trigger` (`manual` vs `auto`), and P3 counts only non-manual events. Without this, three deliberate *tests* of the recovery layer would have delivered the trial's verdict on manufactured evidence — the P2 failure exactly (a predicate firing correctly on a proxy that tracks no real pain). P3 correctly read `0 real (1 manual test excluded)` after the run.
   - **Still untriggered where it counts.** `trigger: auto` — compaction firing unbidden at ≈83% context, mid-turn — has never happened. Same hook, same code path; the only difference is who pulls the trigger. The trial's clock has **not** started.
-- **Status:** Trial **re-armed on an event trigger** (calendar trigger retired). Recovery path **exercised once (manual)**; awaiting a real `auto` event.
-- **When to revisit:** **Not on a date.** When `compaction-log.jsonl` records **≥3 non-manual `compaction_fired` events**, judge: did `restore_injected` follow each one, and did the restored checkpoint actually let work resume without re-deriving? Then keep or drop on evidence. A `compaction_fired` with no matching `restore_injected`, or repeated `restore_missed_stale`, is a **failure** signal — distinct from the **untested** signal of an empty log. **`trigger: manual` events never count**: a hand-run `/compact` is a test of the layer, not evidence about it (`tessera-watch` P3 enforces this).
+- **SUPERSEDED 2026-07-26 by ADR-0015 — the trial was scoped to the wrong event.** Everything below
+  is kept as the trail (the flapping history is itself the evidence), but the framing is retired.
+  `mnemos-session-start.sh` gates on nothing but the checkpoint file existing, so the restore path
+  runs identically on `startup`, `resume`, and `compact`: **541 checkpoints, 121 sessions, ~3
+  compaction events.** The mechanism did not run 3 times, it ran ~121. This entry spent 37 days
+  waiting on the rarest *trigger* — ~2% of invocations — of a mechanism that was running constantly
+  and unwatched. Standing pattern #3, and worse than usual: a proxy normally *correlates* with the
+  pain; this one tracked a fiftieth of it. The 2026-07-26 goal-blob defect was degrading **all ~121
+  restores** and was found via compaction only by accident. See ADR-0015 for the three-way split
+  (T1 deliverability / T2 sufficiency / T3 frequency) and the retirement of `COMPACTION_MIN`.
+- **Status:** Trial **re-scoped, not concluded** (ADR-0015). `tessera-watch` P3 is now
+  `p3_restore_integrity` — a mechanical guard on payload deliverability, explicitly **not** a
+  verdict. **T2 (does the agent resume without re-deriving?) is the sole blocker on a real verdict,
+  and its instrument is unbuilt.** Until then no verdict is available — not keep, not kill.
+- **Historical status (pre-ADR-0015):** Trial **re-armed on an event trigger** (calendar trigger retired). Recovery path **exercised once (manual)**; awaiting a real `auto` event.
+- **When to revisit (CURRENT, per ADR-0015):** when **T2's instrument ships** — a model-emitted
+  receipt, gate-event shaped, recording whether the agent resumed without re-deriving. That is the
+  only thing that can produce a verdict, because `restore_injected` is **a log line the hook writes
+  about itself**, not evidence the model received anything. The log shows four; the model got
+  nothing on all four. Re-scoping from 3 events to 121 gives 121 self-reports — **volume does not
+  fix provenance.** Also revisit if Layer 3 ever delivers to a model even once (it never has), or
+  if a restore is observed failing while P3 is green (that would make T1 a proxy too).
+- **When to revisit (RETIRED — the criterion ADR-0015 replaced):** **Not on a date.** When `compaction-log.jsonl` records **≥3 non-manual `compaction_fired` events**, judge: did `restore_injected` follow each one, and did the restored checkpoint actually let work resume without re-deriving? Then keep or drop on evidence. A `compaction_fired` with no matching `restore_injected`, or repeated `restore_missed_stale`, is a **failure** signal — distinct from the **untested** signal of an empty log. **`trigger: manual` events never count**: a hand-run `/compact` is a test of the layer, not evidence about it (`tessera-watch` P3 enforces this).
 - **Standing caveat:** the trial is about the **compaction-recovery** layer. Mnemos's **session-continuity** layer (checkpoint written on Stop, reloaded on SessionStart) is separately and visibly working — 148 nodes, 134 checkpoints, restores every session. The two got conflated in the original framing. Session-continuity earns its keep on its own; do not let its success vouch for the untested layer, or its trial's failure condemn it.
 
 ### Mnemos/iCPG installed on homebrew system python — venv is the durable fix

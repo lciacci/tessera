@@ -118,10 +118,36 @@ the layer is useless, only that it is untested.
 
 **`trigger` is load-bearing, not decoration.** `auto` = context filled up: the real
 event this layer exists for. `manual` = a hand-run `/compact`, i.e. a **test** of the
-layer. A test is never evidence about the thing it tests — so `tessera-watch` P3 (the
-Mnemos kill/keep verdict) counts only non-manual events. Without this split, three
-deliberate test compactions would trip the trial's verdict on data we manufactured.
-Compact by hand as often as you like; it cannot contaminate the trial.
+layer. A test is never evidence about the thing it tests. Without this split, three
+deliberate test compactions would trip a verdict on data we manufactured. Compact by
+hand as often as you like; it cannot contaminate the trial.
+
+**BUT THE TRIAL WAS WATCHING THE WRONG EVENT (ADR-0015, 2026-07-26).** `tessera-watch`
+P3 is no longer a compaction counter — it is `p3_restore_integrity`. The restore path
+is **not compaction-specific**: `mnemos-session-start.sh` gates on nothing but the
+checkpoint file existing, so it runs identically on `startup`, `resume`, and `compact`.
+
+```
+checkpoints 541 · sessions ingested 121 · compaction_fired ~3
+```
+
+**The mechanism did not run 3 times. It ran ~121.** Compaction is one *trigger* among
+several — session end, crash, `/clear`, restart — for a mechanism whose job is recovery
+across **any** context discontinuity. The old predicate counted ~2% of invocations and
+reported the mechanism untested for 37 days. Not academic: the goal-blob defect fixed
+that day (checkpoint joined every never-evict GoalNode → 11,119 chars → overflowed the
+SessionStart output limit → the harness delivered a 2KB preview) was degrading **all
+~121 restores**, and compaction found it by accident.
+
+So when reading this file's compaction sections: they describe **one trigger**, not the
+mechanism. Three questions now, with different evidence and venues —
+**T1** deliverability (guarded by P3, mechanical, green today);
+**T2** sufficiency, *does the agent resume without re-deriving* — **the real question,
+instrument UNBUILT, so no verdict on Mnemos is available**;
+**T3** compaction frequency (blocked by the empty PreCompact payload, demoted to
+informational). And note `restore_injected` is **a log line the hook writes about
+itself** — the log shows four, the model received nothing on all four. Volume of
+self-reports is not evidence.
 
 ### Manual CLI:
 ```bash

@@ -33,7 +33,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-COMPACTION_MIN = 3      # mnemos trial: judge after ≥3 compaction_fired events
+# ADR-0015 retired COMPACTION_MIN as a verdict threshold: it counted the rarest TRIGGER
+# (~3 events) of a restore path that actually ran ~121 times, on every session start.
+RESTORE_BUDGET_BYTES = 12_000   # see p3_restore_integrity; 18,755 was observed to SPILL
+RESTORE_REQUIRED_FIELDS = ("goal", "active_constraints", "task_narrative")
 SKILL_MIN = 60          # two-stage skill routing earns its keep at 60+ skills
 GRADUATION_RUNS = 3     # a core predicate firing this many runs running → graduation-a
 GATE_LABEL_MIN = 20     # unlabeled post-backstop gates before should_fire labeling earns its slot
@@ -63,45 +66,52 @@ def p1_hook_drift(root: Path) -> tuple[bool, str]:
 # so it would add a layer, not consolidate. See observatory "Override mechanism".
 
 
-def p3_compaction(root: Path) -> tuple[bool, str]:
-    """Real (auto) compaction_fired count — the trigger for the COMPACTION-RECOVERY trial.
+def p3_restore_integrity(root: Path) -> tuple[bool, str]:
+    """Is the restore payload DELIVERABLE? (ADR-0015. Was: count compaction events.)
 
-    Scoped in the name (renamed from "P3 mnemos-trial" 2026-07-26). Mnemos is three layers
-    with three separate verdicts, and lumping them under one label let the least testable
-    layer hold the others hostage: session-continuity (Stop-hook checkpoint + SessionStart
-    reload) is independently demonstrated and NOT on trial — design-principles has said so
-    since 2026-07-09 — and the analysis layer (haziness/correction/divergence) is producing
-    data. Only compaction recovery is untested. This predicate gates that half alone.
+    ── WHY THIS PREDICATE CHANGED SHAPE ──────────────────────────────────────────────────
 
-    Excludes `trigger: manual` — a hand-run `/compact` is a *test* of the recovery layer,
-    not evidence about it. Counting tests as evidence would let three deliberate test
-    compactions deliver the trial's verdict on manufactured data: the P2 failure exactly
-    (a predicate firing correctly on a proxy that tracks no real pain).
+    The old P3 asked "has compaction fired ≥3 times (non-manual)?" and never fired in 37 days.
+    The premise was false. `mnemos-session-start.sh:30` gates on nothing but the checkpoint
+    file existing, so the restore path runs identically on `startup`, `resume`, AND `compact`:
 
-    A MISSING trigger key is counted as real — pre-2026-07-11 entries predate the tagging, and
-    any compaction from back then was necessarily an auto one.
+        checkpoints 541 · sessions ingested 121 · compaction_fired ~3
 
-    ── `trigger: "unknown"` IS NOT THE SAME AS A MISSING KEY. Fixed 2026-07-12. ─────────────
+    The mechanism did not run 3 times, it ran ~121. P3 counted the rarest trigger — ~2% of
+    invocations — and reported the mechanism as untested. Standing pattern #3, and worse than
+    usual: a proxy normally CORRELATES with the pain; this one tracked a fiftieth of it.
 
-    The PreCompact hook defaults to the literal string `"unknown"` and overwrites it only if it
-    can read `.trigger` off stdin. So `"unknown"` means **the tagger ran and could not classify
-    the event** — a measurement failure, not a measurement.
+    Not academic. The 2026-07-26 defect (checkpoint.py joined every GoalNode unbounded →
+    11,119 chars → overflowed the SessionStart output limit → the harness delivered a 2KB
+    preview instead of the checkpoint) was degrading ALL ~121 restores. Compaction found it
+    by accident; a predicate scoped to the real event would have caught it in week one.
 
-    This predicate lumped it into `else: real += 1`. So an event we cannot classify was silently
-    promoted to **evidence for a kill/keep trial** — which is the exact contamination the whole
-    trigger-tagging fix was built to prevent, arriving through the one door nobody watched.
+    ── WHAT THIS DOES AND DOES NOT CLAIM ─────────────────────────────────────────────────
 
-    It was live: a compaction fired on 2026-07-12 with `trigger: "unknown"`, and P3 read it as
-    `1 real`. The hook itself is fine (fed `manual` and `auto` on stdin, it records both
-    correctly) — Claude Code simply sent no trigger field for that event, and it is not
-    reconstructable after the fact.
+    GREEN HERE MEANS "THE PAYLOAD SURVIVES DELIVERY". It does NOT mean restore works. That
+    question is T2 in ADR-0015 (does the agent resume without re-deriving?), only the model
+    can answer it, and its instrument IS NOT BUILT. Reading this predicate as a verdict on
+    Mnemos would mint proxy #5 after P2 (verb count), old-P4 (project count), and sqlfluff
+    (file existence). It is a REGRESSION GUARD on an observed failure, nothing more.
 
-    So: **unknown is excluded from BOTH counts and reported LOUDLY.** A verdict must never rest
-    on an event whose provenance the instrument could not read, and an instrument that cannot
-    read should say so rather than guess. (docs/observatory.md → "Fail-open everywhere".)
+    Size is a direct measure, not a stand-in: checkpoint JSON tracks delivered bytes ~1:1
+    (8,508 → 8,206 rendered; pre-fix ≈18,755 → 18,248, which SPILLED to a file and handed
+    the model a 2KB preview). Budget sits clearly below the observed failure point.
+
+    Compaction events are still TALLIED and reported — they remain the only evidence about
+    T3 (frequency), which ADR-0015 demoted from blocking to informational. But `unknown` no
+    longer fires on its own: the harness sends an empty PreCompact payload
+    (`payload_probe {"len": 2, "keys": []}`), so it is a STANDING state, and a predicate that
+    fires forever on an unfixable fact is noise. What DOES fire is a probe showing any keys —
+    an EVENT meaning T3 just became answerable here (ADR-0015 re-evaluate trigger).
     """
+    ck = root / ".mnemos" / "checkpoint-latest.json"
     log = root / ".mnemos" / "compaction-log.jsonl"
+
+    # ── T3 tally: informational. Only the payload_probe can FIRE, because it is the one
+    #    EVENT here; the rest is a standing state that would alarm forever. ──
     real = manual = unknown = 0
+    probe_keys: list[str] = []
     if log.exists():
         for line in log.read_text().splitlines():
             try:
@@ -110,45 +120,60 @@ def p3_compaction(root: Path) -> tuple[bool, str]:
                 continue
             if event.get("event") != "compaction_fired":
                 continue
+            probe = event.get("payload_probe") or {}
+            if isinstance(probe, dict):
+                probe_keys.extend(probe.get("keys") or [])
             trigger = event.get("trigger", "__absent__")
             if trigger == "manual":
                 manual += 1
             elif trigger == "unknown":
-                unknown += 1          # the tagger failed. Not evidence, not a test. Unusable.
+                unknown += 1      # tagger ran, could not classify. Not evidence, not a test.
             else:
-                real += 1             # "auto", or a pre-tagging entry with no key at all
-    notes = []
-    if manual:
-        notes.append(f"{manual} manual test(s) excluded")
-    if unknown:
-        notes.append(f"⚠️ {unknown} UNCLASSIFIABLE (trigger unreadable — NOT counted as evidence)")
-    note = f" ({'; '.join(notes)})" if notes else ""
+                real += 1         # "auto", or a pre-tagging entry with no key at all
+    tally = (f"compaction {real} auto / {manual} manual / {unknown} unclassifiable "
+             f"[T3, informational per ADR-0015]")
 
-    # THE WARNING USED TO BE UNREACHABLE. `render()` prints only FIRED predicates, so the
-    # "N UNCLASSIFIABLE" note above was embedded in a message that displayed only when
-    # `real >= COMPACTION_MIN` — i.e. the alarm that the instrument could not read an event was
-    # gated on the instrument having succeeded three times. Two unclassifiable events sat
-    # invisible from 2026-07-12 to 07-26. A detector whose failure-report requires its own
-    # success is the fail-open shape this repo keeps finding, here inside the watcher itself.
-    #
-    # So there are now TWO fire conditions, because they are two different facts:
-    #   real >= MIN      -> enough real evidence exists; go judge the trial.
-    #   unknown, no real -> events ARE firing but none are classifiable. The criterion may be
-    #                       unsatisfiable as instrumented, which is a finding about the
-    #                       INSTRUMENT, not about Mnemos. Snooze it if that is understood.
-    if real >= COMPACTION_MIN:
-        return True, (f"{real} real compaction_fired{note} "
-                      f"(≥{COMPACTION_MIN} → judge the COMPACTION-RECOVERY half)")
-    if unknown and real == 0:
+    # ── T1: is the payload deliverable at all? ──
+    if not (root / ".mnemos").is_dir():
+        return False, "no .mnemos/ — restore path not installed here"
+    if not ck.exists():
         return True, (
-            f"{unknown} compaction event(s) fired but NONE were classifiable, and 0 real ones "
-            f"have ever been recorded{note}. The PreCompact hook defaults `trigger` to "
-            f'"unknown" and overwrites it only from stdin, so this harness may never emit a '
-            f"countable event — meaning P3's ≥{COMPACTION_MIN} bar is unreachable HERE and the "
-            f"Mnemos trial cannot conclude on this instrument. Judge the compaction half on a "
-            f"real Claude Code CLI session, or re-instrument. Snooze once understood.")
-    return False, (f"{real} real compaction_fired{note} "
-                   f"(≥{COMPACTION_MIN} → judge the COMPACTION-RECOVERY half)")
+            f"no .mnemos/checkpoint-latest.json — the restore path has NOTHING to deliver on "
+            f"the next session start, and EVERY layer reads this one file. {tally}")
+
+    size = ck.stat().st_size
+    try:
+        data = json.loads(ck.read_text())
+    except ValueError:
+        return True, (
+            f"checkpoint-latest.json is not valid JSON ({size:,}b) — `mnemos resume` cannot "
+            f"render it, so every session start restores nothing. {tally}")
+
+    missing = [f for f in RESTORE_REQUIRED_FIELDS if f not in data]
+    if missing:
+        return True, (
+            f"checkpoint is missing {', '.join(missing)} — the renderer reads these fields, so "
+            f"those sections silently vanish from every restore. {tally}")
+
+    if size > RESTORE_BUDGET_BYTES:
+        return True, (
+            f"checkpoint-latest.json is {size:,}b, over the {RESTORE_BUDGET_BYTES:,}b delivery "
+            f"budget. Checkpoint bytes track delivered bytes ~1:1, and ≈18,755b was observed to "
+            f"SPILL: the harness wrote the block to a file and handed the model a 2KB preview, "
+            f"so Constraints/Progress/Files never arrived. This degrades EVERY session start, "
+            f"not just compaction. Check the goal field first — goals are never-evict and one "
+            f"is minted per ingested session. {tally}")
+
+    if probe_keys:
+        return True, (
+            f"PreCompact payload_probe now reports keys {sorted(set(probe_keys))} — the harness "
+            f"has started sending a payload, so T3 (compaction frequency) may be answerable "
+            f"HERE for the first time. Re-read ADR-0015's re-evaluate triggers. {tally}")
+
+    return False, (
+        f"restore payload deliverable: {size:,}b / {RESTORE_BUDGET_BYTES:,}b, required fields "
+        f"present. NOT a verdict on restore WORKING — that is T2, and its instrument is "
+        f"unbuilt (ADR-0015). {tally}")
 
 
 def p4_downstream(root: Path) -> tuple[bool, str]:
@@ -629,7 +654,7 @@ def _resolve_label(query: str) -> str | None:
 
 PREDICATES = {
     "P1 hook-drift": p1_hook_drift,
-    "P3 mnemos-compaction-trial": p3_compaction,
+    "P3 mnemos-restore-integrity": p3_restore_integrity,
     "P4 downstream-drift": p4_downstream,
     "P5 skill-routing": p5_skills,
     "P6 escalations": p6_escalations,

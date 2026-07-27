@@ -6,40 +6,50 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-07-26 late: SPEC 11 CLOSED, 8/8 green + fleet rolled; watch fires ZERO; TWO DESIGN CALLS OPEN — the 37-day Mnemos trial is unfalsifiable by construction, and decided-but-not-built decisions are undetectable)
+## Handoff — pick up here (2026-07-26 latest: COMPACTION TEST RAN → the 37-day Mnemos trial was watching the WRONG EVENT; re-scoped in ADR-0015, P3 rewritten; 3 fail-opens found — a stale global hook tier, and the spend guard allowing spend on a cwd shift)
 
 *(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
 Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering.)*
 
 ### THE ONE THING TO KNOW
 
-> ### ⏳ COMPACTION TEST IN FLIGHT (2026-07-26) — READ THIS FIRST IF YOU JUST RESUMED
-> A **deliberate `/compact` was run to answer the Mnemos mechanism question**, which has been
-> unanswerable for 37 days. If you are reading this just after a compaction, **you are the test.**
+> ### ✅ COMPACTION TEST RAN (2026-07-26). The trial was watching the WRONG EVENT — ADR-0015.
+> The `/compact` was run. Both layers failed, for two independent reasons, both now fixed
+> (`6577f7c`). Then the diagnosis invalidated the trial's premise, which is the bigger result.
 >
-> **PRE-COMPACTION BASELINE** (`.mnemos/compaction-log.jsonl` = 7 lines):
-> `compaction_fired manual:1 · compaction_fired unknown:2 · restore_injected:4`
-> Repo clean, level with origin.
+> **WHAT THE TEST FOUND**
+> 1. **Layer 2 delivered, then truncated.** All 13 sections were produced (18,248b), but the
+>    harness spilled it to a file and handed the model a **2KB preview** — the goal blob arrived,
+>    Constraints / Progress / Key Files / Git State did not. Cause: `checkpoint.py` joined every
+>    active GoalNode unbounded (goals are never-evict AND one is minted per ingested session) →
+>    **98 nodes / 11,119 chars, 60% of the checkpoint.** The restore blob outgrew its own delivery
+>    channel. Capped to 8 most recent: **11,119 → 872 chars, −92%.**
+> 2. **Layer 3 never injected. Still n=0, ever.** Its 300s staleness gate tripped at 33 min,
+>    **deleted the marker, and emitted nothing** — the restore destroyed by its own freshness
+>    check. The gate also guarded the wrong thing (injected text is read live from
+>    `checkpoint-latest.json`, so marker age never implied stale content). TTL now 24h, and the
+>    stale path now speaks instead of exiting silent.
+> 3. **The global hook tier was two days stale and missing a hook entirely** — `~/.claude/templates/`
+>    had **zero** `additionalContext` in all three PreToolUse hooks, so the whole fleet ran Layer 3,
+>    fatigue/intent, and decision-surface into the debug log. `./install.sh` fixed it; **nothing
+>    detects it** (item 4).
 >
-> **WHAT TO OBSERVE — record honestly, including a null result:**
-> 1. Did a `MNEMOS SESSION RESUME` block appear in context? → **Layer 2** (SessionStart). Prior
->    evidence n=1, from 07-11.
-> 2. Did a `CONTEXT RESTORED AFTER COMPACTION` block appear? → **Layer 3** (PreToolUse). Prior
->    evidence **n=0** — and structurally so: all 3 past compactions predate the channel fix
->    (`1750337`, 07-24 13:06), so Layer 3 emitted to the debug log every time. **This is the
->    first-ever chance to observe it through a channel that works.**
-> 3. Diff the log against the baseline above: a new `compaction_fired` (expect `trigger: manual`
->    or `unknown`) and whether `restore_injected` follows.
+> **THE RESULT THAT MATTERS — the premise was false.** `mnemos-session-start.sh` gates on nothing
+> but the checkpoint file existing, so the restore path runs identically on `startup`, `resume`,
+> and `compact`: **541 checkpoints, 121 sessions, ~3 compactions.** The mechanism did not run 3
+> times — **it ran ~121.** P3 counted the rarest trigger (~2%) and called the mechanism untested
+> for 37 days. The goal-blob defect was degrading **all ~121 restores**; compaction found it by
+> accident. Standing pattern #3, worse than usual — a proxy normally *correlates* with the pain.
 >
-> **ADMISSIBILITY — do not get this wrong, it is why the trial has flapped for 37 days.**
-> A manual `/compact` is **valid evidence about MECHANISM** (does recovery work) and **invalid
-> about FREQUENCY** (does compaction happen often enough to matter). Pattern #7 bars the second,
-> not the first. P3 already excludes `manual`, so this test cannot contaminate it.
+> **DO NOT re-litigate this as a compaction question.** ADR-0015 splits it three ways:
+> **T1** deliverability (P3 now guards it, mechanical, green) · **T2** sufficiency — *does the
+> agent resume without re-deriving?* — **the real question, instrument UNBUILT** · **T3**
+> frequency (blocked by the empty PreCompact payload, demoted to informational).
+> **No verdict on Mnemos is available until T2 exists** — not keep, not kill.
 >
-> **IF LAYER 3 SHOWS NOTHING, that is decisive too** — it means the 07-24 fix did not work and the
-> answer is DROP, not keep. Either outcome ends the argument; that is the point. **Do not
-> re-open the framing. Record the observation, then draft the ADR** (priority A below), which
-> must carry an `Executed when:` field naming its own artifacts (see item F).
+> **The deepest finding, which the re-scope does NOT solve:** `restore_injected` is **a log line
+> the hook writes about itself.** The log shows four; the model received nothing on all four.
+> Going from 3 events to 121 gives 121 self-reports. **Volume does not fix provenance.**
 
 
 **START HERE: the ranked next-session priorities are A–E, at the top of "Open, in priority
@@ -173,39 +183,49 @@ Add a line only when a lesson recurs; the value is that the list is short enough
 
 **NEXT-SESSION PRIORITIES (2026-07-26 late). Items 1 and 3 below are CLOSED; the live work is:**
 
-**A. P3 / the Mnemos compaction trial — a TRIAL redesign, not a predicate tweak.**
-   **The trial is 37 days old — the entire life of the repo (mnemos arrived 2026-06-19) — and has
-   never once been answerable.** It is unfalsifiable BY CONSTRUCTION, from two constraints that
-   are each individually correct: pattern #7 rightly excludes manual `/compact` from the count
-   (added 07-11), and this harness never emits a countable auto event (it sends PreCompact `{}` —
-   proven by `payload_probe: {"len":2,"keys":[]}`). Together, no evidence can ever accumulate. The
-   07-11 exclusion was RIGHT and it closed the last path to a verdict; nobody noticed, because a
-   trial that cannot conclude looks exactly like one that has not concluded yet.
-   **THE FIX IS TO SPLIT THE QUESTION — the trial conflated two, and pattern #7 governs only one:**
-   - *Does compaction happen often enough to matter?* Needs a real auto event; a test cannot say.
-     **Un-runnable here — relocate to a real Claude Code CLI, where P3 works UNMODIFIED.**
-   - *When compaction happens, does recovery work?* A test is exactly how you check this — pattern
-     #7 bars a test as evidence about FREQUENCY, not about MECHANISM. **Answerable right now, on
-     data already collected: the log holds 3 `compaction_fired` and 4 `restore_injected`.**
-   So: P3 is not broken and needs no minor change. Retire it *here* (it cannot fire in this venue),
-   answer the mechanism question from the existing log, and let the frequency question travel with
-   the venue. A candidate local predicate: a `compaction_fired` with no `restore_injected`
-   following — real health, detectable now, quiet-and-honest rather than quiet-and-vacuous.
-   *(Superseded framing, kept for the trail: this was first written as "retire P3 and replace it
-   with something similar." That was too small — the predicate was never the problem.)*
+**A. ~~P3 / the Mnemos compaction trial~~ — RESOLVED 2026-07-26 by ADR-0015. The trial was
+   watching the wrong event.** Re-scope, rewritten predicate, and both fixes shipped
+   (`6577f7c` + this session). Read `docs/adr/0015-restore-trial-rescope.md`, not the superseded
+   reasoning below. **What is LEFT of A is exactly one thing:**
 
-**A-note. Original P3 framing —** P3 is snoozed 90d on proof: the `payload_probe` answered
-   and this harness sends PreCompact `{}` — `{"len": 2, "keys": []}`, no trigger, no session_id.
-   **The snooze is a holding action, not a resolution.** Its revisit trigger ("a payload_probe
-   showing any keys") can almost certainly never fire here, so in 90 days P3 returns with the
-   identical message and nothing will have changed. **P3 is a TRIAL GATE, not a health monitor** —
-   it counts down to a decision, and that decision (judge the compaction half on a real Claude
-   Code CLI) has been made and the venue has moved. A trial gate whose trial relocated has no job
-   left here. **Proposed (Lorenzo's call): RETIRE P3, replace with a predicate that can fire in
-   this venue** — e.g. a `compaction_fired` with no `restore_injected` following it, which is real
-   compaction health and detectable now (log currently 3 fired / 4 restored, so it would be quiet
-   and honest rather than quiet and vacuous). Precedent: three predicates already retired for
-   measuring the wrong thing.
+   **A-live. Build T2's instrument — the only thing that can produce a verdict on Mnemos.**
+   *Does the agent resume, after a discontinuity, without re-deriving what it was doing?* Only
+   the model can answer, so it takes the **gate-event shape**: model-emitted, audited, backstopped
+   by a Stop hook that diffs claimed against detected. **Until it exists no verdict is available
+   — not keep, not kill**, and reading P3's green as "restore works" repeats the category error
+   the old P3 encoded (P3 answers T1, deliverability, only).
+   **The trap to design against:** `restore_injected` is a log line the hook writes about itself.
+   The log shows 4; the model received nothing on all 4. **A receipt written by the sender is not
+   a receipt.** T2 must be reported by the receiver.
+
+   *(Superseded framing, kept for the trail — it was RIGHT that the trial was unfalsifiable and
+   WRONG about why. It blamed pattern #7 plus the empty PreCompact payload closing the last path
+   to evidence, and proposed relocating the venue. The actual cause: the restore path is not
+   compaction-specific at all — it runs on every session start, ~121 times vs ~3 compactions. The
+   evidence was never scarce, it was counted in the wrong place. Relocating would have preserved
+   the category error and gathered auto-compaction events, the question that matters least.)*
+
+**A2. NEW 2026-07-26, and the only one with live blast radius: the spend guard fails OPEN on a
+   cwd shift.** `.claude/scripts/tessera-spend-guard.sh:43` sets `PROJECT_DIR="${CWD:-$PWD}"` from
+   the hook's **session cwd**, not `CLAUDE_PROJECT_DIR`. A plain `cd scripts` in a Bash call made
+   it resolve `scripts/scripts/spend/guard.py` → absent → **spend-committing commands ALLOWED**,
+   for ~13 min this session. Standing pattern #4 (a path resolved through a mutable lookup)
+   recurring inside the deny-by-default gate on external spend.
+   **Spec 11 worked** — it emitted `degraded` rather than failing silently. **But the report
+   landed in `scripts/.tessera/logs/` (cwd-relative), where `tessera-watch` P13 reading the repo
+   root will never see it.** So the alarm fired into an empty room: pattern #9 one level down, in
+   the reporter rather than the reported. Two fixes, and the second matters more than the first:
+   anchor `PROJECT_DIR` to `CLAUDE_PROJECT_DIR`, and make `tessera-degraded` write to the project
+   root rather than `$PWD` — a degraded reporter that can be silenced by `cd` is not a reporter.
+   *(An untracked `scripts/.tessera/` is left on disk as the evidence; delete once dispositioned.)*
+
+**A3. Nothing detects global-tier staleness (this is item 4, promoted — it just cost the fleet).**
+   `~/.claude/templates/` held **7 stale hooks and was missing `tessera-decision-surface.sh`
+   entirely**; all three PreToolUse hooks had **zero** `additionalContext`, so the 07-24 channel
+   fix never reached any downstream. `./install.sh` is the only propagation and it is manual.
+   doccheck's `hooks-match-templates` covers `.claude/scripts/` ↔ `templates/` — **the third tier
+   is unguarded.** Fixed by hand this session (17/17 byte-identical); the *detector* is still
+   missing, so it will drift again. Standing pattern #5, violated by time rather than a missing `cp`.
 
 **B. Correction-detection recall — the self-evaluation thread's real bottleneck.** 2010 user
    turns across 8 sessions, 5 detections. Corrections arrive interrogatively; the detector is

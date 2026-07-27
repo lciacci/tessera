@@ -1,8 +1,10 @@
 """Predicate checks for bin/tessera-watch. Run: pytest scripts/test_tessera_watch.py"""
+import datetime as _dt
 import json
 from importlib.util import module_from_spec, spec_from_loader
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
+from types import SimpleNamespace
 
 _path = Path(__file__).resolve().parent.parent / "bin" / "tessera-watch"
 _loader = SourceFileLoader("tessera_watch", str(_path))
@@ -39,25 +41,6 @@ def test_p1_fires_when_content_differs(tmp_path):
     (root / ".claude" / "scripts" / "h.sh").write_text("echo NEW\n")
     (root / "templates" / "h.sh").write_text("echo OLD\n")
     assert tw.p1_hook_drift(root)[0] is True
-
-
-def test_p3_counts_only_compaction_fired_events(tmp_path):
-    root = _root(tmp_path)
-    log = root / ".mnemos" / "compaction-log.jsonl"
-    log.parent.mkdir()
-    lines = [
-        {"event": "compaction_fired"},
-        {"event": "restore_injected"},      # not counted
-        {"event": "compaction_fired"},
-        {"event": "compaction_fired"},
-    ]
-    log.write_text("\n".join(json.dumps(x) for x in lines) + "\nNOT JSON\n")
-    fired, detail = tw.p3_compaction(root)
-    assert fired is True and "3 real compaction_fired" in detail  # ≥3, malformed line ignored
-
-
-def test_p3_absent_log_is_zero_not_error(tmp_path):
-    assert tw.p3_compaction(_root(tmp_path))[0] is False
 
 
 def test_p5_counts_skill_dirs(tmp_path):
@@ -266,106 +249,6 @@ def test_p7_ignores_already_labeled_gates(tmp_path):
     assert fired is False
 
 
-def _compaction(trigger=None):
-    e = {"ts": 1.0, "event": "compaction_fired"}
-    if trigger:
-        e["trigger"] = trigger
-    return json.dumps(e)
-
-
-def test_p3_excludes_manual_test_compactions(tmp_path):
-    """A hand-run /compact TESTS the recovery layer; it is not evidence about it.
-
-    Without this, three deliberate test compactions would deliver the Mnemos trial's
-    verdict on manufactured data — the P2 failure exactly.
-    """
-    m = tmp_path / ".mnemos"
-    m.mkdir()
-    (m / "compaction-log.jsonl").write_text("\n".join(_compaction("manual") for _ in range(5)))
-    fired, detail = tw.p3_compaction(tmp_path)
-    assert fired is False
-    assert "0 real" in detail and "5 manual" in detail
-
-
-def test_p3_counts_auto_compactions(tmp_path):
-    m = tmp_path / ".mnemos"
-    m.mkdir()
-    (m / "compaction-log.jsonl").write_text("\n".join(_compaction("auto") for _ in range(3)))
-    assert tw.p3_compaction(tmp_path)[0] is True
-
-
-def test_p3_counts_untagged_legacy_entries_as_real(tmp_path):
-    """Entries predating the tagging (2026-07-11) were necessarily auto compactions."""
-    m = tmp_path / ".mnemos"
-    m.mkdir()
-    (m / "compaction-log.jsonl").write_text("\n".join(_compaction() for _ in range(3)))
-    assert tw.p3_compaction(tmp_path)[0] is True
-
-
-# ── P3: an unclassifiable compaction must NOT become evidence ─────────────────
-
-def test_p3_does_not_count_an_unreadable_trigger_as_real(tmp_path):
-    """`trigger: "unknown"` is the PreCompact hook's DEFAULT — it means the tagger ran and
-    could not classify the event. P3 lumped it into `else: real += 1`, silently promoting a
-    measurement FAILURE into evidence for a kill/keep trial. That is the exact contamination
-    the trigger-tagging fix was built to prevent, arriving through the one door nobody watched.
-
-    It was live: a compaction fired 2026-07-12 tagged `unknown`, and P3 read it as `1 real`.
-
-    UPDATED 2026-07-26 — and this test is itself the cautionary tale. Its final assertion read
-    `assert "UNCLASSIFIABLE" in note, "must be reported LOUDLY, not hidden"`. That checked the
-    warning was in the STRING; it never checked the string would ever be SHOWN. `render()`
-    prints only FIRED predicates, and P3 returned `fired=False` here — so the loud warning was
-    unreachable, and two unclassifiable events sat invisible for a fortnight. Pattern #9 inside
-    a unit test: proving a mechanism produced text is not proving anything delivered it.
-
-    The invariant that MUST hold is unchanged and still asserted: unknown is never counted as
-    real. What changed is that this state now FIRES on its own terms — not as "the trial is
-    ready", but as "events are firing and none are countable, so the criterion may be
-    unreachable on this instrument"."""
-    log = tmp_path / ".mnemos"; log.mkdir()
-    (log / "compaction-log.jsonl").write_text(
-        '{"event":"compaction_fired","trigger":"unknown"}\n'
-        '{"event":"compaction_fired","trigger":"manual"}\n'
-    )
-    fired, note = tw.p3_compaction(tmp_path)
-    assert "0 real" in note, "an unreadable trigger must NEVER be promoted to real evidence"
-    assert "UNCLASSIFIABLE" in note, "an unreadable trigger must be reported LOUDLY, not hidden"
-    assert fired is True, (
-        "…and 'LOUDLY' means the predicate must FIRE — render() shows fired predicates only, so "
-        "a warning in a non-fired message is a warning nobody ever sees")
-    assert "unreachable" in note, "must say the bar may be unmeetable here, not just count zero"
-
-
-def test_p3_stays_quiet_when_nothing_has_ever_fired(tmp_path):
-    """No compaction events at all is NOT a degraded instrument — it is an untriggered trial.
-
-    Guards the new fire condition against the obvious over-fire: a fresh repo with an empty or
-    absent log must stay silent, or P3 becomes noise on every project that has never compacted.
-    """
-    (tmp_path / ".mnemos").mkdir()
-    fired, note = tw.p3_compaction(tmp_path)
-    assert fired is False
-    assert "0 real" in note
-
-
-def test_p3_counts_auto_and_pre_tagging_entries_as_real(tmp_path):
-    """A MISSING key is a pre-2026-07-11 entry — necessarily an auto compaction. That is
-    different from an explicit "unknown", and must still count."""
-    log = tmp_path / ".mnemos"; log.mkdir()
-    (log / "compaction-log.jsonl").write_text(
-        '{"event":"compaction_fired","trigger":"auto"}\n'
-        '{"event":"compaction_fired"}\n'
-    )
-    fired, note = tw.p3_compaction(tmp_path)
-    assert "2 real" in note
-
-
-# ── snooze: G-a-earned ack that quiets a predicate for a bounded, auditable window ──
-import datetime as _dt
-from types import SimpleNamespace
-
-
 def test_active_snooze_labels_respects_expiry(tmp_path):
     root = _root(tmp_path)
     now = _dt.datetime(2026, 7, 16, tzinfo=_dt.timezone.utc)
@@ -507,3 +390,151 @@ def test_p4_can_go_green(tmp_path, monkeypatch):
 
     (proj / ".claude" / "scripts" / "mnemos-pre-compact.sh").write_text("current\n")
     assert tw.p4_downstream(root)[0] is False
+
+
+# ── P3: restore integrity (ADR-0015; was "count compaction events") ────────────────────
+#
+# The predicate changed shape because its premise was false. It counted compaction —
+# ~3 events — for a restore path that runs on EVERY session start (~121). What follows
+# harvests the tally invariants worth keeping and replaces the retired gating ones.
+
+
+def _mnemos(tmp_path):
+    m = tmp_path / ".mnemos"
+    m.mkdir(exist_ok=True)
+    return m
+
+
+def _checkpoint(tmp_path, *, pad=0, drop=()):
+    data = {"goal": "g" + "x" * pad, "active_constraints": ["c"], "task_narrative": "n"}
+    for f in drop:
+        data.pop(f, None)
+    (_mnemos(tmp_path) / "checkpoint-latest.json").write_text(json.dumps(data))
+    return tmp_path
+
+
+def _compaction(trigger=None, probe=None):
+    e = {"ts": 1.0, "event": "compaction_fired"}
+    if trigger:
+        e["trigger"] = trigger
+    if probe is not None:
+        e["payload_probe"] = probe
+    return json.dumps(e)
+
+
+def test_p3_fires_when_checkpoint_exceeds_the_delivery_budget(tmp_path):
+    """THE observed defect, 2026-07-26. checkpoint.py joined every never-evict GoalNode,
+    the field hit 11,119 chars, the payload passed the SessionStart output limit, and the
+    harness spilled it to a file and handed the model a 2KB preview — so Constraints,
+    Progress, Key Files and Git State never arrived. It degraded all ~121 restores, not
+    the 3 compactions the old predicate watched."""
+    root = _checkpoint(tmp_path, pad=tw.RESTORE_BUDGET_BYTES)
+    fired, detail = tw.p3_restore_integrity(root)
+    assert fired is True
+    assert "over the" in detail and "SPILL" in detail
+    assert "EVERY session start" in detail, "must not re-frame this as a compaction-only bug"
+
+
+def test_p3_quiet_on_a_deliverable_checkpoint_but_claims_no_verdict(tmp_path):
+    """Green here means the payload survives delivery — NOT that restore works.
+
+    That distinction is the whole reason this predicate is a guard rather than the trial:
+    reading it as a verdict would mint proxy #5 after P2 (verb count), old-P4 (project
+    count) and sqlfluff (file existence). If the message ever stops saying so, the next
+    reader inherits the same category error the old P3 encoded."""
+    fired, detail = tw.p3_restore_integrity(_checkpoint(tmp_path))
+    assert fired is False
+    assert "NOT a verdict" in detail and "T2" in detail
+
+
+def test_p3_fires_when_a_required_field_is_missing(tmp_path):
+    for field in tw.RESTORE_REQUIRED_FIELDS:
+        root = _checkpoint(tmp_path, drop=(field,))
+        fired, detail = tw.p3_restore_integrity(root)
+        assert fired is True and field in detail, f"{field} dropped silently"
+
+
+def test_p3_fires_when_checkpoint_is_absent_but_mnemos_exists(tmp_path):
+    _mnemos(tmp_path)
+    fired, detail = tw.p3_restore_integrity(tmp_path)
+    assert fired is True and "NOTHING to deliver" in detail
+
+
+def test_p3_fires_on_unparseable_checkpoint(tmp_path):
+    (_mnemos(tmp_path) / "checkpoint-latest.json").write_text("{not json")
+    fired, detail = tw.p3_restore_integrity(tmp_path)
+    assert fired is True and "not valid JSON" in detail
+
+
+def test_p3_not_applicable_without_a_mnemos_dir(tmp_path):
+    """A project with no .mnemos/ has not opted in. Firing there makes P3 noise on every
+    downstream that never installed Mnemos."""
+    fired, detail = tw.p3_restore_integrity(tmp_path)
+    assert fired is False and "not installed" in detail
+
+
+def test_p3_tally_distinguishes_manual_unknown_and_auto(tmp_path):
+    """HARVESTED from the retired gating tests. The counts no longer decide anything, but
+    they are the only evidence about T3, so a tally that miscounts is still a broken
+    instrument — just a demoted one."""
+    root = _checkpoint(tmp_path)
+    (_mnemos(tmp_path) / "compaction-log.jsonl").write_text("\n".join([
+        _compaction("manual"), _compaction("manual"), _compaction("unknown"),
+        _compaction("auto"), _compaction(),  # no key = pre-tagging legacy, counts as auto
+    ]))
+    _, detail = tw.p3_restore_integrity(root)
+    assert "compaction 2 auto / 2 manual / 1 unclassifiable" in detail
+
+
+def test_p3_tally_ignores_other_events_and_malformed_lines(tmp_path):
+    root = _checkpoint(tmp_path)
+    (_mnemos(tmp_path) / "compaction-log.jsonl").write_text(
+        _compaction("auto") + '\n{"event":"restore_injected"}\nNOT JSON\n')
+    _, detail = tw.p3_restore_integrity(root)
+    assert "compaction 1 auto" in detail
+
+
+def test_p3_unknown_no_longer_fires_but_stays_auditable(tmp_path):
+    """DELIBERATE REVERSION, and the reasoning must survive or this reads as a regression.
+
+    A previous session made `unknown`-with-no-real FIRE, because the warning lived in a
+    message that `render()` would never print — pattern #9 inside the watcher, and two
+    unclassifiable events sat invisible for a fortnight. That fix was right for what was
+    then an open question.
+
+    It is no longer open. The harness sends an EMPTY PreCompact payload
+    (`payload_probe {"len": 2, "keys": []}`, proven 2026-07-26), so `unknown` is a STANDING,
+    UNFIXABLE state — and a predicate that fires forever on one is noise people learn to
+    skip, which is how a real alarm gets missed. ADR-0015 demotes it to informational.
+
+    The visibility the old fix bought is NOT given back: `--json` emits `detail` for
+    non-fired predicates too, so the tally stays auditable. What replaces the alarm is the
+    EVENT — a probe reporting keys — asserted in the next test."""
+    root = _checkpoint(tmp_path)
+    (_mnemos(tmp_path) / "compaction-log.jsonl").write_text(
+        "\n".join([_compaction("unknown"), _compaction("unknown")]))
+    fired, detail = tw.p3_restore_integrity(root)
+    assert fired is False, "a standing unfixable state must not alarm on every run"
+    assert "2 unclassifiable" in detail, (
+        "…but it must stay in the message, which --json surfaces even when not fired — "
+        "otherwise this silently re-creates the invisible-warning bug it replaces")
+
+
+def test_p3_fires_when_payload_probe_reports_keys(tmp_path):
+    """The event that reopens T3. If the harness ever starts sending a PreCompact payload,
+    compaction frequency becomes answerable here for the first time — ADR-0015's
+    re-evaluate trigger, and the one compaction fact still worth an alarm."""
+    root = _checkpoint(tmp_path)
+    (_mnemos(tmp_path) / "compaction-log.jsonl").write_text(
+        _compaction("unknown", probe={"len": 3, "keys": ["trigger", "session_id"]}))
+    fired, detail = tw.p3_restore_integrity(root)
+    assert fired is True
+    assert "session_id" in detail and "ADR-0015" in detail
+
+
+def test_p3_empty_probe_does_not_fire(tmp_path):
+    """`{"keys": []}` is the CURRENT state — it must not fire, or P3 alarms forever."""
+    root = _checkpoint(tmp_path)
+    (_mnemos(tmp_path) / "compaction-log.jsonl").write_text(
+        _compaction("unknown", probe={"len": 2, "keys": []}))
+    assert tw.p3_restore_integrity(root)[0] is False
