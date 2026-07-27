@@ -153,10 +153,29 @@ scope quality, and the re-stated question is recorded there). What is actually n
    committed staleness marker.
 3. **B2 — correction recall.** BLOCKED on labels from a judgement that did not propose the
    hypothesis. The block is the finding, not an obstacle to route around.
-4. **Minors:** `tessera-verify stats` does not break out `verdict_channel` (now 2-for-2 on the
+4. **`tessera-authorize dismiss` has NEVER RUN — it needs both PERFORMING and INTERROGATING,
+   and they are different tasks.** ADR-0016 built it 2026-07-27; `spend_dismissed` is at
+   **n=0**, while **22 genuine false positives** sit in that session's log (16 pytest fixtures,
+   6 probes of the new guard).
+   - **PERFORM.** A human runs it — the agent structurally cannot, which is the enforcement
+     working as designed:
+     `tessera-authorize dismiss --reason "test fixtures and guard probes; no spend attempted"`.
+     That clears the journal *and* exercises the verb for the first time.
+   - **INTERROGATE — the human path has never been tested end to end.** The deny-list was
+     verified from the agent side (rc=2 through the real hook) and `undispositioned()` from unit
+     tests, but **nobody has run it from a terminal and watched the backstop go quiet.** An
+     untested path is the fail-open class, and by construction the agent cannot close this gap.
+     When it runs, check three things: does the backstop actually go silent afterwards; does the
+     event carry `dismissed_by`; did blocking the agent break the human?
+   - **THE NOT-VACUOUS QUESTION, the same shape as T2's.** If false positives keep accruing and
+     nobody reaches for the verb, *"it works"* and *"it is decorative"* stay indistinguishable,
+     and the honest reading becomes that the prose exit was adequate and ADR-0016 over-built on
+     this half. **That is a legitimate thing to discover, not a failure.**
+5. **Minors:** `tessera-verify stats` does not break out `verdict_channel` (now 2-for-2 on the
    file channel, so the number is worth surfacing); a drift that STOPS drifting is never closed
    (recorded in C — needs a disposition decision, not a patch); concept-tags for the decision
-   surface; `rm -rf scripts/.tessera`; historical `--reclassify --all`.
+   surface; historical `--reclassify --all`. *(`rm -rf scripts/.tessera` — already gone,
+   verified 2026-07-27.)*
 
 **Passive, needs no action:** T2 restore receipts accrue at ~0.8/day. Watch whether later
 receipts stop naming `progress` now that `detect_git_commit` asks git instead of parsing the

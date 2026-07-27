@@ -124,6 +124,18 @@ spend backstop by accident. Only a spend-categorised packet clears a spend denia
 ## Re-evaluate triggers
 
 - A spend `dismiss` is ever emitted by anything other than a human at a terminal.
+- **`spend_dismissed` is still at n=0 after false positives have accumulated.** As of
+  2026-07-27 the verb has **never run**, while 22 genuine false positives sit in one session's
+  log. This repo's own not-vacuous rule applies to it exactly as it applies to T2: *a mechanism
+  that has only ever produced silence has not been shown capable of speaking*, and until it
+  runs, "the verb works" and "the verb is decorative" are indistinguishable. If false positives
+  keep accruing and nobody reaches for it, the honest reading is that the prose exit was
+  adequate and this ADR over-built — which is a legitimate outcome to discover, not a failure.
+- **The human path has never been exercised end-to-end.** The deny-list entry was verified from
+  the agent side (rc=2 through the real hook) and `undispositioned()` from unit tests, but
+  **nobody has run `tessera-authorize dismiss` from a terminal and watched the backstop go
+  quiet.** By construction the agent cannot test this — which is the enforcement working, and
+  also a real hole in the verification. An untested path is the fail-open class.
 - Drift dismissals cluster on one dimension — that is the calibration signal, and it should
   produce a decision about the dimension rather than accumulating.
 - An unsupervised run is blocked by the `grant` deny-list entry with no human available. That
