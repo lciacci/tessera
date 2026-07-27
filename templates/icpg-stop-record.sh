@@ -67,10 +67,24 @@ if ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
 fi
 
 # The graph is the marker: exactly one executing intent is unambiguous.
-EXECUTING=$("$TOOLCHAIN_PY" -c "
+# CAPTURE AND CHECK, never capture alone (found by review, 2026-07-27). This was
+# `EXECUTING=$(... 2>/dev/null)` with no status check, and the empty-test below then
+# read a Python FAILURE — missing `reasons` table, corrupt db, sqlite lock, broken
+# import past the interpreter check — as the honest "zero executing intents". Silent
+# exit 0, no degraded event: the one path in this hook that swallowed a failure,
+# while four others reported. Reproduced with a db holding no `reasons` table.
+#
+# Note the sibling `icpg-inject-context.sh` guards the same query with `|| echo 1` —
+# failing toward "do not prompt". Same defensive need, opposite direction, and this
+# one picked the direction that hides the fault.
+if ! EXECUTING=$("$TOOLCHAIN_PY" -c "
 from icpg.store import ICPGStore
 print('\n'.join(r.id for r in ICPGStore('.').list_reasons(status='executing')))
-" 2>/dev/null)
+" 2>/dev/null); then
+    degraded --component icpg-stop-record --reason list-reasons-failed \
+      --detail "could not query executing intents (icpg import or .icpg/reason.db unreachable); this session's symbols were not recorded"
+    exit 0
+fi
 # ZERO is not a failure — it is the honest state when no intent was stated. Step
 # 0's prompt (icpg-inject-context.sh) is what addresses that; reporting degraded
 # here would fire on every session of a project that does not use intents.

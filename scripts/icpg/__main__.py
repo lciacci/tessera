@@ -298,8 +298,28 @@ def cmd_record(store: ICPGStore, args) -> int:
             store.create_edge(edge)
             count += 1
 
-    # Update reason status
-    store.update_reason_status(reason.id, 'executing')
+    # RECORD DOES NOT TOUCH STATUS (removed 2026-07-27, found by review).
+    #
+    # It used to `update_reason_status(reason.id, 'executing')`, and
+    # `update_reason_status` binds `fulfilled_at` UNCONDITIONALLY — omitting the
+    # kwarg writes SQL NULL. So `icpg record --reason <fulfilled-id>` destroyed the
+    # fulfil timestamp AND silently reverted the intent to `executing`. A closed
+    # finding that a peer verb can reopen without ceremony is exactly what
+    # ADR-0016 §3 exists to prevent.
+    #
+    # Latent until this session: `cmd_fulfil` is the FIRST writer of `fulfilled_at`,
+    # so `SET fulfilled_at = NULL` had always landed on an already-NULL column.
+    # Adding the close verb is what made the collision reachable.
+    #
+    # Deleted rather than guarded, because ADR-0019 already answers it: status is
+    # JUDGEMENT (create opens, fulfil closes) and recording is BOOKKEEPING. A
+    # bookkeeping verb mutating a judgement field was the category error. The
+    # promotion was also dead code — it moved `proposed` -> `executing`, and since
+    # ADR-0019 nothing is created `proposed`.
+    #
+    # The auto-recorder could never hit this (it filters to executing), which is why
+    # only the manual CLI path was exposed. "Unreachable from the hook" is not the
+    # same as "unreachable".
 
     print(f'Recorded {count} symbols → ReasonNode {args.reason}')
     print(f'  Files: {len(files)}')

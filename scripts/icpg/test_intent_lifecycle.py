@@ -170,5 +170,53 @@ def test_recording_the_same_symbols_twice_does_not_duplicate_edges(tmp_path):
     assert len(store.get_edges_from(r.id)) == 2
 
 
+def test_recording_does_not_reopen_a_fulfilled_intent_or_wipe_its_timestamp(tmp_path):
+    """FOUND BY ULTRAREVIEW 2026-07-27 (bug_002).
+
+    `update_reason_status` binds `fulfilled_at` UNCONDITIONALLY — omitting the
+    kwarg writes SQL NULL. `cmd_record` called it as `(id, 'executing')`, so
+    `icpg record --reason <fulfilled-id>` destroyed the fulfil timestamp AND
+    silently reverted the intent to executing. A closed finding a peer verb can
+    reopen without ceremony is what ADR-0016 s3 exists to prevent.
+
+    Latent until this session: `cmd_fulfil` is the first writer of `fulfilled_at`,
+    so the NULL write had always landed on an already-NULL column. Adding the close
+    verb made the collision reachable.
+
+    The auto-recorder filters to `executing` and could never hit it — only the
+    manual CLI path was exposed. "Unreachable from the hook" is not "unreachable".
+    """
+    from . import __main__ as m
+    store = _store(tmp_path)
+    r = ReasonNode(goal='g', owner='t', status='executing')
+    store.create_reason(r)
+    m.cmd_fulfil(store, _Args(reason=r.id[:8]))
+
+    closed = store.get_reason(r.id)
+    stamp = closed.fulfilled_at
+    assert closed.status == 'fulfilled' and stamp
+
+    # Recording is BOOKKEEPING; status is JUDGEMENT (ADR-0019). Bookkeeping must
+    # not mutate a judgement field — assert against the source, since a graph with
+    # no changed files would pass vacuously.
+    # Comments stripped first: the removal is documented IN cmd_record, so a raw
+    # substring scan matches the explanation and fails on the fixed code. A guard
+    # that cannot tell code from prose about the code is the `_check_`-prefix
+    # mistake again, one file over.
+    import inspect
+    code = '\n'.join(
+        line for line in inspect.getsource(m.cmd_record).splitlines()
+        if not line.lstrip().startswith('#')
+    )
+    assert 'update_reason_status' not in code, (
+        'cmd_record writes reason status again — it will NULL fulfilled_at and '
+        'silently reopen a closed intent'
+    )
+
+    after = store.get_reason(r.id)
+    assert after.status == 'fulfilled', 'a closed intent was reopened'
+    assert after.fulfilled_at == stamp, 'the fulfil timestamp was destroyed'
+
+
 if __name__ == '__main__':
     raise SystemExit(pytest.main([__file__, '-q']))

@@ -1,0 +1,23 @@
+{
+  "id": "esc-20260727-222022",
+  "ts": "2026-07-27T22:20:22Z",
+  "agent": "claude",
+  "session_id": "89553f0f-609a-44fd-b66f-d4f0b10ecfe7",
+  "severity": "blocking",
+  "category": "credentials",
+  "summary": "Cannot run pr-arbiter against Tessera's changes: no ANTHROPIC_API_KEY exists anywhere, and pr-arbiter has no entry point that reviews a repo other than itself. Both need a human.",
+  "tried": [
+    "Located ~/Claude/pr-arbiter and read its README 'Running it' section \u2014 every documented harness (run_baseline, run_triage, phase2_harness) evaluates its OWN fixed 20-PR corpus, not an arbitrary diff.",
+    "eval/review_pr.py looked like the general reviewer but is hardcoded to ROOT = pr-arbiter's own repo and diffs that repo's branch vs main. It is a self-dogfood script.",
+    "Checked preconditions: no .venv in pr-arbiter (I could build it), and no ANTHROPIC_API_KEY in the environment and no .env* file at all. CLAUDE.md forbids me creating/modifying .env*, and I have no key regardless.",
+    "Checked the spend guard would not block the run (rc=0, allowed) \u2014 so the blocker is purely the missing credential plus the missing entry point, not authorization."
+  ],
+  "options": [
+    "Provide ANTHROPIC_API_KEY (you create .env yourself) and I build the venv + write a small adapter that feeds Tessera's diff to agents.reviewer + agents.arbiter",
+    "Skip pr-arbiter; use /code-review ultra on this branch instead \u2014 it is the independent pass and needs no adapter",
+    "Run pr-arbiter yourself in its own repo and paste findings back"
+  ],
+  "refs": [],
+  "status": "resolved:Option 2 chosen: /code-review ultra instead of pr-arbiter. No key needed, no adapter needed, and it reads cross-file \u2014 which matters because both defects the self-review found today (INSERT OR IGNORE whose uniqueness lived in the schema; a hook whose correctness depended on a matcher in settings.json) are invisible to pr-arbiter's per-file, single-file-tuned agents. pr-arbiter remains unrun against Tessera; its lack of an any-repo entry point is a real gap tracked in its own repo, not a Tessera blocker.",
+  "resolved_ts": "2026-07-27T22:21:43Z"
+}
