@@ -1262,3 +1262,80 @@ def test_non_accepted_adrs_are_not_required_to_have_executed(fake_repo, status):
     """Proposed is undecided, Watching decided NOT to adopt, Superseded is history."""
     _adr(fake_repo, "0099", status)
     assert doccheck.check_adr_execution_recorded() == []
+
+
+# ── drift-dimensions-have-producers ───────────────────────────────────────────────────
+#
+# iCPG's detector scored six dimensions and five of them measured whether an EDGE TYPE
+# existed rather than whether the code had changed. Four of those types had no writer
+# anywhere, so `test(0.30)` rode 712 of 712 stored events as a constant and `ownership`/
+# `dependency` never fired in either direction. Nothing asserted that a consumed edge type
+# had a producer — which is why it survived three evaluation passes, each of which stated
+# a confident root cause and each of which was too shallow.
+
+def _icpg(fake_repo, drift_src: str, producer_src: str = "") -> None:
+    icpg = fake_repo / "scripts" / "icpg"
+    icpg.mkdir(parents=True)
+    (icpg / "drift.py").write_text(drift_src)
+    (icpg / "store.py").write_text(producer_src)
+
+
+def test_catches_a_dimension_reading_an_edge_type_nothing_writes(fake_repo):
+    _icpg(fake_repo, "store.get_edges_from(reason.id, 'VALIDATED_BY')\n")
+    bad = doccheck.check_drift_dimensions_have_producers()
+    assert any("VALIDATED_BY" in v for v in bad), bad
+
+
+def test_passes_when_every_read_edge_type_has_a_writer(fake_repo):
+    _icpg(
+        fake_repo,
+        "store.get_edges_to(symbol_id, 'CREATES')\n",
+        "edge = Edge(from_id=r, to_id=s, edge_type='CREATES')\n",
+    )
+    assert doccheck.check_drift_dimensions_have_producers() == []
+
+
+def test_a_declared_cli_choice_counts_as_a_producer(fake_repo):
+    """`icpg record --edge-type MODIFIES` is a real writer even with no literal in a
+    write call. It must count — but only because `choices=` DECLARES the set; an
+    unconstrained flag would make every edge type producible and the check vacuous."""
+    _icpg(
+        fake_repo,
+        "store.get_edges_to(sym.id, 'MODIFIES')\n",
+        "p.add_argument('--edge-type', default='CREATES',\n"
+        "               choices=['CREATES', 'MODIFIES'])\n",
+    )
+    assert doccheck.check_drift_dimensions_have_producers() == []
+
+
+def test_the_detector_cannot_vouch_for_itself(fake_repo):
+    """A literal in drift.py must not count as its own producer, or the check
+    congratulates the module for mentioning the edge type it consumes."""
+    _icpg(
+        fake_repo,
+        "store.get_edges_from(r.id, 'REQUIRES')\n"
+        "edge_type='REQUIRES'  # not a writer — no Edge is created here\n",
+    )
+    bad = doccheck.check_drift_dimensions_have_producers()
+    assert any("REQUIRES" in v for v in bad), bad
+
+
+def test_a_detector_that_reads_nothing_is_a_violation_not_a_pass(fake_repo):
+    """Standing pattern #1 — what tells you THIS check died? An empty read set is
+    either a detector that stopped detecting or a parser that drifted. Both are
+    findings, and neither may exit green."""
+    _icpg(fake_repo, "# no edge reads at all\n")
+    bad = doccheck.check_drift_dimensions_have_producers()
+    assert any("reads no edge type" in v for v in bad), bad
+
+
+def test_not_vacuous_against_the_real_drift_module():
+    """Feed the SHIPPED file back through the predicate with one edge type swapped for
+    an unwritten one. A fresh check's green is not evidence until something has been
+    seen to make it red — the `unrunnable-hooks-report-themselves` lesson, where a new
+    check passed on its first run while incapable of flagging anything."""
+    real = (doccheck.ROOT / doccheck.DRIFT_MODULE).read_text()
+    assert doccheck._edge_types_read_by_the_detector(real), "parser reads nothing"
+    poisoned = real.replace("'CREATES'", "'DRIFTS_FROM'")
+    read = doccheck._edge_types_read_by_the_detector(poisoned)
+    assert "DRIFTS_FROM" in read - doccheck._edge_types_any_code_writes()

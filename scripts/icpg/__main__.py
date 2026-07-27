@@ -11,6 +11,7 @@ from pathlib import Path
 from . import __version__
 from .bootstrap import bootstrap_from_git
 from .contracts import format_contracts, infer_contracts
+from .coverage import untested_intents
 from .drift import check_all_drift, check_file_drift
 from .models import Edge, ReasonNode, _now, _uuid
 from .store import ICPGStore
@@ -462,12 +463,16 @@ def cmd_status(store: ICPGStore) -> int:
 
     stats = store.get_stats()
     drift = store.get_unresolved_drift()
+    untested, live = untested_intents(store)
 
     print('iCPG STATUS')
     print(f'  ReasonNodes:      {stats["reasons"]}')
     print(f'  Symbols:          {stats["symbols"]}')
     print(f'  Edges:            {stats["edges"]}')
     print(f'  Unresolved drift: {stats["unresolved_drift"]}')
+    # Reported here, deliberately NOT as a drift dimension — see coverage.py.
+    # As `test` drift this was a constant 0.30 on 712 of 712 events.
+    print(f'  Intents w/o tests: {untested}/{live}')
 
     if drift:
         print(f'\nTop drift events:')

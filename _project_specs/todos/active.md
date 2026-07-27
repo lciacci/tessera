@@ -405,11 +405,28 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    and weight on the new numbers** — and note the bands were anchored under the dead signal, so
    they are suspect independently.
 
-**C. iCPG — diagnosed today, untouched.** 700 drift rows are 154 distinct; every dimension scores
-   the ABSENCE of edge types nothing writes (5 of 6 edge types have no writer; `test(0.30)` is a
-   constant on 701/701; usage drift is literally `grep -rl` over an unfiltered tree incl. `.venv`).
-   See item 6 for the ordered fix. **`scripts/icpg/` has zero tests and collides with
-   `scripts/polyphony/` on `store.py`/`models.py`**, so a suite needs its own process line.
+**C. ~~iCPG — diagnosed, untouched.~~ SHRINK EXECUTED 2026-07-27.** Six dimensions → three, each
+   with a named producer (`changed` / `decision` / `usage`); `ownership` + `dependency` deleted;
+   `test(0.30)` moved to `scripts/icpg/coverage.py` and reported by `icpg status` as a count;
+   usage bounded to git-tracked files; **746 events purged, not deduplicated** (725 carried the
+   constant). `scripts/icpg/` has its **first tests ever** (13, own process line) and doccheck
+   gained **`drift-dimensions-have-producers`** (33 checks).
+   **A fourth root cause, found by reading the rows:** decision-drift gated on `postconditions`
+   (0/10 reasons) while `contracts.py` writes **53 invariants across 10 reasons** that the
+   evaluator already understood — a live producer and a live evaluator pointed at different
+   fields. Fresh baseline: 217 events (`usage` 140, `changed` 49, both 28); `decision` fires zero
+   because all 53 invariants currently hold — **live-and-silent, which is a different fact from
+   dead.**
+   **WHAT IS LEFT, and it is not cosmetic:**
+   1. **The re-insertion defect is live and refills the backlog.** `mnemos-pre-edit.sh` runs
+      `icpg drift file` on every Edit/Write and `cmd_drift` persists with a fresh UUID and no
+      natural key — the count grew 712 → 746 during the session that diagnosed it. Purging
+      buys one clean reading, not a clean counter. Dedup-on-insert + event IDs + `drift list` +
+      evidence on the report (the ADR-0013 list) is now the entire remainder.
+   2. **`usage`'s thresholds are uncalibrated** — 168 of 816 symbols fire, 64 saturated at 1.00,
+      and bootstrap scopes are one commit-cluster wide so "outside scope" is nearly the repo.
+      **Do not tune `>2` and `/10` by eye**; that is how three proxy predicates were born.
+   3. **The authoring half of the trial is untouched and is the bigger question** — see below.
 
 **D. ADR-0014 / decision D1 — the review backend seam.** Proposed, unanswered. Decides whether
    review is model-portable (conclave / open-weight / Codex) or Claude-only-by-choice, and it owns
@@ -604,19 +621,30 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    including `.venv/`. Decision, ownership, and dependency drift have never fired once.
    **This answers `design-principles.md:440`'s kill/keep criterion — "does drift detection catch things
    grep wouldn't?" — with: no, the dominant dimension IS grep, in a subprocess.**
-   **Now the open work, in order:** (a) **decide what the detector is for** — wire the writers
-   (`VALIDATED_BY` from the suite, `MODIFIES` from a Stop hook) or delete the dimensions that cannot be
-   fed; (b) bound `usage` drift to `git ls-files` or drop it; (c) stop reporting `test(0.30)` as drift —
-   it is a coverage signal, report it separately; (d) *then* dedup on insert, surface event IDs +
-   `drift list`, evidence on the report, `--note`/`dismissed` (the ADR-0013 list, still correct, now
-   correctly ordered); (e) **`scripts/icpg/` has zero tests and is not in `run-tests.sh`** — a suite
-   collides with `scripts/polyphony/` on `store.py`/`models.py`, so it needs its own process line plus
-   doccheck's `ignored-test-suites-are-run`, or it silently stops running (pattern #1); (f) leave the
-   check that would have caught this: **every edge type `drift.py` reads must have a producer** —
-   a `tessera-chaos` probe candidate too. See observatory → "iCPG's drift detector measures the
-   emptiness of its own graph". **The iCPG kill/keep verdict is confounded three ways** (one edge type
-   fed, five scored by absence, and `mnemos-pre-edit.sh` dropping its output for the whole trial) —
-   judging it now would measure the plumbing, not the concept. Same shape as F-001, one layer up.
+   **The open work, in order — (a), (b), (c), (e), (f) DONE 2026-07-27; only (d) remains:**
+   ~~(a) decide what the detector is for~~ — decided with Lorenzo: **shrink to what can be fed**,
+   do not build writers speculatively (ADR-0006 ranks prevention over detection, and deleted
+   machinery cannot fail silently). ~~(b) bound `usage`~~ — `git grep` over tracked files.
+   ~~(c) stop reporting `test(0.30)` as drift~~ — moved to `coverage.py`, printed by
+   `icpg status` as `Intents w/o tests: N/M`.
+   **(d) STILL OPEN and now the entire remainder:** dedup on insert, surface event IDs +
+   `drift list`, evidence on the report, `--note`/`dismissed`. **Do it first** — the re-insertion
+   defect is live (`mnemos-pre-edit.sh` → `drift file` persists on every edit; the count grew
+   712 → 746 during the session that diagnosed it), so the purge bought one clean reading, not a
+   clean counter.
+   ~~(e) zero tests~~ — 13 now, own process line, registered under `ignored-test-suites-are-run`;
+   three were watched RED against a re-added unfed dimension before being accepted.
+   ~~(f) leave the check~~ — doccheck **`drift-dimensions-have-producers`**, with `drift.py`
+   excluded from the producer scan so it cannot vouch for itself, and an empty read set treated
+   as a violation rather than a pass. See observatory → "iCPG's drift detector measures the
+   emptiness of its own graph".
+   **The kill/keep verdict is still unavailable, and the reason has changed.** Two of the three
+   confounds are cleared (dimensions no longer score absence; the pre-edit channel was fixed
+   07-24). The third is untouched and is the one that matters: **all 10 reasons are
+   `owner='git-history'`, `agent=NULL`, `source='inferred'`** — no agent has ever authored one,
+   because nothing records intent. Per FOCUS-004's rule that absence is **not evidence**, in
+   either direction; the recording half must be wired before `design-principles.md:459` can be
+   answered. Same shape as F-001, one layer up.
 7. Minors: **concept-tags for B** (it only surfaces file-keyed decisions; Alternatives-Considered
    and cross-cutting lessons are blind — the observatory "harness-staleness" entry is a live
    example B could not have surfaced). *Still open — but note B gained the **amendment edge**

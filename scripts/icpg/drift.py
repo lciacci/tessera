@@ -1,20 +1,64 @@
-"""6-dimension drift detection per RFC Section 6."""
+"""Drift detection over the dimensions that have real inputs.
+
+SHRUNK 2026-07-27 from six dimensions to three. Five of the six scored whether an
+EDGE TYPE existed in the graph rather than whether the code had changed, and four
+of those edge types (REQUIRES, DUPLICATES, VALIDATED_BY, DRIFTS_FROM) have no
+writer anywhere in this codebase. Consequences, measured before the cut:
+
+    712 of 712 stored events carried a constant `test(0.30)`
+    decision / ownership / dependency drift had NEVER fired, in either direction
+    usage drift shelled out to `grep -rl <name> .` over an unfiltered tree
+
+A dimension that can only ever return one value is not a measurement. The stored
+events were therefore purged rather than deduplicated: deduplicating them would
+have preserved 154 distinct non-measurements. (Standing pattern #7 — a verdict
+must not rest on what the instrument could not read.)
+
+WHAT SURVIVES, and the producer feeding each:
+
+    changed   symbol checksum vs. the recorded one          <- upsert_symbol
+    decision  the intent's contract predicates, re-run      <- contracts.py
+    usage     symbol referenced outside its intent's scope, <- git grep, tracked
+              over GIT-TRACKED files only                      files only
+
+WHAT LEFT, and where it went:
+
+    test        -> `coverage.py`. "No VALIDATED_BY edge" is a fact about the
+                   graph's completeness, not about code drifting. Reported as a
+                   count, never as a severity.
+    ownership   -> deleted. Needed >3 distinct reason owners on one symbol; every
+                   ReasonNode here is `owner='git-history'` from the bootstrap.
+    dependency  -> deleted. Needed REQUIRES edges between reasons; unwritten.
+
+Re-adding a dimension means adding its PRODUCER FIRST. doccheck's
+`drift-dimensions-have-producers` fails if this module reads an edge type that
+nothing in `scripts/icpg/` writes — the check that would have caught all of the
+above at commit time, which is what standing pattern #1 asks for. `coverage.py`
+is deliberately out of that check's scope: measuring an absent edge type is its
+entire job.
+
+Note this does NOT settle iCPG's kill/keep trial. `design-principles.md:459` asks
+two questions and this addresses one; the other — does the agent populate
+ReasonNodes in practice — is still unexercised, and its cause is fully explained
+(nothing records, and the hook that surfaces intent was silent until 2026-07-24).
+See docs/observatory.md -> "iCPG's drift detector measures the emptiness of its
+own graph".
+"""
 
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
 
-from .models import DriftEvent, Edge, _now, _uuid
+from .models import DriftEvent, _now, _uuid
+from .predicates import evaluate_predicate
 from .store import ICPGStore
 from .symbols import extract_symbols
 
 
 def check_file_drift(store: ICPGStore, file_path: str) -> list[DriftEvent]:
     """Check drift for symbols in a single file only. Fast path for hooks."""
-    symbols = store.get_symbols_for_file(file_path)
     events = []
-    for sym in symbols:
+    for sym in store.get_symbols_for_file(file_path):
         event = check_symbol_drift(store, sym.id)
         if event:
             events.append(event)
@@ -24,33 +68,24 @@ def check_file_drift(store: ICPGStore, file_path: str) -> list[DriftEvent]:
 def check_all_drift(store: ICPGStore) -> list[DriftEvent]:
     """Full drift scan across all tracked symbols."""
     events = []
-    reasons = store.list_reasons()
-
-    for reason in reasons:
+    for reason in store.list_reasons():
         if reason.status in ('rejected', 'abandoned'):
             continue
-
-        creates_edges = store.get_edges_from(reason.id, 'CREATES')
-        for edge in creates_edges:
+        for edge in store.get_edges_from(reason.id, 'CREATES'):
             sym = store._get_symbol(edge.to_id)
             if not sym:
                 continue
             event = check_symbol_drift(store, sym.id)
             if event:
                 events.append(event)
-
     return events
 
 
-def check_symbol_drift(
-    store: ICPGStore, symbol_id: str
-) -> DriftEvent | None:
-    """Check a single symbol for drift across all 6 dimensions."""
+def check_symbol_drift(store: ICPGStore, symbol_id: str) -> DriftEvent | None:
+    """Check a single symbol across the dimensions that have inputs."""
     sym = store._get_symbol(symbol_id)
     if not sym:
         return None
-
-    # Find creating reason
     creates_edges = store.get_edges_to(symbol_id, 'CREATES')
     if not creates_edges:
         return None
@@ -58,232 +93,111 @@ def check_symbol_drift(
     if not reason:
         return None
 
-    dimensions = []
-    severity_scores = []
-
-    # 1. Spec drift — checksum changed without MODIFIES edge
-    spec = _check_spec_drift(store, sym, reason)
-    if spec:
-        dimensions.append('spec')
-        severity_scores.append(spec)
-
-    # 2. Decision drift — postconditions no longer hold
-    decision = _check_decision_drift(store, reason)
-    if decision:
-        dimensions.append('decision')
-        severity_scores.append(decision)
-
-    # 3. Ownership drift — >3 different owners
-    ownership = _check_ownership_drift(store, sym)
-    if ownership:
-        dimensions.append('ownership')
-        severity_scores.append(ownership)
-
-    # 4. Test drift — VALIDATED_BY tests missing or failing
-    test = _check_test_drift(store, reason)
-    if test:
-        dimensions.append('test')
-        severity_scores.append(test)
-
-    # 5. Usage drift — used outside original scope
-    usage = _check_usage_drift(store, sym, reason)
-    if usage:
-        dimensions.append('usage')
-        severity_scores.append(usage)
-
-    # 6. Dependency drift — downstream coupling changed
-    dep = _check_dependency_drift(store, reason)
-    if dep:
-        dimensions.append('dependency')
-        severity_scores.append(dep)
-
-    if not dimensions:
+    scored = [
+        ('changed', _check_changed_drift(store, sym)),
+        ('decision', _check_decision_drift(store, reason)),
+        ('usage', _check_usage_drift(store, sym, reason)),
+    ]
+    hits = [(dim, score) for dim, score in scored if score]
+    if not hits:
         return None
+    return _build_event(symbol_id, reason.id, hits)
 
-    avg_severity = sum(severity_scores) / len(severity_scores)
-    desc_parts = [f'{d}({s:.2f})' for d, s in zip(dimensions, severity_scores)]
 
+def _build_event(symbol_id: str, reason_id: str, hits) -> DriftEvent:
+    dimensions = [dim for dim, _ in hits]
+    scores = [score for _, score in hits]
+    parts = ', '.join(f'{d}({s:.2f})' for d, s in hits)
     return DriftEvent(
         id=_uuid(),
         symbol_id=symbol_id,
-        from_reason_id=reason.id,
+        from_reason_id=reason_id,
         drift_dimensions=dimensions,
-        severity=round(avg_severity, 2),
-        description=f'Drift detected: {", ".join(desc_parts)}',
+        severity=round(sum(scores) / len(scores), 2),
+        description=f'Drift detected: {parts}',
         detected_at=_now()
     )
 
 
-def _check_spec_drift(store, sym, reason) -> float | None:
-    """Symbol checksum changed since creation without a MODIFIES edge."""
-    # Re-extract current symbol
-    current_symbols = extract_symbols(sym.file_path)
-    current = next((s for s in current_symbols if s.name == sym.name), None)
+def _check_changed_drift(store, sym) -> float | None:
+    """Symbol checksum differs from the one recorded, or the symbol is gone.
+
+    Was `spec` drift, defined as "changed WITHOUT a MODIFIES edge". Renamed
+    2026-07-27 because that exemption has never once applied: `icpg record` is
+    the only writer of MODIFIES and no hook invokes it, so the old name promised
+    a distinction the data could not make. The exemption is kept — it costs one
+    query and becomes live the moment a recorder is wired — but the dimension is
+    now named for what it actually measures.
+    """
+    current = next(
+        (s for s in extract_symbols(sym.file_path) if s.name == sym.name), None
+    )
     if not current:
         return 0.8  # Symbol removed entirely
-
     if current.checksum != sym.checksum:
-        # Check if there's a MODIFIES edge explaining the change
-        mod_edges = store.get_edges_to(sym.id, 'MODIFIES')
-        if not mod_edges:
+        if not store.get_edges_to(sym.id, 'MODIFIES'):
             return 0.6  # Changed without explanation
     return None
 
 
 def _check_decision_drift(store, reason) -> float | None:
-    """ReasonNode postconditions no longer hold."""
-    if not reason.postconditions:
+    """Contract predicates that no longer hold.
+
+    Reads invariants AND postconditions. Until 2026-07-27 it read postconditions
+    ALONE — and nothing in this repo has ever written one (0 of 10 reasons),
+    while `contracts.py:88` writes a `file_exists(...)` invariant for every scope
+    path of every reason (10 of 10, ~50 predicates). A live producer and a live
+    evaluator that were never connected, which is why this dimension had never
+    fired. That is not the "no writer" failure the other dimensions had; it is a
+    narrower and more embarrassing one, and only reading the rows found it.
+    """
+    predicates = list(reason.invariants) + list(reason.postconditions)
+    if not predicates:
         return None
-
-    failed = 0
-    for predicate in reason.postconditions:
-        if not evaluate_predicate(predicate, store.project_dir):
-            failed += 1
-
-    if failed > 0:
-        return min(1.0, failed / len(reason.postconditions))
-    return None
-
-
-def _check_ownership_drift(store, sym) -> float | None:
-    """Symbol touched by >3 different owners."""
-    edges = store.get_edges_to(sym.id)
-    owners = set()
-    for edge in edges:
-        reason = store.get_reason(edge.from_id)
-        if reason:
-            owners.add(reason.owner)
-
-    if len(owners) > 3:
-        return min(1.0, (len(owners) - 3) / 5)
-    return None
-
-
-def _check_test_drift(store, reason) -> float | None:
-    """VALIDATED_BY tests no longer exist or fail."""
-    test_edges = store.get_edges_from(reason.id, 'VALIDATED_BY')
-    if not test_edges:
-        # No tests linked — mild concern
-        return 0.3
-
-    missing = 0
-    for edge in test_edges:
-        test_sym = store._get_symbol(edge.to_id)
-        if not test_sym or not Path(test_sym.file_path).exists():
-            missing += 1
-
-    if missing > 0:
-        return min(1.0, missing / len(test_edges))
-    return None
+    failed = sum(
+        1 for p in predicates if not evaluate_predicate(p, store.project_dir)
+    )
+    return min(1.0, failed / len(predicates)) if failed else None
 
 
 def _check_usage_drift(store, sym, reason) -> float | None:
-    """Symbol imported from scopes outside original ReasonNode scope."""
+    """Symbol referenced outside its intent's declared scope, over tracked files.
+
+    `git grep` replaced `grep -rl <name> .` on 2026-07-27. The old form walked
+    the whole tree — `.venv/`, `.git/`, `build/`, `__pycache__` — so any common
+    symbol name saturated the score inside vendored code alone, and the score
+    was `min(1.0, n/10)`, i.e. pinned at 1.00 after ten hits. Tracked-only is
+    also this repo's standing rule: `git ls-files`, never `find`.
+    """
     if not reason.scope:
         return None
+    files = _tracked_files_mentioning(sym.name, store.project_dir)
+    if files is None:
+        return None
+    out_of_scope = [f for f in files if not _in_scope(f, reason.scope)]
+    if len(out_of_scope) <= 2:
+        return None
+    return min(1.0, len(out_of_scope) / 10)
 
-    # Use grep to find imports/usages of the symbol
+
+def _tracked_files_mentioning(name: str, project_dir) -> list[str] | None:
+    """Tracked files containing `name`, or None if git could not answer.
+
+    None is "no answer", NOT "no matches" — a missing git, a timeout, or a
+    non-repo directory must not read as a clean scope. rc=1 IS an answer: git
+    grep uses it for "no matches found".
+    """
     try:
         result = subprocess.run(
-            ['grep', '-rl', sym.name, '.'],
-            capture_output=True, text=True, timeout=5,
-            cwd=str(store.project_dir)
+            ['git', 'grep', '--name-only', '--fixed-strings', '-e', name],
+            capture_output=True, text=True, timeout=5, cwd=str(project_dir)
         )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         return None
-
-    if result.returncode != 0:
+    if result.returncode not in (0, 1):
         return None
-
-    usage_files = [
-        f.strip().lstrip('./') for f in result.stdout.strip().split('\n')
-        if f.strip()
-    ]
-
-    out_of_scope = 0
-    for uf in usage_files:
-        if not any(uf.startswith(s.rstrip('/')) for s in reason.scope):
-            out_of_scope += 1
-
-    if out_of_scope > 2:
-        return min(1.0, out_of_scope / 10)
-    return None
+    return [ln.strip() for ln in result.stdout.splitlines() if ln.strip()]
 
 
-def _check_dependency_drift(store, reason) -> float | None:
-    """Downstream REQUIRES reasons have drifted or changed status."""
-    req_edges = store.get_edges_to(reason.id, 'REQUIRES')
-    if not req_edges:
-        return None
-
-    drifted = 0
-    for edge in req_edges:
-        dep_reason = store.get_reason(edge.from_id)
-        if dep_reason and dep_reason.status == 'drifted':
-            drifted += 1
-
-    if drifted > 0:
-        return min(1.0, drifted / len(req_edges))
-    return None
-
-
-def evaluate_predicate(predicate: str, project_dir: Path) -> bool:
-    """Evaluate a single structured predicate against codebase state.
-
-    Supported predicates:
-        file_exists("path")
-        test_exists("path")
-        symbol_count("dir/") <= N
-        function_signature("name") == "sig"
-    """
-    predicate = predicate.strip()
-
-    # file_exists("path")
-    m = _match_predicate(predicate, 'file_exists')
-    if m:
-        return (project_dir / m).exists()
-
-    # test_exists("path")
-    m = _match_predicate(predicate, 'test_exists')
-    if m:
-        return (project_dir / m).exists()
-
-    # symbol_count("dir/") <= N
-    import re
-    sc = re.match(
-        r'symbol_count\("([^"]+)"\)\s*(<=|>=|==|<|>)\s*(\d+)', predicate
-    )
-    if sc:
-        dir_path, op, threshold = sc.group(1), sc.group(2), int(sc.group(3))
-        count = _count_symbols_in_dir(project_dir / dir_path)
-        return _compare(count, op, threshold)
-
-    # Unrecognized predicate — pass (don't block on unknown)
-    return True
-
-
-def _match_predicate(predicate: str, func_name: str) -> str | None:
-    import re
-    m = re.match(rf'{func_name}\("([^"]+)"\)', predicate)
-    return m.group(1) if m else None
-
-
-def _count_symbols_in_dir(dir_path: Path) -> int:
-    if not dir_path.is_dir():
-        return 0
-    count = 0
-    for f in dir_path.rglob('*'):
-        if f.is_file():
-            count += len(extract_symbols(str(f)))
-    return count
-
-
-def _compare(value: int, op: str, threshold: int) -> bool:
-    ops = {
-        '<=': value <= threshold,
-        '>=': value >= threshold,
-        '==': value == threshold,
-        '<': value < threshold,
-        '>': value > threshold,
-    }
-    return ops.get(op, True)
+def _in_scope(path: str, scope: list[str]) -> bool:
+    return any(path.startswith(s.rstrip('/')) for s in scope)

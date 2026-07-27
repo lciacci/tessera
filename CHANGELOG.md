@@ -12,6 +12,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 > 2026-07-08 and 2026-07-25. The section below covers the 2026-07-26 session; the older
 > `[Unreleased]` content follows it, unchanged.
 
+### 2026-07-27 — iCPG's drift detector was scoring the emptiness of its own graph
+
+Six dimensions, three of which could not fire. Fourth diagnostic pass, fourth root cause —
+and this one was not a missing writer.
+
+#### Added
+- **doccheck `drift-dimensions-have-producers`** (33 checks) — every edge type
+  `scripts/icpg/drift.py` reads must be one something in `scripts/icpg/` writes. `drift.py`
+  is excluded from the producer scan so it cannot vouch for itself, and **an empty read set
+  is a violation, not a pass**. Nothing had ever asserted this, which is why four unwritten
+  edge types survived three evaluation passes.
+- **`scripts/icpg/test_drift.py`** — the module's first tests, ever (13), with its own
+  process line in `run-tests.sh`. Three were watched going RED against a re-added unfed
+  dimension before being accepted.
+- **`scripts/icpg/coverage.py`** — `untested_intents()`, surfaced by `icpg status` as
+  `Intents w/o tests: N/M`. Reading an edge type nothing writes is fine when you are
+  *reporting* its absence; it was a bug when the detector *scored* it.
+- **`scripts/icpg/predicates.py`** — the contract evaluator, split out of `drift.py`.
+
+#### Changed
+- **Drift shrank from six dimensions to three**, each with a named producer: `changed`
+  (checksum), `decision` (contract predicates), `usage` (bounded to git-tracked files via
+  `git grep`, replacing `grep -rl <name> .` over a tree that included `.venv/`).
+- **`decision` drift now reads invariants as well as postconditions.** THE FOURTH ROOT
+  CAUSE: it gated on `postconditions`, which **0 of 10** reasons have, while `contracts.py`
+  writes **53 invariants across 10 reasons** in a form the evaluator already understood. A
+  live producer and a live evaluator, pointed at different fields.
+
+#### Removed
+- **`ownership` and `dependency` dimensions** — needed >3 distinct reason owners (all 10
+  reasons are `owner='git-history'`) and REQUIRES edges (unwritten). Never fired once.
+- **746 stored drift events, purged rather than deduplicated** — 725 carried a constant
+  `test(0.30)`. Deduplicating would have preserved 154 distinct non-measurements.
+
+Fresh baseline: 217 events over 816 symbols. `decision` fires zero because all 53
+invariants currently hold — live-and-silent, which is a different fact from dead.
+
+**Not fixed, and it refills the backlog on its own:** `cmd_drift` still re-inserts with a
+fresh UUID and no natural key, and `mnemos-pre-edit.sh` runs `drift file` on every edit.
+**Not settled:** iCPG's kill/keep trial — no agent has ever authored a ReasonNode, and a
+known cause fully explains that, so the absence is not evidence in either direction.
+
 ### 2026-07-26 — the Mnemos trial was measuring the wrong thing, and four fail-opens under it
 
 A single deliberate `/compact` — run to answer a 37-day-old question — found two defects,

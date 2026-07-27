@@ -64,12 +64,17 @@ echo "──────────────────"
 # Separate processes: gate/ and override/ cannot share one (see header). spend/ gets its
 # own for the same reason — it has a same-dir `event.py`/`guard.py` import contract, and
 # joining the pool is how the collision bites the next suite that lands.
-run "top-level" "$PY" -m pytest scripts/ -q --ignore=scripts/gate --ignore=scripts/override --ignore=scripts/mnemos --ignore=scripts/spend --ignore=scripts/verify --ignore=scripts/restore
+run "top-level" "$PY" -m pytest scripts/ -q --ignore=scripts/gate --ignore=scripts/override --ignore=scripts/mnemos --ignore=scripts/spend --ignore=scripts/verify --ignore=scripts/restore --ignore=scripts/icpg
 run "gate"      "$PY" -m pytest scripts/gate -q
 run "override"  "$PY" -m pytest scripts/override -q
 run "spend"     "$PY" -m pytest scripts/spend -q
 run "verify"    "$PY" -m pytest scripts/verify -q
 run "restore"   "$PY" -m pytest scripts/restore -q
+# icpg/ and polyphony/ BOTH carry a store.py and a models.py. polyphony has no tests
+# today, so the collision is latent rather than live — which is exactly when it is
+# cheapest to avoid, and exactly the shape that bit gate/ and override/ (see header).
+# Added 2026-07-27 with `scripts/icpg/`'s first tests, after the drift-detector shrink.
+run "icpg"      "$PY" -m pytest scripts/icpg -q
 # Spec 11's fail-open probes. Held OUT of this file while they were legitimately red (a
 # permanently-red main suite is one people learn to ignore); folded in on 2026-07-26 when
 # all 8 went green, which is the spec's own instruction. They live at top-level chaos/, not

@@ -440,6 +440,16 @@ The agent-teams skill describes iCPG as tracking *ReasonNodes* (intent), *constr
   - *Usage drift* (symbol used outside original scope)
   - *Dependency drift* (downstream REQUIRES reasons have drifted)
   - All concrete, all detectable. Walk back "over-engineered" framing.
+  - **(2026-07-27 — three of the six were not detectable, and the list above is why nobody
+    checked.)** Each dimension names a real mechanism, so the set reads as designed rather than
+    aspirational. But four of the six edge types those mechanisms consume — `REQUIRES`,
+    `DUPLICATES`, `VALIDATED_BY`, `DRIFTS_FROM` — **have no writer anywhere in the codebase**,
+    so *test* drift returned a constant `0.30` on 712 of 712 stored events and *ownership* and
+    *dependency* never fired in either direction. The detector was scoring the emptiness of its
+    own graph. Shrunk to the three with real inputs (`changed`, `decision`, `usage`);
+    "no linked tests" is now reported as coverage, not severity. **The reusable form of the
+    error: a mechanism being named is not a mechanism being fed.** See observatory → "iCPG's
+    drift detector measures the emptiness of its own graph".
 - **The 3 canonical pre-task queries are real CLI commands:** `icpg query prior` (duplicate detection), `icpg query constraints <file>` (invariants for files about to be touched), `icpg query risk <symbol>` (fragility profile including drift history). Concrete, not vague.
 - **ReasonNode schema is well-defined.** UUID, goal, decision_type (business_goal/arch_decision/task/workaround/constraint/patch), scope, owner, status, source, plus a formal Design-by-Contract trio (preconditions, postconditions, invariants).
 - **Contract predicates have actual types.** `file_exists("path")`, `test_exists("path")`, `symbol_count("dir") <= 15`, `function_signature("name") == "..."`. Evaluable, not hand-wavy. Three authoring tiers: hand-authored for high-risk intents, LLM-inferred via `icpg create --infer-contracts`, or heuristic (scope → file_exists, test → test_exists).
@@ -457,6 +467,19 @@ The agent-teams skill describes iCPG as tracking *ReasonNodes* (intent), *constr
 **Revised decisions:**
 
 - **Adopt iCPG for dogfood with higher confidence than before.** The earlier skepticism was largely misplaced. The remaining open questions are *behavioral* not *conceptual* — does the agent actually populate ReasonNodes and contracts well in practice? Does drift detection catch things grep wouldn't? Real questions, answered by dogfood, not by skepticism.
+  - **(2026-07-27 — status of the two questions, and neither has a verdict yet.)**
+    **Q2 (does drift catch things grep wouldn't?)** was answerable and the honest answer was
+    *no, as built*: the dimension firing on ~700 of 701 events was `subprocess.run(['grep',
+    '-rl', ...])` over an unfiltered tree including `.venv/`. That is now bounded to git-tracked
+    files and the dimensions that scored absent edge types are gone — so the question is
+    **re-askable against a detector that measures something**, but it has not been re-answered.
+    **Q1 (does the agent populate ReasonNodes?) has never been exercised at all.** All 10
+    reasons are `owner='git-history'`, `agent=NULL`, `source='inferred'` — every one derived by
+    the bootstrap, none authored during work. A cause fully explains that (nothing records
+    intent; the hook that *surfaces* it dropped its output until 2026-07-24), and per
+    FOCUS-004's rule an observation a known cause fully explains is **not evidence** — not for
+    keeping and not for cutting. **The recording half has to be wired before either question
+    yields a verdict**, and that is a deliberate open item, not an oversight.
 - **Adopt code-graph as the continuously-loaded structural layer for active development on familiar code.** Auto-fresh via three-layer sync. This is the workshop view for code you're actively writing.
 - **GitNexus is reserved for unfamiliar-codebase evaluation, not default install.** Strong fit for onboarding, vendor due diligence, legacy rescue, forensic analysis. Install when first such task arises, not preemptively. Code-graph and GitNexus serve different temporal phases of work (active development vs evaluation), not the same problem.
 - **The "Workflow: Before Any Code Change" sequence from iCPG.md becomes a Tessera principle:** *Intent → Dedup → Constraints → Risk → Locate → Change → Record → Drift-check → Verify.* This is the actual procedural value of having iCPG — a defined sequence that prevents duplicate work and unintended drift.

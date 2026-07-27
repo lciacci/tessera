@@ -1421,6 +1421,69 @@ def check_session_logs_are_repo_anchored() -> list[str]:
     return bad
 
 
+DRIFT_MODULE = "scripts/icpg/drift.py"
+
+
+def _edge_types_read_by_the_detector(text: str) -> set[str]:
+    return set(re.findall(r"get_edges_(?:to|from)\([^)]*?['\"]([A-Z_]+)['\"]", text))
+
+
+def _edge_types_any_code_writes() -> set[str]:
+    """Producers: an `edge_type='X'` write, or a declared `--edge-type` choice.
+
+    `coverage.py` is excluded as a READER by construction (it is not scanned for
+    reads), and it writes nothing, so it contributes neither side.
+    """
+    produced: set[str] = set()
+    icpg = ROOT / "scripts" / "icpg"
+    for path in sorted(icpg.glob("*.py")) if icpg.is_dir() else []:
+        if path.name in ("drift.py", "test_drift.py"):
+            continue  # a reader cannot vouch for itself; tests are not producers
+        text = path.read_text()
+        produced |= set(re.findall(r"edge_type\s*=\s*['\"]([A-Z_]+)['\"]", text))
+        for block in re.findall(r"--edge-type.*?choices\s*=\s*\[([^\]]*)\]", text, re.S):
+            produced |= set(re.findall(r"['\"]([A-Z_]+)['\"]", block))
+    return produced
+
+
+def check_drift_dimensions_have_producers() -> list[str]:
+    """Every edge type `drift.py` READS must be one some code in scripts/icpg/ WRITES.
+
+    THE BUG THIS EXISTS FOR, measured 2026-07-26: of six edge types, one was ever
+    written. `REQUIRES`, `DUPLICATES`, `VALIDATED_BY` and `DRIFTS_FROM` appeared only
+    in the models enum and on the read side, so the dimensions that consumed them
+    scored *the emptiness of the graph* and called it drift — `test(0.30)` on 712 of
+    712 stored events, `ownership` and `dependency` never once firing in either
+    direction. Nothing anywhere asserted that a consumed edge type had a producer,
+    and that is the only reason it survived three evaluation passes.
+
+    Standing pattern #1 says to ask what would tell you this check itself died. Two
+    answers are built in: an empty read set is reported as a violation rather than a
+    pass (a detector reading no edge types is either broken or the parser is), and
+    `drift.py` is excluded from the producer scan so it can never vouch for itself.
+
+    `coverage.py` reads VALIDATED_BY with no producer ON PURPOSE — reporting an
+    absent edge as a count is the honest form of the fact that scoring it was not.
+    That is why this check names one module rather than the package.
+    """
+    drift = ROOT / DRIFT_MODULE
+    if not drift.exists():
+        return [f"{DRIFT_MODULE} missing — iCPG's detector has no definition"]
+
+    read = _edge_types_read_by_the_detector(drift.read_text())
+    if not read:
+        return [f"{DRIFT_MODULE} reads no edge type at all — either the detector "
+                f"stopped detecting or this check's parser drifted; both are findings"]
+
+    produced = _edge_types_any_code_writes()
+    return [
+        f"{DRIFT_MODULE} scores `{edge}` but nothing in scripts/icpg/ writes it — "
+        f"the dimension measures the graph's emptiness, not the code (add the "
+        f"producer first, or drop the dimension)"
+        for edge in sorted(read - produced)
+    ]
+
+
 def check_chaos_suite_is_reachable() -> list[str]:
     """Every chaos probe file must be invoked by a runner that exists and is executable.
 
@@ -1620,6 +1683,7 @@ def check_adr_execution_recorded() -> list[str]:
     return bad
 
 CHECKS = {
+    "drift-dimensions-have-producers": check_drift_dimensions_have_producers,
     "chaos-suite-is-reachable": check_chaos_suite_is_reachable,
     "session-logs-are-repo-anchored": check_session_logs_are_repo_anchored,
     "standing-patterns-are-surfaced": check_standing_patterns_are_surfaced,

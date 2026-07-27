@@ -1203,9 +1203,69 @@ Both were found by adversarial verification, **not** by the framework. **The rea
 
 ### iCPG's drift detector measures the emptiness of its own graph *(2026-07-25 → 07-26; surfaced by the scryer eval, root cause found on the third pass)*
 
-- **Status:** OPEN, and this entry has been **corrected twice** — each pass found the previous
-  root cause too shallow. Kept in full, because the *sequence* is the lesson: each correction came
-  from reading one layer deeper into code I had already formed a confident verdict about.
+- **Status:** **SHRINK EXECUTED 2026-07-27** (steps 0–2 and 4–6 of the corrected work order;
+  step 3 — dedup on insert, event IDs, evidence on the report — is still OPEN and is now the
+  whole remainder). What shipped, and the one thing the fourth pass found:
+
+  - **Six dimensions → three, each with a named producer.** `changed` (checksum, fed by
+    `upsert_symbol`), `decision` (contract predicates, fed by `contracts.py`), `usage` (bounded
+    to git-tracked files). **Deleted:** `ownership` (needs >3 distinct reason owners; all 10
+    reasons are `owner='git-history'`) and `dependency` (needs REQUIRES edges; unwritten).
+    **Moved out:** `test` → `scripts/icpg/coverage.py`, reported by `icpg status` as
+    `Intents w/o tests: 10/10` — a count, never a severity, with no path into a composite.
+  - **A FOURTH root cause, and it is not the "no writer" one.** `_check_decision_drift` gated on
+    `reason.postconditions` — **0 of 10 reasons have any** — while `contracts.py:88` writes a
+    `file_exists(...)` invariant for every scope path of every reason: **53 invariants across
+    10 reasons**, and `evaluate_predicate` has always supported exactly that form. A live
+    producer, a live evaluator, and a reader pointed at the wrong field. Not an absent edge
+    type; a mis-wiring, invisible to every previous pass because all three parts existed. It
+    now reads invariants AND postconditions. *Fourth pass, fourth root cause — see the method
+    lesson below, which predicted this shape.*
+  - **The 746 stored events were PURGED, not deduplicated.** Deduplicating would have preserved
+    154 distinct non-measurements; 725 of the 746 carried the constant `test(0.30)`. Standing
+    pattern #7 — a verdict must not rest on what the instrument could not read.
+  - **Fresh baseline, honest and interpretable for the first time:** 217 events over 816
+    symbols — `usage` 140, `changed` 49, both 28. **`decision` fires ZERO, and that is now a
+    different fact than before:** all 53 invariants currently hold, verified by evaluating each
+    one. It *could not* fire before; it *did not* fire today. Live-and-silent ≠ dead.
+  - **`scripts/icpg/` has tests — its first, ever.** 13 in `test_drift.py`, its own process line
+    in `run-tests.sh` (icpg and polyphony both carry `store.py`/`models.py`; the collision is
+    latent only because polyphony has no tests yet), registered under doccheck's
+    `ignored-test-suites-are-run`. **Three of them were watched going RED** against a re-added
+    unfed dimension before being accepted.
+  - **The check that would have caught all of this:** doccheck
+    **`drift-dimensions-have-producers`** (33 checks now) — every edge type `drift.py` reads
+    must be one something in `scripts/icpg/` writes. `drift.py` is excluded from the producer
+    scan so it cannot vouch for itself, and **an empty read set is a violation, not a pass**
+    (standing pattern #1: what tells you the check itself died). Non-vacuity is tested by
+    feeding the shipped module back through the predicate with one edge type swapped.
+
+  **STILL OPEN, and do not let the purge hide it: the re-insertion defect is live and it
+  refills the backlog automatically.** `mnemos-pre-edit.sh` runs `icpg drift file` on every
+  Edit/Write and `cmd_drift` persists every event with a fresh UUID and no natural key — the
+  746 rows had grown from 712 during this session's own editing. Purging without fixing insert
+  buys one clean reading, not a clean counter. That is step 3, unchanged in content and now
+  correctly ordered first among what remains.
+
+  **What this does NOT settle: iCPG's kill/keep trial.** `design-principles.md:459` asks two
+  questions and this answers one. The other — *does the agent populate ReasonNodes and
+  contracts well in practice?* — is still unexercised: **all 10 reasons are `owner='git-history'`,
+  `agent=NULL`, `source='inferred'`,** i.e. every one is bootstrap-derived and none was authored
+  by an agent doing work. A cause fully explains that (no hook records intent, and the hook that
+  *surfaces* it was dropping its output until 2026-07-24), so per FOCUS-004's rule the absence is
+  **not evidence** for or against the concept. A verdict needs the recording half wired first.
+
+  **A second calibration question, deliberately left open:** `usage` now fires on 168 of 816
+  symbols with 64 saturated at 1.00. It is honest — a scope comparison over tracked files — but
+  its thresholds (`>2` files, `/10` saturation) were never calibrated against anything, and the
+  bootstrap reasons' scope is one commit-cluster wide, so "outside scope" is nearly the whole
+  repo by construction. **Do not tune those numbers by eye** — that is how the three retired
+  proxy predicates were born. It needs a stated question first.
+
+- **Original status:** OPEN, and this entry had been **corrected twice** — each pass found the
+  previous root cause too shallow. Kept in full, because the *sequence* is the lesson: each
+  correction came from reading one layer deeper into code I had already formed a confident
+  verdict about. *(A third correction, above, landed on the fourth pass. The lesson held.)*
   1. **First claim (wrong):** "iCPG has no verb to close a drift event." False — `icpg drift resolve`
      exists. Corrected in ADR-0013's CORRECTION block.
   2. **Second claim (true but shallow):** "the detector re-inserts duplicates; 700 rows are 154
