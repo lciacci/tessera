@@ -6,7 +6,7 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-07-26 late: SPEC 11 CLOSED — 8/8 green, mechanized, fleet rolled, criterion 5 independently confirmed; watch fires ZERO; P3 needs a design call)
+## Handoff — pick up here (2026-07-26 late: SPEC 11 CLOSED, 8/8 green + fleet rolled; watch fires ZERO; TWO DESIGN CALLS OPEN — the 37-day Mnemos trial is unfalsifiable by construction, and decided-but-not-built decisions are undetectable)
 
 *(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
 Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering.)*
@@ -144,7 +144,28 @@ Add a line only when a lesson recurs; the value is that the list is short enough
 
 **NEXT-SESSION PRIORITIES (2026-07-26 late). Items 1 and 3 below are CLOSED; the live work is:**
 
-**A. P3 — a DESIGN CALL, not a wait.** P3 is snoozed 90d on proof: the `payload_probe` answered
+**A. P3 / the Mnemos compaction trial — a TRIAL redesign, not a predicate tweak.**
+   **The trial is 37 days old — the entire life of the repo (mnemos arrived 2026-06-19) — and has
+   never once been answerable.** It is unfalsifiable BY CONSTRUCTION, from two constraints that
+   are each individually correct: pattern #7 rightly excludes manual `/compact` from the count
+   (added 07-11), and this harness never emits a countable auto event (it sends PreCompact `{}` —
+   proven by `payload_probe: {"len":2,"keys":[]}`). Together, no evidence can ever accumulate. The
+   07-11 exclusion was RIGHT and it closed the last path to a verdict; nobody noticed, because a
+   trial that cannot conclude looks exactly like one that has not concluded yet.
+   **THE FIX IS TO SPLIT THE QUESTION — the trial conflated two, and pattern #7 governs only one:**
+   - *Does compaction happen often enough to matter?* Needs a real auto event; a test cannot say.
+     **Un-runnable here — relocate to a real Claude Code CLI, where P3 works UNMODIFIED.**
+   - *When compaction happens, does recovery work?* A test is exactly how you check this — pattern
+     #7 bars a test as evidence about FREQUENCY, not about MECHANISM. **Answerable right now, on
+     data already collected: the log holds 3 `compaction_fired` and 4 `restore_injected`.**
+   So: P3 is not broken and needs no minor change. Retire it *here* (it cannot fire in this venue),
+   answer the mechanism question from the existing log, and let the frequency question travel with
+   the venue. A candidate local predicate: a `compaction_fired` with no `restore_injected`
+   following — real health, detectable now, quiet-and-honest rather than quiet-and-vacuous.
+   *(Superseded framing, kept for the trail: this was first written as "retire P3 and replace it
+   with something similar." That was too small — the predicate was never the problem.)*
+
+**A-note. Original P3 framing —** P3 is snoozed 90d on proof: the `payload_probe` answered
    and this harness sends PreCompact `{}` — `{"len": 2, "keys": []}`, no trigger, no session_id.
    **The snooze is a holding action, not a resolution.** Its revisit trigger ("a payload_probe
    showing any keys") can almost certainly never fire here, so in 90 days P3 returns with the
@@ -176,6 +197,27 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    the fate of `tessera-code-review`'s 978 lines. Option D ("declare Claude-only, deliberately")
    is explicitly on the table — the repo has drifted into it while keeping portable-looking
    artifacts that do not run.
+
+**F. THE DECIDED-BUT-NOT-BUILT GAP — two instances in one day, and nothing detects it.**
+   An accepted decision that was never carried into the machinery is **indistinguishable from one
+   that was**. Both of today's worst bugs are this:
+   - **ADR-0008** ruled CUT-the-bulk on the `code-review` skill (2026-07-14). The prep step ran
+     (`adr-gate` was split out); the cut never did. Twelve days later the leftover skill was found
+     **shadowing the native `/code-review`** — the very command ADR-0008 cited as its replacement.
+   - **P3**: the observatory recorded, in Lorenzo's name (2026-07-16), that the compaction verdict
+     is *"structurally un-completable here"* and moves to a real CLI venue. **P3 was left counting
+     toward ≥3 for ten more days**, behaving as though the trial could still conclude.
+   Neither was detectable. `decision_surface`'s new amendment edge surfaces *"this decision was
+   revisited"*; it does NOT surface *"this decision was never executed."* doccheck asserts what
+   docs claim about the repo, not whether a decision's action happened. **This is the gap behind
+   Lorenzo's ADR question (2026-07-26) — and it is NOT ADR strictness. There is no state for
+   "decided, not yet built", and no signal when a decision and its machinery drift apart.**
+   Candidate shapes, none chosen (avoid a 4th proxy predicate — pattern #3):
+   (i) an explicit `Status: Accepted — UNEXECUTED` until something marks it done;
+   (ii) an ADR field naming the artifact its decision produces, checked for existence;
+   (iii) a watcher predicate over Accepted ADRs whose named action has no commit.
+   **Do not build (iii) reflexively** — "has this been done?" is judgement, and judgement is where
+   the retired proxies came from. (i) is exact and nearly free; start there.
 
 **E. Smaller, known:** item 2 Part B (pending-record channel — needs its 3-decision design gate);
    item 4 (third hook layer still unchecked: `templates/` ↔ `~/.claude/templates/`); item 5's
