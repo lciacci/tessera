@@ -503,12 +503,24 @@ Both were found by adversarial verification, **not** by the framework. **The rea
 - **This also answers the not-vacuous question** raised against the tier advisory the same day
   ("if nobody acts on it, 'it works' and 'it is decorative' are indistinguishable"). The answer is
   that it is used, in a mode the design did not anticipate and the docs did not describe.
-- **What it makes actionable:** `CLAUDE_EFFORT` is a live session env var (`high` here), so a
-  mismatch between classified tier and actual effort is *readable, not predicted* — no classifier
-  change, no second dimension on an instrument whose first dimension is still mis-rating
-  discussion-heavy prompts (see the entry below). The statusline currently flags model mismatch and
-  is silent on effort. **Unbuilt; the advice attached to any such flag must say "at a session
-  boundary", never "switch now."**
+- **An effort-mismatch statusline flag was proposed and DECLINED (same day). Do not build it.**
+  `CLAUDE_EFFORT` is a live session env var (`high` here), so a tier/effort mismatch would be
+  *readable rather than predicted* — which is why it looked attractive. Three reasons it fails:
+  1. **No per-turn signal.** The model-tier flag earns its statusline slot because its input —
+     the prompt's shape — changes every turn. Effort is session-scoped: same value every turn,
+     so the flag is wallpaper. This repo has retired three predicates for firing correctly while
+     meaning nothing.
+  2. **The mismatch does not exist yet.** The classifier emits a *model* tier; there is no
+     model-tier → correct-effort mapping anywhere. Flagging "OPUS but effort=low" means inventing
+     that mapping and then measuring the invention — principle-#3's failure aimed at the proposer.
+  3. **Category mismatch with the finding above.** Both knobs are session-*boundary* decisions; a
+     statusline is a per-turn channel. The venue that would fit is SessionStart, where no prompt
+     has been submitted yet and there is therefore nothing to compare against. It has no good home.
+- **The meta-lesson, which is the more transferable half:** this proposal was floated three times
+  and shrank every round — second classifier dimension → read the env var → statusline flag → 
+  nothing. **A proposal that keeps shrinking under evidence is usually converging on zero.** Each
+  smaller version was re-floated instead of asking whether the shrinkage *was* the answer; the
+  human's "or is that getting too micro?" is what stopped it. Watch for that shape.
 
 ### Tier classifier under-rates discussion-heavy prompts
 
