@@ -406,7 +406,30 @@ def p9_interpreter_drift(root: Path) -> tuple[bool, str]:
                       f"python whenever a dependent formula moves. That is how F-001 happened. "
                       f"Rebuild on a uv-managed base: rm -rf .venv && ./install.sh")
 
-    return False, f"toolchain interpreter is reachable and manager-independent ({interp})"
+    # ── SECOND CONSUMER: icpg. Added 2026-07-26. ──────────────────────────────────────
+    # P9's invariant is "does the interpreter the CONSUMER resolves have what it imports?" —
+    # and mnemos was the only consumer ever checked. `mnemos-pre-edit.sh` ALSO shells out to
+    # `icpg` for the intent/constraint/drift half of the documented "PreToolUse checks fatigue
+    # and intent" feature, and `icpg` resolves through a NAME on a mutable PATH exactly as
+    # mnemos did. If it breaks, that half silently vanishes, the hook reports nothing, and no
+    # predicate mentioned icpg at all — so the feature would read as "this file has no
+    # intents" rather than "the tool is gone". **That is F-001's confound verbatim: empty
+    # would have meant unreachable, and we would have read it as unused.**
+    #
+    # Declare-then-check, mirroring `expects_venv`: only a project that USES icpg (it has a
+    # reason.db) can be missing it. Silent elsewhere rather than noisy everywhere.
+    if (root / ".icpg" / "reason.db").exists():
+        icpg_bin = shutil.which("icpg") or str(root / ".venv" / "bin" / "icpg")
+        if not Path(icpg_bin).exists():
+            return True, ("this repo has .icpg/reason.db but `icpg` is NOT resolvable — the "
+                          "intent/constraint half of mnemos-pre-edit is silently dead, and it "
+                          "looks exactly like 'this file has no intents' (F-001's confound)")
+        probe = subprocess.run([interp, "-c", "import icpg"], capture_output=True, timeout=10)
+        if probe.returncode != 0:
+            return True, (f"`icpg` resolves but {interp} CANNOT import icpg — the intent half "
+                          f"of mnemos-pre-edit fails open into silence. Run ./install.sh")
+
+    return False, f"toolchain interpreter is reachable and manager-independent ({interp}); icpg ok"
 
 
 def g_a_consecutive(root: Path) -> tuple[bool, str]:

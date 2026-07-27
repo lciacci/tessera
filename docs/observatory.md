@@ -1521,6 +1521,41 @@ this section — the dedup fix it prescribes is real but is now step 3, not step
   skill corpus is next touched (ADR-0008/0009/0010 lineage) — a rename is cheapest to do while
   the corpus is already open.
 
+### Fatigue/intent re-judged, and a proxy I used while auditing for proxies *(2026-07-26)*
+
+- **Status:** item 5 CLOSED. The feature is LIVE and its silence is honest. One real gap found
+  and fixed (icpg), and one bad measurement made by me and corrected here.
+- **The re-judge (owed since the 07-24 channel fix).** `mnemos-pre-edit.sh` was silenced for the
+  ENTIRE Mnemos trial by the bare-stdout bug. Post-fix it works, verified live: the
+  `Mnemos + iCPG Context` block landed while editing `scripts/mnemos/checkpoint.py`.
+  - **Fatigue half: live.** 0.25 FLOW, real dimensions (token-util 0.39, scope-scatter 0.375).
+    Warnings fire only at `pre_sleep` (0.60+), so silence at FLOW is CORRECT — not breakage.
+    Auto-checkpoint at 0.60+ and auto-consolidate at 0.40+ are both wired.
+  - **Intent half: works when iCPG has intents for the file**, silent otherwise. The
+    one-file-in-many firing observed is expected behaviour, not a defect.
+- **THE REAL GAP, and it is F-001's confound verbatim: nothing watched `icpg`.** The intent half
+  shells out to `icpg`, which resolves through a NAME on a mutable PATH exactly as mnemos did —
+  and **no watcher predicate mentioned icpg at all**. If it broke, that half would vanish and the
+  hook would read as *"this file has no intents"* rather than *"the tool is gone"*. **Empty would
+  have meant unreachable and we would have read it as unused** — the precise error that confounded
+  the whole Mnemos trial. Fixed by extending **P9** (whose stated invariant is already *"does the
+  interpreter the CONSUMER resolves have what it imports?"* — mnemos was simply the only consumer
+  ever checked). Declare-then-check: only a repo with `.icpg/reason.db` can be missing it.
+- **THE MEASUREMENT ERROR — mine, made while auditing for exactly this.** I counted
+  `grep -c degraded` per hook, found 5 of 16 reporting, and read it as a spec-11 coverage hole.
+  **Wrong: that counts an ARTIFACT, not the property.** The property is *"is the failure reported
+  within one session by anything?"*, and coverage is DISTRIBUTED across mechanisms:
+  - toolchain unreachable → **P9** at SessionStart
+  - hook never ran at all → the `settings.json` trailing `tessera-degraded` branch (16/17 commands)
+  - `tessera-verify-scan` → covered by something *stronger*, `exit 2` + stderr, which is why
+    `report_settings.needs_reporting()` correctly skips it (its `_TRAILING_EXIT` wants `; exit 0`)
+  Three separate "missing coverage" findings collapsed on inspection. **Standing pattern #3 aimed
+  at the auditor: I named the artifact that correlates with the pain instead of the pain.** The
+  honest open question is narrower and still real — *is any bail-out covered by NOTHING?* — and it
+  needs per-hook reading to separate "nothing to do" from "could not run", not a grep.
+- **When to revisit:** when the per-bail-out audit runs (handoff item 5b). Do not re-open it with
+  a count.
+
 ### Mnemos: we never broke it — we inherited it half-wired, and the half we ADDED is the half producing data *(2026-07-26)*
 
 - **Status:** OPEN, but the framing is corrected. Prompted by the fair question: *the machinery has

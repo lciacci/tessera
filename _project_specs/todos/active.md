@@ -239,6 +239,27 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    evidence was never scarce, it was counted in the wrong place. Relocating would have preserved
    the category error and gathered auto-compaction events, the question that matters least.)*
 
+**A5. ~~Item 5 — re-judge fatigue/intent~~ — CLOSED 2026-07-26. Feature is LIVE; silence is honest.**
+   `mnemos-pre-edit.sh` was silenced for the WHOLE trial by the bare-stdout channel bug; post-fix
+   it works, verified live (the `Mnemos + iCPG Context` block landed while editing
+   `scripts/mnemos/checkpoint.py`). Fatigue half live — 0.25 FLOW, real dimensions; warnings fire
+   only at 0.60+, so FLOW silence is correct, not breakage. Intent half fires when iCPG has
+   intents for the file. **The one-file-in-many firing is expected behaviour.**
+   **Real gap found + fixed: nothing watched `icpg`.** It resolves through a NAME on a mutable
+   PATH exactly as mnemos did, and no predicate mentioned it. If it broke, the intent half would
+   read as "this file has no intents" rather than "the tool is gone" — **F-001's confound
+   verbatim.** P9 extended (declare-then-check on `.icpg/reason.db`).
+
+**A5b. OPEN — the per-bail-out audit, and DO NOT re-open it with a count.**
+   I counted `grep -c degraded` per hook (5 of 16), called it a spec-11 hole, and was **wrong
+   three times over**: coverage is DISTRIBUTED — toolchain bail-outs → P9, never-ran → the
+   `settings.json` trailing branch, `tessera-verify-scan` → `exit 2` + stderr (stronger, which is
+   why `report_settings.needs_reporting()` skips it). **That was standing pattern #3 aimed at the
+   auditor: I named the artifact that correlates with the pain instead of the pain.**
+   The honest question is narrower and still unanswered: **is any bail-out covered by NOTHING?**
+   It needs per-hook reading to separate "nothing to do" from "could not run" — a session's work,
+   and doing it fast is how a wrong classification gets baked into a check.
+
 **A4. ~~Decided-but-not-built is undetectable (item F)~~ — FIXED 2026-07-26.** ADRs now carry an
    append-only `- **Executed:**` line: `not yet` / `n/a — <why>` / `<date> — \`artifacts\``.
    **The immutability rule was conflating two facts** — *what was decided* (immutable; rewriting

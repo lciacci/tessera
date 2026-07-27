@@ -607,3 +607,60 @@ def test_p14_quiet_when_the_tier_is_not_installed(tmp_path, monkeypatch):
     home = tmp_path / "home"; home.mkdir()
     monkeypatch.setattr(tw.Path, "home", staticmethod(lambda: home))
     assert tw.p14_global_tier_drift(tmp_path)[0] is False
+
+
+# ── P9's second consumer: icpg ─────────────────────────────────────────────────────────
+#
+# P9's invariant is "does the interpreter the CONSUMER resolves have what it imports?" and
+# mnemos was the only consumer ever checked. mnemos-pre-edit.sh also shells out to `icpg`
+# for the intent/constraint/drift half. If icpg breaks, that half vanishes silently and the
+# hook reads as "this file has no intents" — F-001's confound verbatim (empty ≠ unreachable).
+
+
+def _icpg_repo(tmp_path, *, with_db=True):
+    root = _root(tmp_path)
+    (root / ".venv" / "bin").mkdir(parents=True)
+    if with_db:
+        (root / ".icpg").mkdir()
+        (root / ".icpg" / "reason.db").write_text("x")
+    return root
+
+
+def _past_the_mnemos_checks(tmp_path, monkeypatch, root, *, icpg):
+    """Build a fake `mnemos` whose shebang is THIS interpreter, so P9 clears the mnemos
+    gates and actually reaches the icpg branch. Without this the test short-circuits on an
+    unreadable shebang and asserts nothing — which is how a vacuous test looks."""
+    import sys
+    fake = tmp_path / "mnemos"
+    fake.write_text(f"#!{sys.executable}\n")
+    monkeypatch.setattr(tw.shutil, "which",
+                        lambda n: icpg if n == "icpg" else str(fake))
+    (root / ".python-version").write_text("3.13\n")
+    (root / ".venv" / "bin" / "python").write_text("x")
+
+
+def test_p9_fires_when_a_repo_uses_icpg_but_icpg_is_unresolvable(tmp_path, monkeypatch):
+    """THE regression. Silent icpg = the intent half vanishes and reads as 'no intents'."""
+    root = _icpg_repo(tmp_path)
+    _past_the_mnemos_checks(tmp_path, monkeypatch, root, icpg=None)
+    fired, detail = tw.p9_interpreter_drift(root)
+    assert fired is True, detail
+    assert "icpg" in detail and "silently dead" in detail, detail
+    assert "F-001" in detail, "must name the confound, or the next reader re-derives it"
+
+
+def test_p9_silent_on_repos_that_do_not_use_icpg(tmp_path, monkeypatch):
+    """Declare-then-check: a project with no reason.db never used it, so absence is not a
+    fault. Firing there would make P9 noisy on every downstream that skipped iCPG."""
+    root = _icpg_repo(tmp_path, with_db=False)
+    monkeypatch.setattr(tw.shutil, "which", lambda name: None if name == "icpg" else "/bin/true")
+    _, detail = tw.p9_interpreter_drift(root)
+    assert "icpg" not in detail or "ok" in detail
+
+
+def test_p9_icpg_branch_is_reachable_on_the_real_repo():
+    """Non-vacuity: this repo HAS .icpg/reason.db, so the branch is live rather than
+    dead code that would never have run."""
+    assert (Path(__file__).resolve().parent.parent / ".icpg" / "reason.db").exists()
+    fired, detail = tw.p9_interpreter_drift(Path(__file__).resolve().parent.parent)
+    assert "icpg ok" in detail or "icpg" in detail, detail
