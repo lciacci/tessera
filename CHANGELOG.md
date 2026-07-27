@@ -51,6 +51,13 @@ verb anywhere in the command text and blocked the doc edit describing the featur
 Narrowed to command position, optionally behind `bash -c "`. A guard that blocks writing
 about itself is one people learn to route around.
 
+**Rolled to all five downstreams and pushed** — conclave `cb0e267`, heaviside `ad4b4d6`,
+settempo `5093ec6`, tess-dashboard `371a8c0`, howler `15e6582`. Verified per repo, not
+assumed: 101 spend tests green in each, and each repo's own hook driven to rc=2 on a
+self-grant and rc=0 on `terraform destroy`. howler kept `--exclude spend` (documented
+deliberate defer; absence confirmed *after* the apply, since a previous sync once installed
+it by accident), so ADR-0016 does not reach it — there is no guard there to carry it.
+
 ### 2026-07-27 — iCPG drift: dedup on insert, and a report a human can act on
 
 Closes item C. `create_drift_event` INSERTed unconditionally with a fresh UUID on every

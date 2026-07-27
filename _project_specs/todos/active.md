@@ -162,8 +162,16 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    the deny-by-default control on external spend had an authorization verb the agent could
    invoke on itself, held back only by a sentence in its own contract. Now refused
    unconditionally.
-   **STILL OPEN, deliberately:** the fleet has its own `scripts/spend/` copies and has NOT
-   been rolled. Do it as a deliberate act, not a side effect.
+   **FLEET ROLLED 2026-07-27, all five, pushed.** conclave `cb0e267`, heaviside `ad4b4d6`,
+   settempo `5093ec6`, tess-dashboard `371a8c0`, howler `15e6582`. Verified per repo rather
+   than assumed: 101 spend tests green in each, and each repo's OWN hook driven to rc=2 on a
+   self-grant and rc=0 on `terraform destroy`. **howler kept `--exclude spend`** — its guard
+   is a documented deliberate defer, a previous sync installed it by accident once, and
+   absence was confirmed AFTER the apply, not just before. So ADR-0016 does not reach howler:
+   there is no guard there to carry it, and closing that defer needs a howler session because
+   only there can you learn whether the guard blocks a real build, upload or signing step.
+   Synced with `--update-stale`, which only refreshes files byte-identical to a known tessera
+   version — proof they were never customized downstream.
 
 ### T2's first real receipt: `insufficient` — and the checkpoint has a concrete bug
 
