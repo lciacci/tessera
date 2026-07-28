@@ -41,8 +41,8 @@ down, inference flows up. All three are **runtime peers**.
 | S1 | **Inference gateway** — OpenAI-compatible, Tailscale-private, multi-backend (LiteLLM). | Conclave | Tessera routing/dispatch (`scripts/model_routing.py`, ADR-0002 hooks); pr-arbiter (`base_url`). | Build stance decided; fleet not yet standing (Phase-0 local tier proven — see S-evidence). |
 | S2 | **Union-recall divergence metric** — a scoring **variant** of `divergence.py` whose oracle is the **union of true findings** (bug-recall + false-positive-rate vs a labeled defect set), NOT best-single-*answer*. | Conclave (instrument shape) — the **"true finding" scoring function is co-owned with pr-arbiter** (it defines a finding). | Tessera's *"is review-fan-out worth it?"* gate. | **Not built.** Same instrument, different scoring function. Cheapest next lever; validates pr-arbiter's headline before any integration is built. |
 | S3 | **Escalation tiers** — the `local → lab → frontier` ladder as addressable roles behind the gateway. | Conclave (exposes tiers) | Tessera (owns the **WHEN** — the confidence-gated cascade / escalation trigger). | Tiers specified; the *trigger policy* is Tessera's, unbuilt. |
-| S4 | **Review pattern → `/arbiter`** — pr-arbiter's reviewer+arbiter+triage graduates into the tool backing Tessera's `/arbiter`, running on conclave's fleet. | pr-arbiter (the pattern) + Tessera (the `/arbiter` surface + when-to-invoke) | Tessera users / CI | **ADR-gated** (Open decision D3). pr-arbiter Phase 3 is the prerequisite. |
-| S5 | **Findings feedback** — a peer's `FINDINGS.md` feeds Tessera's backlog via `tessera-findings` (globs `*/.tessera/project.yml`). | Conclave (already a downstream); pr-arbiter (only if it adopts `.tessera/`). | Tessera | Live for conclave; **pr-arbiter adoption is an open question** (Open decision D4). |
+| S4 | **Review pattern → `/arbiter`** — the reviewer+arbiter+triage pattern graduates into the tool backing Tessera's `/arbiter`, running on conclave's fleet. | **`arbiter`** (github.com/lciacci/arbiter) owns the engine; Tessera owns the `/arbiter` surface + when-to-invoke | Tessera users / CI | **Prerequisite met, still ADR-gated on D3.** The pattern graduated 2026-07-28: pr-arbiter froze as a research artifact and the engine now lives in `arbiter`, a standalone CLI that reviews a git ref range. Phase 3 was never run and is no longer the gate. |
+| S5 | **Findings feedback** — a peer's `FINDINGS.md` feeds Tessera's backlog via `tessera-findings` (globs `*/.tessera/project.yml`). | Conclave (already a downstream); **`arbiter`** (adopted `.tessera/` at scaffold). | Tessera | Live for conclave; **arbiter is now a downstream too** — D4 resolved, see below. |
 
 ---
 
@@ -57,8 +57,9 @@ down, inference flows up. All three are **runtime peers**.
 **PARKED (decided-in-principle, not standing):**
 - **Conclave standing fleet** — build stance is set (local-first tier ladder); the fleet is not
   deployed and the escalation signal is unmeasured (needs a real workload trace).
-- **pr-arbiter Phase 3** — design complete and ratified, **blocked on an 8–15h senior-annotator
-  pilot** (`../pr-arbiter/docs/PHASE_3_RESUMPTION.md`). Prerequisite for S4.
+- **pr-arbiter Phase 3** — **abandoned 2026-07-28, not parked.** Design complete and ratified but
+  never implemented; the project moved from research to tooling instead. No longer a prerequisite
+  for anything. See `../pr-arbiter/docs/PHASE_3_RESUMPTION.md` for the record.
 - **S2 union-recall divergence variant** — specified here; not built.
 
 **ADR-GATED (a later ADR decides; NOT decided in this map):**
@@ -100,12 +101,15 @@ Do **not** resolve these in this map. They are the ADR's job.
   live — Tessera policy, conclave substrate, or a thin seam between?
 - **D2 — The review gate.** Adopt the S2 union-recall divergence variant as Tessera's
   "is review-fan-out worth it?" gate, and on what labeled corpus is "true finding" scored?
-- **D3 — `/arbiter` graduation.** pr-arbiter → the implementation backing `/arbiter`, on conclave's
-  fleet — gated on pr-arbiter Phase 3 + a stable conclave fleet.
-- **D4 — Should pr-arbiter adopt `.tessera/`?** It pre-dates Tessera and is mid-research; adoption is
-  cheap/reversible (`hook_distro: global`, no app restructure) but was parked to avoid confounding
-  its own eval with harness churn. Natural **output** of the conclave/interop design session, not a
-  prerequisite. (Adopting pushes downstream count to 5 → trips `tessera-watch` P4.)
+- **D3 — `/arbiter` graduation.** The engine exists (`arbiter`), so the pr-arbiter-Phase-3 half of
+  this gate is discharged. What remains is a stable conclave fleet and the ADR itself. Note the
+  engine is deliberately **not** Claude-Code-bound: it is plain Python against the Anthropic SDK
+  with a bare client, so `ANTHROPIC_BASE_URL` points it at conclave's gateway with no code change.
+  Layering holds — `arbiter` is the pattern, Tessera decides when review runs.
+- **D4 — RESOLVED 2026-07-28.** Moot for pr-arbiter, which is frozen and will never adopt. Its
+  successor `arbiter` adopted `.tessera/` at scaffold, so it is a downstream now and S5 applies to
+  it. The `tessera-watch` P4 trip this decision warned about (downstream count → 5) is therefore
+  live; treat that as expected rather than as a regression.
 
 ## What would firm this map into that ADR
 
