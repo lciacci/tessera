@@ -82,10 +82,17 @@ fi
 # dependency this hook did not previously have, and losing it silently reinstated
 # the exact defect the guard was written to prevent.
 if [ -z "$SOURCE" ]; then
+    # Match key-colon-value together, not "source" followed by the value token
+    # anywhere later. The looser form matched any payload where the literal
+    # "startup" appeared after "source" in the raw bytes, so a compact event
+    # carrying e.g. {"source":"compact","event":"startup"} resolved to startup
+    # and re-anchored the base mid-session — precisely the data loss this block
+    # exists to prevent. Both spacings are listed because the payload may be
+    # compact or pretty-printed and this path exists for when jq is unavailable.
     case "$INPUT" in
-        *'"source"'*'"startup"'*) SOURCE=startup ;;
-        *'"source"'*'"resume"'*)  SOURCE=resume ;;
-        *'"source"'*'"compact"'*) SOURCE=compact ;;
+        *'"source":"startup"'*|*'"source": "startup"'*) SOURCE=startup ;;
+        *'"source":"resume"'*|*'"source": "resume"'*)   SOURCE=resume ;;
+        *'"source":"compact"'*|*'"source": "compact"'*) SOURCE=compact ;;
     esac
 fi
 
