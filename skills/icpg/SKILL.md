@@ -1,6 +1,6 @@
 ---
 name: icpg
-description: Intent-Augmented Code Property Graph — tracks WHY code exists via ReasonNodes with formal contracts, drift detection over the 3 dimensions that have producers, and 3 canonical pre-task queries for autonomous development
+description: Intent-Augmented Code Property Graph — tracks WHY code exists via ReasonNodes with formal contracts, drift detection over the 2 dimensions that have producers, and 3 canonical pre-task queries for autonomous development
 when-to-use: "Before any code change — query the reason graph for intent, constraints, and risk"
 user-invocable: false
 effort: high
@@ -28,7 +28,7 @@ was supposed to do.
 │  detects when code drifts from its original purpose.           │
 │                                                                │
 │  Storage: .icpg/reason.db (SQLite, per-project, gitignored)   │
-│  CLI: icpg init | create | record | query | drift | bootstrap │
+│  CLI: init | create | record | fulfil | query | drift | bootstrap│
 └────────────────────────────────────────────────────────────────┘
 ```
 
@@ -105,20 +105,37 @@ are what is actually fed. Keep them distinct when reasoning about what this grap
 
 ---
 
-## 3-Dimension Drift Model *(was 6 — shrunk 2026-07-27)*
+## 2-Dimension Drift Model *(was 6, then 3 — both cuts 2026-07-27)*
 
 | Dimension | What It Means | Detection | Fed by |
 |-----------|--------------|-----------|--------|
 | **Changed** | Symbol checksum differs from the recorded one | Compare stored vs current checksum | `upsert_symbol` |
 | **Decision** | Contract predicates no longer hold | Evaluate invariants + postconditions | `contracts.py` |
-| **Usage** | Symbol referenced outside its intent's scope | `git grep` over **tracked files only** | git |
+| ~~**Usage**~~ | ~~Symbol referenced outside its intent's scope~~ | **RETIRED 2026-07-27 — ADR-0017** | — |
 
-Run `icpg drift check` to scan; each dimension produces a 0-1 severity score, and the
-event's severity is their mean.
+Run `icpg drift check` to scan. **One event PER DIMENSION** (ADR-0018), each carrying that
+dimension's own 0-1 score.
 
-### Why three and not six — read this before adding a fourth
+*It used to bundle every firing dimension into one event and store the MEAN of their
+scores — a 0.8 deletion beside a 0.3 gave 0.55, describing neither. The composite also made
+disposition impossible to attribute (dismissing it credited EVERY dimension with the
+detector error) and made suppression over-reach, since both findings shared one dedup key.*
 
-The other three dimensions scored **the absence of an edge type nothing writes.**
+### Why `usage` was retired (ADR-0017)
+
+It shelled out to `git grep --fixed-strings` — a **substring** match. Measured over a
+corpus-complete graph (the extractor was extended to shell and extensionless files first,
+84 → 261 of 261 code files, so the dimension got a fair hearing): 986 fires over 6468
+symbols, and the top firers were `ok`, `run`, `err`, `ev`, `read`, `check` — `ok` matching
+"hook" and "token" in a repo about hooks. **It scored name commonness, not usage.** The
+word-boundary repair was tested *before* retiring and failed (`read` still 180, `run` 214).
+
+The general reason no threshold could save it: `design-principles.md` asks *"does drift
+detection catch things grep wouldn't?"* and this dimension **was** a call to grep.
+
+### Why the rest are few and not six — read this before adding another
+
+The dimensions cut in the 6->3 shrink scored **the absence of an edge type nothing writes.**
 `REQUIRES`, `DUPLICATES`, `VALIDATED_BY` and `DRIFTS_FROM` appear only in the enum and on
 the read side; no code in `scripts/icpg/` produces them. So:
 
@@ -230,20 +247,42 @@ pip install "./scripts/icpg[all]"      # + ChromaDB + scikit-learn + openai
 ## Workflow: Before Any Code Change
 
 ```
-0. INTENT       → icpg create (or identify existing intent)
-1. DEDUP        → icpg query prior (check for duplicate work)
-2. CONSTRAINTS  → icpg query constraints (understand invariants)
-3. RISK         → icpg query risk (check fragile symbols)
+0. INTENT       → icpg create        YOU        (prompted when none is open)
+1. DEDUP        → icpg query prior   YOU
+2. CONSTRAINTS  → icpg query constraints        ← HOOKED (PreToolUse)
+3. RISK         → icpg query risk    YOU
 4. LOCATE       → search_graph to find symbols (code-graph skill)
-5. CHANGE       → Make the edit
-6. RECORD       → icpg record (link symbols to intent)
-7. DRIFT CHECK  → icpg drift check (verify no unintended drift)
+5. CHANGE       → Make the edit      YOU
+6. RECORD       → icpg record                   ← HOOKED (Stop)
+7. DRIFT CHECK  → icpg drift check              ← HOOKED (PreToolUse)
 8. VERIFY       → Run tests, lint, typecheck
+   CLOSE        → icpg fulfil <id>   YOU
 ```
 
 **Step 0 is non-negotiable for autonomous agents.** Every change must
 be linked to a stated purpose. Without an intent, there's nothing to
 measure drift against.
+
+### What is automated, and what deliberately is not (ADR-0019)
+
+The split is **judgement vs bookkeeping**:
+
+- **JUDGEMENT — always yours.** Stating *what you are trying to achieve, in what
+  scope, under what contracts* (`icpg create`, or `/icpg-intent`), and deciding
+  *this is done* (`icpg fulfil`). **Nothing auto-creates a ReasonNode.** A hook
+  doing it would answer "does the agent state intent?" by making the question
+  unanswerable — the proxy trap this repo has retired four predicates over.
+- **BOOKKEEPING — hooked.** Which symbols changed while an intent was open
+  (`icpg-stop-record.sh`, anchored to a SessionStart-stamped SHA).
+
+**`icpg-inject-context.sh` asks for an intent** when zero are executing — once per
+session, and it *asks*, never blocks: a PreToolUse hook denying edits would be
+control, not instrumentation (ADR-0006).
+
+**Close your intents.** The recorder attributes symbols only when **exactly one**
+intent is executing. At zero it records nothing; at two or more it goes quiet and
+emits a `degraded` event rather than guess which intent a change belongs to.
+Leaving intents open is precisely what silences it.
 
 ---
 
