@@ -94,9 +94,10 @@ treating that emptiness as a signal is the exact error P3 made for 37 days.
 not 5 — found in the same sync dry-run). Unrelated to restore, so it was excluded rather than
 rolled in silently. `bin/tessera-sync-harness ~/Claude/howler` shows it.
 
-**Offered, not built:** the observatory trigger above is stated in machine-checkable form but is
-**not wired** as a `tessera-watch` predicate. Until it is, it is prose depending on someone
-re-reading the file — which is the failure mode that entry documents.
+**Wired the same day: `tessera-watch` P16.** The stopping rule is enforced by the harness, not by
+recall. It reads `T2 accruing: 0/10 receipts across 0/3 projects, day 0/30 — too early to read, by
+design` and stays quiet until the bar or 30 days. **P16 counts receipts and never interprets
+them** — keeping it a "time to read" trigger rather than proxy predicate #4.
 
 ### Standing patterns
 

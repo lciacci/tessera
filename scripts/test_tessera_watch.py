@@ -721,3 +721,84 @@ def test_p15_reads_the_cap_from_the_backstop_not_a_copy(tmp_path):
     assert tw.p15_spend_backstop_suppressed(tmp_path)[0] is False, (
         "P15 used its own copy of the cap instead of the backstop's"
     )
+
+
+# ── P16: the T2 read-trigger. Guards against reading EARLY, so the tests must drive it
+# to the state where it SHOULD fire — asserting only that it is quiet today would pass
+# against a predicate that can never fire at all (standing pattern #1, aimed at P16).
+
+def _fleet(tmp_path: Path, receipts: dict[str, int], own: int = 0) -> Path:
+    """A tessera root with sibling downstream projects, the shape _downstream_projects globs.
+    `receipts` maps project name -> number of restore_receipt events. `own` puts receipts in
+    tessera itself, which must never count."""
+    root = tmp_path / "fleet" / "tessera"
+    for name, n in [("tessera", own), *receipts.items()]:
+        project = tmp_path / "fleet" / name
+        (project / ".tessera" / "logs").mkdir(parents=True, exist_ok=True)
+        (project / ".tessera" / "project.yml").write_text("profile: standard\n")
+        lines = [json.dumps({"type": "restore_receipt", "data": {"sufficient": True}})] * n
+        # An offer is not a receipt: the harness half must not inflate the model half.
+        lines.append(json.dumps({"type": "restore_offered", "data": {"bytes": 10}}))
+        (project / ".tessera" / "logs" / "s1.jsonl").write_text("\n".join(lines) + "\n")
+    return root
+
+
+_T0 = tw.T2_SHIPPED
+_DAY = _dt.timedelta(days=1)
+
+
+def test_p16_quiet_while_the_data_is_thin_and_it_is_early(tmp_path):
+    root = _fleet(tmp_path, {"a": 2, "b": 1})
+    fired, detail = tw.p16_t2_receipts(root, now=_T0 + 3 * _DAY)
+    assert fired is False
+    assert "too early to read, by design" in detail
+
+
+def test_p16_fires_when_the_bar_is_met(tmp_path):
+    """The load-bearing case. A predicate that only ever tests its quiet branch is
+    indistinguishable from one that can never fire."""
+    root = _fleet(tmp_path, {"a": 4, "b": 4, "c": 2})
+    fired, detail = tw.p16_t2_receipts(root, now=_T0 + 5 * _DAY)
+    assert fired is True
+    assert "T2 BAR MET" in detail and "GREEN LIGHT" in detail
+    assert "a 4, b 4, c 2" in detail
+
+
+def test_p16_holds_at_two_projects_however_many_receipts(tmp_path):
+    """Three projects is not decoration: two cannot separate a venue effect from one
+    project's bad checkpoint."""
+    root = _fleet(tmp_path, {"a": 20, "b": 20})
+    assert tw.p16_t2_receipts(root, now=_T0 + 5 * _DAY)[0] is False
+
+
+def test_p16_holds_below_the_receipt_bar_across_enough_projects(tmp_path):
+    root = _fleet(tmp_path, {"a": 3, "b": 3, "c": 3})
+    assert tw.p16_t2_receipts(root, now=_T0 + 5 * _DAY)[0] is False
+
+
+def test_p16_fires_on_patience_and_names_the_RATE_as_the_finding(tmp_path):
+    """Thin data after 30 days is a finding about the ask landing — NOT about Mnemos.
+    A message that reads like failure invites the substitution the stopping rule forbids."""
+    root = _fleet(tmp_path, {"a": 2})
+    fired, detail = tw.p16_t2_receipts(root, now=_T0 + 31 * _DAY)
+    assert fired is True
+    assert "THE FINDING IS THE RATE, NOT MNEMOS" in detail
+    assert "Do NOT read the thin data as a verdict" in detail
+
+
+def test_p16_never_counts_tesseras_own_receipts(tmp_path):
+    """The entire reason this shipped downstream: active.md disqualifies tessera's own
+    receipts as evidence, so they must not be able to satisfy the bar."""
+    root = _fleet(tmp_path, {"a": 1}, own=50)
+    fired, detail = tw.p16_t2_receipts(root, now=_T0 + 5 * _DAY)
+    assert fired is False, "tessera's own receipts satisfied a downstream-only bar"
+    assert "1/10 receipts" in detail
+
+
+def test_p16_does_not_count_offers_as_receipts(tmp_path):
+    """offer.py is the harness marking its own delivery. Counting it would rebuild
+    `restore_injected` — one party certifying itself — one level up."""
+    root = _fleet(tmp_path, {"a": 0, "b": 0, "c": 0})
+    fired, detail = tw.p16_t2_receipts(root, now=_T0 + 5 * _DAY)
+    assert fired is False
+    assert "0/10 receipts" in detail

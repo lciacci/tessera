@@ -700,6 +700,89 @@ def _max_spend_fires(root: Path) -> int:
     return 3
 
 
+# T2's read-trigger (ADR-0015, observatory "T2 downstream"). A DATE, not a derived anchor:
+# the 30-day arm is load-bearing precisely when there are zero receipts, so anchoring it on
+# the receipts themselves would make it unreachable in the only state that needs it.
+T2_SHIPPED = datetime(2026, 7, 29, tzinfo=timezone.utc)
+T2_RECEIPT_BAR = 10             # total downstream receipts...
+T2_PROJECT_BAR = 3              # ...across this many distinct projects
+T2_PATIENCE_DAYS = 30
+
+
+def p16_t2_receipts(root: Path, now: datetime | None = None) -> tuple[bool, str]:
+    """Is there enough downstream T2 data to be worth READING yet?
+
+    ── THIS PREDICATE GUARDS AGAINST READING TOO EARLY, WHICH IS UNUSUAL, AND DELIBERATE ──
+
+    The T2 instrument shipped downstream on 2026-07-29 having produced **zero** receipts in
+    the fleet's entire history: `restore_offered` was 0 across 34 sessions in 6 projects, 26
+    of them substantive, because `scripts/restore/` was never scaffolded. It is now installed
+    and empty *by construction*.
+
+    An empty new instrument is the exact state in which this repo has twice formed a verdict
+    it had no business forming — P3 counted 3 compactions and called Mnemos untested for 37
+    days; `usage` was re-scoped three times and decided zero. So the observatory's stopping
+    rule says: not next session, not the one after; >=10 receipts across >=3 distinct
+    projects. This is that rule, moved out of prose a human has to re-read and into the
+    harness — because "an entry nobody re-reads" is the failure mode that entry documents.
+
+    THREE projects, not two: two cannot separate a venue effect from one project's bad
+    checkpoint.
+
+    TESSERA'S OWN RECEIPTS DO NOT COUNT, and that is the whole point of shipping downstream.
+    `active.md` records why: *"orientation came from THIS FILE and the standing-patterns
+    block, not from the checkpoint… a downstream app has no such file."* Free here —
+    `_downstream_projects()` already excludes root.
+
+    ── WHAT IT MUST NEVER DO ─────────────────────────────────────────────────────────────
+    It counts receipts. It does NOT read them: no sufficient/insufficient tally, no scoring,
+    no band. The moment a predicate summarises the verdict it becomes a proxy for the
+    judgement, and this repo has retired three proxy predicates already (#3). "Is it time to
+    read" is mechanical; "what do they say" is a human's job and stays one.
+
+    Both fire messages are green lights, not alarms — and the 30-day one is worded with care,
+    because a thin-data message that reads like failure invites exactly the substitution the
+    stopping rule forbids: treating what little arrived as an answer about Mnemos.
+    """
+    now = now or datetime.now(timezone.utc)
+    per_project: dict[str, int] = {}
+    for project in _downstream_projects(root):
+        logs = project / ".tessera" / "logs"
+        if not logs.is_dir():
+            continue
+        for log in logs.glob("*.jsonl"):
+            for line in log.read_text(errors="replace").splitlines():
+                try:
+                    event = json.loads(line)
+                except ValueError:
+                    continue
+                if event.get("type") == "restore_receipt":
+                    per_project[project.name] = per_project.get(project.name, 0) + 1
+
+    total = sum(per_project.values())
+    breakdown = ", ".join(f"{p} {n}" for p, n in sorted(per_project.items())) or "none"
+
+    if total >= T2_RECEIPT_BAR and len(per_project) >= T2_PROJECT_BAR:
+        return True, (f"T2 BAR MET — {total} downstream restore receipts across "
+                      f"{len(per_project)} projects ({breakdown}). This is a GREEN LIGHT, not "
+                      f"an alarm: the stopping rule in docs/observatory.md -> 'T2 downstream' "
+                      f"is satisfied, so the read is now legitimate. Read the four signals "
+                      f"there first — only ONE of them is evidence about Mnemos.")
+
+    elapsed = (now - T2_SHIPPED).days
+    if elapsed >= T2_PATIENCE_DAYS:
+        return True, (f"T2 has run {elapsed} days and collected {total} receipt(s) across "
+                      f"{len(per_project)} project(s) ({breakdown}), under the "
+                      f"{T2_RECEIPT_BAR}/{T2_PROJECT_BAR} bar. THE FINDING IS THE RATE, NOT "
+                      f"MNEMOS — read signal 1 (is the ask landing?) in docs/observatory.md. "
+                      f"Do NOT read the thin data as a verdict; that substitution is what the "
+                      f"stopping rule exists to prevent.")
+
+    return False, (f"T2 accruing: {total}/{T2_RECEIPT_BAR} receipts across "
+                   f"{len(per_project)}/{T2_PROJECT_BAR} projects ({breakdown}), day "
+                   f"{elapsed}/{T2_PATIENCE_DAYS} — too early to read, by design")
+
+
 def p15_spend_backstop_suppressed(root: Path) -> tuple[bool, str]:
     """Can the spend backstop still fire, or has its own cap silenced it?
 
@@ -824,6 +907,7 @@ PREDICATES = {
     "P13 degraded": p13_degraded,
     "P14 global-tier-drift": p14_global_tier_drift,
     "P15 spend-backstop-suppressed": p15_spend_backstop_suppressed,
+    "P16 t2-receipts": p16_t2_receipts,
     "G-a graduation:snooze": g_a_consecutive,
 }
 

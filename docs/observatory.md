@@ -2320,11 +2320,18 @@ check whether it "worked."
   three investigation cycles without producing a signal has had a fair hearing (ADR-0017's rule,
   applied here in advance rather than after the fact).
 
-**Trigger (machine-checkable, NOT WIRED — stated so it can be, and marked so it is not mistaken
-for live):** count `restore_receipt` events across the six downstream `.tessera/logs/`; fire when
-≥10 across ≥3 projects, or at 30 days with fewer. Would be `tessera-watch` P16. Until it exists
-this is prose that depends on someone re-reading this file — which is the failure mode this very
-entry documents.
+**Trigger: WIRED as `tessera-watch` P16 (2026-07-29, same day).** Counts `restore_receipt` across
+the downstream `.tessera/logs/`; fires at ≥10 across ≥3 projects, or at 30 days with fewer.
+Anchored on a dated constant (`T2_SHIPPED`) rather than on the receipts, because the 30-day arm is
+load-bearing exactly when there are zero receipts to derive an anchor from. Tessera's own are
+excluded for free — `_downstream_projects()` already drops root.
+
+It was briefly left as prose here, which was wrong for the reason this entry itself gives: an
+un-evaluated trigger depends on someone re-reading the file. **It counts receipts and never reads
+them** — no sufficient/insufficient tally, no score. "Is it time to read" is mechanical; "what do
+they say" stays a human's, or P16 becomes proxy predicate #4. Both fire messages are green lights,
+and the 30-day one names *the rate* as the finding, in those words, so thin data cannot be
+mistaken for a verdict on Mnemos.
 
 ---
 
