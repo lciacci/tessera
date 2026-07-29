@@ -1,12 +1,24 @@
 #!/bin/bash
 
-# Spec 11 reporter, resolved BEFORE the anchoring cd below so a relative $0 cannot be
-# invalidated by it. Inlined rather than sourced, same reasoning as tessera-restore-scan.sh:
-# a shared lib is one more file that can go missing on the path whose job is reporting
-# missing files. Output is discarded because THIS hook's stdout is the context channel —
-# a reporter must never be able to corrupt the restore it is reporting on.
-_HOOKDIR=$(cd "$(dirname "$0")" 2>/dev/null && pwd)
-_degraded() {
+# Spec 11 reporter. `$_HOOKDIR` is captured BEFORE the anchoring cd below so a relative $0
+# cannot be invalidated by it. Inlined rather than sourced, same reasoning as
+# tessera-restore-scan.sh: a shared lib is one more file that can go missing on the path
+# whose job is reporting missing files. Output is discarded because THIS hook's stdout is
+# the context channel — a reporter must never be able to corrupt the restore it reports on.
+#
+# THE TWO PATH FAMILIES ANSWER TO OPPOSITE TIERS, and that is deliberate — flagged as an
+# inconsistency in review (2026-07-29), so it is written down rather than left to be
+# re-derived. Unlike every sibling, this is a SessionStart hook: it parses no stdin, so it
+# has no hook-JSON `cwd` to anchor on and only these two signals.
+#   PROJECT tier — the `case` below fires, $PWD becomes the repo root, and the $_HOOKDIR
+#     entries resolve. The $PWD entries are then redundant, pointing at the same files.
+#   GLOBAL tier — the `case` deliberately does NOT fire ($HOME is not a repo), so
+#     $_HOOKDIR/../.. is $HOME and resolves nothing. The $PWD entries are LOAD-BEARING.
+# So $PWD is read post-cd on purpose. That is consistent with the whole hook, not a lapse:
+# the checkpoint probe and offer.py probe below are $PWD-relative too, because in the
+# global tier the session cwd IS this hook's only notion of which project it is serving.
+# Weakening the `case` guard breaks this function as well — which is why it says so here.
+degraded() {
   for _c in "$_HOOKDIR/../../bin/tessera-degraded" "$_HOOKDIR/../../scripts/tessera-degraded" \
             "$PWD/bin/tessera-degraded" "$PWD/scripts/tessera-degraded"; do
     if [ -x "$_c" ]; then "$_c" "$@" >/dev/null 2>&1 || true; return 0; fi
@@ -76,13 +88,37 @@ if [ -f ".mnemos/checkpoint-latest.json" ]; then
             # the harness half of a design built specifically so no party marks its own
             # homework. In the GLOBAL tier path 1 resolves to $HOME and path 2 is the
             # project, which is the pairing that must hold; if neither does, say so.
-            _off_found=""
+            # PRESENT-BUT-BROKEN is a distinct failure from ABSENT, and the first draft of this
+            # block conflated them: it set the found-flag on the same line as the interpreter
+            # call, so a resolvable offer.py that CRASHED suppressed the very diagnostic this
+            # block exists to emit. Pattern #1, aimed at the fix for pattern #1. Caught by
+            # arbiter, not by me. So: only a clean exit counts as recorded, and a failing path
+            # falls through to the next candidate rather than claiming the job is done.
+            #
+            # LIMIT, stated because it is not obvious: offer.py returns 0 on EVERY path,
+            # including the ones where it deliberately writes nothing (no session id, no
+            # checkpoint, unwritable log). So `$?` separates crashed from ran — it cannot
+            # separate ran-and-wrote from ran-and-declined. Closing that needs the caller to
+            # check the log, which duplicates offer.py's own session-keyed anchoring. The
+            # honest boundary: this reports the toolchain, `tessera-restore-scan` reports the
+            # missing offer at Stop, and neither claims to be the other.
+            _off_found=""; _off_seen=""
             for _off in "$_HOOKDIR/../../scripts/restore/offer.py" \
                         "$PWD/scripts/restore/offer.py"; do
-                [ -f "$_off" ] && { python3 "$_off" >/dev/null 2>&1; _off_found=1; break; }
+                [ -f "$_off" ] || continue
+                _off_seen=1
+                python3 "$_off" >/dev/null 2>&1 && { _off_found=1; break; }
             done
-            [ -n "$_off_found" ] || _degraded --component restore-offer --reason offer-missing \
-                --detail "a checkpoint was delivered but scripts/restore/offer.py resolved nowhere; no restore_offered recorded, so this session's receipt cannot be asked for. Run tessera-sync-harness."
+            if [ -z "$_off_found" ]; then
+                if [ -n "$_off_seen" ]; then
+                    _off_reason=offer-failed
+                    _off_detail="scripts/restore/offer.py resolved but exited non-zero; no restore_offered recorded. The module is present, so this is a toolchain fault (python3, imports), not a sync gap."
+                else
+                    _off_reason=offer-missing
+                    _off_detail="a checkpoint was delivered but scripts/restore/offer.py resolved nowhere; no restore_offered recorded, so this session's receipt cannot be asked for. Run tessera-sync-harness."
+                fi
+                degraded --component restore-offer --reason "$_off_reason" --detail "$_off_detail"
+            fi
         fi
     fi
 fi

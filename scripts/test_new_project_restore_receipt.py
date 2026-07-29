@@ -151,11 +151,23 @@ def test_sessionstart_reports_when_offer_py_resolves_nowhere(tmp_path):
         import pytest
         pytest.skip("mnemos CLI unreachable — no checkpoint delivered, nothing to report on")
 
-    (target / "scripts" / "restore").rename(target / "scripts" / "_restore_gone")
-    degraded = [e for e in run("probe-broken") if e.get("type") == "degraded"]
+    # ABSENT — the fleet's actual state for its whole life.
+    restore = target / "scripts" / "restore"
+    restore.rename(target / "scripts" / "_restore_gone")
+    degraded = [e for e in run("probe-missing") if e.get("type") == "degraded"]
     assert any(e["data"]["reason"] == "offer-missing" for e in degraded), (
         "SessionStart delivered a checkpoint, could not record the offer, and said nothing — "
         f"that silence IS the 34-session bug. Events: {degraded}")
+
+    # PRESENT BUT BROKEN — a distinct failure, and the first draft of the fix suppressed it
+    # by setting the found-flag on the same line as the interpreter call (arbiter, 2026-07-29).
+    # A crashing offer.py must not read as a recorded offer.
+    (target / "scripts" / "_restore_gone").rename(restore)
+    (restore / "offer.py").write_text("import sys\nsys.exit(3)\n")
+    degraded = [e for e in run("probe-failed") if e.get("type") == "degraded"]
+    assert any(e["data"]["reason"] == "offer-failed" for e in degraded), (
+        "a present-but-failing offer.py was treated as a recorded offer — the reporter is "
+        f"suppressed by exactly the fault it exists to report. Events: {degraded}")
 
 
 if __name__ == "__main__":
