@@ -6,98 +6,79 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-07-27 LATE session: the iCPG loop closed — intent authored deliberately, recorded automatically — and three independent review passes found progressively more, including defects in the code written to fix the previous pass. ADR-0017/0018/0019. Framework work is DONE; next is downstream.)
+## Handoff — pick up here (2026-07-29: the T2 instrument had never run downstream — 34 sessions, 26 substantive, zero receipts. Shipped, back-filled to six projects, and the read-trigger wired as P16. Then arbiter found a real bug in the fix, and arbiter turned out to have been reviewing less than it claimed.)
 
 *(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
 Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering.)*
 
 ### THE ONE THING TO KNOW
 
-> ### ⚠ EACH REVIEW PASS FOUND DEFECTS IN THE FIXES FROM THE PASS BEFORE IT.
-> Not carelessness — the same defect class wearing new clothes each round, and the
-> only reason any of it surfaced is that the passes were **independent**:
+> ### ⚠ STANDING PATTERN #1 HIT FOUR TIMES IN ONE DAY, AT FOUR LEVELS OF THE SAME STACK.
+> Not a theme imposed afterwards — each was found separately, and each produced
+> ordinary-looking success:
 >
-> - **Self-review** of ADR-0019 found 2 (unbounded edge duplication; a mid-session
->   compaction silently re-anchoring the session base), then 2 more while fixing
->   them (a `$INPUT` that was never assigned, so the fix was inert; a migration
->   assuming a table exists).
-> - **ultrareview** found 3 more, all verified real, none a false positive.
-> - **The high-effort workflow pass** found **10**, three of them in code written
->   an hour earlier to fix ultrareview's findings — including the compact guard
->   being *itself* fail-open, restoring the exact bug it was written to prevent.
+> 1. **The instrument was dark.** `restore_offered` = 0 across **34 downstream sessions in 6
+>    projects, 26 of them substantive**. `scripts/restore/` was never scaffolded, and the
+>    SessionStart probe's `for` loop ended with no `else` — so a project that COULD NOT record
+>    an offer and one with nothing to record logged identically.
+> 2. **The fix for it was silent on its own failure mode.** The found-flag was set on the same
+>    line as the interpreter call, so a resolvable `offer.py` that *crashed* counted as a
+>    recorded offer. I closed the gap for ABSENT and left it open for PRESENT-BUT-BROKEN.
+> 3. **The predicate watching it could undercount quietly.** P16 keyed its tally by directory
+>    name. Cannot collide today — the glob is single-parent — but a merged counter holds a
+>    *counting* predicate silent, and it should not depend on another function's properties.
+> 4. **The reviewer checking all of it was narrower than it claimed.** arbiter printed
+>    "1 file(s) reviewed · 0 blocking" having never opened the file under review.
 >
-> **The through-line: every fix was applied where the bug was found, not to the
-> shape.** `INSERT OR IGNORE` with a uuid primary key shipped THREE TIMES
-> (`drift_events`, `edges`, `mnemo_nodes`) — and the commit fixing the second said
-> in its own message "fix the pattern, not the row", then fixed only the row. The
-> third was live and costing data: 485 auto-commit nodes for 319 distinct messages.
+> **NUMBERS 2 AND 3 WERE FOUND BY arbiter, IN CODE WRITTEN AN HOUR EARLIER TO FIX NUMBER 1,
+> WHICH I HAD ALREADY TESTED HARD.** Number 4 was found only because the first run's result
+> looked *too* clean and got re-run with `--ext ""`.
 >
-> **What actually closed it was a check, not a fix:** doccheck
-> `insert-or-ignore-needs-a-real-key` (36 checks now) fails on a fourth. That check
-> was **vacuous on its first version** — it scanned forward from the statement while
-> the uuid is generated on the line above — and was only caught by re-introducing
-> the defect on purpose. *A guard tested against fixed code proves nothing.* Three
-> guards today were blind to the thing they guarded.
+> **The method, again: all four came from RUNNING something and reading what came back. None
+> came from re-reading a diff.** Self-review that executes nothing remains the weakest
+> instrument here — and today it extends one level further out: the *tool* you reach for to
+> check your work is itself in scope for the check.
 
 ### What shipped
 
-- **ADR-0017** — `usage` drift RETIRED. It was a `git grep --fixed-strings` call, so
-  "does drift catch what grep wouldn't" was no by construction. Extractor first
-  extended to shell + extensionless files (corpus 84 → 261 of 261) so the dimension
-  was judged fairly. Drift is now `changed` + `decision`.
-- **ADR-0018** — one drift event PER DIMENSION. The composite made severity a
-  meaningless mean, made dismissal attribution impossible (retiring `usage` credited
-  `changed` with 29 detector errors it never made), and made suppression over-reach.
-- **ADR-0019** — the iCPG loop closed. `create` opens `executing` and takes
-  hand-authored `--invariant/--precondition/--postcondition`; `icpg fulfil` closes;
-  a Stop hook records the session's symbols against the single executing intent,
-  anchored on a SessionStart-stamped SHA. **Step 0 is never automated** — a hook
-  authoring intent would answer Q1 by making it unanswerable.
-- **Mnemos checkpoint goal fix** — the stated goal was 40 sessions stale. A
-  re-bootstrap regenerated every iCPG id, the bridge's content-keyed dedup missed
-  all 43, and 44 goals sharing one timestamp took all 8 slots.
-- **Fleet**: the spend-guard self-authorization fix rolled and pushed to all four
-  downstream projects carrying it.
+- **T2 downstream** (`89619b9`, `c6aae93`). Scaffold ships `scripts/restore/{paths,offer,emit,scan}.py`
+  + the Stop hook; `settings.base.json` wires `tessera-restore-scan`; the offer fall-through now
+  emits `degraded/restore-offer/{offer-missing,offer-failed}`. All six downstreams back-filled and
+  pushed. Guarded by `scripts/test_new_project_restore_receipt.py` — every assertion run against
+  the re-planted defect.
+- **P16 `t2-receipts`** (`718dd90`, `9b73e27`). The read-trigger, wired instead of remembered.
+  Reads `T2 accruing: 0/10 receipts across 0/3 projects, day 0/30 — too early to read, by design`.
+- **The API-spend boundary NAMED** (`b23e845`). `COMMITTING` is three literals — this guard
+  covers cloud provisioning, not metered per-call charges, so `arbiter` needs no envelope.
+  Decision, not oversight; re-evaluate when cost bites. **An exemption is a call someone made;
+  a blind spot is a gap nobody chose, and they look identical from outside.**
+- **In arbiter** (`3e6be34`, that repo): its scope bug recorded as fail-open instance 5, item 7,
+  and the START HERE of its next session.
 
-### Next — DOWNSTREAM. The framework side is done.
+### Next — in priority order
 
-Nothing here is blocking. Framework signals: downstream findings **0 open across 5
-projects**, chaos **11/11**, doccheck **36/36**, suite green, no open escalations.
-
-1. **Conclave** — the likely next target.
-2. **Howler — the iOS port.**
-3. **settempo** — worked 2026-07-27; may be done for now.
-
-**Do NOT wire the iCPG loop downstream yet.** It is one day old and three review
-passes found defects in it. Run a downstream session or two on the harness that was
-already trusted (mnemos, gate, spend, doccheck) and wire iCPG once the baseline is
-quiet. Debugging an app and a one-day-old instrumentation layer at once is the
-blast-radius widening that stopped downstream work in the first place.
-
-#### UPDATE 2026-07-29 — one clause above was false, and it is now fixed
-
-*"the harness that was already trusted (mnemos, gate, spend, doccheck)"* — **mnemos's restore
-half was not downstream at all.** `restore_offered` was 0 across **34 downstream sessions in 6
-projects, 26 of them substantive**; `scripts/restore/` was never added to the scaffold, and the
-SessionStart probe's `for` loop ended with no `else`, so a project that could not record and one
-with nothing to record logged identically. Shipped, back-filled to all six, and the fall-through
-now reports `degraded/offer-missing`. Suite green, doccheck 36/36, chaos 11/11.
-
-**→ READ `docs/observatory.md` → "T2 downstream — the instrument shipped 2026-07-29 with ZERO
-data" BEFORE forming any view on T2.** It carries the four watch signals (only one of which is
-evidence about Mnemos) and **a stopping rule that binds against reading EARLY**: not next session,
-not the one after; ≥10 receipts across ≥3 projects, tessera's own excluded. Confirming the
-plumbing works is fine and is not a reading. The instrument is new and empty by construction —
-treating that emptiness as a signal is the exact error P3 made for 37 days.
-
-**Still open, deliberately not bundled:** howler is missing the **entire spend guard** (14 files,
-not 5 — found in the same sync dry-run). Unrelated to restore, so it was excluded rather than
-rolled in silently. `bin/tessera-sync-harness ~/Claude/howler` shows it.
-
-**Wired the same day: `tessera-watch` P16.** The stopping rule is enforced by the harness, not by
-recall. It reads `T2 accruing: 0/10 receipts across 0/3 projects, day 0/30 — too early to read, by
-design` and stays quiet until the bar or 30 days. **P16 counts receipts and never interprets
-them** — keeping it a "time to read" trigger rather than proxy predicate #4.
+1. **DOWNSTREAM WORK. That is the whole list for T2** — receipts arrive only as a byproduct.
+   Conclave is the target; howler's iOS port after. **Do not do T2 work; do real work.**
+   On the first downstream session, confirm the one thing never verified: that the newly-wired
+   Stop hook actually fires and the ask reaches the model. Watch for three things — the ask not
+   arriving at all, an answer of `sufficient` with thin `--used` text (the reflex signature), or
+   another Stop hook eating the channel, which is how `bin/tessera-verify` lost three verdicts.
+2. **This repo's control surface has never been independently reviewed, and could not have
+   been.** 21 extensionless files in `bin/`, ~4,500 lines — every `tessera-*` command, including
+   `tessera-verify` (489) and `tessera-watch` (1009) — are invisible to arbiter's default `--ext`
+   set. Two runs on 2026-07-29 came back clean over exactly this class. `--ext ""` is the
+   workaround; the real fix is arbiter item 7. **Reviewing all of it is ~$15–25 — a cost call,
+   not an obvious yes.** The falsifier and the watcher are the two worth doing first: they are
+   what this framework uses to check itself.
+3. **howler is missing the ENTIRE spend guard** — 14 files, not 5, found in the sync dry-run.
+   Excluded deliberately rather than bundled into unrelated approval.
+   `bin/tessera-sync-harness ~/Claude/howler` shows it.
+4. **Do NOT wire the iCPG loop downstream yet** (carried from 07-27, still current). Run a
+   downstream session or two on the harness already trusted, then wire it.
+5. **Carried, unchanged:** item 2 Part B (the pending-record channel, needs its 3-decision
+   design gate); B2 correction recall (blocked on unbiased labels — the block IS the finding);
+   `tessera-authorize dismiss` needs a HUMAN to run it end to end, which the agent structurally
+   cannot do.
 
 ### Standing patterns
 
@@ -195,6 +176,141 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    found the third hours later. **A defect class that has recurred becomes a doccheck
    assertion, or the next instance is found the same way — by someone counting rows
    months later.**
+
+12. **A report can be entirely TRUE and still be a false green. Ask what it did NOT cover.**
+   Distinct from #1 and #9: nothing broke, and the output was delivered and accurate.
+   arbiter printed `1 file(s) reviewed · 0 blocking` — true — having silently dropped every
+   extensionless file, including the only file under review; the same default had skipped
+   `bin/tessera-new-project` in an earlier run that DID report findings from the `.sh` files
+   beside it, so the report looked like a working review of the whole diff. Its docstring
+   documented the skip. Its output never did, and the output is what anyone reads.
+   **Second instance of the shape** — on 2026-07-27 the spend contract's "known ceiling,
+   inherited" hedge absorbed five plain-literal bypasses of a control it called
+   *unconditional*. **A ceiling is a class you decided not to catch; a hole is a member of
+   the class you claimed to catch, and a hedge phrased broadly enough turns the second into
+   the first.** So: any narrowing of scope must appear in the OUTPUT, not only in the source.
+   Live consequence, unfixed: ~4,500 lines across 21 extensionless `bin/` files — this
+   framework's entire control surface, `tessera-verify` and `tessera-watch` included — have
+   never been reviewable by default. **The tool you reach for to check your work is in scope
+   for the check.**
+
+
+### Do not read T2 early — the stopping rule is binding
+
+`docs/observatory.md` → **"T2 downstream"**. Not next session, not the one after. **≥10 receipts
+across ≥3 projects, tessera's own excluded.** At 30 days under the bar, the finding is about the
+RATE, not about Mnemos. Confirming the plumbing works is fine and is *not* a reading.
+
+This exists because the repo has twice formed a verdict on an instrument that had not run — P3
+counted 3 compactions and called Mnemos untested for 37 days; `usage` was re-scoped three times
+and decided zero. **A fresh instrument shipping empty is the single most tempting time to
+misread it.** P16 now holds the rule so it does not ride recall.
+
+### Open, and better answered downstream than here
+
+- **`busy_timeout` on `ICPGStore._conn()`** — deliberately SKIPPED; needs a real concurrent
+  workload to size, and guessing here sets a knob from nothing.
+- **63 unresolved drift events**, all from this repo's own edits. The real question is whether
+  `changed` should auto-resolve under an active intent.
+- **Q1 — does the agent author intent in practice?** Four intents were authored today under real
+  work (T2 ship, the arbiter fixes, P16, the P16 patch) and all four closed. That is the first
+  non-self-referential evidence, and it is thin.
+- **pr-arbiter has no any-repo entry point** — tracked there, not here.
+
+---
+
+## Handoff — 2026-07-27 (LATE session: the iCPG loop closed — intent authored deliberately, recorded automatically — and three independent review passes found progressively more, including defects in the code written to fix the previous pass. ADR-0017/0018/0019. Framework work is DONE; next is downstream.)
+
+*(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
+Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering.)*
+
+### THE ONE THING TO KNOW
+
+> ### ⚠ EACH REVIEW PASS FOUND DEFECTS IN THE FIXES FROM THE PASS BEFORE IT.
+> Not carelessness — the same defect class wearing new clothes each round, and the
+> only reason any of it surfaced is that the passes were **independent**:
+>
+> - **Self-review** of ADR-0019 found 2 (unbounded edge duplication; a mid-session
+>   compaction silently re-anchoring the session base), then 2 more while fixing
+>   them (a `$INPUT` that was never assigned, so the fix was inert; a migration
+>   assuming a table exists).
+> - **ultrareview** found 3 more, all verified real, none a false positive.
+> - **The high-effort workflow pass** found **10**, three of them in code written
+>   an hour earlier to fix ultrareview's findings — including the compact guard
+>   being *itself* fail-open, restoring the exact bug it was written to prevent.
+>
+> **The through-line: every fix was applied where the bug was found, not to the
+> shape.** `INSERT OR IGNORE` with a uuid primary key shipped THREE TIMES
+> (`drift_events`, `edges`, `mnemo_nodes`) — and the commit fixing the second said
+> in its own message "fix the pattern, not the row", then fixed only the row. The
+> third was live and costing data: 485 auto-commit nodes for 319 distinct messages.
+>
+> **What actually closed it was a check, not a fix:** doccheck
+> `insert-or-ignore-needs-a-real-key` (36 checks now) fails on a fourth. That check
+> was **vacuous on its first version** — it scanned forward from the statement while
+> the uuid is generated on the line above — and was only caught by re-introducing
+> the defect on purpose. *A guard tested against fixed code proves nothing.* Three
+> guards today were blind to the thing they guarded.
+
+### What shipped
+
+- **ADR-0017** — `usage` drift RETIRED. It was a `git grep --fixed-strings` call, so
+  "does drift catch what grep wouldn't" was no by construction. Extractor first
+  extended to shell + extensionless files (corpus 84 → 261 of 261) so the dimension
+  was judged fairly. Drift is now `changed` + `decision`.
+- **ADR-0018** — one drift event PER DIMENSION. The composite made severity a
+  meaningless mean, made dismissal attribution impossible (retiring `usage` credited
+  `changed` with 29 detector errors it never made), and made suppression over-reach.
+- **ADR-0019** — the iCPG loop closed. `create` opens `executing` and takes
+  hand-authored `--invariant/--precondition/--postcondition`; `icpg fulfil` closes;
+  a Stop hook records the session's symbols against the single executing intent,
+  anchored on a SessionStart-stamped SHA. **Step 0 is never automated** — a hook
+  authoring intent would answer Q1 by making it unanswerable.
+- **Mnemos checkpoint goal fix** — the stated goal was 40 sessions stale. A
+  re-bootstrap regenerated every iCPG id, the bridge's content-keyed dedup missed
+  all 43, and 44 goals sharing one timestamp took all 8 slots.
+- **Fleet**: the spend-guard self-authorization fix rolled and pushed to all four
+  downstream projects carrying it.
+
+### Next — DOWNSTREAM. The framework side is done.
+
+Nothing here is blocking. Framework signals: downstream findings **0 open across 5
+projects**, chaos **11/11**, doccheck **36/36**, suite green, no open escalations.
+
+1. **Conclave** — the likely next target.
+2. **Howler — the iOS port.**
+3. **settempo** — worked 2026-07-27; may be done for now.
+
+**Do NOT wire the iCPG loop downstream yet.** It is one day old and three review
+passes found defects in it. Run a downstream session or two on the harness that was
+already trusted (mnemos, gate, spend, doccheck) and wire iCPG once the baseline is
+quiet. Debugging an app and a one-day-old instrumentation layer at once is the
+blast-radius widening that stopped downstream work in the first place.
+
+#### UPDATE 2026-07-29 — one clause above was false, and it is now fixed
+
+*"the harness that was already trusted (mnemos, gate, spend, doccheck)"* — **mnemos's restore
+half was not downstream at all.** `restore_offered` was 0 across **34 downstream sessions in 6
+projects, 26 of them substantive**; `scripts/restore/` was never added to the scaffold, and the
+SessionStart probe's `for` loop ended with no `else`, so a project that could not record and one
+with nothing to record logged identically. Shipped, back-filled to all six, and the fall-through
+now reports `degraded/offer-missing`. Suite green, doccheck 36/36, chaos 11/11.
+
+**→ READ `docs/observatory.md` → "T2 downstream — the instrument shipped 2026-07-29 with ZERO
+data" BEFORE forming any view on T2.** It carries the four watch signals (only one of which is
+evidence about Mnemos) and **a stopping rule that binds against reading EARLY**: not next session,
+not the one after; ≥10 receipts across ≥3 projects, tessera's own excluded. Confirming the
+plumbing works is fine and is not a reading. The instrument is new and empty by construction —
+treating that emptiness as a signal is the exact error P3 made for 37 days.
+
+**Still open, deliberately not bundled:** howler is missing the **entire spend guard** (14 files,
+not 5 — found in the same sync dry-run). Unrelated to restore, so it was excluded rather than
+rolled in silently. `bin/tessera-sync-harness ~/Claude/howler` shows it.
+
+**Wired the same day: `tessera-watch` P16.** The stopping rule is enforced by the harness, not by
+recall. It reads `T2 accruing: 0/10 receipts across 0/3 projects, day 0/30 — too early to read, by
+design` and stays quiet until the bar or 30 days. **P16 counts receipts and never interprets
+them** — keeping it a "time to read" trigger rather than proxy predicate #4.
 
 ### Open, and better answered downstream than here
 
