@@ -1,5 +1,20 @@
 #!/bin/bash
 
+# Spec 11 reporter, resolved BEFORE the anchoring cd below so a relative $0 cannot be
+# invalidated by it. Inlined rather than sourced, same reasoning as tessera-restore-scan.sh:
+# a shared lib is one more file that can go missing on the path whose job is reporting
+# missing files. Output is discarded because THIS hook's stdout is the context channel —
+# a reporter must never be able to corrupt the restore it is reporting on.
+_HOOKDIR=$(cd "$(dirname "$0")" 2>/dev/null && pwd)
+_degraded() {
+  for _c in "$_HOOKDIR/../../bin/tessera-degraded" "$_HOOKDIR/../../scripts/tessera-degraded" \
+            "$PWD/bin/tessera-degraded" "$PWD/scripts/tessera-degraded"; do
+    if [ -x "$_c" ]; then "$_c" "$@" >/dev/null 2>&1 || true; return 0; fi
+  done
+  command -v tessera-degraded >/dev/null 2>&1 && tessera-degraded "$@" >/dev/null 2>&1
+  return 0
+}
+
 # Anchor to the project root: hook commands inherit the SESSION cwd, which may be
 # another repo entirely (2026-07-24 — a cd into a downstream split this repo's gate
 # log 4/2 and silently no-op'd twelve hooks). $0 is a fact this script always has.
@@ -51,10 +66,23 @@ if [ -f ".mnemos/checkpoint-latest.json" ]; then
             # is precisely the claim `restore_injected` was not entitled to make.
             # Silent by construction: this hook's stdout IS the context channel.
             # stdlib-only, so bare python3 is correct here (CLAUDE.md interpreter split).
-            for _off in "$(dirname "$0")/../../scripts/restore/offer.py" \
+            #
+            # LOUD on fall-through (2026-07-29). This loop used to end with no `else`, and
+            # that silence is the whole reason the T2 instrument sat dark in the fleet for
+            # its entire life: `restore_offered` = 0 across 34 downstream sessions in 6
+            # projects, 26 of them substantive. A checkpoint WAS delivered every one of
+            # those times — the branch above ran — so the log of an uninstalled instrument
+            # and the log of one with nothing to say were byte-identical. Pattern #1, in
+            # the harness half of a design built specifically so no party marks its own
+            # homework. In the GLOBAL tier path 1 resolves to $HOME and path 2 is the
+            # project, which is the pairing that must hold; if neither does, say so.
+            _off_found=""
+            for _off in "$_HOOKDIR/../../scripts/restore/offer.py" \
                         "$PWD/scripts/restore/offer.py"; do
-                [ -f "$_off" ] && { python3 "$_off" >/dev/null 2>&1; break; }
+                [ -f "$_off" ] && { python3 "$_off" >/dev/null 2>&1; _off_found=1; break; }
             done
+            [ -n "$_off_found" ] || _degraded --component restore-offer --reason offer-missing \
+                --detail "a checkpoint was delivered but scripts/restore/offer.py resolved nowhere; no restore_offered recorded, so this session's receipt cannot be asked for. Run tessera-sync-harness."
         fi
     fi
 fi

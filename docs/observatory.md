@@ -2248,6 +2248,86 @@ this section — the dedup fix it prescribes is real but is now step 3, not step
   existing silver-label harness; P10's adjudication requires any detector change to re-run it and
   re-open bands/weights on the new numbers).
 
+### T2 downstream — the instrument shipped 2026-07-29 with ZERO data, and reading it early is the failure it exists to correct
+
+- **Status:** Watching. **No verdict is available and none will be for weeks.** That is the entry.
+- **Source:** A read of downstream event logs, prompted by "a couple projects have been run a bit,
+  what does that tell us?" — not by anything the framework reported.
+
+**What was found.** `restore_offered` was **0 across 34 downstream sessions in 6 projects**. Of
+those, **26 were substantive** (`scan.py`'s own `is_substantive`: ≥1 edit or ≥20 turns) and would
+each have owed a receipt. `scripts/restore/` was never added to `bin/tessera-new-project`, so the
+SessionStart probe of `$PWD/scripts/restore/offer.py` resolved nowhere and the `for` loop ended
+with no `else`. The hook was always correct — verified by dropping the modules into a scaffolded
+project, where `restore_offered` appeared immediately. Only the directory was missing.
+
+**Why it mattered more than a missing file.** `active.md`'s own handoff already records that
+tessera's receipts are biased: *"orientation came from THIS FILE and the standing-patterns block,
+not from the checkpoint… A downstream app has no such file. Do not read tessera receipts as a
+general verdict on Mnemos."* T2 is the only question ADR-0015 says can produce a verdict on the
+recovery half, and it could only ever be answered in the one venue the repo itself disqualifies.
+
+**Fixed (2026-07-29):** the 4 modules + the Stop hook ship from the scaffold; all six live
+downstreams back-filled via `tessera-sync-harness`; the fall-through now emits
+`degraded/restore-offer/offer-missing` instead of nothing. Guarded by
+`scripts/test_new_project_restore_receipt.py`, every assertion of which was run against the
+re-planted defect (standing pattern #10).
+
+#### What we are watching for, and what each finding means
+
+Four signals, deliberately separated — three of them are findings about the *instrument*, and only
+the third is evidence about *Mnemos*. Conflating them is how P3 spent 37 days.
+
+1. **Answer rate — offers vs. receipts on substantive sessions.** Offers accruing with no receipts
+   means the ask is not landing: the Stop hook is unwired, or the model is skipping it.
+   → **An instrument fault. Fix the ask. It says nothing about restore quality.**
+2. **The reflex signature — uniformly `sufficient` with thin, generic `--used` text.** The contract
+   already reasons that an unconditional demand makes `--sufficient` a reflex, "which rebuilds the
+   bug one level up"; that logic was applied to *frequency* and applies equally to *venue*.
+   → **Do NOT read those sufficients as evidence.** The finding is that the ask has become
+   routine, and the response is to make it rarer or reframe it — not to trust the answers.
+3. **Which field `insufficient` names — this is the payload.** tessera's receipts have named
+   `progress` (a corrupted extractor, since fixed) and `goal` (the goal blob, still shaped wrong).
+   → If downstream names **different** fields, the selection bias is real and measured, which is
+   the entire reason this shipped. If it names the **same** fields, that is convergent evidence
+   the defect is in `write_checkpoint` and not in the venue — a *stronger* result, not a null one.
+4. **The instrument going quiet after a fix.** Already flagged in `active.md` for `progress`; it
+   can now be watched across 7 venues instead of 1. → A finding → fix → quiet loop closing would
+   be the first this repo has completed end to end.
+
+An immediate n=6 observation, from back-filling alone: **three of six downstream checkpoints carry
+no `active_constraints`** (howler, heaviside, arbiter) and tess-dashboard's carries only `goal`.
+Not yet a finding — `fields` lists only truthy values, so this may be honest emptiness. It is the
+first thing this instrument has ever said about a downstream project.
+
+#### THE STOPPING RULE — binding, and it binds against reading EARLY
+
+This repo's recurring error is a verdict formed on an instrument that has not run: P3 counted 3
+compactions and called the mechanism untested for 37 days; `usage` was re-scoped three times and
+decided zero. **Shipping an instrument and interrogating it immediately is that same error wearing
+new clothes**, and it is the specific risk here because the fix is fresh and the temptation is to
+check whether it "worked."
+
+- **Do not read this for a verdict in the next session, or the one after.** Confirming the
+  plumbing (an offer appears, a receipt can be filed) is fine and is *not* a reading.
+- **The bar: ≥10 downstream receipts across ≥3 distinct projects.** Three because two cannot
+  separate a venue effect from one project's bad checkpoint.
+- **tessera's own receipts do not count toward it.** That is the whole point.
+- **If 30 days pass with <10 receipts, the finding is about the RATE, not about Mnemos** — read
+  signal 1, and do not substitute the thin data for the absent data.
+- **No re-scope.** If the first honest read is inconclusive, the answer is more sessions or an
+  explicit retirement of T2 — not a fourth framing of the question. A dimension that has consumed
+  three investigation cycles without producing a signal has had a fair hearing (ADR-0017's rule,
+  applied here in advance rather than after the fact).
+
+**Trigger (machine-checkable, NOT WIRED — stated so it can be, and marked so it is not mistaken
+for live):** count `restore_receipt` events across the six downstream `.tessera/logs/`; fire when
+≥10 across ≥3 projects, or at 30 days with fewer. Would be `tessera-watch` P16. Until it exists
+this is prose that depends on someone re-reading this file — which is the failure mode this very
+entry documents.
+
+---
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.

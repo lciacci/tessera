@@ -74,6 +74,30 @@ already trusted (mnemos, gate, spend, doccheck) and wire iCPG once the baseline 
 quiet. Debugging an app and a one-day-old instrumentation layer at once is the
 blast-radius widening that stopped downstream work in the first place.
 
+#### UPDATE 2026-07-29 — one clause above was false, and it is now fixed
+
+*"the harness that was already trusted (mnemos, gate, spend, doccheck)"* — **mnemos's restore
+half was not downstream at all.** `restore_offered` was 0 across **34 downstream sessions in 6
+projects, 26 of them substantive**; `scripts/restore/` was never added to the scaffold, and the
+SessionStart probe's `for` loop ended with no `else`, so a project that could not record and one
+with nothing to record logged identically. Shipped, back-filled to all six, and the fall-through
+now reports `degraded/offer-missing`. Suite green, doccheck 36/36, chaos 11/11.
+
+**→ READ `docs/observatory.md` → "T2 downstream — the instrument shipped 2026-07-29 with ZERO
+data" BEFORE forming any view on T2.** It carries the four watch signals (only one of which is
+evidence about Mnemos) and **a stopping rule that binds against reading EARLY**: not next session,
+not the one after; ≥10 receipts across ≥3 projects, tessera's own excluded. Confirming the
+plumbing works is fine and is not a reading. The instrument is new and empty by construction —
+treating that emptiness as a signal is the exact error P3 made for 37 days.
+
+**Still open, deliberately not bundled:** howler is missing the **entire spend guard** (14 files,
+not 5 — found in the same sync dry-run). Unrelated to restore, so it was excluded rather than
+rolled in silently. `bin/tessera-sync-harness ~/Claude/howler` shows it.
+
+**Offered, not built:** the observatory trigger above is stated in machine-checkable form but is
+**not wired** as a `tessera-watch` predicate. Until it is, it is prose depending on someone
+re-reading the file — which is the failure mode that entry documents.
+
 ### Standing patterns
 
 *(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` prints this block at
