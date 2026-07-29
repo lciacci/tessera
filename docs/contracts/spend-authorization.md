@@ -116,6 +116,44 @@ If a false positive still blocks non-spend work, **use a non-Bash tool** (Write/
 external spend and are not gated). Do **not** grant yourself a spend envelope you do not need,
 and do not reword a genuine spend command to slip past the pattern.
 
+### Metered API spend is OUT OF SCOPE — deliberately, decided 2026-07-29
+
+`COMMITTING` is three literals: `terraform apply` and two `aws ec2` provisioning forms. This
+guard covers **cloud infrastructure provisioning**. It has no concept of a metered per-call API
+charge, so an agent running `arbiter`, or any tool billing per token, is **not** gated and needs
+no envelope.
+
+**This is a decision, not an oversight, and the distinction is the reason it is written here.**
+Found 2026-07-29 when a session ran `arbiter --base main` — $1.48, 35 model calls — through the
+real PreToolUse hook and was allowed. The working belief at the time was that arbiter had been
+*exempted*. It never was; it was never in scope. **Those two states are indistinguishable from
+outside and are not the same thing:** an exemption is a call someone made and can revisit, a
+blind spot is a gap nobody chose. Naming it converts the second into the first, which is the
+whole point of this section.
+
+**The reasoning for leaving it.** Metered API spend is a different risk class from a GPU fleet:
+bounded per call, self-limiting, and visible in the tool's own output (arbiter prints its token
+count and cost every run). The runaway is what this guard exists to stop. Gating it would mean a
+human granting an envelope before each review run — the agent structurally cannot (ADR-0016) —
+which taxes the one tool whose stated positioning is being cheap to reach for.
+
+**The cost of the decision, stated so it is not discovered later as a surprise:** the guard will
+block `terraform apply` on a change that costs cents while allowing an agent to run arbiter in a
+loop. Cost scales with diff size — $1.48 for 8 files here, $2.74 for 7 Python files in arbiter's
+own measurements — so a large refactor is several dollars per review and nothing bounds a repeat.
+
+**Re-evaluate when:** metered spend actually bites — an unexpected bill, a runaway loop, or any
+month where API cost is noticed rather than assumed. The remedy then is a `COMMITTING` entry plus
+an envelope workflow, not a rethink. Until then this stays a stated boundary and the guard stays
+scoped to provisioning.
+
+*Worded as three named literals rather than "infrastructure spend" on purpose. See
+`docs/observatory.md` → "The spend guard matches command TEXT": **a ceiling is a class you
+decided not to catch; a hole is a member of the class you claimed to catch, and a hedge phrased
+broadly enough launders the second into the first.** "This guard does not cover API spend" is a
+ceiling only while the covered set stays enumerable — if `COMMITTING` ever grows toward "spend
+generally", this paragraph becomes the next place a real gap hides in plain sight.*
+
 ## Self-authorization is refused — enforced, not requested *(ADR-0016, 2026-07-27)*
 
 **That last sentence used to be the only thing stopping self-authorization.** Driving the real

@@ -34,7 +34,7 @@ for f in "$TPL/CLAUDE.md.template" "$TPL/settings.base.json" "$TPL/gitignore.bas
 done
 
 mkdir -p "$TARGET/.claude/scripts" "$TARGET/.tessera/logs" "$TARGET/.mnemos" \
-         "$TARGET/scripts/gate" "$TARGET/scripts/spend"
+         "$TARGET/scripts/gate" "$TARGET/scripts/spend" "$TARGET/scripts/restore"
 
 # Harness scripts. Default (global): no local mnemos copies — settings.json falls
 # back to ~/.claude/templates. Frozen: pin live copies now (anti-drift snapshot).
@@ -93,6 +93,27 @@ cp "$TESSERA_ROOT"/.claude/scripts/tessera-spend-guard.sh \
    "$TESSERA_ROOT"/.claude/scripts/tessera-spend-backstop.sh "$TARGET/.claude/scripts/"
 chmod +x "$TARGET"/.claude/scripts/tessera-spend-guard.sh \
          "$TARGET"/.claude/scripts/tessera-spend-backstop.sh "$TARGET"/scripts/spend/guard.py
+
+# Restore receipt (T2, ADR-0015). Both parties ship or neither, and here that rule has an
+# extra edge: the two halves are written by DIFFERENT parties on purpose. offer.py is the
+# harness recording what it delivered; emit.py is the model answering whether it sufficed.
+# Shipping offer.py alone yields a denominator with nothing to divide it by; shipping emit.py
+# alone rebuilds `restore_injected` — one party certifying its own delivery.
+#
+# WHY THIS EXISTS AT ALL (2026-07-29): it did not ship for the fleet's whole life. The
+# SessionStart hook probes `$PWD/scripts/restore/offer.py`, which is the right path by this
+# scaffold's own convention (cf. scripts/tessera-degraded) — the directory was simply never
+# scaffolded. Result: `restore_offered` = 0 across 34 downstream sessions in 6 projects, of
+# which 26 were substantive and would have owed a receipt. Nothing reported it, because an
+# instrument that was never installed and one that has nothing to say log identically.
+#
+# The scan.py backstop rides along for the same reason it does for gate and spend: the ask
+# is what produces the answer. This repo's own gate log ran on model recall and missed ~85%.
+cp "$TESSERA_ROOT"/scripts/restore/paths.py "$TESSERA_ROOT"/scripts/restore/offer.py \
+   "$TESSERA_ROOT"/scripts/restore/emit.py "$TESSERA_ROOT"/scripts/restore/scan.py \
+   "$TARGET/scripts/restore/"
+cp "$TESSERA_ROOT"/.claude/scripts/tessera-restore-scan.sh "$TARGET/.claude/scripts/"
+chmod +x "$TARGET/.claude/scripts/tessera-restore-scan.sh"
 
 # Settings + gitignore (stack-agnostic bases — add your stack's commands after).
 cp "$TPL/settings.base.json" "$TARGET/.claude/settings.json"
