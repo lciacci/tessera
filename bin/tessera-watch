@@ -745,11 +745,18 @@ def p16_t2_receipts(root: Path, now: datetime | None = None) -> tuple[bool, str]
     stopping rule forbids: treating what little arrived as an answer about Mnemos.
     """
     now = now or datetime.now(timezone.utc)
-    per_project: dict[str, int] = {}
+    # Keyed by RESOLVED PATH, displayed by name. `_downstream_projects` globs one parent
+    # non-recursively today, so names are unique by construction and this cannot collide —
+    # but the project count is half the bar, and a collision would MERGE two projects into
+    # one counter, undercounting distinct projects and holding the predicate quiet. A
+    # predicate that fails by staying silent is the failure class this whole entry is about,
+    # so it does not get to depend on a property of a different function (arbiter, 2026-07-29).
+    per_project: dict[Path, int] = {}
     for project in _downstream_projects(root):
         logs = project / ".tessera" / "logs"
         if not logs.is_dir():
             continue
+        key = project.resolve()
         for log in logs.glob("*.jsonl"):
             for line in log.read_text(errors="replace").splitlines():
                 try:
@@ -757,10 +764,11 @@ def p16_t2_receipts(root: Path, now: datetime | None = None) -> tuple[bool, str]
                 except ValueError:
                     continue
                 if event.get("type") == "restore_receipt":
-                    per_project[project.name] = per_project.get(project.name, 0) + 1
+                    per_project[key] = per_project.get(key, 0) + 1
 
     total = sum(per_project.values())
-    breakdown = ", ".join(f"{p} {n}" for p, n in sorted(per_project.items())) or "none"
+    breakdown = ", ".join(f"{p.name} {n}" for p, n in
+                          sorted(per_project.items(), key=lambda kv: kv[0].name)) or "none"
 
     if total >= T2_RECEIPT_BAR and len(per_project) >= T2_PROJECT_BAR:
         return True, (f"T2 BAR MET — {total} downstream restore receipts across "

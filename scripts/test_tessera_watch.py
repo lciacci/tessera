@@ -802,3 +802,31 @@ def test_p16_does_not_count_offers_as_receipts(tmp_path):
     fired, detail = tw.p16_t2_receipts(root, now=_T0 + 5 * _DAY)
     assert fired is False
     assert "0/10 receipts" in detail
+
+
+def test_p16_counts_same_named_projects_separately(tmp_path):
+    """Cannot happen under today's single-parent glob — asserted anyway because the project
+    count is HALF the bar, and a merged counter would undercount distinct projects and hold
+    P16 QUIET. A predicate that fails by staying silent must not depend on a property of a
+    different function (arbiter, 2026-07-29)."""
+    root = tmp_path / "fleet" / "tessera"
+    (root / ".tessera").mkdir(parents=True)
+    (root / ".tessera" / "project.yml").write_text("profile: standard\n")
+    receipt = json.dumps({"type": "restore_receipt", "data": {"sufficient": True}})
+    for parent in ("one", "two", "three"):
+        project = tmp_path / "fleet" / parent / "api"
+        (project / ".tessera" / "logs").mkdir(parents=True)
+        (project / ".tessera" / "project.yml").write_text("profile: standard\n")
+        (project / ".tessera" / "logs" / "s.jsonl").write_text((receipt + "\n") * 4)
+
+    # Three distinct projects that all happen to be named "api".
+    projects = [tmp_path / "fleet" / p / "api" for p in ("one", "two", "three")]
+    original = tw._downstream_projects
+    tw._downstream_projects = lambda _root: projects
+    try:
+        fired, detail = tw.p16_t2_receipts(root, now=_T0 + 5 * _DAY)
+    finally:
+        tw._downstream_projects = original
+
+    assert fired is True, f"three same-named projects collapsed into fewer: {detail}"
+    assert "12 downstream restore receipts across 3 projects" in detail
