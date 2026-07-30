@@ -2,14 +2,18 @@
 
 Personal agentic coding framework for Claude Code.
 
-Tessera is **forked from [Maggy](https://github.com/alinaqi/maggy)** (MIT) — not
-merely inspired by it. The repo was seeded by importing Maggy wholesale, and much
-of the skill library, hook surface, and command set is still Maggy's. What Tessera
-adds on top is a governing layer written from scratch: compounding design
-principles, Architecture Decision Records, project profiles, an observatory of
-undecided questions, and a set of mechanisms that hold the framework honest — a
-suggestion-gate recorder, a doc-honesty checker, an escalation protocol, and
-run-scoped external-spend authorization.
+Tessera began as a **fork of [Maggy](https://github.com/alinaqi/maggy)** (MIT) — not
+merely inspired by it. The repo was seeded by importing Maggy wholesale, and the
+skill library is still substantially Maggy's.
+
+What has changed since is most of the operating surface. Every wired hook, the
+entire `tessera-*` command line, and the mechanisms that hold the framework honest
+— a suggestion-gate recorder, a doc-honesty checker, an escalation protocol,
+fail-open probes, restore receipts, and run-scoped external-spend authorization —
+are Tessera's, alongside the governing layer of compounding design principles,
+Architecture Decision Records, project profiles, and an observatory of undecided
+questions. The memory and intent-graph subsystems were inherited and then largely
+rewritten; some other inherited subtrees remain untouched.
 
 See [NOTICE](NOTICE) for the full provenance split — which files came from where.
 

@@ -8,14 +8,21 @@ they are looking at.
 ## What came from Maggy
 
 The repository was seeded by importing Maggy wholesale (commit `ad19913`,
-"Import Maggy baseline (pre-prune)" — 345 files). As of this writing a large
-majority of those files are still byte-identical to that import:
+"Import Maggy baseline (pre-prune)" — 345 files). A large majority of those files
+are still byte-identical to that import, though the split is much closer to even
+when weighed by line count rather than by file:
 
-- `skills/` — the skill library (the single largest inherited component)
-- `commands/`, `hooks/`, `rules/`, `agents/` — the Claude Code surface
-- `cortex-mcp/`, and much of `scripts/` and `bin/`
-- Several documents under `docs/` and `_project_specs/` that describe **Maggy's**
-  architecture and roadmap, not Tessera's
+- `skills/` — the skill library, and the single largest inherited component by
+  any measure
+- `commands/`, `rules/`, `agents/`, and roughly half of `hooks/`. Note that the
+  hooks which actually **fire** live in `.claude/scripts/` and are Tessera's; the
+  inherited `hooks/` tree is a separate surface
+- `cortex-mcp/`, `evals/`, and `scripts/polyphony/` — inherited essentially
+  untouched, and not exercised by `tessera-test`
+- Part of `scripts/` — the minority by line count. In `bin/`, only the vendored
+  `gemini-cli` and `qwen3` wrappers; every `tessera-*` command is Tessera's
+- Several documents under `_project_specs/` that describe **Maggy's** architecture
+  and roadmap, not Tessera's (`docs/` no longer carries any)
 
 ## What is original to Tessera
 
@@ -25,11 +32,21 @@ copy — was written from scratch:
 - `docs/design-principles.md` — the compounding-principles design doc
 - `docs/adr/` — the Architecture Decision Records
 - `docs/observatory.md`, `docs/contracts/` — the watch list and the contracts
-- `scripts/gate/`, `scripts/doccheck.py`, `scripts/spend/`, `scripts/override/` and
-  `bin/tessera-escalate` — the gate, doc-honesty, spend-authorization, and escalation
-  machinery
+- `scripts/gate/`, `scripts/doccheck.py`, `scripts/spend/`, `scripts/override/`,
+  `scripts/restore/` and `bin/tessera-escalate` — the gate, doc-honesty,
+  spend-authorization, escalation, and restore-receipt machinery
+- `.claude/scripts/` — every hook wired into a Tessera session
+- `bin/tessera-*` — the command line, including `tessera-verify` (the adversarial
+  falsifier) and `tessera-watch` (the observatory's machine-checkable triggers)
+- `chaos/` — the fail-open probes, which break a component on purpose and assert
+  that Tessera reports it
 - `.tessera/` — the project-profile model
 - `install.sh` — Tessera's self-hosting installer (see ADR-0003)
+
+Two subsystems sit between the categories: **Mnemos** (`scripts/mnemos/`, the
+memory layer) and **iCPG** (`scripts/icpg/`, the intent graph) were inherited from
+Maggy and then rewritten to roughly three-quarters, so neither list above owns them
+cleanly.
 
 ## Direction of dependency
 
