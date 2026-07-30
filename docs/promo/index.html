@@ -290,6 +290,8 @@
     box-shadow: 0 0 0 4px rgba(94,201,168,0.15);
   }
   .tl-item.status-watching .tl-dot { background: var(--accent-2); box-shadow: 0 0 0 4px rgba(217,166,78,0.15); }
+  .tl-item.status-superseded .tl-dot { background: var(--text-dim); box-shadow: none; }
+  .tl-item.status-superseded .tl-title { opacity: 0.72; }
   .tl-meta { font-size: 0.78rem; color: var(--text-dim); margin-bottom: 4px; }
   .tl-status {
     display: inline-block; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em;
@@ -398,6 +400,7 @@
       Tessera
     </div>
     <ul>
+      <li><a class="navlink" href="#capabilities">Capabilities</a></li>
       <li><a class="navlink" href="#philosophy">Philosophy</a></li>
       <li><a class="navlink" href="#principles">Principles</a></li>
       <li><a class="navlink" href="#skills">Skills</a></li>
@@ -445,6 +448,45 @@
         <span class="badge">Discipline</span>
         <h3>Verifiable over ceremonial</h3>
         <p>A TDD Stop hook that actually runs tests beats a ten-stage agent pipeline nobody reads. Reviewers operate read-only. Decisions get written down, not just remembered.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="capabilities">
+  <div class="wrap">
+    <h2 class="section-title">What ships with it</h2>
+    <p class="section-sub">The instrumentation, not the intentions. Each of these exists because something failed quietly first — the design goal is that the framework can tell you when it is broken, rather than looking healthy either way.</p>
+    <div class="grid-3">
+      <div class="card">
+        <span class="badge">Docs</span>
+        <h3>Doc-claim checking</h3>
+        <p>Assertions over the docs' own claims about the repo: paths that must exist, decisions that must be indexed, thresholds that must match the code. Enforced by a pre-commit hook rather than advisory — a green that blocks nothing gets committed past.</p>
+      </div>
+      <div class="card">
+        <span class="badge">Chaos</span>
+        <h3>Fail-open probes</h3>
+        <p>A suite that breaks a component on purpose and asserts Tessera reports it within one session. The probes were written and watched failing before the reporting existed. One caught a case where deleting the watcher outright still produced a completely normal session start.</p>
+      </div>
+      <div class="card">
+        <span class="badge">Spend</span>
+        <h3>Spend authorization</h3>
+        <p>External spend requires a run-scoped envelope, granted by a human and refused to the agent. Cost-reducing commands are never blocked — a spend gate must never be able to block the exit.</p>
+      </div>
+      <div class="card">
+        <span class="badge">Escalation</span>
+        <h3>Escalation packets</h3>
+        <p>Blocked work files a structured packet instead of stopping: what is stuck, what was already tried and how it failed, and what to choose between. The asynchronous form of a decision gate, for when no human is there to answer one.</p>
+      </div>
+      <div class="card">
+        <span class="badge">Health</span>
+        <h3>Degraded reporting</h3>
+        <p>A component that could not do its job says so, through a channel that assumes nothing about the infrastructure it is reporting on. Having nothing to do and being unable to run are different events, and collapsing them is how a dead component reads as a quiet one.</p>
+      </div>
+      <div class="card">
+        <span class="badge">Memory</span>
+        <h3>Session memory and restore</h3>
+        <p>Typed working memory that survives context compaction, plus a receipt recording whether what was restored actually sufficed. The agent answers, the harness records the offer — so neither marks its own homework.</p>
       </div>
     </div>
   </div>
@@ -681,6 +723,19 @@
     ["ADR-0004", "2026-06-30", "Accepted", "Per-project hook distribution — global default, freeze for ship-critical", "Hooks distribute through the global ~/.claude/ install by default, syncing every downstream automatically; a project can freeze its own copy when it needs to be immune to upstream changes. Closes a drift bug where a statusline fix landed in Tessera but not in three downstream repos.", "accepted"],
     ["ADR-0005", "2026-07-11", "Accepted", "The autonomy inflection — Tier 1 reordered, spend promoted to Tier 1", "Reorders the autonomy roadmap (escalation → verifiable contracts → observability) against three months of dogfood evidence, and promotes cost/spend awareness from an optional frontier concern to a Tier-1 precondition — spend gates were already the largest category of real decision points logged downstream.", "accepted"],
     ["ADR-0006", "2026-07-12", "Accepted", "Tessera is instrumentation, not control", "Amends ADR-0005's readiness claim after a single session surfaced eight silent failures in Tessera's own safety machinery, including a spend guard that failed open. Retargets Tessera's goal: make the agent's unreliability visible and bounded, not the agent reliable. Prioritizes adversarial verification and pruning the unaudited skill corpus over building more in-band gates.", "accepted"],
+    ["ADR-0007", "2026-07-13", "Superseded by ADR-0008", "The skill corpus — an unpruned inherited baseline", "Authorized a prune of the inherited skill corpus on a reachability tally. Superseded the next day once the skills were actually read, and kept as the record of the error: 47 skills were deleted unread because an eagerly-loaded rule said dead code should go, and code has grep and tests as safeguards while prose has neither. The durable rule it produced — never subtract from a knowledge artifact you have not read; harvest before you cut — outlived the decision.", "superseded"],
+    ["ADR-0008", "2026-07-14", "Accepted", "The content audit inverts the prune — the fix is delivery, not deletion", "Reading the corpus reversed the verdict: it is mostly a keep, and the framework's real gap is distribution. Supersedes ADR-0007 rather than editing it, so the reachability error stays on the record. Re-scoped the work from pruning to profile-gated delivery.", "accepted"],
+    ["ADR-0009", "2026-07-16", "Accepted", "Skill delivery is curation, not copying", "Claude Code already unions the skill corpus into every project, so shipping skills is a matter of switching them off, not copying them in. The scaffold reads a project's profile and writes a skillOverrides map: a universal base plus additive stack tags.", "accepted"],
+    ["ADR-0010", "2026-07-20", "Accepted", "Skill registry — repo is truth, global is a managed mirror", "The repo's skills/ directory is the source of truth: git-tracked, reviewed, doccheck-guarded. The global install is a one-way mirror that holds no original content by definition, so there is never a question of which copy is authoritative.", "accepted"],
+    ["ADR-0011", "2026-07-21", "Watching", "sqlfluff — the trigger fired, the evidence said no, and the trigger was the bug", "An adoption trigger fired on file existence rather than on pain, so it fired correctly and meant nothing. The finding was about the predicate, not the tool — the third proxy predicate this project has had to retire.", "watching"],
+    ["ADR-0012", "2026-07-22", "Accepted", "sqlfluff adopted, warn-only — supersedes ADR-0011", "Adopted on the second look, in the shape the Observatory had prescribed before either ADR existed: an on-demand skill plus a gate that no-ops when no SQL is present, and stays loud when the linter itself cannot run.", "accepted"],
+    ["ADR-0013", "2026-07-25", "Watching", "Scryer — near-total overlap with iCPG, and the mirror it held up", "Evaluating an external tool surfaced more about the incumbent than the candidate: iCPG was carrying 680 undisposed drift events. The evaluation's most useful output was a defect in the thing it was being compared against.", "watching"],
+    ["ADR-0014", "2026-07-26", "Accepted", "The review backend seam — model-portable, or admit it is Claude-only", "Forced the choice rather than leaving it implicit. The decision is Option D: review is Claude-only, deliberately — a stated exemption is a call someone made, and a blind spot is a gap nobody chose, and the two look identical from outside.", "accepted"],
+    ["ADR-0015", "2026-07-26", "Accepted", "The memory trial was scoped to the wrong event — re-scope to restore integrity", "The trial had been counting compaction events, which are one trigger for a recovery mechanism that runs on any context discontinuity — about 2% of its actual invocations. Split into three questions with different evidence and venues: does the payload survive delivery, does the agent resume without re-deriving, and how often does compaction fire.", "accepted"],
+    ["ADR-0016", "2026-07-27", "Accepted", "Disposition verbs — who may close a finding, and what stops that silencing a real one", "Where a detector over-fires by design, a model filtering it is the intended architecture; where over-firing is a defect, a model-emitted exit is that defect's own bypass. Same verb, opposite meanings — so they are not one question and do not get one answer.", "accepted"],
+    ["ADR-0017", "2026-07-27", "Accepted", "usage drift retired — the dimension was git grep", "One of three drift dimensions was a call to git grep, so it could not answer the question that justified building it. Retired rather than re-scoped a fourth time: a dimension that has consumed three investigation cycles without producing a signal has had a fair hearing.", "accepted"],
+    ["ADR-0018", "2026-07-27", "Accepted", "One drift event per dimension", "A symbol drifting on N dimensions now emits N events, each carrying one dimension and its own score. The previous composite event carried a list and the mean, which made three separate things ambiguous and unactionable at once.", "accepted"],
+    ["ADR-0019", "2026-07-27", "Accepted", "Close the iCPG loop — state intent deliberately, record it automatically", "Stating why a change is being made stays a deliberate act; recording what it touched becomes automatic. Never the reverse — a hook that auto-creates the intent would answer the question of whether the agent states intent by making it unanswerable.", "accepted"],
   ];
   const tl = document.getElementById("adrTimeline");
   ADRS.forEach(a => {

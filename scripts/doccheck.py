@@ -165,6 +165,54 @@ def check_adr_index_complete() -> list[str]:
     return bad
 
 
+PROMO = "docs/promo/index.html"
+# The ADR timeline is a JS array of rows: ["ADR-NNNN", date, status, title, prose, css].
+# Anchored to the row-leading id ON PURPOSE — see the docstring below.
+_PROMO_ADR_ROW = re.compile(r'^\s*\["(ADR-0\d{3})"', re.M)
+
+
+def check_promo_adr_timeline_is_complete() -> list[str]:
+    """Every ADR on disk appears as a ROW on the outward-facing promo timeline.
+
+    FOUND 2026-07-30, by a human asking "is the html document up to date?" — the same way
+    the six doc-drift bugs before it were found. The page documented ADR-0001..0006 while
+    19 were on disk: **13 behind, and it is published** (houseofyeti.com, linked from
+    GitHub). Nothing could have said so. `check_adr_references_resolve` reads the
+    observatory, design-principles, the handoff and CLAUDE.md — this file was outside
+    every check in the repo, which is the standing-pattern-#1 shape aimed at the one
+    artifact strangers actually read.
+
+    WHY COMPLETENESS IS THE PROPERTY HERE AND NOT A PROXY. A6 rejected two handoff checks
+    for keying on unenforced prose, and concluded the ADR `Executed:` field works "only
+    because it is a STRUCTURED FIELD with a stated contract." Both conditions hold here:
+    the rows are a JS array of exact ids, and the section frames itself as a *timeline* of
+    records "numbered, dated, and immutable once accepted" — not a curated highlight reel.
+    A timeline with gaps is wrong in a way a selection would not be. If that framing ever
+    changes to "selected decisions", this check must be retired rather than satisfied.
+
+    WHY IT ANCHORS ON THE ROW AND NOT ON ANY MENTION. Row prose cites other ADRs — 0006's
+    entry opens "Amends ADR-0005's readiness claim". A loose `ADR-0\\d{3}` scan would count
+    those mentions, so a page whose timeline array was emptied or renamed could still go
+    green on prose alone. Keying on the row-leading quoted id is what makes the check
+    unable to be satisfied by a footnote. That case is covered by a regression test.
+
+    No status filter: a timeline is history, so Superseded and Watching records belong on
+    it too, and filtering would re-introduce the judgement this check exists to avoid.
+
+    A missing file is deliberately NOT an error — this asserts the timeline is complete,
+    not that a marketing page must exist. Emptying the array is still caught, loudly: every
+    ADR reports missing.
+    """
+    promo = ROOT / PROMO
+    if not promo.is_file():
+        return []
+    listed = set(_PROMO_ADR_ROW.findall(promo.read_text()))
+    return [f"{PROMO}: ADR {adr.name[:4]} ({adr.name}) is on disk but has no row on the "
+            f"published ADR timeline — an outward-facing page reads as current"
+            for adr in sorted((ROOT / "docs" / "adr").glob("[0-9][0-9][0-9][0-9]-*.md"))
+            if f"ADR-{adr.name[:4]}" not in listed]
+
+
 def check_compaction_threshold_qualified() -> list[str]:
     """Any doc stating the Mnemos trial threshold must say the events are NON-MANUAL.
 
@@ -1767,8 +1815,11 @@ def check_adr_references_resolve() -> list[str]:
     0-range is by construction not ours to resolve.
     """
     cited: dict[str, set[str]] = {}
+    # PROMO added 2026-07-30: it was outside every check in the repo, and it is the one
+    # artifact strangers read. Completeness is checked separately; this catches the other
+    # direction — a published row citing a decision that does not exist.
     for rel in ("docs/observatory.md", "docs/design-principles.md",
-                "_project_specs/todos/active.md", "CLAUDE.md"):
+                "_project_specs/todos/active.md", "CLAUDE.md", PROMO):
         path = ROOT / rel
         if not path.is_file():
             continue
@@ -1931,6 +1982,7 @@ CHECKS = {
     "template-names-findings-channel": check_downstream_template_names_the_findings_channel,
     "no-upstream-clone-instructions": check_no_upstream_clone_instructions,
     "adr-index-complete": check_adr_index_complete,
+    "promo-adr-timeline-is-complete": check_promo_adr_timeline_is_complete,
     "adr-execution-recorded": check_adr_execution_recorded,
     "compaction-threshold-qualified": check_compaction_threshold_qualified,
     "gate-recording-not-recall": check_gate_recording_not_claimed_as_recall,

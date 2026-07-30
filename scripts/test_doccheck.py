@@ -1455,3 +1455,76 @@ def test_a_mixed_executed_line_checks_both_halves(fake_repo):
     (fake_repo / "bin" / "made").write_text("#!/bin/sh\n")
     _adr(fake_repo, "0104", "Accepted", "2026-07-27 — `bin/made`; removed: `bin/absent`")
     assert doccheck.check_adr_execution_recorded() == []
+
+
+# ── promo-adr-timeline-is-complete ────────────────────────────────────────────
+# The bug: the published page (houseofyeti.com, linked from GitHub) carried
+# ADR-0001..0006 while 19 were on disk, and no check read the file at all.
+
+
+def _promo(repo, rows: str) -> None:
+    (repo / "docs" / "promo").mkdir(parents=True, exist_ok=True)
+    (repo / "docs" / "promo" / "index.html").write_text(
+        '<div class="timeline" id="adrTimeline"></div>\n<script>\n  const adrs = [\n'
+        f"{rows}  ];\n</script>\n"
+    )
+
+
+def test_promo_timeline_missing_an_adr_is_flagged(fake_repo):
+    """The found bug: an ADR on disk with no row on the published timeline."""
+    (fake_repo / "docs" / "adr" / "0002-second.md").write_text("# ADR 2")
+    _promo(fake_repo, '    ["ADR-0001", "2026-06-22", "Accepted", "First", "x", "accepted"],\n')
+    bad = doccheck.check_promo_adr_timeline_is_complete()
+    assert any("0002" in v for v in bad), bad
+    assert not any("0001" in v for v in bad), bad
+
+
+def test_promo_timeline_complete_is_clean(fake_repo):
+    """Guards the other direction — a complete timeline must not fire."""
+    (fake_repo / "docs" / "adr" / "0002-second.md").write_text("# ADR 2")
+    _promo(
+        fake_repo,
+        '    ["ADR-0001", "2026-06-22", "Accepted", "First", "x", "accepted"],\n'
+        '    ["ADR-0002", "2026-06-26", "Accepted", "Second", "y", "accepted"],\n',
+    )
+    assert doccheck.check_promo_adr_timeline_is_complete() == []
+
+
+def test_promo_prose_mention_does_not_satisfy_the_timeline(fake_repo):
+    """A FOOTNOTE IS NOT A ROW — the failure this check was NOT written for.
+
+    Row prose legitimately cites other ADRs ("Amends ADR-0005's readiness claim"), so a
+    loose `ADR-0\\d{3}` scan would let a page with one row and many mentions go green.
+    """
+    (fake_repo / "docs" / "adr" / "0002-second.md").write_text("# ADR 2")
+    _promo(
+        fake_repo,
+        '    ["ADR-0001", "2026-06-22", "Accepted", "First", "Amends ADR-0002 in passing.",'
+        ' "accepted"],\n',
+    )
+    bad = doccheck.check_promo_adr_timeline_is_complete()
+    assert any("0002" in v for v in bad), "a prose mention satisfied the check — it must not"
+
+
+def test_promo_timeline_reformatted_fails_loud_not_open(fake_repo):
+    """A guard that reads an artifact must not key on a convention the code may break —
+    and where it must, breaking it has to fail LOUD.
+
+    (observatory 2026-07-27: the declared-vocabulary guard keyed on the `_check_` naming
+    convention and a rename walked past it, all 34 tests green.) This check keys on JS
+    array-literal formatting, which an author is free to reformat. The difference is
+    DIRECTION: no match means an empty `listed`, so every ADR reports missing and doccheck
+    goes red — the opposite of walking past silently. Verified here, not assumed.
+    """
+    (fake_repo / "docs" / "adr" / "0002-second.md").write_text("# ADR 2")
+    (fake_repo / "docs" / "promo").mkdir(parents=True, exist_ok=True)
+    (fake_repo / "docs" / "promo" / "index.html").write_text(
+        "<script>const adrs = [{id: 'ADR-0001'}, {id: 'ADR-0002'}];</script>\n"
+    )
+    bad = doccheck.check_promo_adr_timeline_is_complete()
+    assert len(bad) == 2, f"reformatting must fail loud over every ADR, got: {bad}"
+
+
+def test_promo_absent_is_not_an_error(fake_repo):
+    """Asserts the timeline is complete, not that a marketing page must exist."""
+    assert doccheck.check_promo_adr_timeline_is_complete() == []
