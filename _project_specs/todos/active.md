@@ -75,7 +75,21 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
    `bin/tessera-sync-harness ~/Claude/howler` shows it.
 4. **Do NOT wire the iCPG loop downstream yet** (carried from 07-27, still current). Run a
    downstream session or two on the harness already trusted, then wire it.
-5. **Prompt caching — arbiter is dispatched, and its numbers are what unblock the rest.**
+5. **Prompt caching — arbiter ANSWERED (2026-07-30, measured); one decision is open.**
+   Result: 50% of prompt tokens served from cache, ~29% off a live run, control clean in both
+   directions. Two findings kept: `triage` is a non-candidate **by seven tokens** (1,017 and 1,024
+   against a 1,024 floor — a marker there would report success and cache nothing), and the
+   *transcript* was the money, not the prefix (78% of a five-turn review is re-sends). The meter
+   shipped first and alone, and now doubles as the regression detector — `hit_rate` prints on every
+   run, so a prefix trimmed under the floor surfaces unprompted. **OPEN DECISION: add the meter
+   sentence to `templates/tessera/CLAUDE.md.template`?** — *"if this project meters its own LLM
+   cost, it must record `cache_creation_input_tokens` and `cache_read_input_tokens` alongside
+   `input_tokens`."* Unconditional, does not encode arbiter's shape, affects every future
+   downstream. Placement guidance stays held (one shape observed; the breakpoint-cap trap shows how
+   repo-specific it gets). No predicate — the property is runtime, and the meter already is the
+   check. Full verdict in `docs/observatory.md` → "Prompt caching: the fleet reads at 0%…".
+   *(Superseded text, kept for the trail: this item previously read "arbiter is dispatched, and its
+   numbers are what unblock the rest.")*
    The fleet reads at 0% because `cache_control` appears in **zero** call sites across 7 files in
    5 repos; caching is opt-in and nobody opted in. One candidate of five examined (arbiter,
    marker-only); quarry needs a restructure first; conclave is a non-candidate **by design** (it

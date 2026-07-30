@@ -2335,9 +2335,9 @@ mistaken for a verdict on Mnemos.
 
 ### Prompt caching: the fleet reads at 0% because nothing opts in — and the knowledge to prevent that already existed *(2026-07-30)*
 
-- **Status:** Watching. The audit below is **complete and will not change**; the verdict half (does
-  caching measurably work in arbiter, does a line go into the downstream CLAUDE.md template) is
-  deliberately deferred until arbiter has been done once. Two records, different maturity.
+- **Status:** Watching → **arbiter half ANSWERED 2026-07-30, measured** (see VERDICT below); the
+  fleet audit below is complete and will not change. Still open: quarry's restructure question, and
+  whether a line goes into the downstream CLAUDE.md template.
 - **Source:** "the cache is being used very little" — read off the platform console by a human, not
   reported by anything. Standing pattern #1's shape, one rung out: there was no instrument to be
   broken, because nobody built one.
@@ -2431,10 +2431,73 @@ no API surface), and it measures the property rather than counting occurrences o
 which would false-positive on every correctly-uncached one-shot call site. **Do not build it before
 arbiter produces a number.** Until then the revisit condition lives in the handoff.
 
-- **Revisit when:** arbiter reports step-4 numbers (`cache_read_input_tokens` > 0 on a second
-  identical-prefix request, with a control), the measured `count_tokens` figure for its prefix, and
-  the per-agent outcome for `reviewer` / `second_pass` / `triage`. Those four decide the template
-  line and whether a predicate is worth building.
+#### VERDICT — arbiter, measured 2026-07-30 (`57a7683`, `46c42e3`, `4efca63` in that repo)
+
+Caching works, and the meter shipped first and alone — deliberately, because `_record()` had been
+summing `input_tokens`, the uncached *remainder*. Had the markers landed first, the reported cost
+would have fallen while the token total silently under-reported by **exactly the amount caching
+saved**: a fix whose own instrument would have confirmed it in the wrong units.
+
+Control first, because a zero read is unattributable without one:
+
+| request | input | cache_write | cache_read |
+|---|---:|---:|---:|
+| 1 | 332 | 1,822 | 0 |
+| 2 | 332 | 0 | **1,822** |
+
+End-to-end at `--jobs 1` (so the thread pool could not muddy it): 6 calls, 75,552 prompt tokens,
+**50% served from cache, $0.17 against $0.238** at full input rate — **~29% off**. That figure is
+arithmetically consistent rather than merely reported: half the tokens moving 1× → 0.1× saves ~45%
+of input, less the ~12.5% write premium on the other half ≈ 32%, diluted to ~29% by output tokens.
+**The counterfactual is computed, not re-run, and that is correct** — the pre-caching path differs
+only in `cache_control` metadata, so a second paid run would re-derive a number already exact.
+
+**THE PREFIX WAS NOT THE MONEY — THE TRANSCRIPT WAS.** System prompt 2,138 tokens; a five-turn
+verified review measured **79,045**, of which **78% is re-sends** (turn one already carries diff +
+before + after). Predicted before the run and confirmed by it, which is why the second breakpoint —
+a *moving* marker on the newest transcript turn — carries the result and the system-block marker
+alone would have bought little.
+
+**The thing the dispatch prompt did not anticipate: the breakpoint cap interacts with loop depth.**
+Max 4 breakpoints per request; the system block takes one. Marking *per turn* would sit exactly on
+the cap at `MAX_VERIFY_TURNS = 4` and **break silently the first time anyone raised it**. One moving
+marker instead. Any future guidance must say this — a per-turn rule is the obvious implementation
+and it is a latent fail-open keyed to a constant nobody would think to check.
+
+**The sharpest finding, and it is a near-miss not a success: `triage` is NOT A CANDIDATE by seven
+tokens.** Its prefix measures **1,017** tokens for the reviewer voice and **1,024** for the arbiter
+voice, against `claude-sonnet-4-6`'s 1,024 minimum — one below the floor, one exactly on it. A
+marker there caches nothing half the time and flips on any wording edit, while reporting success.
+Same family as this repo's recurring fail-open defect: *not a wrong answer, a confident claim about
+work that never happened.* Left unmarked; `cache_prefix` is opt-in on `call_tool` with the numbers
+recorded at the call site. (Whether the 1,024 floor is inclusive is undocumented — immaterial, since
+a prefix sitting *on* it is one edit from silence either way.)
+
+**Why that near-miss is survivable, and it is the transferable result.** Every cached prefix in
+arbiter is now a **load-bearing length** — trimming thirty tokens from `reviewer.SYSTEM` would drop
+it under the floor exactly as `triage` already is, and nothing static would catch that. But
+`usage()` prints `hit_rate` to stderr on **every run** (`cli.py:284`), so the collapse surfaces
+unprompted on the next invocation. **The meter, built first for cost accounting, turns out to be the
+regression detector for the mechanism's most likely failure mode.** That ordering — meter before
+marker — is worth more than the 29%.
+
+- **Still open:** quarry (candidate only after hoisting its constant preamble into a `system` block;
+  justified by call volume, which is a question about quarry, not about caching).
+- **Template line — RECOMMENDED, NOT YET EXECUTED (a scaffold change is the human's call; see the
+  handoff). Ship the meter half, hold the rest.** *"If this project meters its own LLM cost,
+  it must record `cache_creation_input_tokens` and `cache_read_input_tokens` alongside
+  `input_tokens`."* One instance now demonstrates that ordering mattered, and the line is
+  unconditional — true whether caching applies, on the compat endpoint, and before any restructure —
+  so it does not encode arbiter's shape. Guidance on *where to place markers* stays held: one
+  observed shape is not enough, and the breakpoint-cap trap above shows how repo-specific that
+  guidance gets.
+- **Predicate — DO NOT BUILD, and the reason changed.** The proposed check was *does a downstream
+  with Messages-API call sites record the cache usage fields*. Arbiter shows the property is
+  **runtime, not static**: a prefix that falls under the floor is invisible to any source scan and
+  obvious to `hit_rate` on the next run. The meter already is the check. A static predicate would be
+  proxy predicate #4.
+- **Revisit when:** quarry's call volume is known, or a second repo is done and the two shapes can
+  be compared — that is the point at which placement guidance is worth writing down.
 
 ---
 
