@@ -2510,6 +2510,53 @@ marker — is worth more than the 29%.
 - **Revisit when:** quarry's call volume is known, or a second repo is done and the two shapes can
   be compared — that is the point at which placement guidance is worth writing down.
 
+### The eager prefix is ~15.6k tokens — and the size of it is NOT the argument *(2026-07-30)*
+
+- **Status:** Watching. Recorded so the measurement is not lost; **explicitly not proposed as a
+  trim.** Half of the case that produced this entry does not survive scrutiny, and the note exists
+  partly to stop that half being picked up later as if it did.
+- **Source:** Asked, while closing out the caching work, whether there was prompt-caching work to do
+  *for sessions on Tessera itself*. There is not — Claude Code owns `cache_control` in its own
+  sessions, so there is no marker to place. The measurement fell out sideways.
+
+**Measured, per session, before any work happens:** `CLAUDE.md` ~6,950 tok · `.claude/skills/mnemos`
+~4,390 · `.claude/skills/base` ~1,470 · the SessionStart surfacer (handoff + standing patterns)
+~2,790 — **~15,600 tokens**, plus the Mnemos checkpoint (~2,600) for ~18k in practice. (Estimated at
+chars/4; `count_tokens` if a decision ever rests on it.)
+
+**Caching makes that CHEAP, not FREE, and the distinction is the point.** A large, stable, turn-to-turn-
+identical prefix is the *ideal* caching case — written once at 1.25×, read at 0.1× thereafter. So
+cost is not an argument against it. **Attention still is**, and someone reasoning "caching is on,
+therefore prefix size is free" would be drawing the wrong conclusion from the right fact.
+
+**Why this is NOT yet an action, stated so the next reader does not skip the step.** Token count is
+an *artifact*; the pain would be a miss attributable to dilution, which is unmeasured. Proposing a
+cut on size alone is principle #3's failure aimed at the eager load — and this repo has retired
+three predicates for measuring a stand-in. **ADR-0008's cut was structural, not dimensional:** it
+removed content with *no surface in this repo* (OWASP web patterns, no web server). "It is large" is
+a different claim and a weaker one. Note also the proposer's bias — the agent is the consumer of
+this context, so an agent arguing there is too much of it is arguing about its own working
+conditions without evidence of cost. The session that produced this entry is mild counter-evidence:
+the standing-patterns block and the decision-surface hook both fired usefully, and the Mnemos trial
+background is what made that session's restore receipt specific rather than generic.
+
+**The one part that IS structural, and the only part worth acting on.** `.claude/skills/mnemos/SKILL.md`
+carries the **P3 compaction-trial narrative that ADR-0015 superseded**, including an explicitly
+retained *"original 07-15 reading, kept for the trail."* That is archival history occupying the
+highest-value context position in every session — ADR-0008's criterion exactly, not a size
+complaint. **It is a relocate, not a delete** (ADR-0007: harvest before you cut; prose has neither
+grep nor tests as a safeguard), and the natural destination is this file.
+
+- **A design constraint worth preserving, surfaced by the same measurement:** the PreToolUse hooks
+  append via `hookSpecificOutput.additionalContext`, which lands *after* the cached prefix. Had they
+  instead rewritten system-position content per tool call, every Edit would invalidate all ~15.6k.
+  The 2026-07-24 fix that moved them off bare stdout was made for delivery reasons and is
+  cache-correct by accident. **Nothing should ever inject varying content into a stable prefix
+  position** — no timestamps, no session ids, no per-turn assembly ahead of the messages.
+- **Revisit when:** a real miss is plausibly attributable to context dilution, or the next
+  ADR-0008-style audit runs — at which point the Mnemos narrative relocation is the concrete item
+  and the token total is context, not justification.
+
 ---
 
 ## Closing notes
