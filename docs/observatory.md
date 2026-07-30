@@ -2336,7 +2336,8 @@ mistaken for a verdict on Mnemos.
 ### Prompt caching: the fleet reads at 0% because nothing opts in — and the knowledge to prevent that already existed *(2026-07-30)*
 
 - **Status:** Watching → **arbiter half ANSWERED 2026-07-30, measured** (see VERDICT below); the
-  fleet audit below is complete and will not change. Still open: quarry's restructure question, and
+  fleet audit below is settled in its **verdicts** (one method gap found and closed since — see the
+  blind-spot note). Still open: quarry's restructure question, and
   whether a line goes into the downstream CLAUDE.md template.
 - **Source:** "the cache is being used very little" — read off the platform console by a human, not
   reported by anything. Standing pattern #1's shape, one rung out: there was no instrument to be
@@ -2368,6 +2369,16 @@ Standing pattern #6 in another organ: knowledge that nothing checks is not load-
 
 **One candidate out of five examined.** Which is the result — a uniform "add caching everywhere"
 would have produced one no-op, one wrong refactor, and one violated seam.
+
+**The audit's own method had the blind spot this repo already records about arbiter** (found
+2026-07-30, same day, re-scanning on the question "anything for tessera?"). The fleet grep filtered
+on `*.py`/`*.ts`/`*.js`/`*.sh`, and tessera's `bin/` is **21 extensionless files** — exactly the
+class handoff item 2 says arbiter's default `--ext` set cannot see. An unfiltered re-scan found one
+missed call site, `bin/deepseek`, and it closes as a non-candidate on shape (no `system` block, no
+tools, one user message per one-shot process — no shared prefix exists), so the conclusion stands.
+**The conclusion survived; the method did not.** A filter that a repo has already written down as a
+known blind spot should not be re-applied by the next person auditing — including when that person
+is the one who read the warning that morning.
 
 #### A method correction, recorded because it is the transferable half
 
