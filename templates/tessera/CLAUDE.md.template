@@ -92,6 +92,16 @@ lie. `exclude_rules = layout` is deliberate: stock sqlfluff output measured 89% 
 first real corpus. To make it blocking once findings are genuinely real, change the script's
 final `exit 0` to `exit 1` — not before, since a gate that cries wolf gets bypassed.
 
+## LLM cost metering
+
+If this project calls an LLM API and meters its own spend, record `cache_creation_input_tokens`
+and `cache_read_input_tokens` alongside `input_tokens`. **`input_tokens` is the uncached
+remainder, not the prompt size** — the real total is all three summed, so a meter that omits them
+under-reports by exactly the amount prompt caching saves: the cost line falls while the token
+count quietly goes wrong. Surface the hit rate as well. A cached prefix that drifts below the
+model's minimum length stops caching *silently*, and a collapsing hit rate is the only thing that
+will say so. (Measured in arbiter, 2026-07-30 — one prefix missed the floor by seven tokens.)
+
 ## Don't
 
 - Don't modify `.env` / `.env.*` (also denied in settings.json)

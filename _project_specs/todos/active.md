@@ -75,21 +75,30 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
    `bin/tessera-sync-harness ~/Claude/howler` shows it.
 4. **Do NOT wire the iCPG loop downstream yet** (carried from 07-27, still current). Run a
    downstream session or two on the harness already trusted, then wire it.
-5. **Prompt caching — arbiter ANSWERED (2026-07-30, measured); one decision is open.**
-   Result: 50% of prompt tokens served from cache, ~29% off a live run, control clean in both
-   directions. Two findings kept: `triage` is a non-candidate **by seven tokens** (1,017 and 1,024
-   against a 1,024 floor — a marker there would report success and cache nothing), and the
-   *transcript* was the money, not the prefix (78% of a five-turn review is re-sends). The meter
-   shipped first and alone, and now doubles as the regression detector — `hit_rate` prints on every
-   run, so a prefix trimmed under the floor surfaces unprompted. **OPEN DECISION: add the meter
-   sentence to `templates/tessera/CLAUDE.md.template`?** — *"if this project meters its own LLM
-   cost, it must record `cache_creation_input_tokens` and `cache_read_input_tokens` alongside
-   `input_tokens`."* Unconditional, does not encode arbiter's shape, affects every future
-   downstream. Placement guidance stays held (one shape observed; the breakpoint-cap trap shows how
-   repo-specific it gets). No predicate — the property is runtime, and the meter already is the
-   check. Full verdict in `docs/observatory.md` → "Prompt caching: the fleet reads at 0%…".
-   *(Superseded text, kept for the trail: this item previously read "arbiter is dispatched, and its
-   numbers are what unblock the rest.")*
+5. **Prompt caching — ANSWERED, shipped, and closed except for one repo.**
+   arbiter, measured 2026-07-30: **50% of prompt tokens served from cache, ~29% off a live run**,
+   control clean in both directions. Two findings kept — `triage` is a non-candidate **by seven
+   tokens** (1,017 and 1,024 against a 1,024 floor; a marker there reports success and caches
+   nothing), and the **transcript was the money, not the prefix** (78% of a five-turn review is
+   re-sends). *Meter before marker* is the transferable result: `hit_rate` prints on every run, so a
+   prefix later trimmed under the floor surfaces unprompted instead of silently. That sentence now
+   ships in `templates/tessera/CLAUDE.md.template` (verified by scaffolding a throwaway project, not
+   by reading the template). Full verdict: `docs/observatory.md` → "Prompt caching: the fleet reads
+   at 0%…". **Next, by repo:**
+   - **tessera** — nothing open. **No predicate, deliberately:** the property is runtime, the meter
+     already is the check, and a static scan would be proxy predicate #4. Marker-*placement*
+     guidance stays held until a second repo shape exists — the breakpoint-cap trap (max 4, system
+     takes one, so per-turn marking sits exactly on the cap at `MAX_VERIFY_TURNS=4` and breaks
+     silently when anyone raises it) shows how repo-specific that guidance gets.
+   - **quarry** — the only live candidate, and it is not a marker job. Its `callJSON` has no
+     `system` block at all; the constant preamble must be hoisted out of the user message first.
+     Justified only by call volume, which is a question about quarry's usage, not about caching.
+   - **arbiter** — nothing caching-related left. (Its open item is unrelated: the `--ext` scope bug
+     in handoff item 2.)
+   - **conclave** — closed. Non-candidate *by design*: it reaches `api.anthropic.com` through the
+     OpenAI-compat endpoint, which has no slot for the field, and provider-agnosticism is the point.
+   - **howler / heaviside / tess-dashboard / lorenzo-portfolio** — closed. No API surface, except
+     portfolio, whose Haiku 4.5 prefix cannot clear that model's 4,096-token floor.
    The fleet reads at 0% because `cache_control` appears in **zero** call sites across 7 files in
    5 repos; caching is opt-in and nobody opted in. One candidate of five examined (arbiter,
    marker-only); quarry needs a restructure first; conclave is a non-candidate **by design** (it
