@@ -2544,8 +2544,17 @@ background is what made that session's restore receipt specific rather than gene
 carries the **P3 compaction-trial narrative that ADR-0015 superseded**, including an explicitly
 retained *"original 07-15 reading, kept for the trail."* That is archival history occupying the
 highest-value context position in every session — ADR-0008's criterion exactly, not a size
-complaint. **It is a relocate, not a delete** (ADR-0007: harvest before you cut; prose has neither
-grep nor tests as a safeguard), and the natural destination is this file.
+complaint.
+
+**Corrected within the hour, and the correction is the instructive part.** This entry first said the
+narrative should be *relocated here, its natural destination*. It already **is** here: the
+compaction question is `docs/observatory.md` → "Mnemos compaction vehicle" (and the trial mystery it
+explains is the PreToolUse-stdout entry), and the re-scope is ADR-0015. So the `SKILL.md` copy is a
+**third** copy, not a homeless one, and "relocate" was the wrong verb chosen without checking the
+destination. The actual next step is a **read-and-compare**: establish what in the SKILL.md text is
+*not* already carried by ADR-0015 and the two entries, harvest only that, then cut. ADR-0007's rule
+applied rather than cited — and a reminder that "harvest before you cut" also means *check whether
+it was already harvested*.
 
 - **A design constraint worth preserving, surfaced by the same measurement:** the PreToolUse hooks
   append via `hookSpecificOutput.additionalContext`, which lands *after* the cached prefix. Had they
