@@ -75,7 +75,22 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
    `bin/tessera-sync-harness ~/Claude/howler` shows it.
 4. **Do NOT wire the iCPG loop downstream yet** (carried from 07-27, still current). Run a
    downstream session or two on the harness already trusted, then wire it.
-5. **Carried, unchanged:** item 2 Part B (the pending-record channel, needs its 3-decision
+5. **Prompt caching — arbiter is dispatched, and its numbers are what unblock the rest.**
+   The fleet reads at 0% because `cache_control` appears in **zero** call sites across 7 files in
+   5 repos; caching is opt-in and nobody opted in. One candidate of five examined (arbiter,
+   marker-only); quarry needs a restructure first; conclave is a non-candidate **by design** (it
+   reaches `api.anthropic.com` through the OpenAI-compat endpoint, which has no slot for the
+   field); howler, heaviside and tess-dashboard have no API surface at all. **Do not roll this
+   out fleet-wide** — the correct action differed in every repo. Four things wanted back from
+   arbiter: the step-4 `cache_read_input_tokens` reading with a control, the measured
+   `count_tokens` figure for its prefix (near 1024 is a finding on its own), the per-agent outcome
+   for `reviewer`/`second_pass`/`triage`, and anything the dispatch prompt failed to anticipate.
+   Those decide a held `templates/tessera/CLAUDE.md.template` line and whether a predicate is
+   worth building. **Meter before marker:** arbiter's `_record()` (`client.py:46`) ignores both
+   cache usage fields, so today it cannot show the fix working in either direction.
+   See `docs/observatory.md` → "Prompt caching: the fleet reads at 0%…". **No trigger is wired**,
+   so this item is the only thing that will surface it.
+6. **Carried, unchanged:** item 2 Part B (the pending-record channel, needs its 3-decision
    design gate); B2 correction recall (blocked on unbiased labels — the block IS the finding);
    `tessera-authorize dismiss` needs a HUMAN to run it end to end, which the agent structurally
    cannot do.

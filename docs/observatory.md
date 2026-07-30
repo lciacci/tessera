@@ -2333,6 +2333,109 @@ they say" stays a human's, or P16 becomes proxy predicate #4. Both fire messages
 and the 30-day one names *the rate* as the finding, in those words, so thin data cannot be
 mistaken for a verdict on Mnemos.
 
+### Prompt caching: the fleet reads at 0% because nothing opts in — and the knowledge to prevent that already existed *(2026-07-30)*
+
+- **Status:** Watching. The audit below is **complete and will not change**; the verdict half (does
+  caching measurably work in arbiter, does a line go into the downstream CLAUDE.md template) is
+  deliberately deferred until arbiter has been done once. Two records, different maturity.
+- **Source:** "the cache is being used very little" — read off the platform console by a human, not
+  reported by anything. Standing pattern #1's shape, one rung out: there was no instrument to be
+  broken, because nobody built one.
+
+**What was found.** `cache_control` count is **zero across every call site in the fleet** — 7 files
+in 5 repos (`arbiter/src/arbiter/client.py` ×3 call sites, conclave's `ensemble.py` /
+`selfmoa_judge.py` / `judge_eval.py`, maggy's `ai_client.py`, `quarry/apps/api/src/llm/index.ts`,
+`lorenzo-portfolio/api/chat.js`). Caching is **opt-in** — a request-body parameter, per call site.
+There is no environment variable, proxy setting, client default, or config file that turns it on.
+So the console's near-zero read rate is not a misconfiguration; it is the accurate reading of a
+fleet that never asked.
+
+**The uniformity is the finding, not the misses.** Five independent codebases in two languages, all
+shipping uncached, while a complete and accurate `shared/prompt-caching.md` sits in the bundled
+`claude-api` skill — the source of every number in this entry. Whatever the availability timeline
+was in each case, that is not five oversights. **Read-time knowledge did not reach write-time.**
+Standing pattern #6 in another organ: knowledge that nothing checks is not load-bearing.
+
+#### The triage — and the point is that it differed every time
+
+| Repo | Verdict | Why |
+|---|---|---|
+| **arbiter** | **Candidate — marker only** | `reviewer.SYSTEM` (3,304 chars) + its `TOOL` schema (995) + shared `TOOLS`, byte-identical for every file; diff already last via `_user_message()`. `claude-sonnet-4-6` → 1024-token minimum, ~1.5k estimated (chars/4, unverified — `count_tokens` is the measurement). |
+| **quarry** | Candidate **after restructure** | `callJSON` has **no `system` block at all** — model, max_tokens, temperature, one user message. The constant preamble is concatenated into that string. Making it cacheable is a design change to working code, justified only by call volume. Not a marker. |
+| **conclave** | **Non-candidate by design** | Reaches `api.anthropic.com` — but via the **OpenAI-compatible endpoint** (`ensemble.py:269` asserts `/v1/chat/completions`). `cache_control` is a Messages-API *content-block* field with no slot in the OpenAI request shape, and `ensemble.py:63` names provider-agnosticism as the point: *"That is the seam."* |
+| **maggy** | Out of scope | Not a downstream — the ancestor tessera partially forked from. |
+| **howler, heaviside, tess-dashboard** | No surface | Zero API call sites. tess-dashboard's single `claude-opus-4-8` hit is fixture data in `src/App.test.tsx`; it renders a model string read from Tessera's logs. |
+
+**One candidate out of five examined.** Which is the result — a uniform "add caching everywhere"
+would have produced one no-op, one wrong refactor, and one violated seam.
+
+#### A method correction, recorded because it is the transferable half
+
+conclave was first called a non-candidate because it "uses in-fleet Gemma." **That was wrong.** It
+does hit `api.anthropic.com`; it just does so through a schema with nowhere to put the marker. The
+first read came from a grep pattern matching the *file*; the correct read came from opening the
+call and following the endpoint. Same verdict, different reason — and the wrong reason would have
+been recorded as fact if the repo had not been opened before dispatching a session at it.
+**A pattern match tells you a file mentions something. It does not tell you the call's shape.**
+
+#### Facts worth not re-deriving
+
+- **The cacheable-prefix minimum is model-specific and NOT monotonic across generations.** 512
+  tokens on Opus 5 · 1024 on Opus 4.8, Sonnet 5, Sonnet 4.6 · 2048 on Opus 4.7 · **4096 on Opus 4.6
+  and Haiku 4.5**. Below the line: no error, `cache_creation_input_tokens: 0`, silently nothing.
+  This is why `lorenzo-portfolio` (Haiku 4.5, one short `SYSTEM_PROMPT`) would accept the marker and
+  cache nothing — the most dangerous shape, because it reads as done.
+- **`input_tokens` is the UNCACHED REMAINDER, not the prompt size.** Real size is
+  `input_tokens + cache_creation_input_tokens + cache_read_input_tokens`. A meter summing only
+  input+output silently under-reports after caching lands, and its cost estimate drops for the
+  wrong reason. **arbiter's `_record()` (`client.py:46`) does exactly this** — so today it cannot
+  report a hit rate in either direction. Standing pattern #1, pre-registered: the fix and the
+  instrument that would show it worked must land together, meter first.
+- **Invalidation is tiered.** Tool-definition changes (including *reordering*) and model switches
+  invalidate all three tiers; system-prompt content spares tools; `tool_choice` and toggling
+  thinking spare tools+system. Effort changes are model-switch-grade — measured here 2026-07-27,
+  see the entry above.
+- **Silent non-caching, distinct from invalidation:** the 20-block lookback (a breakpoint searches
+  back at most 20 content blocks — agentic turns exceeding that miss); concurrent identical-prefix
+  requests all miss, since an entry is readable only once the first response begins streaming; and
+  a breakpoint at the end of the *whole* prompt when the shared part is the *prefix* writes a
+  distinct entry per request that is never read.
+- **Two escape hatches for the expensive rows.** A mid-conversation system-prompt change can ride a
+  `{"role": "system"}` message inside `messages[]` instead of editing top-level `system` — available
+  today, no beta header. Mid-conversation tool changes have a beta on Opus 5. Model switch has none.
+
+#### What is deferred, and why
+
+A line in `templates/tessera/CLAUDE.md.template` was proposed and **held, not rejected**. The
+scaffold surface is real — `bin/tessera-new-project` copies that template — but the correct action
+differed in every repo examined (marker / restructure / not applicable / not ours), and a template
+line cannot carry that. It would end up saying some version of *"consider prompt caching,"* which is
+the knowledge layer, and the knowledge layer is precisely what is already demonstrated not to work.
+
+The one sentence that **is** uniform, unconditional, and a check rather than a reminder:
+
+> If this project meters its own LLM cost, it must record `cache_creation_input_tokens` and
+> `cache_read_input_tokens` alongside `input_tokens` — `input_tokens` is the uncached remainder,
+> not the prompt size.
+
+True whether or not caching applies, true on the compat endpoint, true before any restructure. If a
+template line goes in, that is the line — **after** arbiter, so it points at something done once
+rather than something hoped for. Same rule that keeps `tessera-new-project` free of an `--adopt`
+flag: build it on the second instance, not the first.
+
+**No trigger is wired, and that is a known weakness of this entry** — an un-evaluated trigger
+depends on someone re-reading the file, which is the failure the T2 entry above names in its own
+words. The candidate predicate, if this earns one: *does a downstream with Messages-API call sites
+record the cache usage fields* — mechanical, conditional (no false positive on the five repos with
+no API surface), and it measures the property rather than counting occurrences of `cache_control`,
+which would false-positive on every correctly-uncached one-shot call site. **Do not build it before
+arbiter produces a number.** Until then the revisit condition lives in the handoff.
+
+- **Revisit when:** arbiter reports step-4 numbers (`cache_read_input_tokens` > 0 on a second
+  identical-prefix request, with a control), the measured `count_tokens` figure for its prefix, and
+  the per-agent outcome for `reviewer` / `second_pass` / `triage`. Those four decide the template
+  line and whether a predicate is worth building.
+
 ---
 
 ## Closing notes
