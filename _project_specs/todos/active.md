@@ -20,22 +20,40 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
 > standing patterns never reach the model"**. Two commands:
 >
 > ```bash
-> .claude/scripts/tessera-watch-surface.sh > /tmp/sf.txt
-> wc -c < /tmp/sf.txt                                  # 10,778 — over the harness cap
+> git show <pre-fix-sha>:.claude/scripts/tessera-watch-surface.sh > /tmp/old.sh; chmod +x /tmp/old.sh
+> /tmp/old.sh > /tmp/sf.txt
+> wc -c < /tmp/sf.txt                                  # 10,878 — over the documented 10,000 cap
 > grep -c '^[0-9]*\. \*\*' /tmp/sf.txt                 # 12 patterns emitted
 > head -c 2048 /tmp/sf.txt | grep -c '^[0-9]*\. \*\*'  # 1 survives the preview
 > ```
 >
+> **The cap is documented, not inferred:** code.claude.com/docs/en/hooks — *"Hook output strings,
+> including additionalContext, systemMessage, and plain stdout, are capped at 10,000 characters.
+> Output that exceeds this limit is saved to a file and replaced with a preview and file path."*
+>
+> **AND THE SPILL WAS INTERMITTENT** (`bin/tessera-verify` refuted the flat figure before commit).
+> Composition: handoff 927 + patterns 8,950 + observatory **70 to ~1,001, depending on how many
+> triggers fired**. A quiet repo came in at 9,880 — under the cap, all 12 patterns delivered. The
+> measured run was 10,878 because P3 and G-a were both red. **The cross-cutting lessons stopped
+> arriving exactly when the observatory had something to report.** That is worse than a constant
+> failure and invisible to any single measurement. Do not restate 10,878 without its condition.
+>
 > **This session's own SessionStart is the proof** — the injected block cut off mid-pattern-1, at
 > *"a guard written for a bug and tested against that same bug is"*.
 >
-> `doccheck`'s `standing-patterns-are-surfaced` asserts the block exists in `active.md` and that the
-> surfacer extracts it. **Both are true; the check is green.** Its docstring says *"A pointer would
-> ride recall too; the block is printed verbatim."* It is not printed verbatim — 92% is dropped one
-> layer past where the check can see. **The mechanism built to stop lessons riding model recall has
-> been delivering one lesson and leaving eleven to model recall, and its check verifies the sender
-> and never the receiver.** That is Standing pattern #1, aimed at the artifact that carries
-> Standing pattern #1 — which is itself the one pattern that still arrives.
+> `doccheck`'s `standing-patterns-are-surfaced` asserted the block exists in `active.md` and that
+> the surfacer extracts it. **Both were true; the check was green.** Its docstring says *"A pointer
+> would ride recall too; the block is printed verbatim."* It was not printed verbatim — 92% dropped
+> one layer past where the check could see. **The mechanism built to stop lessons riding model
+> recall was delivering one lesson and leaving eleven to model recall, and its check verified the
+> sender and never the receiver.** That is Standing pattern #1, aimed at the artifact that carries
+> Standing pattern #1 — which is itself the one pattern that still arrived.
+>
+> **One overstatement, corrected before commit.** The first write-up said the old check "would have
+> kept passing on a COMMENT left in the surfacer." `bin/tessera-verify` refuted that: the comment is
+> lowercase, the old grep was capitalised, and the old check fires correctly on this change. The
+> hazard is real — the falsifier capitalised one letter and got a surfacer emitting zero patterns
+> while the check returned PASS — but this repo escaped it **by a capital letter, not by design.**
 >
 > **Do not date it.** The block has grown since 2026-07-24 and truncation depends on total surfacer
 > size; *when* each pattern stopped arriving is unmeasured. Remedy options are in the entry; the
@@ -136,7 +154,10 @@ print(sum('file_exists' in json.dumps(x) for x in c), '/', len(c), 'are file_exi
    every other item on this list is judged by lessons that have not been arriving. Emit the
    patterns as their own hook output so each fits under the cap, **and** make doccheck assert the
    **delivered** size — without that second half the fix is verified by the same blind check.
-   Measure the cap first; it is bounded (≤10,944) but its floor is unknown.
+   **DONE 2026-08-06** — the cap turned out to be documented (10,000 chars), not a thing to
+   measure. Shipped: `tessera-patterns-surface.sh --part N --of 2`, registered twice, plus
+   doccheck `standing-patterns-fit-the-cap`, which RUNS the parts and asserts the union carries
+   every pattern exactly once. All four failure branches were falsified before commit.
 1. **P3 remedy, three parts, in this order.** Parts 1–2 are ~30 minutes; part 3 is not a patch.
    1. **Drop `file_exists` invariants from the checkpoint's constraint set** — owned by doccheck +
       pre-commit, still live in iCPG. Takes the checkpoint to roughly 5,900b.

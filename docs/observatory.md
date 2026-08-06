@@ -2629,24 +2629,50 @@ looked since.
 **The measurement:**
 
 ```bash
-.claude/scripts/tessera-watch-surface.sh > /tmp/sf.txt
-wc -c < /tmp/sf.txt                                    # 10,778
-grep -c '^[0-9]*\. \*\*' /tmp/sf.txt                   # 12  standing patterns present
-head -c 2048 /tmp/sf.txt | grep -c '^[0-9]*\. \*\*'    # 1   survive the preview
+git show <pre-fix-sha>:.claude/scripts/tessera-watch-surface.sh > /tmp/old.sh; chmod +x /tmp/old.sh
+/tmp/old.sh > /tmp/sf.txt
+wc -c < /tmp/sf.txt                                    # 10,878  — over the 10,000 cap
+grep -c '^[0-9]*\. \*\*' /tmp/sf.txt                   # 12  standing patterns emitted
+head -c 2048 /tmp/sf.txt | grep -c '^[0-9]*\. \*\*'    # 1   survives the preview
 ```
 
-The harness caps hook output and hands the model a **2KB preview** past roughly 10.9KB (see the
-sibling entry for the bound). The surfacer emits 10,778 bytes. **One pattern arrives. Eleven do
-not.** This session's own SessionStart is the proof: the injected block cut off mid-pattern-1, at
-*"a guard written for a bug and tested against that same bug is"*.
+Composition of that 10,878: **927** handoff pointer + **8,950** standing patterns + **~1,001**
+observatory triggers.
+
+> **A correction, recorded because the wrong number was load-bearing for an hour.** The first
+> measurement of the patterns block read **9,951** and concluded it cleared the cap "by 49
+> characters." That was wrong: the `awk '/^=== STANDING PATTERNS/{f=1} f'` used to isolate it runs
+> to end-of-file, so it swept in the observatory block that follows. The block is **8,950**. The
+> finding is unchanged — the *total* is what spills, and the 1-of-12 survival was measured
+> directly, not derived — but any argument resting on "49 characters of headroom" was resting on a
+> measurement artifact. The real margin against a 9,000-char budget is 50 characters, which
+> happens to justify the same remedy for a different reason.
+
+The harness caps hook output at 10,000 characters and hands the model a ~2KB preview past it. The
+surfacer emitted 10,878. **One pattern arrives. Eleven do not.** This session's own SessionStart is
+the proof: the injected block cut off mid-pattern-1, at *"a guard written for a bug and tested
+against that same bug is"*.
+
+> **THE SPILL WAS INTERMITTENT, NOT CONSTANT — refuted by `bin/tessera-verify`, 2026-08-06, and the
+> correction makes the bug worse rather than smaller.** The claim above originally read "the
+> surfacer emits 10,878 characters" as a flat fact. It is not flat. Checked out at HEAD with no
+> observatory trigger firing, the same script emits **9,947 bytes / 9,880 characters — under the
+> cap.** Decomposition: handoff 927 + patterns 8,950 + observatory **70**. In the run that was
+> measured, the observatory section was ~1,001, because P3 and the G-a graduation were both red.
+>
+> So the standing patterns stopped arriving **exactly when the observatory had something to say** —
+> the delivery of the cross-cutting lessons was silently coupled to how much else was wrong. A
+> quiet repo delivered all 12; a repo with fired triggers delivered one. That is a worse failure
+> than a constant one and it is undetectable by any single measurement, which is why a flat figure
+> concealed it. **Do not restate the 10,878 without its condition.**
 
 **Why this is the sharpest instance of Standing pattern #1 yet recorded** — and pattern #1 is the
 one that got truncated:
 
-`scripts/doccheck.py` → `check_standing_patterns_are_surfaced` asserts two things: that
+`scripts/doccheck.py` → `check_standing_patterns_are_surfaced` asserted two things: that
 `active.md`'s newest handoff contains a `### Standing patterns` block, and that
-`tessera-watch-surface.sh` extracts it. **Both are true.** The check is green. Its docstring states
-the intent exactly:
+`tessera-watch-surface.sh` extracts it. **Both were true.** The check was green. Its docstring
+stated the intent exactly:
 
 > *"So the through-lines rode model recall — and a session re-derived a lesson the repo had already
 > paid for eight times. A pointer would ride recall too; the block is printed verbatim."*
@@ -2675,10 +2701,37 @@ channel it is certifying. *A check that verifies the sender and never the receiv
 Option 1 plus option 4 looks right and is untested. **Option 4 is the load-bearing half**: without
 it, any fix to 1–3 is a fix verified by the same blind check.
 
-**What was NOT verified:** the exact cap (bounded ≤10,944, floor unknown); whether hook outputs are
-capped by *bytes* or by *lines/tokens* — 2048 bytes is the observed preview size, and the trigger
-threshold was inferred from two spills, not measured; and whether a second SessionStart hook's
-output counts toward the same budget or is capped independently.
+**ANSWERED, then RESOLVED — same day.** The cap did not need measuring; it is **documented**:
+code.claude.com/docs/en/hooks — *"Hook output strings, including `additionalContext`,
+`systemMessage`, and plain stdout, are capped at 10,000 characters. Output that exceeds this limit
+is saved to a file and replaced with a preview and file path."* **Characters, not bytes**, and per
+output string, so each registered hook entry carries its own budget — which is what makes the
+part-split work. An hour was spent inferring a bound from two observed spills before anyone read
+the docs; *the empirical estimate (≤10,944) was correct and useless, because the exact figure was a
+fetch away.*
+
+**Shipped 2026-08-06** — option 1 + option 4, as decided: `.claude/scripts/tessera-patterns-surface.sh`
+takes `--part N --of M`, is registered twice on SessionStart, and doccheck's
+`standing-patterns-fit-the-cap` **runs the parts** and asserts (a) the registered indices are
+exactly 1..N, (b) each part is under a 9,000 budget, (c) the union carries every pattern exactly
+once. All four branches were falsified against planted defects before the check was trusted.
+`standing-patterns-are-surfaced` was retargeted in the same commit — **and the stated reason for
+retargeting it was wrong, refuted by `bin/tessera-verify` before commit.** The claim was that the
+old check would have kept passing on the *comment* left behind in the surfacer. It would not have:
+the comment reads "The standing patterns USED TO BE PRINTED HERE" in lowercase, the old check
+grepped for `"Standing patterns"` capitalised, and run against the new tree the old check **fires
+correctly.**
+
+The hazard is nonetheless real, and the falsifier demonstrated it rather than taking either side on
+argument: capitalising one letter in that comment — a wholly ordinary way to write the same
+sentence — produced a surfacer emitting **zero** patterns while the old check returned **PASS**.
+So substring-matching prose is genuinely unreliable, and this repo escaped it **by a capital
+letter, not by design**. The retarget stands; the near-miss was a near-miss, not a hit, and the
+original write-up overstated it.
+
+**Still not verified:** whether the harness counts the 10,000 against the raw string or some
+post-processed form, and whether many small hook outputs have an aggregate ceiling of their own.
+Neither is load-bearing for the fix.
 
 ---
 
@@ -2707,7 +2760,8 @@ spilled, and the harness persisted them at
 10,944b  tessera-watch-surface   → harness: "Output too large (10.6KB)" → 2KB preview
 ```
 
-So the true threshold is **≤10,944**, not 18,755. A checkpoint at 11,500 bytes passes P3 and still
+The cap is **documented at 10,000 characters** (code.claude.com/docs/en/hooks — see the sibling
+entry above), not 18,755. A checkpoint at 11,500 bytes passes P3 and still
 spills. The predicate is not merely lenient — it is capable of reporting green on a checkpoint the
 model never receives, which is the exact failure ADR-0015 rebuilt it to catch.
 

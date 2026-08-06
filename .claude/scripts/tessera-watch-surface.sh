@@ -88,35 +88,19 @@ if [ -f "$HANDOFF" ]; then
         fi
         echo ""
 
-        # Standing patterns — the lessons paid for more than once. Printed VERBATIM, not
-        # pointed at. These are cross-cutting, so no ADR owns them and the file-anchored
-        # decision-surface hook cannot find them; a pointer would ride model recall, which
-        # is the failure this whole surfacer exists to remove. Scoped to the first handoff
-        # block, same as the priorities, so a stale copy further down cannot win.
-        # The italic *( ... )* note under the heading is skipped STRUCTURALLY — from a line
-        # containing `*(` to one containing `)*`. An earlier version enumerated the note's
-        # first-words in a grep -vE, which silently leaked meta-commentary the moment the
-        # paragraph was re-wrapped (caught in review 2026-07-24). The awk already tracks
-        # state; a state flag costs nothing and does not rot on a reflow.
-        patterns=$(awk '
-            /^## Handoff — pick up here/ { blk=1; next }
-            blk && /^## /                { exit }
-            blk && /^### Standing patterns/ { want=1; next }
-            blk && want && /^### /       { want=0 }
-            blk && want && /\*\(/        { skip=1 }
-            blk && want && skip          { if (/\)\*/) skip=0; next }
-            blk && want                  { print }
-        ' "$HANDOFF" | cut -c1-116)
-
-        if [ -n "$patterns" ]; then
-            echo "=== STANDING PATTERNS (paid for more than once — do not re-learn) ==="
-            echo "$patterns"
-            echo ""
-        else
-            echo "  ⚠️  NO STANDING-PATTERNS BLOCK IN THE HANDOFF — the cross-cutting lessons"
-            echo "     are not being surfaced. Restore '### Standing patterns' in active.md."
-            echo ""
-        fi
+        # The standing patterns USED TO BE PRINTED HERE, and that is why 11 of 12 of them
+        # never reached the model (2026-08-06). Claude Code caps hook output at 10,000
+        # characters; this script emitted 10,878 and the harness replaced everything past
+        # ~2KB with a file path. doccheck was green throughout — it asserted the block was
+        # extracted, which was true, and could not see the truncation one layer later.
+        # Emission was never the property; ARRIVAL is.
+        #
+        # They now live in `tessera-patterns-surface.sh`, registered TWICE in settings.json
+        # so each part gets its own 10,000-character budget, and guarded by doccheck's
+        # `standing-patterns-fit-the-cap`, which runs the parts and measures what they
+        # actually emit. Do not move them back into this output "for cohesion" — the
+        # cohesion is what broke them.
+        # See docs/observatory.md → "11 of the 12 standing patterns never reach the model".
     fi
 fi
 

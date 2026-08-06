@@ -1528,3 +1528,84 @@ def test_promo_timeline_reformatted_fails_loud_not_open(fake_repo):
 def test_promo_absent_is_not_an_error(fake_repo):
     """Asserts the timeline is complete, not that a marketing page must exist."""
     assert doccheck.check_promo_adr_timeline_is_complete() == []
+
+
+# ─── BUG (2026-08-06): the standing patterns were EMITTED and did not ARRIVE. The surfacer
+# put the handoff pointer and all 12 patterns in one hook output — 10,878 chars against
+# Claude Code's documented 10,000-char cap — so the harness replaced everything past ~2KB
+# with a file path and exactly ONE pattern reached the model. `standing-patterns-are-surfaced`
+# was green throughout: it asked whether the block was EXTRACTED, which was true. These
+# tests exist because that check could not see one layer further, and neither could its
+# author until the parts were run and measured.
+
+def _patterns_repo(root, parts=2, n_patterns=3, pattern_len=40):
+    """A repo with a handoff, an emitter that chunks it, and settings that register parts."""
+    (root / "_project_specs" / "todos").mkdir(parents=True, exist_ok=True)
+    body = "\n".join(f"{i}. **Lesson {i}.** {'x' * pattern_len}" for i in range(1, n_patterns + 1))
+    (root / "_project_specs" / "todos" / "active.md").write_text(
+        f"## Handoff — pick up here (test)\n\n### Standing patterns\n\n{body}\n\n## Older\n")
+    src = Path(doccheck.__file__).resolve().parent.parent / ".claude" / "scripts" / "tessera-patterns-surface.sh"
+    dst = root / ".claude" / "scripts" / "tessera-patterns-surface.sh"
+    dst.write_text(src.read_text())
+    dst.chmod(0o755)
+    cmd = ('if [ -x "${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-patterns-surface.sh" ]; then '
+           'exec "${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-patterns-surface.sh" '
+           '--part %d --of %d; fi; exit 0')
+    (root / ".claude" / "settings.json").write_text(json.dumps({"hooks": {"SessionStart": [
+        {"hooks": [{"type": "command", "command": cmd % (p, parts)}]}
+        for p in range(1, parts + 1)]}}))
+    return root
+
+
+def test_patterns_parts_cover_every_lesson(fake_repo):
+    _patterns_repo(fake_repo)
+    assert doccheck.check_standing_patterns_fit_the_cap() == []
+
+
+def test_catches_unregistered_part(fake_repo):
+    """--of 2 declared but only part 1 wired: half the lessons are surfaced by nothing."""
+    root = _patterns_repo(fake_repo, parts=2)
+    d = json.loads((root / ".claude" / "settings.json").read_text())
+    d["hooks"]["SessionStart"] = [e for e in d["hooks"]["SessionStart"]
+                                  if "--part 2" not in json.dumps(e)]
+    (root / ".claude" / "settings.json").write_text(json.dumps(d))
+    bad = doccheck.check_standing_patterns_fit_the_cap()
+    assert any("expected [1, 2]" in v for v in bad), bad
+
+
+def test_catches_emitter_not_registered_at_all(fake_repo):
+    root = _patterns_repo(fake_repo)
+    (root / ".claude" / "settings.json").write_text(json.dumps({"hooks": {"SessionStart": []}}))
+    bad = doccheck.check_standing_patterns_fit_the_cap()
+    assert any("emitted by nothing" in v for v in bad), bad
+
+
+def test_catches_part_over_budget(fake_repo, monkeypatch):
+    """The original bug: one output carrying more than the harness will deliver."""
+    monkeypatch.setattr(doccheck, "_HOOK_OUTPUT_BUDGET", 200)
+    _patterns_repo(fake_repo, parts=1, n_patterns=4, pattern_len=100)
+    bad = doccheck.check_standing_patterns_fit_the_cap()
+    assert any("over the 200 budget" in v for v in bad), bad
+
+
+def test_catches_dropped_pattern(fake_repo):
+    """A chunker that loses a lesson reproduces the original bug with better numbers."""
+    root = _patterns_repo(fake_repo)
+    emitter = root / ".claude" / "scripts" / "tessera-patterns-surface.sh"
+    emitter.write_text(emitter.read_text().replace(
+        "for (i = 0; i <= max; i++) if (owner[i] == part)",
+        "for (i = 0; i < max; i++) if (owner[i] == part)"))
+    bad = doccheck.check_standing_patterns_fit_the_cap()
+    assert any("MISSING" in v for v in bad), bad
+
+
+def test_surfaced_check_is_not_satisfied_by_a_comment(fake_repo):
+    """The retarget's own lesson: a substring test over a shell script cannot tell code from
+    prose. The old check asserted "Standing patterns" appeared in the surfacer; when the block
+    moved out, the file kept a COMMENT saying so and the check would have stayed green."""
+    root = _patterns_repo(fake_repo)
+    (root / ".claude" / "scripts" / "tessera-patterns-surface.sh").unlink()
+    (root / ".claude" / "scripts" / "tessera-watch-surface.sh").write_text(
+        "#!/bin/bash\n# The Standing patterns used to be printed here; see the observatory.\n")
+    bad = doccheck.check_standing_patterns_are_surfaced()
+    assert any("nothing emits it" in v for v in bad), bad

@@ -1286,10 +1286,26 @@ def check_standing_patterns_are_surfaced() -> list[str]:
     Measured that day: only 20 of 43 observatory entries name a file at all. So the
     through-lines rode model recall — and a session re-derived a lesson the repo had already
     paid for eight times. A pointer would ride recall too; the block is printed verbatim.
+
+    RETARGETED 2026-08-06 when the block moved to `tessera-patterns-surface.sh`. This check
+    used to assert that the string "Standing patterns" appeared in `tessera-watch-surface.sh`,
+    which is a substring test over a shell script and cannot tell code from prose.
+
+    HOW CLOSE THAT CAME, stated accurately because the first draft of this docstring did not.
+    The claim was that the check would have gone on passing on the COMMENT left behind in the
+    surfacer. `bin/tessera-verify` REFUTED it: the comment reads "The standing patterns USED
+    TO BE PRINTED HERE" in lowercase, the old grep was capitalised, and the old check fires
+    correctly on this change. The hazard is still real — the falsifier capitalised one letter
+    in that comment and got a surfacer emitting ZERO patterns while the old check returned
+    PASS. So the repo escaped a false green by a capital letter, not by design. A near-miss,
+    not a hit.
+
+    It now names the emitting script explicitly and, more importantly,
+    `standing-patterns-fit-the-cap` RUNS it. Emission is not the property; arrival is.
     """
     bad = []
     handoff = ROOT / "_project_specs" / "todos" / "active.md"
-    surfacer = ROOT / ".claude" / "scripts" / "tessera-watch-surface.sh"
+    emitter = ROOT / ".claude" / "scripts" / "tessera-patterns-surface.sh"
     if not handoff.exists():
         return ["_project_specs/todos/active.md missing — cannot verify standing patterns"]
     text = handoff.read_text()
@@ -1301,9 +1317,106 @@ def check_standing_patterns_are_surfaced() -> list[str]:
     if "### Standing patterns" not in block:
         bad.append("_project_specs/todos/active.md: newest handoff has no '### Standing "
                    "patterns' block — the cross-cutting lessons are not surfaced at SessionStart")
-    if surfacer.exists() and "Standing patterns" not in surfacer.read_text():
-        bad.append(".claude/scripts/tessera-watch-surface.sh: does not extract the standing-"
-                   "patterns block — the section exists but nothing prints it")
+    if not (emitter.exists() and os.access(emitter, os.X_OK)):
+        bad.append(".claude/scripts/tessera-patterns-surface.sh: missing or not executable — "
+                   "the standing-patterns block exists but nothing emits it")
+    return bad
+
+
+# Claude Code caps hook output at 10,000 characters (code.claude.com/docs/en/hooks); past
+# that the harness saves it to a file and hands the model a ~2KB preview. 9,000 leaves a
+# margin so growth is caught by a failing check rather than by silent truncation.
+_HOOK_OUTPUT_CAP = 10_000
+_HOOK_OUTPUT_BUDGET = 9_000
+
+
+def check_standing_patterns_fit_the_cap() -> list[str]:
+    """The standing patterns must ARRIVE — every one of them, not merely be emitted.
+
+    ADDED 2026-08-06, after measuring that 11 of 12 never reached the model. The surfacer
+    emitted 10,878 characters in one output; the cap is 10,000; the harness replaced
+    everything past ~2KB with a file path. `standing-patterns-are-surfaced` was green the
+    whole time because it asked whether the block was EXTRACTED, which was true.
+
+    So this check RUNS the registered parts and measures what they emit. Three properties,
+    and the third is the one a size check alone would miss:
+
+      1. the registered `--part` indices are exactly 1..N for the declared `--of N`;
+      2. every part's output is under the budget;
+      3. the UNION of the parts carries every pattern in the handoff, each exactly once.
+
+    (3) exists because a chunker that silently drops or duplicates a pattern reproduces the
+    original bug with better numbers. Growth past what N parts can carry fails (2) loudly;
+    the fix is to add a part in settings.json, which cannot be done by accident.
+
+    COVERAGE IS DISTRIBUTED, so do not audit this check alone. `bin/tessera-verify` found
+    the seam: when the emitter is merely NON-EXECUTABLE this check fires (the subprocess
+    raises), but when it is ABSENT this check early-returns [] and goes silent — absence is
+    owned by `standing-patterns-are-surfaced`, which fires on both. The property is "does
+    something report it", not "does this function report it". That is the same distinction
+    the degraded-event contract records, and counting per-check coverage is how three wrong
+    findings got written on 2026-07-26.
+    """
+    settings = ROOT / ".claude" / "settings.json"
+    emitter = ROOT / ".claude" / "scripts" / "tessera-patterns-surface.sh"
+    handoff = ROOT / "_project_specs" / "todos" / "active.md"
+    if not (settings.exists() and emitter.exists() and handoff.exists()):
+        return []                      # standing-patterns-are-surfaced owns the absence
+    try:
+        hooks = json.loads(settings.read_text())["hooks"]["SessionStart"]
+    except (ValueError, KeyError):
+        return [".claude/settings.json: SessionStart hooks unreadable — cannot verify "
+                "standing-patterns delivery"]
+
+    parts, declared = [], set()
+    for entry in hooks:
+        for h in entry.get("hooks", []):
+            m = re.search(r"tessera-patterns-surface\.sh\"? --part (\d+) --of (\d+)",
+                          h.get("command", ""))
+            if m:
+                parts.append(int(m.group(1)))
+                declared.add(int(m.group(2)))
+    if not parts:
+        return [".claude/settings.json: tessera-patterns-surface.sh is not registered on "
+                "SessionStart — the standing patterns are emitted by nothing"]
+    if len(declared) != 1:
+        return [f".claude/settings.json: patterns hooks disagree on --of {sorted(declared)} — "
+                f"the chunking would drop or duplicate lessons"]
+    total = declared.pop()
+    if sorted(parts) != list(range(1, total + 1)):
+        return [f".claude/settings.json: patterns parts registered {sorted(parts)}, expected "
+                f"{list(range(1, total + 1))} — a missing part is silently unsurfaced lessons"]
+
+    bad, seen = [], []
+    for n in sorted(parts):
+        try:
+            out = subprocess.run([str(emitter), "--part", str(n), "--of", str(total)],
+                                 cwd=ROOT, capture_output=True, text=True, timeout=30).stdout
+        except (OSError, subprocess.SubprocessError) as exc:
+            bad.append(f".claude/scripts/tessera-patterns-surface.sh --part {n}: "
+                       f"failed to run ({exc}) — delivery is unverifiable, treat as broken")
+            continue
+        if len(out) > _HOOK_OUTPUT_BUDGET:
+            bad.append(f"standing-patterns part {n}/{total} emits {len(out):,} chars, over the "
+                       f"{_HOOK_OUTPUT_BUDGET:,} budget (harness cap {_HOOK_OUTPUT_CAP:,}) — it "
+                       f"will be truncated to a preview. Add a part in .claude/settings.json")
+        seen += re.findall(r"^(\d+)\. \*\*", out, re.M)
+
+    text = handoff.read_text()
+    first = text.find("## Handoff — pick up here")
+    nxt = text.find("\n## ", first + 5)
+    block = text[first:nxt if nxt != -1 else len(text)]
+    s = block.find("### Standing patterns")
+    if s != -1:
+        e = block.find("\n### ", s + 5)
+        expected = re.findall(r"^(\d+)\. \*\*", block[s:e if e != -1 else len(block)], re.M)
+        if sorted(seen) != sorted(expected):
+            missing = sorted(set(expected) - set(seen), key=int)
+            dupes = sorted({p for p in seen if seen.count(p) > 1}, key=int)
+            bad.append(f"standing-patterns parts carry {sorted(seen, key=int)} but the handoff "
+                       f"has {sorted(expected, key=int)}"
+                       + (f" — MISSING {missing}" if missing else "")
+                       + (f" — DUPLICATED {dupes}" if dupes else ""))
     return bad
 
 
@@ -1968,6 +2081,7 @@ CHECKS = {
     "chaos-suite-is-reachable": check_chaos_suite_is_reachable,
     "session-logs-are-repo-anchored": check_session_logs_are_repo_anchored,
     "standing-patterns-are-surfaced": check_standing_patterns_are_surfaced,
+    "standing-patterns-fit-the-cap": check_standing_patterns_fit_the_cap,
     "decision-surface-is-wired": check_decision_surface_is_wired,
     "pretooluse-hooks-reach-the-model": check_pretooluse_hooks_reach_the_model,
     "referenced-paths-exist": check_referenced_paths_exist,
