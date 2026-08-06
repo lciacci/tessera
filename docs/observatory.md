@@ -2566,6 +2566,60 @@ it was already harvested*.
   ADR-0008-style audit runs — at which point the Mnemos narrative relocation is the concrete item
   and the token total is context, not justification.
 
+### Every conduct instrument counts the artifact, not the conduct *(2026-08-06, surfaced by the Agent Behavior eval)*
+
+- **Status:** Watching. **Dated trigger, deliberately — not an open "Investigating".** Re-open when the ADR-0020 fixture work lands and produces a lucky-correct-negative result, or by **2026-10-05** regardless.
+- **Source:** ADR-0020 (`docs/adr/0020-agent-behavior-evaluation.md`), §6. Agent Behavior was the mirror; this entry is the reflection, and it is about Tessera.
+
+**The claim.** Tessera has a rule about proxies — principle #3, *name the pain, not the artifact that
+correlates with it* — and its own conduct instruments are, without exception, artifact counters.
+Measured in `.tessera/logs/` on 2026-08-06:
+
+```
+suggestion_gate  204 events / 36 sessions   fired 199 · held 5 (2.4%) · retro 34
+spend_denied     124                        spend_authorized 1
+restore_offered    9                        restore_receipt  6
+degraded           2
+```
+
+- The **friction journal** is in practice a fired-counter: `held` is 2.4% of events. It records that
+  a gate happened, never whether it was the right gate or a good one.
+- **`tessera-gate-scan`** diffs a count of gate-shaped turns against a count of logged events. Two
+  counts. It is a recall net by design and CLAUDE.md says so — but nothing sits behind it that
+  measures the property.
+- The **restore receipt** is a self-reported verdict. ADR-0015 split the offer from the receipt so
+  neither party marks its own homework, which fixed *who reports*; the report is still a label, not
+  a measurement of whether re-derivation actually occurred.
+- The **`degraded` contract** carries an explicit warning not to audit coverage by counting
+  `degraded` calls per hook — added because doing exactly that produced three wrong findings on
+  2026-07-26. That warning is written as advice to one auditor. It is a property of the whole layer.
+
+**The alternative, and where it came from.** Agent Behavior's calibration document judges the
+*trajectory* against a written statement of the conduct, per **trigger occurrence**, with a fixture
+matrix whose load-bearing case is the **lucky-correct negative** — outcome right, required process
+skipped. Tessera has named that failure more than any other (Standing pattern #2) and has never had
+a test shape for it.
+
+**Why this is not already a decision.** No calibration data exists. Deciding to retire artifact
+counting on the strength of an external README is ADR-0013's refused move, one organ over. The
+sequencing is real: ADR-0020's adopted fixture work in `scripts/mnemos/eval_correction.py` is the
+cheapest possible test of whether a judge can distinguish a lucky-correct negative at all, and a
+conduct judge is worth nothing if it cannot.
+
+**Two things to carry into that decision, both already known here:**
+- **A conduct judge over Tessera's own transcripts is behavior-conditioned, not observational.**
+  `CLAUDE.md` is eagerly loaded, so the agent was *given* the conventions. That answers a different
+  question, and no number from it may be reported as if it were observational.
+- **Fail-loud applies to the judge.** A trajectory judge returning `not applicable` for every
+  trigger is indistinguishable from a compliant agent. Standing pattern #1, aimed at the instrument
+  this entry proposes.
+
+**Counter-argument, recorded so it is not lost:** counting is what a hook can do cheaply and
+deterministically, and determinism is principle #17's whole point. An LLM judge is elective,
+costly, and itself unverified. The honest framing is not *counters are wrong* — it is that the
+counter was never chosen over the alternative, it was the only thing convenient, and no one has
+looked since.
+
 ---
 
 ## Closing notes

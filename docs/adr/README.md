@@ -47,6 +47,7 @@ Auto-generated below as ADRs are created. Update when adding a new ADR.
 | 0017 | 2026-07-27 | `usage` drift retired — the dimension was `git grep`, so it could not answer the question that justified it | Accepted |
 | 0018 | 2026-07-27 | One drift event per dimension — the composite event made three separate things ambiguous | Accepted |
 | 0019 | 2026-07-27 | Close the iCPG loop — author intent deliberately, record it automatically, never the reverse | Accepted |
+| 0020 | 2026-08-06 | Agent Behavior — the format is a linter, the calibration methodology is the find, and Tessera's conduct instruments all count artifacts | Watching |
 
 ---
 
