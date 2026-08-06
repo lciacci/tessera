@@ -2620,6 +2620,177 @@ costly, and itself unverified. The honest framing is not *counters are wrong* �
 counter was never chosen over the alternative, it was the only thing convenient, and no one has
 looked since.
 
+### 11 of the 12 standing patterns never reach the model — and the check guarding them is green *(2026-08-06)*
+
+- **Status:** Investigating. **Reproducible in two commands; validate before acting.**
+- **Source:** Found by accident, checking whether this session's own handoff edit had made the SessionStart spill worse. It had not — but the measurement exposed this.
+- **Related:** the sibling entry below (same root cause: the harness's output cap). Different mechanism, different fix, so it is filed separately.
+
+**The measurement:**
+
+```bash
+.claude/scripts/tessera-watch-surface.sh > /tmp/sf.txt
+wc -c < /tmp/sf.txt                                    # 10,778
+grep -c '^[0-9]*\. \*\*' /tmp/sf.txt                   # 12  standing patterns present
+head -c 2048 /tmp/sf.txt | grep -c '^[0-9]*\. \*\*'    # 1   survive the preview
+```
+
+The harness caps hook output and hands the model a **2KB preview** past roughly 10.9KB (see the
+sibling entry for the bound). The surfacer emits 10,778 bytes. **One pattern arrives. Eleven do
+not.** This session's own SessionStart is the proof: the injected block cut off mid-pattern-1, at
+*"a guard written for a bug and tested against that same bug is"*.
+
+**Why this is the sharpest instance of Standing pattern #1 yet recorded** — and pattern #1 is the
+one that got truncated:
+
+`scripts/doccheck.py` → `check_standing_patterns_are_surfaced` asserts two things: that
+`active.md`'s newest handoff contains a `### Standing patterns` block, and that
+`tessera-watch-surface.sh` extracts it. **Both are true.** The check is green. Its docstring states
+the intent exactly:
+
+> *"So the through-lines rode model recall — and a session re-derived a lesson the repo had already
+> paid for eight times. A pointer would ride recall too; the block is printed verbatim."*
+
+It is **not** printed verbatim. 92% of it is dropped one layer past where the check can see. The
+mechanism built specifically to stop lessons riding model recall has, in practice, been delivering
+one lesson and leaving eleven to model recall — and the check certifying it cannot observe the
+channel it is certifying. *A check that verifies the sender and never the receiver.*
+
+**Note what this does NOT imply.** The block has been growing since 2026-07-24; it is not knowably
+"broken since then" — the truncation depends on total surfacer size, which varies with the handoff.
+**When each pattern stopped arriving is unmeasured.** Do not write a date on this without checking.
+
+**Possible remedies, none decided — this needs a decision, not a patch:**
+
+1. **Emit the patterns as their own hook output**, separate from the handoff pointer, so each fits
+   under the cap. Cheapest, and it keeps verbatim delivery.
+2. **Rotate** — print N patterns per session, cycling. Verbatim but incomplete by design; a lesson
+   would be absent on most sessions, which is what this entry is complaining about.
+3. **Compress the block** to one line per pattern with the detail behind a pointer. Contradicts the
+   docstring's own reasoning, and the detail is where the instances live.
+4. **Measure the cap and assert against it in doccheck** — whatever else is chosen, the check must
+   verify the *delivered* size, not merely that the surfacer emitted something. Otherwise the next
+   growth spurt silently re-breaks it.
+
+Option 1 plus option 4 looks right and is untested. **Option 4 is the load-bearing half**: without
+it, any fix to 1–3 is a fix verified by the same blind check.
+
+**What was NOT verified:** the exact cap (bounded ≤10,944, floor unknown); whether hook outputs are
+capped by *bytes* or by *lines/tokens* — 2048 bytes is the observed preview size, and the trigger
+threshold was inferred from two spills, not measured; and whether a second SessionStart hook's
+output counts toward the same budget or is capped independently.
+
+---
+
+### P3's budget sits ABOVE the harness's real spill limit, and the field it names is 5% of the overflow *(2026-08-06)*
+
+- **Status:** Investigating — **but every number below is reproducible in one command, so validate before acting.** This entry is written to be falsified, not believed.
+- **Source:** Measured while answering "what does fixing P3 actually give us?" during the ADR-0020 session. Nothing here was found by reading the predicate; all of it came from measuring the artifacts it governs.
+- **Related:** ADR-0015 (P3 re-scoped to restore integrity), `docs/contracts/restore-receipt.md`, `_project_specs/todos/active.md` → "T2's first real receipt" (2026-07-27) — this entry compounds with that one.
+
+**Three findings. They are independent — one being wrong does not touch the others.**
+
+**1. The budget is above the real threshold, so P3 can certify a checkpoint that does not arrive.**
+
+`bin/tessera-watch:38`:
+
+```python
+RESTORE_BUDGET_BYTES = 12_000   # see p3_restore_integrity; 18,755 was observed to SPILL
+```
+
+18,755 is an **upper** bound — it is the only spill anyone had seen, so the budget was set below it
+with margin. Nobody established a lower bound. This session does: **both** SessionStart hooks
+spilled, and the harness persisted them at
+
+```
+12,611b  mnemos-session-start    → harness: "Output too large (12.3KB)" → 2KB preview
+10,944b  tessera-watch-surface   → harness: "Output too large (10.6KB)" → 2KB preview
+```
+
+So the true threshold is **≤10,944**, not 18,755. A checkpoint at 11,500 bytes passes P3 and still
+spills. The predicate is not merely lenient — it is capable of reporting green on a checkpoint the
+model never receives, which is the exact failure ADR-0015 rebuilt it to catch.
+
+**2. The field P3 tells you to check is not the field overflowing.**
+
+P3's own remediation text says *"Check the goal field first — goals are never-evict and one is
+minted per ingested session."* Measured against `.mnemos/checkpoint-latest.json` (12,364b total):
+
+```
+  8316b  67%  active_constraints   ← the overflow
+  1454b  11%  active_results       (progress)
+   671b   5%  goal                 ← what the hint names
+   444b   3%  recent_files
+   224b   2%  task_narrative
+     2b   0%  current_subgoal      (empty)
+     2b   0%  working_memory       (empty)
+```
+
+Deleting `goal` **entirely** does not get under budget. `active_constraints` is 77 entries, **61 of
+them `file_exists("path")`** invariants bridged from iCPG intents — e.g.
+`INV: file_exists("scripts/override/")`. Those are static repo facts, not session constraints, and
+`scripts/doccheck.py` already asserts every one of those paths with a pre-commit hook behind it.
+Two-thirds of a restore budget is spent re-asserting paths that a commit cannot violate.
+
+The hint is not merely unhelpful; it is *directionally wrong*, and it was presumably written when
+the goal blob was the overflow (the 2026-07-27 receipt saw `+90 older goal(s) omitted`). The blob
+shrank; the hint did not follow.
+
+**3. Fixing the bytes turns P3 green and does not answer T2 — this is ADR-0020's finding landing on
+the predicate itself.**
+
+This session's receipt was `insufficient`, missing `goal` and `decisions`. There is **no decisions
+field in the checkpoint schema at all**, and `current_subgoal` and `working_memory` are 2 bytes
+each — empty at source, not truncated. Freeing 6.5KB of budget cannot fill a field that does not
+exist or is empty before delivery. **Budget was never the binding constraint on the things that
+actually had to be re-derived.**
+
+So: fix the constraint bloat, and P3 goes green while the next receipt still reads `insufficient`.
+P3 measures **bytes delivered** — an artifact. T2 asks **did the agent resume without
+re-deriving** — the property. See the sibling entry, "Every conduct instrument counts the artifact,
+not the conduct"; this is that entry's first concrete instance, found the same day and not planted.
+
+**Where it compounds with the 2026-07-27 receipt** (`active.md` → "T2's first real receipt"):
+
+- That receipt found `progress` **corrupted** — `write_checkpoint`'s extractor capturing `$(cat <<`
+  and `$MSG` fragments out of shell command text. This session could not see progress **at all**:
+  `active_results` sits below the spill boundary. **The field that is corrupted is also the field
+  that does not get delivered.** Across two receipts, nobody has yet observed the progress field
+  arrive intact — so its corruption has never been seen under real delivery conditions.
+- That receipt's defect #2 — goal stale and misleading, `+90 older goal(s) omitted` — **recurred
+  verbatim ten days later** as `+87 older goal(s) omitted`. It was recorded and not fixed.
+
+**Proposed remedy — three parts, in this order. Parts 1 and 2 are ~30 minutes; part 3 is not a patch.**
+
+1. **Drop `file_exists` invariants from the checkpoint's constraint set.** They are owned by
+   doccheck + pre-commit, and they still live in iCPG. Takes the checkpoint to roughly 5,900b.
+2. **Re-anchor `RESTORE_BUDGET_BYTES` on the measured bound.** Something at or below 8,000, which
+   carries real margin under 10,944. Without this, part 1 fixes one checkpoint and leaves the
+   predicate still able to certify a spilling one.
+3. **The T2 gap is a `write_checkpoint` defect, not a budget defect.** No decisions field, empty
+   `current_subgoal`, empty `working_memory`, corrupted `progress`. That is the finding worth
+   promoting; it needs its own decision, not a patch.
+
+**What was NOT verified — read this before acting:**
+
+- **One checkpoint was measured.** The 61/77 `file_exists` ratio may not be typical. Check two or
+  three before treating it as the general shape.
+- **The spill threshold is bounded, not measured.** 10,944 spilled; the largest payload that
+  *successfully* delivered this session was not measured, so the true limit is somewhere at or
+  below 10,944 and the floor is unknown. **8,000 is a margin, not a measurement** — if the real
+  limit turns out to be ~4KB, part 1 alone does not clear it either.
+- **Removing the constraints was not attempted.** The safety argument is "doccheck asserts the
+  paths"; that was read, not exercised.
+- **Whether `active_results` arriving would have changed the `insufficient` verdict is unknown** —
+  it never arrived, and per the point above it may be corrupt when it does.
+- **This is a tessera receipt, and the 07-27 caveat still binds:** orientation here came from the
+  handoff file and the standing-patterns block, not from the checkpoint. A downstream app has no
+  such file. **Do not read tessera receipts as a general verdict on Mnemos.**
+
+**Revisit when:** parts 1 and 2 land and a subsequent session's receipt is compared against this
+one — specifically whether it still reads `insufficient`, which is the prediction this entry makes
+and the cheapest way to falsify it.
+
 ---
 
 ## Closing notes

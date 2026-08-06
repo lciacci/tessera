@@ -6,117 +6,156 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-07-29: the T2 instrument had never run downstream — 34 sessions, 26 substantive, zero receipts. Shipped, back-filled to six projects, and the read-trigger wired as P16. Then arbiter found a real bug in the fix, and arbiter turned out to have been reviewing less than it claimed.)
+## Handoff — pick up here (2026-08-06: ADR-0020 evaluated Agent Behavior — the shipped tool is a frontmatter linter, the calibration methodology is the find, and the mirror said every conduct instrument here counts the artifact the conduct emits. Then P3 turned out to be the first concrete instance: its budget sits ABOVE the harness's real spill limit, and the field its hint names is 5% of the overflow.)
 
 *(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
 Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering.)*
 
 ### THE ONE THING TO KNOW
 
-> ### ⚠ STANDING PATTERN #1 HIT FOUR TIMES IN ONE DAY, AT FOUR LEVELS OF THE SAME STACK.
-> Not a theme imposed afterwards — each was found separately, and each produced
-> ordinary-looking success:
+> ### ⚠ ELEVEN OF THE TWELVE STANDING PATTERNS HAVE NOT BEEN REACHING THE MODEL — AND THE CHECK GUARDING THEM IS GREEN.
 >
-> 1. **The instrument was dark.** `restore_offered` = 0 across **34 downstream sessions in 6
->    projects, 26 of them substantive**. `scripts/restore/` was never scaffolded, and the
->    SessionStart probe's `for` loop ended with no `else` — so a project that COULD NOT record
->    an offer and one with nothing to record logged identically.
-> 2. **The fix for it was silent on its own failure mode.** The found-flag was set on the same
->    line as the interpreter call, so a resolvable `offer.py` that *crashed* counted as a
->    recorded offer. I closed the gap for ABSENT and left it open for PRESENT-BUT-BROKEN.
-> 3. **The predicate watching it could undercount quietly.** P16 keyed its tally by directory
->    name. Cannot collide today — the glob is single-parent — but a merged counter holds a
->    *counting* predicate silent, and it should not depend on another function's properties.
-> 4. **The reviewer checking all of it was narrower than it claimed.** arbiter printed
->    "1 file(s) reviewed · 0 blocking" having never opened the file under review.
+> Read this one first; it was found last, by accident, checking whether this session's own handoff
+> edit had made the SessionStart spill worse. Full entry: `docs/observatory.md` → **"11 of the 12
+> standing patterns never reach the model"**. Two commands:
 >
-> **NUMBERS 2 AND 3 WERE FOUND BY arbiter, IN CODE WRITTEN AN HOUR EARLIER TO FIX NUMBER 1,
-> WHICH I HAD ALREADY TESTED HARD.** Number 4 was found only because the first run's result
-> looked *too* clean and got re-run with `--ext ""`.
+> ```bash
+> .claude/scripts/tessera-watch-surface.sh > /tmp/sf.txt
+> wc -c < /tmp/sf.txt                                  # 10,778 — over the harness cap
+> grep -c '^[0-9]*\. \*\*' /tmp/sf.txt                 # 12 patterns emitted
+> head -c 2048 /tmp/sf.txt | grep -c '^[0-9]*\. \*\*'  # 1 survives the preview
+> ```
 >
-> **The method, again: all four came from RUNNING something and reading what came back. None
-> came from re-reading a diff.** Self-review that executes nothing remains the weakest
-> instrument here — and today it extends one level further out: the *tool* you reach for to
-> check your work is itself in scope for the check.
+> **This session's own SessionStart is the proof** — the injected block cut off mid-pattern-1, at
+> *"a guard written for a bug and tested against that same bug is"*.
+>
+> `doccheck`'s `standing-patterns-are-surfaced` asserts the block exists in `active.md` and that the
+> surfacer extracts it. **Both are true; the check is green.** Its docstring says *"A pointer would
+> ride recall too; the block is printed verbatim."* It is not printed verbatim — 92% is dropped one
+> layer past where the check can see. **The mechanism built to stop lessons riding model recall has
+> been delivering one lesson and leaving eleven to model recall, and its check verifies the sender
+> and never the receiver.** That is Standing pattern #1, aimed at the artifact that carries
+> Standing pattern #1 — which is itself the one pattern that still arrives.
+>
+> **Do not date it.** The block has grown since 2026-07-24 and truncation depends on total surfacer
+> size; *when* each pattern stopped arriving is unmeasured. Remedy options are in the entry; the
+> load-bearing one is that doccheck must assert the **delivered** size, or any fix is verified by
+> the same blind check.
+>
+> ### ⚠ P3 IS AN INSTANCE OF THE THING ADR-0020 JUST NAMED — AND IT WAS FOUND BY MEASURING, NOT BY READING THE PREDICATE.
+>
+> Full write-up with reproduction: `docs/observatory.md` → **"P3's budget sits ABOVE the harness's
+> real spill limit, and the field it names is 5% of the overflow"**. Three independent findings;
+> one being wrong does not touch the others.
+>
+> 1. **The budget is above the real threshold.** `bin/tessera-watch:38` sets
+>    `RESTORE_BUDGET_BYTES = 12_000` on the comment *"18,755 was observed to SPILL"* — an **upper**
+>    bound, the only spill anyone had seen. This session gives a much tighter one: **both**
+>    SessionStart hooks spilled, at 12,611b and **10,944b**. A checkpoint at 11,500b passes P3 and
+>    still spills. **The predicate can report green on a checkpoint the model never receives** —
+>    the exact failure ADR-0015 rebuilt it to catch.
+> 2. **The field the hint names is not the field overflowing.** P3 says *"check the goal field
+>    first."* Measured: `goal` is 671b (**5%**); `active_constraints` is 8,316b (**67%**), of which
+>    **61 of 77 are `file_exists("path")`** invariants bridged from iCPG — static repo facts that
+>    doccheck already asserts with a pre-commit hook behind them. **Deleting `goal` entirely does
+>    not get under budget.** The hint was presumably right when the goal blob was the overflow; the
+>    blob shrank and the hint did not follow.
+> 3. **Fixing the bytes turns P3 green and does not answer T2.** This session's receipt was
+>    `insufficient` on `goal` and `decisions`. There is **no decisions field in the schema**, and
+>    `current_subgoal` and `working_memory` are 2 bytes each — empty at source, not truncated.
+>    Budget was never the binding constraint on what actually had to be re-derived. **P3 measures
+>    bytes delivered (artifact); T2 asks whether the agent resumed without re-deriving (property).**
+>    That is ADR-0020's finding, landing on the predicate itself, the same day, unplanted.
+>
+> **IT COMPOUNDS WITH THE 2026-07-27 RECEIPT** (below, "T2's first real receipt"):
+> that receipt found `progress` **corrupted** — the extractor capturing `$(cat <<` and `$MSG` out
+> of shell text. This session could not see progress **at all**; `active_results` sits below the
+> spill boundary. **The field that is corrupted is also the field that does not get delivered**,
+> so across two receipts nobody has yet observed it arrive intact. And that receipt's defect #2 —
+> goal stale, `+90 older goal(s) omitted` — **recurred verbatim ten days later** as `+87 older
+> goal(s) omitted`. Recorded, not fixed.
 
-### What shipped
+### VALIDATE BEFORE ACTING — every number above is one command
 
-- **T2 downstream** (`89619b9`, `c6aae93`). Scaffold ships `scripts/restore/{paths,offer,emit,scan}.py`
-  + the Stop hook; `settings.base.json` wires `tessera-restore-scan`; the offer fall-through now
-  emits `degraded/restore-offer/{offer-missing,offer-failed}`. All six downstreams back-filled and
-  pushed. Guarded by `scripts/test_new_project_restore_receipt.py` — every assertion run against
-  the re-planted defect.
-- **P16 `t2-receipts`** (`718dd90`, `9b73e27`). The read-trigger, wired instead of remembered.
-  Reads `T2 accruing: 0/10 receipts across 0/3 projects, day 0/30 — too early to read, by design`.
-- **The API-spend boundary NAMED** (`b23e845`). `COMMITTING` is three literals — this guard
-  covers cloud provisioning, not metered per-call charges, so `arbiter` needs no envelope.
-  Decision, not oversight; re-evaluate when cost bites. **An exemption is a call someone made;
-  a blind spot is a gap nobody chose, and they look identical from outside.**
-- **In arbiter** (`3e6be34`, that repo): its scope bug recorded as fail-open instance 5, item 7,
-  and the START HERE of its next session.
+```bash
+# 1. the budget constant and its provenance
+sed -n 38p bin/tessera-watch
+
+# 2. what the harness actually persisted this session (the spill evidence)
+ls -la ~/.claude/projects/-Users-lorenzociacci-Claude-tessera/*/tool-results/
+
+# 3. the field-size breakdown
+python3 - <<'EOF'
+import json, os
+p = '.mnemos/checkpoint-latest.json'
+d = json.load(open(p)); tot = os.path.getsize(p)
+for k, v in d.items():
+    s = json.dumps(v); print(f"{len(s):7d}  {len(s)*100//tot:3d}%  {k}")
+print("total:", tot)
+EOF
+
+# 4. the constraint composition
+python3 -c "
+import json
+c = json.load(open('.mnemos/checkpoint-latest.json'))['active_constraints']
+print(sum('file_exists' in json.dumps(x) for x in c), '/', len(c), 'are file_exists')"
+```
+
+**What was NOT verified — this list is the point of the write-up:**
+
+- **One checkpoint was measured.** The 61/77 ratio may not be typical; check two or three.
+- **The spill threshold is bounded, not measured.** 10,944 spilled. The largest payload that
+  *successfully* delivered was never measured, so the floor is unknown. **8,000 is a margin, not a
+  measurement** — if the true limit is ~4KB, part 1 below does not clear it either.
+- **Removing the constraints was not attempted.** The safety argument ("doccheck asserts the
+  paths") was read, not exercised.
+- **Whether `active_results` arriving would change the verdict is unknown** — it never arrived, and
+  per the 07-27 receipt it may be corrupt when it does.
+- **The 07-27 caveat still binds:** orientation here came from THIS FILE and the standing-patterns
+  block, not from the checkpoint. A downstream app has no such file. **Do not read tessera receipts
+  as a general verdict on Mnemos.**
+
+### What shipped (2026-08-06)
+
+- **ADR-0020** (`3e11786`, pushed) — Agent Behavior evaluated. Verdict **Watching**, no dependency,
+  next check 2026-10-05. Adopted idea-only: the calibration **fixture matrix** whose load-bearing
+  case is the **lucky-correct negative** (outcome right, required process skipped — a failure this
+  repo has named more than any other and never had a test shape for), the **five-layer disagreement
+  diagnosis**, and the rule that a judge run over tessera's own transcripts is **behavior-conditioned,
+  not observational**, because `CLAUDE.md` is eagerly loaded. Refused: the `.agents/behaviors/`
+  format (specified as non-delivered, zero third-party clients) and the Braintrust `Eval` harness
+  where the judging actually lives (provider-coupled, against ADR-0014's seam).
+  **`Executed: not yet`** — nothing has been built.
+- **Two observatory entries** — "Every conduct instrument counts the artifact, not the conduct"
+  (Watching, dated trigger 2026-10-05) and the P3 entry above.
+- **`docs/promo/index.html`** — ADR-0020 timeline row. doccheck caught the omission, not a human.
 
 ### Next — in priority order
 
-1. **DOWNSTREAM WORK. That is the whole list for T2** — receipts arrive only as a byproduct.
-   Conclave is the target; howler's iOS port after. **Do not do T2 work; do real work.**
-   On the first downstream session, confirm the one thing never verified: that the newly-wired
-   Stop hook actually fires and the ask reaches the model. Watch for three things — the ask not
-   arriving at all, an answer of `sufficient` with thin `--used` text (the reflex signature), or
-   another Stop hook eating the channel, which is how `bin/tessera-verify` lost three verdicts.
-2. **This repo's control surface has never been independently reviewed, and could not have
-   been.** 21 extensionless files in `bin/`, ~4,500 lines — every `tessera-*` command, including
-   `tessera-verify` (489) and `tessera-watch` (1009) — are invisible to arbiter's default `--ext`
-   set. Two runs on 2026-07-29 came back clean over exactly this class. `--ext ""` is the
-   workaround; the real fix is arbiter item 7. **Reviewing all of it is ~$15–25 — a cost call,
-   not an obvious yes.** The falsifier and the watcher are the two worth doing first: they are
-   what this framework uses to check itself.
-3. **howler is missing the ENTIRE spend guard** — 14 files, not 5, found in the sync dry-run.
-   Excluded deliberately rather than bundled into unrelated approval.
-   `bin/tessera-sync-harness ~/Claude/howler` shows it.
-4. **Do NOT wire the iCPG loop downstream yet** (carried from 07-27, still current). Run a
-   downstream session or two on the harness already trusted, then wire it.
-5. **Prompt caching — ANSWERED, shipped, and closed except for one repo.**
-   arbiter, measured 2026-07-30: **50% of prompt tokens served from cache, ~29% off a live run**,
-   control clean in both directions. Two findings kept — `triage` is a non-candidate **by seven
-   tokens** (1,017 and 1,024 against a 1,024 floor; a marker there reports success and caches
-   nothing), and the **transcript was the money, not the prefix** (78% of a five-turn review is
-   re-sends). *Meter before marker* is the transferable result: `hit_rate` prints on every run, so a
-   prefix later trimmed under the floor surfaces unprompted instead of silently. That sentence now
-   ships in `templates/tessera/CLAUDE.md.template` (verified by scaffolding a throwaway project, not
-   by reading the template). Full verdict: `docs/observatory.md` → "Prompt caching: the fleet reads
-   at 0%…". **Next, by repo:**
-   - **tessera** — nothing open. **No predicate, deliberately:** the property is runtime, the meter
-     already is the check, and a static scan would be proxy predicate #4. Marker-*placement*
-     guidance stays held until a second repo shape exists — the breakpoint-cap trap (max 4, system
-     takes one, so per-turn marking sits exactly on the cap at `MAX_VERIFY_TURNS=4` and breaks
-     silently when anyone raises it) shows how repo-specific that guidance gets.
-   - **quarry** — the only live candidate, and it is not a marker job. Its `callJSON` has no
-     `system` block at all; the constant preamble must be hoisted out of the user message first.
-     Justified only by call volume, which is a question about quarry's usage, not about caching.
-   - **arbiter** — nothing caching-related left. (Its open item is unrelated: the `--ext` scope bug
-     in handoff item 2.)
-   - **conclave** — closed. Non-candidate *by design*: it reaches `api.anthropic.com` through the
-     OpenAI-compat endpoint, which has no slot for the field, and provider-agnosticism is the point.
-   - **howler / heaviside / tess-dashboard / lorenzo-portfolio** — closed. No API surface, except
-     portfolio, whose Haiku 4.5 prefix cannot clear that model's 4,096-token floor.
-   The fleet reads at 0% because `cache_control` appears in **zero** call sites across 7 files in
-   5 repos; caching is opt-in and nobody opted in. One candidate of five examined (arbiter,
-   marker-only); quarry needs a restructure first; conclave is a non-candidate **by design** (it
-   reaches `api.anthropic.com` through the OpenAI-compat endpoint, which has no slot for the
-   field); howler, heaviside and tess-dashboard have no API surface at all. **Do not roll this
-   out fleet-wide** — the correct action differed in every repo. Four things wanted back from
-   arbiter: the step-4 `cache_read_input_tokens` reading with a control, the measured
-   `count_tokens` figure for its prefix (near 1024 is a finding on its own), the per-agent outcome
-   for `reviewer`/`second_pass`/`triage`, and anything the dispatch prompt failed to anticipate.
-   Those decide a held `templates/tessera/CLAUDE.md.template` line and whether a predicate is
-   worth building. **Meter before marker:** arbiter's `_record()` (`client.py:46`) ignores both
-   cache usage fields, so today it cannot show the fix working in either direction.
-   See `docs/observatory.md` → "Prompt caching: the fleet reads at 0%…". **No trigger is wired**,
-   so this item is the only thing that will surface it.
-6. **Carried, unchanged:** item 2 Part B (the pending-record channel, needs its 3-decision
-   design gate); B2 correction recall (blocked on unbiased labels — the block IS the finding);
-   `tessera-authorize dismiss` needs a HUMAN to run it end to end, which the agent structurally
-   cannot do.
+0. **The standing-patterns truncation (the boxed item above).** Ahead of everything else, because
+   every other item on this list is judged by lessons that have not been arriving. Emit the
+   patterns as their own hook output so each fits under the cap, **and** make doccheck assert the
+   **delivered** size — without that second half the fix is verified by the same blind check.
+   Measure the cap first; it is bounded (≤10,944) but its floor is unknown.
+1. **P3 remedy, three parts, in this order.** Parts 1–2 are ~30 minutes; part 3 is not a patch.
+   1. **Drop `file_exists` invariants from the checkpoint's constraint set** — owned by doccheck +
+      pre-commit, still live in iCPG. Takes the checkpoint to roughly 5,900b.
+   2. **Re-anchor `RESTORE_BUDGET_BYTES`** at or below 8,000. Without this, part 1 fixes one
+      checkpoint and leaves the predicate able to certify a spilling one.
+   3. **The T2 gap is a `write_checkpoint` defect, not a budget defect** — no decisions field,
+      empty `current_subgoal`, empty `working_memory`, corrupted `progress`. Its own decision.
+   **The falsifiable prediction, and the cheapest way to test this whole entry:** after parts 1–2,
+   P3 goes green and the next receipt still reads `insufficient`. If it reads `sufficient`, this
+   analysis is wrong and that is worth more than being right.
+2. **ADR-0020's adopted half — the fixture matrix in `scripts/mnemos/eval_correction.py`.** Add the
+   five case types: positive, negative, **lucky-correct negative**, outside-scope, allowed-boundary.
+   The lucky-correct negative is load-bearing. This is also what unblocks the sibling observatory
+   entry, whose trigger is exactly this work producing a result. Warrants an iCPG intent; the
+   2026-08-06 session opened none because it changed no code.
+3. **Carried unchanged from 2026-07-29** (retitled section immediately below, items 1–6 there):
+   downstream work is still the whole list for T2; this repo's control surface still has never been
+   independently reviewed (21 extensionless files in `bin/`, invisible to arbiter's default `--ext`);
+   howler is still missing the spend guard; the iCPG loop still should not be wired downstream yet.
 
 ### Standing patterns
 
@@ -243,6 +282,115 @@ This exists because the repo has twice formed a verdict on an instrument that ha
 counted 3 compactions and called Mnemos untested for 37 days; `usage` was re-scoped three times
 and decided zero. **A fresh instrument shipping empty is the single most tempting time to
 misread it.** P16 now holds the rule so it does not ride recall.
+
+## Handoff — 2026-07-29 (the T2 instrument had never run downstream — 34 sessions, 26 substantive, zero receipts. Shipped, back-filled to six projects, and the read-trigger wired as P16. Then arbiter found a real bug in the fix, and arbiter turned out to have been reviewing less than it claimed.)
+
+### THE ONE THING TO KNOW
+
+> ### ⚠ STANDING PATTERN #1 HIT FOUR TIMES IN ONE DAY, AT FOUR LEVELS OF THE SAME STACK.
+> Not a theme imposed afterwards — each was found separately, and each produced
+> ordinary-looking success:
+>
+> 1. **The instrument was dark.** `restore_offered` = 0 across **34 downstream sessions in 6
+>    projects, 26 of them substantive**. `scripts/restore/` was never scaffolded, and the
+>    SessionStart probe's `for` loop ended with no `else` — so a project that COULD NOT record
+>    an offer and one with nothing to record logged identically.
+> 2. **The fix for it was silent on its own failure mode.** The found-flag was set on the same
+>    line as the interpreter call, so a resolvable `offer.py` that *crashed* counted as a
+>    recorded offer. I closed the gap for ABSENT and left it open for PRESENT-BUT-BROKEN.
+> 3. **The predicate watching it could undercount quietly.** P16 keyed its tally by directory
+>    name. Cannot collide today — the glob is single-parent — but a merged counter holds a
+>    *counting* predicate silent, and it should not depend on another function's properties.
+> 4. **The reviewer checking all of it was narrower than it claimed.** arbiter printed
+>    "1 file(s) reviewed · 0 blocking" having never opened the file under review.
+>
+> **NUMBERS 2 AND 3 WERE FOUND BY arbiter, IN CODE WRITTEN AN HOUR EARLIER TO FIX NUMBER 1,
+> WHICH I HAD ALREADY TESTED HARD.** Number 4 was found only because the first run's result
+> looked *too* clean and got re-run with `--ext ""`.
+>
+> **The method, again: all four came from RUNNING something and reading what came back. None
+> came from re-reading a diff.** Self-review that executes nothing remains the weakest
+> instrument here — and today it extends one level further out: the *tool* you reach for to
+> check your work is itself in scope for the check.
+
+### What shipped
+
+- **T2 downstream** (`89619b9`, `c6aae93`). Scaffold ships `scripts/restore/{paths,offer,emit,scan}.py`
+  + the Stop hook; `settings.base.json` wires `tessera-restore-scan`; the offer fall-through now
+  emits `degraded/restore-offer/{offer-missing,offer-failed}`. All six downstreams back-filled and
+  pushed. Guarded by `scripts/test_new_project_restore_receipt.py` — every assertion run against
+  the re-planted defect.
+- **P16 `t2-receipts`** (`718dd90`, `9b73e27`). The read-trigger, wired instead of remembered.
+  Reads `T2 accruing: 0/10 receipts across 0/3 projects, day 0/30 — too early to read, by design`.
+- **The API-spend boundary NAMED** (`b23e845`). `COMMITTING` is three literals — this guard
+  covers cloud provisioning, not metered per-call charges, so `arbiter` needs no envelope.
+  Decision, not oversight; re-evaluate when cost bites. **An exemption is a call someone made;
+  a blind spot is a gap nobody chose, and they look identical from outside.**
+- **In arbiter** (`3e6be34`, that repo): its scope bug recorded as fail-open instance 5, item 7,
+  and the START HERE of its next session.
+
+### Next — in priority order
+
+1. **DOWNSTREAM WORK. That is the whole list for T2** — receipts arrive only as a byproduct.
+   Conclave is the target; howler's iOS port after. **Do not do T2 work; do real work.**
+   On the first downstream session, confirm the one thing never verified: that the newly-wired
+   Stop hook actually fires and the ask reaches the model. Watch for three things — the ask not
+   arriving at all, an answer of `sufficient` with thin `--used` text (the reflex signature), or
+   another Stop hook eating the channel, which is how `bin/tessera-verify` lost three verdicts.
+2. **This repo's control surface has never been independently reviewed, and could not have
+   been.** 21 extensionless files in `bin/`, ~4,500 lines — every `tessera-*` command, including
+   `tessera-verify` (489) and `tessera-watch` (1009) — are invisible to arbiter's default `--ext`
+   set. Two runs on 2026-07-29 came back clean over exactly this class. `--ext ""` is the
+   workaround; the real fix is arbiter item 7. **Reviewing all of it is ~$15–25 — a cost call,
+   not an obvious yes.** The falsifier and the watcher are the two worth doing first: they are
+   what this framework uses to check itself.
+3. **howler is missing the ENTIRE spend guard** — 14 files, not 5, found in the sync dry-run.
+   Excluded deliberately rather than bundled into unrelated approval.
+   `bin/tessera-sync-harness ~/Claude/howler` shows it.
+4. **Do NOT wire the iCPG loop downstream yet** (carried from 07-27, still current). Run a
+   downstream session or two on the harness already trusted, then wire it.
+5. **Prompt caching — ANSWERED, shipped, and closed except for one repo.**
+   arbiter, measured 2026-07-30: **50% of prompt tokens served from cache, ~29% off a live run**,
+   control clean in both directions. Two findings kept — `triage` is a non-candidate **by seven
+   tokens** (1,017 and 1,024 against a 1,024 floor; a marker there reports success and caches
+   nothing), and the **transcript was the money, not the prefix** (78% of a five-turn review is
+   re-sends). *Meter before marker* is the transferable result: `hit_rate` prints on every run, so a
+   prefix later trimmed under the floor surfaces unprompted instead of silently. That sentence now
+   ships in `templates/tessera/CLAUDE.md.template` (verified by scaffolding a throwaway project, not
+   by reading the template). Full verdict: `docs/observatory.md` → "Prompt caching: the fleet reads
+   at 0%…". **Next, by repo:**
+   - **tessera** — nothing open. **No predicate, deliberately:** the property is runtime, the meter
+     already is the check, and a static scan would be proxy predicate #4. Marker-*placement*
+     guidance stays held until a second repo shape exists — the breakpoint-cap trap (max 4, system
+     takes one, so per-turn marking sits exactly on the cap at `MAX_VERIFY_TURNS=4` and breaks
+     silently when anyone raises it) shows how repo-specific that guidance gets.
+   - **quarry** — the only live candidate, and it is not a marker job. Its `callJSON` has no
+     `system` block at all; the constant preamble must be hoisted out of the user message first.
+     Justified only by call volume, which is a question about quarry's usage, not about caching.
+   - **arbiter** — nothing caching-related left. (Its open item is unrelated: the `--ext` scope bug
+     in handoff item 2.)
+   - **conclave** — closed. Non-candidate *by design*: it reaches `api.anthropic.com` through the
+     OpenAI-compat endpoint, which has no slot for the field, and provider-agnosticism is the point.
+   - **howler / heaviside / tess-dashboard / lorenzo-portfolio** — closed. No API surface, except
+     portfolio, whose Haiku 4.5 prefix cannot clear that model's 4,096-token floor.
+   The fleet reads at 0% because `cache_control` appears in **zero** call sites across 7 files in
+   5 repos; caching is opt-in and nobody opted in. One candidate of five examined (arbiter,
+   marker-only); quarry needs a restructure first; conclave is a non-candidate **by design** (it
+   reaches `api.anthropic.com` through the OpenAI-compat endpoint, which has no slot for the
+   field); howler, heaviside and tess-dashboard have no API surface at all. **Do not roll this
+   out fleet-wide** — the correct action differed in every repo. Four things wanted back from
+   arbiter: the step-4 `cache_read_input_tokens` reading with a control, the measured
+   `count_tokens` figure for its prefix (near 1024 is a finding on its own), the per-agent outcome
+   for `reviewer`/`second_pass`/`triage`, and anything the dispatch prompt failed to anticipate.
+   Those decide a held `templates/tessera/CLAUDE.md.template` line and whether a predicate is
+   worth building. **Meter before marker:** arbiter's `_record()` (`client.py:46`) ignores both
+   cache usage fields, so today it cannot show the fix working in either direction.
+   See `docs/observatory.md` → "Prompt caching: the fleet reads at 0%…". **No trigger is wired**,
+   so this item is the only thing that will surface it.
+6. **Carried, unchanged:** item 2 Part B (the pending-record channel, needs its 3-decision
+   design gate); B2 correction recall (blocked on unbiased labels — the block IS the finding);
+   `tessera-authorize dismiss` needs a HUMAN to run it end to end, which the agent structurally
+   cannot do.
 
 ### Open, and better answered downstream than here
 
