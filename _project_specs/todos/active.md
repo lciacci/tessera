@@ -50,13 +50,25 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
    whose default scope could open a file in Tessera's `bin/` at all** — the control-surface blind
    spot pattern #12 has been warning about. Both findings are in `p16`, added in `718dd90`.
 
-   - **`bin/tessera-watch:761` — an unguarded `log.read_text()` takes down the whole watcher.**
-     Confirmed by hand, including the consequence: `evaluate()` (:923) has no `try` around
+   > ⚠ **LINE NUMBERS RE-ANCHORED 2026-08-07 at `7eff509`. Anchor on the SYMBOL, not the number.**
+   > The originals (`:761`, `:923`, `:654`, `:775-783`) came from arbiter's run at `9b73e27` and no
+   > longer resolve — the P3 remedy added ~22 lines near the top of the file and shifted everything
+   > below. Current: the unguarded read is **`:783`, inside `p16_t2_receipts` (`:734`)**;
+   > `evaluate()` is **`:945`**; `p13_degraded`'s guarded equivalent is **`:646`**; the receipt-bar
+   > arm is **`:795`**. *A line number in a doc is a claim with a very short half-life — this one
+   > went stale inside a day, in the same file that records the same lesson about test counts.*
+
+   - **an unguarded `log.read_text()` in `p16_t2_receipts` takes down the whole watcher.**
+     Confirmed by hand, including the consequence: `evaluate()` has no `try` around
      `pred(root)`, so an `OSError` from P16 — a log file vanishing between `logs.glob()` and the
      read, or a permissions error — propagates out and **every** predicate's run dies, not just
-     P16's. `p13_degraded` (:654) already guards its equivalent with `except OSError`; P16 is the
+     P16's. `p13_degraded` already guards its equivalent with `except OSError`; P16 is the
      one that does not. Fail-open in its purest form: the thing that reports breakage is what breaks.
-   - **`bin/tessera-watch:775-783` — the receipt-bar arm can fall through and then contradict
+     **One mitigation the report did not know about, which lowers urgency without closing it:**
+     `.claude/scripts/tessera-watch-surface.sh` catches a non-zero exit and emits
+     `degraded --reason runner-crashed`, so this fails LOUD rather than silent — the A5b audit's
+     chaos probes 9–11 cover exactly this edge. It is a robustness bug, not a silent-failure one.
+   - **the receipt-bar arm can fall through and then contradict
      itself.** The bars are AND-ed (`total >= T2_RECEIPT_BAR and len(per_project) >= T2_PROJECT_BAR`).
      If one project generates ≥10 receipts before day 30, receipts clear the bar but projects do not,
      so control reaches the elapsed arm — which after 30 days fires the "THE FINDING IS THE RATE"
