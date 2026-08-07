@@ -1046,9 +1046,15 @@ Both were found by adversarial verification, **not** by the framework. **The rea
 > wrong.** It matters more than an ordinary stale entry because this entry is the declared *seed* for
 > ADR-0008's deferred conclave design note — a wrong picture here feeds an unwritten ADR. The stale
 > bullets are kept below, marked, per ADR-0007 (harvest before you cut); the heading is kept verbatim
-> because `docs/contracts/three-project-cohesion.md` and `docs/design-principles.md` cite it as an
-> anchor. **`docs/contracts/three-project-cohesion.md` is the source of truth for who-owns-what; this
-> entry is the scratchpad.**
+> because `docs/contracts/three-project-cohesion.md` (line-wrapped, in Cross-references) and
+> **ADR-0014** cite it as an anchor — an accepted ADR names this entry, so renaming it silently
+> breaks a decision record's citation. **`docs/contracts/three-project-cohesion.md` is the source of
+> truth for who-owns-what; this entry is the scratchpad.**
+>
+> *(Corrected within the day: this sentence first claimed `docs/design-principles.md` was a citer. It
+> is not — it never references this entry. ADR-0014 does. Noted rather than silently fixed because
+> the false claim was introduced by the commit whose entire subject was correcting false claims, and
+> because no check catches it: `referenced-paths-exist` verifies paths, not cross-reference targets.)*
 >
 > **(1) The fleet described below is two generations gone.** "Qwen3-32B / Gemma3-27B / Mistral-24B,
 > one per L40S" was conclave's *second* fleet of three — the deliberately-ideal peer-modern one, built
