@@ -2934,6 +2934,112 @@ not the conduct"; this is that entry's first concrete instance, found the same d
 one — specifically whether it still reads `insufficient`, which is the prediction this entry makes
 and the cheapest way to falsify it.
 
+> ### ✅ PARTS 1 AND 2 LANDED 2026-08-07 — and measuring first moved two of this entry's own numbers
+>
+> **The result:** checkpoint **12,835 → 7,077 bytes**; SessionStart output **7,609 characters**
+> against the documented 10,000-character cap, with ~2,400 of headroom. P3 is green. G-a clears on
+> the next hook-driven run — the fire log is written only by `bin/tessera-watch --log`, which the
+> SessionStart hook passes and manual runs deliberately do not, so ad-hoc runs cannot pollute its
+> consecutive-run window.
+>
+> **Two of this entry's "NOT verified" items were checked, and both moved:**
+>
+> 1. **The 61/77 `file_exists` ratio is not just typical — it is CONSERVATIVE.** Measured across 7
+>    real checkpoints: **53/53, 53/53, 56/56, 53/53, 61/77, 62/80**. Four of the seven are **100%**.
+>    So dropping the static predicates does not shrink the constraint set in the common case, it
+>    **empties** it — which is a finding about Mnemos rather than about bytes; see the sibling entry
+>    below.
+> 2. **"8,000 is a margin, not a measurement" — now it is a measurement, and 8,000 was the wrong
+>    number.** The wrapper is **105 characters** (`mnemos-session-start.sh` headers), so the
+>    checkpoint→delivered ratio is **1.011, essentially 1:1**, and the cap is *documented* at 10,000
+>    characters rather than inferred. The derived ceiling is **≈9,895 checkpoint bytes**.
+>    `RESTORE_BUDGET_BYTES` is re-anchored at **9,500**, which is that with margin for wrapper drift
+>    — not the 8,000 guess this entry proposed. **The old 12,000 rested on 18,755, an UPPER bound and
+>    the only spill anyone had seen; three tighter spills (12,611b, 12,472b, 10,944b) refuted it.**
+>
+> **What was NOT done, deliberately:** part 3. It is a `write_checkpoint` defect, not a budget one,
+> and it needs its own decision.
+>
+> **The prediction stands and is now testable.** This entry predicts that P3 goes green *and the next
+> receipt still reads `insufficient`*. It is unfalsified so far — the 2026-08-07 receipt read
+> `insufficient` on `goal` and `decisions`, and **there is no decisions field in the schema at all**,
+> which no byte fix reaches. The cheap test is the next session's receipt. **If it reads `sufficient`,
+> this entry is wrong, and that is worth more than being right.**
+
+### P3 has never measured what it claims to measure — three anchors, three proxies *(2026-08-07)*
+
+- **Status:** Investigating. **Named, scoped, and deliberately NOT built in the session that found
+  it** — the fix lands in the only restore layer ever proven to deliver, and it is a design
+  decision, not a patch.
+- **The pattern, which is the entry.** P3 exists under ADR-0015 to answer **deliverability**. Every
+  anchor it has ever had measured something *adjacent* to delivery:
+
+  | anchor | what it measured | how it was wrong |
+  |---|---|---|
+  | `12_000` | an observed spill at 18,755b | an **upper** bound — the only spill anyone had seen. Sat above the real limit; three tighter spills (12,611 / 12,472 / 10,944) refuted it |
+  | `9_500` | `hook_stdout_bytes − checkpoint_bytes` = 105, called "wrapper overhead" | a **NET of two errors cancelling**: the render is ~718 chars *smaller* than the JSON, and the hook emits a second block (`=== iCPG STATUS ===`, ~1,037 chars) that was never counted. Real overhead is **1,250** |
+  | `8_000` *(current)* | checkpoint JSON bytes × an assumed ratio | the render/JSON ratio is **content-dependent, 0.598–0.944 observed**. No constant is exact; this one is merely safe today |
+
+  **The magnitude of the error keeps shrinking. The class does not.** Each anchor was set by someone
+  who had just been burned by the previous one.
+- **How the 9,500 error was caught, which is the reusable part.** Not by review and not by a test —
+  the tests passed. `bin/tessera-verify` built a checkpoint of **exactly 9,500 bytes**, confirmed it
+  **PASSED P3**, and measured its hook stdout at **10,230 characters** — over the documented
+  10,000-character cap. A landmine at the threshold, which is the one input a guard's own tests
+  never try because the author picked the threshold.
+- **Why the current anchor is documented rather than fixed.** `bin/` is stdlib-only (doccheck
+  `bin-scripts-are-stdlib-only`), so P3 **cannot import the renderer** and cannot compute delivered
+  characters itself. The derivation and both prior failures are written into `bin/tessera-watch` at
+  the constant, so the next person to touch it does not repeat the sequence.
+- **The fix, with the constraint that makes it non-trivial — this is what the session found.** The
+  integration point is **`scripts/restore/offer.py`**, which already writes `restore_offered` with
+  `bytes` and `fields`; `delivered_chars` is the natural third field, and P3 would read the most
+  recent event instead of stat-ing a file. **The blocker:** `mnemos-session-start.sh` calls
+  `offer.py` **mid-hook**, right after the resume block prints — and the iCPG block, the 1,037 chars
+  the 9,500 anchor missed, is emitted *later*. A true total means moving the offer call to the end
+  of the hook. Every variant trades one fail-open for another: **buffer the output** and a trap
+  failure suppresses the restore entirely, or **move the call** and an early exit records no offer
+  at all, which reads to `restore/scan.py` as "nothing was owed".
+- **Two things the fix would NOT solve, so it is not oversold:** it records *last run's* delivered
+  size, not a prediction about the next; and it is silent on **T2 sufficiency** (part 3), which is a
+  `write_checkpoint` defect and a different question entirely.
+- **A rejected alternative, recorded so it is not re-proposed:** having P3 detect real spills from
+  the harness's own `tool-results/` artifacts. Genuine ground truth with no modelling — rejected
+  because it depends on undocumented harness internals, and this same session produced a wrong
+  number by inferring structure from an artifact without verifying it.
+- **Revisit when:** the hook is next touched for another reason (do it then, not standalone), or a
+  checkpoint between 8,000b and the true ceiling is observed spilling — which would mean the current
+  anchor has stopped being merely imprecise and started being wrong.
+
+### Mnemos's never-evict guarantee is spending its budget on facts a pre-commit hook already enforces *(2026-08-07)*
+
+- **Status:** Investigating. Surfaced by measuring the P3 remedy, not by looking for it.
+- **The observation.** ConstraintNodes are **never evicted** — that is Mnemos's headline typed-graph
+  guarantee, the thing the type system exists to provide. Measured across 7 real checkpoints, the
+  constraint set was **53/53, 53/53, 56/56, 53/53, 61/77 and 62/80** `file_exists("path")`
+  invariants, bridged in bulk from iCPG. **Four of seven were 100%.** So in the common case the
+  never-evict policy was protecting *nothing but static assertions that a repo path exists* — and
+  spending 5.3–8.7KB of a 10,000-character delivery channel to do it, which is why Constraints,
+  Progress and Files were the fields that never arrived.
+- **Why this is not merely redundant but inverted.** Those same paths are asserted by doccheck's
+  `referenced-paths-exist` with a **pre-commit hook that blocks the commit**. That is a strictly
+  stronger guarantee than a line in a payload which was, measurably, not being delivered. The
+  weaker mechanism was consuming the budget that the load-bearing fields needed.
+- **The shape, and it is the one ADR-0020 named.** *Every conduct instrument counts the artifact the
+  conduct emits.* A ConstraintNode is the artifact; "the agent is operating under a real invariant"
+  is the conduct. Counting nodes made a graph full of `file_exists` look like a graph full of
+  constraints. This is the second concrete instance in two days, and like the first it was found by
+  measuring rather than by reading the design.
+- **What this does NOT say.** It does not say never-evict is wrong, or that ConstraintNodes are
+  worthless — 19 real constraints survived the filter in the live checkpoint. It says the *population*
+  was dominated by a bridge writing static predicates in bulk, and nothing was watching the mix.
+- **The open question, which is the entry:** should `bridge-icpg` be writing `file_exists` invariants
+  as ConstraintNodes at all? Filtering at render time (what shipped) treats the symptom. The
+  alternative is not importing them, which is a change to the iCPG↔Mnemos bridge contract and wants
+  its own decision. **Not made here.**
+- **Revisit when:** the bridge is next touched, or a downstream project's checkpoint is measured —
+  every measurement so far is from this repo, whose iCPG graph is unusually path-heavy.
+
 ### Findings have a channel to the framework but none to a PEER *(conclave F-002, transferred 2026-08-07)*
 
 - **Status:** Watching. **Deliberately not built**, on the raiser's own recommendation. Trigger below.

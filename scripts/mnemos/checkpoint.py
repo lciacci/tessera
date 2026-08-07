@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import time
 from collections import Counter
@@ -54,6 +55,33 @@ def _select_goals(goals: list, task_id: str | None) -> tuple[list, int, int]:
     return shown, bridged, len(live) - len(shown)
 
 
+STATIC_PREDICATE = re.compile(r"\bfile_exists\(")
+
+
+def _select_constraints(nodes: list) -> tuple[list[str], int]:
+    """Constraints for the render, minus the static repo facts. Returns (shown, dropped).
+
+    `file_exists("path")` invariants are bridged in bulk from iCPG and they DOMINATE the
+    payload: measured across 7 checkpoints on 2026-08-07 they were 53/53, 53/53, 56/56,
+    53/53, 61/77 and 62/80 — four of the seven were 100% — and the constraint field was
+    5.3-8.7KB of a checkpoint whose whole delivery channel caps at 10,000 characters. So
+    the never-evict guarantee was spending the budget on assertions that a repo path
+    exists, and Constraints/Progress/Files were the fields that never arrived.
+
+    Dropping them loses nothing the agent needs: every one is a static fact about the
+    repo, `doccheck`'s `referenced-paths-exist` asserts that class, and a pre-commit hook
+    blocks on it — a guarantee strictly stronger than a line in a payload that spilled.
+    They also stay in the store and in iCPG; this is exclusion from one render.
+
+    **The count is STATED, never silently dropped** — same rule as `_select_goals`, and
+    for the same reason: this repo's signature failure is that an empty field reads as
+    "nothing to report" (F-001). A checkpoint whose constraints quietly vanished would be
+    indistinguishable from a project with no invariants.
+    """
+    shown = [n.content for n in nodes if not STATIC_PREDICATE.search(n.content or '')]
+    return shown, len(nodes) - len(shown)
+
+
 def write_checkpoint(
     store: MnemosStore,
     fatigue_score: float = 0.0,
@@ -89,7 +117,12 @@ def write_checkpoint(
 
     # Gather constraints (never evicted)
     constraint_nodes = store.get_by_type('constraint')
-    constraints = [n.content for n in constraint_nodes]
+    constraints, dropped = _select_constraints(constraint_nodes)
+    if dropped:
+        constraints.append(
+            f'[{dropped} file_exists invariant(s) omitted from this checkpoint — static '
+            'repo facts asserted by doccheck `referenced-paths-exist` + pre-commit; '
+            '`mnemos nodes --type constraint` lists all]')
 
     # Gather result summaries (compressed or active)
     result_nodes = store.get_by_type('result')

@@ -6,7 +6,7 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-08-07: cross-repo cleanup after the conclave/arbiter reconciliation. The observatory's three-project entry was the most stale artifact in the system and it seeds an unwritten ADR; conclave F-002 disposed; the Pattern lane renamed pr-arbiter → arbiter with arbiter notified; D1 and D2 closed as dead open-decisions. The durable lesson: a lane going stale has no mechanical subject, so no check was built for it — and that is the finding.)
+## Handoff — pick up here (2026-08-07: cross-repo cleanup after the conclave/arbiter reconciliation. The observatory's three-project entry was the most stale artifact in the system and it seeds an unwritten ADR; conclave F-002 disposed; the Pattern lane renamed pr-arbiter → arbiter with arbiter notified; D1 and D2 closed as dead open-decisions; two live `bin/tessera-watch` defects relayed in by hand from arbiter, item 7. The durable lesson: a lane going stale has no mechanical subject, so no check was built for it — and that is the finding.)
 
 *(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
 Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering.)*
@@ -42,6 +42,29 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
    against the real repo (deleted `../arbiter/src/arbiter/second_pass.py`, went red, restored).
    **It does NOT catch the bug that motivated it** — see the next item.
 6. **`docs/design-principles.md`** — three stale pr-arbiter spots, none flagged by anyone.
+
+7. **Two live defects in `bin/tessera-watch`, reported from arbiter — not fixed here.** Relayed by
+   hand because arbiter has no channel to a peer (the S5 gap; `docs/observatory.md` → "Findings have
+   a channel to the framework but none to a PEER"). Note the provenance: arbiter fixed its
+   extension-filter scope bug the same day (`arbiter@975b491`), and **this is the first arbiter run
+   whose default scope could open a file in Tessera's `bin/` at all** — the control-surface blind
+   spot pattern #12 has been warning about. Both findings are in `p16`, added in `718dd90`.
+
+   - **`bin/tessera-watch:761` — an unguarded `log.read_text()` takes down the whole watcher.**
+     Confirmed by hand, including the consequence: `evaluate()` (:923) has no `try` around
+     `pred(root)`, so an `OSError` from P16 — a log file vanishing between `logs.glob()` and the
+     read, or a permissions error — propagates out and **every** predicate's run dies, not just
+     P16's. `p13_degraded` (:654) already guards its equivalent with `except OSError`; P16 is the
+     one that does not. Fail-open in its purest form: the thing that reports breakage is what breaks.
+   - **`bin/tessera-watch:775-783` — the receipt-bar arm can fall through and then contradict
+     itself.** The bars are AND-ed (`total >= T2_RECEIPT_BAR and len(per_project) >= T2_PROJECT_BAR`).
+     If one project generates ≥10 receipts before day 30, receipts clear the bar but projects do not,
+     so control reaches the elapsed arm — which after 30 days fires the "THE FINDING IS THE RATE"
+     message quoting a receipt count *above* the stated bar. **Not verified as unintended** — arbiter
+     rated it low, and it may be the intended reading of a two-dimensional bar. Tessera's call.
+
+   Neither fires exit 1 in arbiter (medium and low; the gate needs high or critical), so nothing
+   blocked on them — which is the point of relaying them here rather than leaving them in a report.
 
 **The finding worth carrying: a lane going stale has NO mechanical subject.** Two of three candidate
 checks were rejected *on measurement*, not on taste — "every lane owner is a live downstream" would
@@ -204,7 +227,26 @@ print(sum('file_exists' in json.dumps(x) for x in c), '/', len(c), 'are file_exi
    measure. Shipped: `tessera-patterns-surface.sh --part N --of 2`, registered twice, plus
    doccheck `standing-patterns-fit-the-cap`, which RUNS the parts and asserts the union carries
    every pattern exactly once. All four failure branches were falsified before commit.
-1. **P3 remedy, three parts, in this order.** Parts 1–2 are ~30 minutes; part 3 is not a patch.
+1. ~~**P3 remedy, three parts, in this order.**~~ **PARTS 1–2 DONE 2026-08-07. Part 3 remains and is
+   the whole item now.** Checkpoint **12,835 → 7,077 bytes**; SessionStart output **7,609 chars**
+   against the documented 10,000-char cap; P3 green. Measuring first moved two numbers this list
+   asserted: the `file_exists` ratio is **more** extreme than 61/77 (four of seven checkpoints are
+   **100%**, so the filter *empties* the set rather than shrinking it — its own observatory entry),
+   and **8,000 was the wrong re-anchor**. The wrapper is 105 chars, ratio 1.011, so the derived
+   ceiling is **≈9,895** and the budget is **9,500**, not 8,000. The omitted count is stated in the
+   payload, never silently dropped. **Part 3 is unchanged and is a `write_checkpoint` defect, not a
+   budget one** — no decisions field in the schema, empty `current_subgoal`/`working_memory`,
+   corrupted `progress`. **The prediction is now live: the next receipt should still read
+   `insufficient`. If it reads `sufficient`, the analysis was wrong.**
+   **AND A PART 4 EXISTS NOW, which is the more interesting one:** P3 has had **three anchors and
+   all three were proxies** — the current 8,000 included. `bin/tessera-verify` refuted the 9,500 by
+   building a checkpoint of exactly 9,500b, confirming it PASSED P3, and measuring 10,230 chars of
+   hook stdout. The fix is `delivered_chars` in `scripts/restore/offer.py`; the blocker is that the
+   offer is recorded **mid-hook**, before the iCPG block exists. **Do it when the hook is next
+   touched for another reason, not standalone** — it lands in the only restore layer proven to
+   deliver. Full write-up + the rejected alternative: `docs/observatory.md` → "P3 has never measured
+   what it claims to measure". Original text follows.
+   Parts 1–2 are ~30 minutes; part 3 is not a patch.
    1. **Drop `file_exists` invariants from the checkpoint's constraint set** — owned by doccheck +
       pre-commit, still live in iCPG. Takes the checkpoint to roughly 5,900b.
    2. **Re-anchor `RESTORE_BUDGET_BYTES`** at or below 8,000. Without this, part 1 fixes one

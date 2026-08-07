@@ -35,7 +35,29 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # ADR-0015 retired COMPACTION_MIN as a verdict threshold: it counted the rarest TRIGGER
 # (~3 events) of a restore path that actually ran ~121 times, on every session start.
-RESTORE_BUDGET_BYTES = 12_000   # see p3_restore_integrity; 18,755 was observed to SPILL
+# RE-ANCHORED 2026-08-07. The old 12_000 rested on "18,755 was observed to SPILL" — an UPPER
+# bound, the only spill anyone had seen — so it sat ABOVE the real limit and could report green
+# on a checkpoint the model never received. Three tighter spills refuted it: 12,611b, 12,472b,
+# 10,944b. The cap is DOCUMENTED at 10,000 CHARACTERS (code.claude.com/docs/en/hooks).
+#
+# THE FIRST RE-ANCHOR (9_500) WAS ALSO WRONG, and how it was wrong is the useful part.
+# It came from `hook_stdout_bytes - checkpoint_bytes` = 105, reported as "wrapper overhead".
+# That 105 was a NET of two errors cancelling: the RENDER is ~718 chars SMALLER than the JSON,
+# and mnemos-session-start.sh emits a SECOND block on the same stdout — `=== iCPG STATUS ===`,
+# ~1,037 chars. Measuring a difference and naming it a component. `bin/tessera-verify` refuted
+# it with a decisive landmine: a checkpoint of EXACTLY 9,500b PASSED P3 and produced 10,230
+# chars of hook stdout — over the cap, the very defect 12_000 had.
+#
+# Measured properly:
+#   · render/JSON ratio is CONTENT-DEPENDENT: 0.598 to 0.944 observed. No constant is exact.
+#   · non-checkpoint overhead on the same stdout: 1,250 chars (171 resume wrapper + iCPG block).
+#   => worst case at ratio 1.0: 8,000 + 1,250 = 9,250, leaving 750 for iCPG-block growth.
+#
+# STILL A PROXY, stated rather than hidden: this measures checkpoint JSON bytes, and the
+# delivered thing is rendered characters plus siblings. `bin/` is stdlib-only (doccheck
+# `bin-scripts-are-stdlib-only`) so P3 cannot import the renderer. The honest instrument is
+# the hook recording its own delivered size for P3 to read — see docs/observatory.md.
+RESTORE_BUDGET_BYTES = 8_000    # see p3_restore_integrity
 RESTORE_REQUIRED_FIELDS = ("goal", "active_constraints", "task_narrative")
 SKILL_MIN = 60          # two-stage skill routing earns its keep at 60+ skills
 GRADUATION_RUNS = 3     # a core predicate firing this many runs running → graduation-a
