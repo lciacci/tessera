@@ -1040,7 +1040,77 @@ Both were found by adversarial verification, **not** by the framework. **The rea
 
 ### Tessera ↔ Conclave ↔ pr-arbiter — the review/model cluster is converging *(seed for ADR-0008's deferred conclave design note)*
 
-- **Status:** Converging, **not decided** — Lorenzo's call to keep updating as the two sibling repos'
+> ## ▶ CORRECTED 2026-08-07 — READ THIS BEFORE THE BODY BELOW
+>
+> **The body of this entry is a 2026-07-16/17 snapshot and four of its load-bearing claims are now
+> wrong.** It matters more than an ordinary stale entry because this entry is the declared *seed* for
+> ADR-0008's deferred conclave design note — a wrong picture here feeds an unwritten ADR. The stale
+> bullets are kept below, marked, per ADR-0007 (harvest before you cut); the heading is kept verbatim
+> because `docs/contracts/three-project-cohesion.md` and `docs/design-principles.md` cite it as an
+> anchor. **`docs/contracts/three-project-cohesion.md` is the source of truth for who-owns-what; this
+> entry is the scratchpad.**
+>
+> **(1) The fleet described below is two generations gone.** "Qwen3-32B / Gemma3-27B / Mistral-24B,
+> one per L40S" was conclave's *second* fleet of three — the deliberately-ideal peer-modern one, built
+> to give the judge its best shot. A third, genuine-**specialist** fleet followed
+> (Qwen3-Coder-Next-80B / DeepSeek-R1-32B / Llama-3.3-70B, 2026-07-17). What conclave carries now is
+> not a fleet at all but a **tier ladder** — `local-tiny` 3B/8B → `local-mid` 30B-A3B (the default
+> daily driver) → `lab` 80B on-demand → `frontier` — behind one OpenAI-compatible Tailscale-private
+> gateway, on RunPod. (`../conclave/docs/design.md` current-state banner; `../conclave/docs/HANDOFF.md`.)
+>
+> **(2) "Conclave carries both a judge and a router" is stated below as *the converging design*. Both
+> halves are dead.**
+> - **The judge was DISPROVED on all three fleets.** Headroom (oracle − best single — the ceiling on
+>   what *any* selection policy can add) came to **+0.040** on the peer fleet and **+0.0244** on the
+>   specialist one. It **shrank** as the fleet got stronger — the convergence effect. A real in-fleet
+>   judge scores *below* just always calling the strongest model. Parked with a trigger: revisit only
+>   if the model landscape re-diverges.
+> - **The router is SHELVED, and it is fleet-dependent rather than wrong-in-principle.** A router pays
+>   only when pairwise winners **split**. They split weakly on the peer fleet and **concentrate** on
+>   the specialist one — the 80B coder wins 18/30 and 100% of tie-breaks. Since `router ≤ judge ≤
+>   oracle`, the headroom figure condemns every selection policy over these fleets, not just the judge.
+> - **What conclave actually settled on is `diagnostic → operational → monitor`,** and only the
+>   diagnostic is live: `divergence.py` / `divergence_modern.py` / `fleet_pairwise.py` measure a
+>   fleet's headroom for $0, offline, before anything is built. It correctly said "don't ensemble" on
+>   all three. **That instrument is the reusable deliverable — not a judge and not a router.**
+>
+> **(3) The pr-arbiter Phase-1 / Phase-2 numbers are cited below as live evidence. Do not repeat them
+> as a headline.** The contract's own guard **(d)** says why: Phase 1's critical-recall win is **7/8
+> vs 6/8 on one seed** (the "88% vs 75%" below is that, rounded into a percentage it cannot carry),
+> and the Phase-2 generation lift **~vanished under 3-seed variance**. pr-arbiter froze as a research
+> study on 2026-07-28. **Gate any build on the instrument (S2), not the headline.**
+>
+> **(4) "pr-arbiter Phase 3" is listed below as an ADR prerequisite. It was ABANDONED 2026-07-28** —
+> designed and ratified, never implemented; the project moved from research to tooling instead. It is
+> no longer a prerequisite for anything. (`../pr-arbiter/docs/PHASE_3_RESUMPTION.md`.)
+>
+> ### What is true instead, as of 2026-08-07
+>
+> - **The pattern shipped, under a different name.** `arbiter` (`../arbiter`,
+>   github.com/lciacci/arbiter) is a CLI that reviews a git ref range: reviewer → independent second
+>   pass → two-voice KEEP/DROP/UNSURE triage, exit 1 on high/critical. One model, two roles, **no
+>   fleet** — it independently built the arrangement conclave measured. It is **not a gate and nothing
+>   gates it.** Both conclave and arbiter are Tessera downstreams (contract D4).
+> - **Conclave's measurements moved from gate input to DESIGN input.** With nothing gated, the
+>   union-recall work is no longer "should Tessera fan review out?" but "should arbiter ever add a
+>   fleet?" — and the measured answer is no: MODEL diversity bought **+0.000 recall for +20 false
+>   positives**, while ROLE diversity bought **+0.109**. Bounded by a weak second arm; see guard (b).
+> - **The escalation trigger is task SHAPE, not model tier.** Conclave's local 30B scores **0.073
+>   recall, 0/8 criticals** on structured adversarial review against claude's 0.509 — while *matching*
+>   a hosted 80B on edit-and-apply. Review is the shape that breaks the local tier.
+>
+> ### What in the body below SURVIVES, and is the reason it is kept
+>
+> - **The union-recall vs select-best distinction** (the "load-bearing insight" bullet) is correct and
+>   is now anti-conflation guard **(a)**, binding in all three repos. It has since gained *direct*
+>   union-recall evidence rather than resting on the select-best null.
+> - **All three harvested `codex-review`/`gemini-review` patterns hold.** Typed JSON findings —
+>   confirmed twice over, since `arbiter` ships a typed-finding schema too. Headless/CI mode — that is
+>   exactly `arbiter`'s shape. 1M-context whole-repo review — untouched, still a routing case.
+> - **"Measure headroom offline before building the aggregator" is the right discipline.** It is what
+>   killed the judge, and it is the deliverable conclave kept.
+
+- **Status:** ~~Converging, **not decided**~~ **CORRECTED 2026-08-07, see banner above** — Lorenzo's call to keep updating as the two sibling repos'
   findings refine. This is the ADR-0008 "Tessera ↔ conclave interoperation" thread actually starting,
   and the home the `codex-review`/`gemini-review` removal harvests land in (their findings-schema /
   headless-CI / 1M-context patterns feed here). Not an ADR yet.
@@ -1060,13 +1130,17 @@ Both were found by adversarial verification, **not** by the framework. **The rea
     Complements pr-arbiter's union-recall (roles) with a *context-breadth* axis. Tracked as a routing case
     (`docs/observatory.md` → the 1M-context revisit trigger).
 - **The three pieces, and how they fit:**
-  - **conclave** (`~/Claude/conclave`) — a self-hosted multi-model inference lab: open-weight fleet
+  - **conclave** (`~/Claude/conclave`) — ⚠ **FLEET STALE, see banner (1); the "route, don't judge"
+    finding is also superseded — conclave's own doc corrected it to "just call the strongest model."**
+    A self-hosted multi-model inference lab: open-weight fleet
     (Qwen3-32B / Gemma3-27B / Mistral-24B, one per L40S) behind an OpenAI-compatible gateway, private
     over Tailscale, on RunPod (AWS fallback). Cost controls built before any GPU boots. **Its research
     finding: "route, don't judge"** — on *answer-quality, select-best* (Q&A), a fan-out judge scores
     *below* the best single model and pays N× for a saturated gap; the instrument `orchestrator/divergence.py`
     measures `headroom = oracle − best_single` offline for $0 before you build anything.
-  - **pr-arbiter** (`~/Claude/pr-arbiter`) — a POC measuring reviewer + independent arbiter vs single-agent.
+  - **pr-arbiter** (`~/Claude/pr-arbiter`) — ⚠ **FROZEN 2026-07-28, and the numbers in this bullet are
+    the ones guard (d) says not to repeat as a headline — see banner (3). Successor: `arbiter`.**
+    A POC measuring reviewer + independent arbiter vs single-agent.
     **On code review (Phase 1) fan-out+arbiter PAYS: it catches a critical security bug the best single-agent
     misses across every prompt variant** (critical recall 88% vs 75%, fewer false positives). On code
     *generation* (Phase 2) the effect is real but weak under 3-seed variance (87% vs 82%). Ships a typed-finding
@@ -1085,12 +1159,21 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   (best single *answer*, quality-graded) would falsely condemn review fan-out; review needs a variant whose
   oracle is **union of true findings, scored on bug-recall + false-positive rate** vs a labeled defect set.
   Same instrument shape, different scoring function.
-- **The converging design (evidence-backed, still refining):** Tessera → conclave as the **default backend**
+- ⚠ **THIS BULLET IS THE MOST WRONG THING IN THE ENTRY — see banner (2). Both the judge and the
+  router are dead: the judge disproved on three fleets, the router shelved because the fleets
+  concentrate rather than split. Do not seed an ADR from it.**
+  **The converging design (evidence-backed, still refining):** Tessera → conclave as the **default backend**
   (self-hosted fleet for most work; frontier models reserved for occasional/investigation). **Conclave carries
   both a judge and a router**, switched per task by headroom: **fan-out+judge where headroom is real (review /
   recall — pr-arbiter validates), route-to-specialist where it saturates (most Q&A — conclave validates).**
   pr-arbiter graduates to back `/arbiter`, running on conclave's fleet.
-- **What would firm this into an ADR:** (1) a review-flavored divergence measurement (union-recall metric)
+- ⚠ **SUPERSEDED — the live version of this list is in the contract's "What would firm this map into
+  that ADR". (1) is now partly done (MODEL axis measured and null; ROLE axis +0.109; the missing arm
+  is peer-strength). (2)'s pr-arbiter-Phase-3 half is ABANDONED — see banner (4) — leaving "a stable
+  conclave fleet", itself narrowed to *a fleet standing at a tier that can review*. (3)'s review half
+  was settled by ADR-0014 (option D, review is Claude-only) and its router half evaporated with the
+  router.** Original text:
+  **What would firm this into an ADR:** (1) a review-flavored divergence measurement (union-recall metric)
   showing the review headroom is real and how big; (2) pr-arbiter Phase 3 + a stable conclave fleet;
   (3) the concrete interop shape (does Tessera call conclave's gateway directly; do `bin/` wrappers collapse
   into conclave calls; where does the router live). Until then: **noted here so it is not lost.**
@@ -2844,6 +2927,123 @@ not the conduct"; this is that entry's first concrete instance, found the same d
 **Revisit when:** parts 1 and 2 land and a subsequent session's receipt is compared against this
 one — specifically whether it still reads `insufficient`, which is the prediction this entry makes
 and the cheapest way to falsify it.
+
+### Findings have a channel to the framework but none to a PEER *(conclave F-002, transferred 2026-08-07)*
+
+- **Status:** Watching. **Deliberately not built**, on the raiser's own recommendation. Trigger below.
+- **Source:** conclave `docs/FINDINGS.md` **F-002**, raised 2026-08-07 during the conclave ↔ arbiter
+  reconciliation, addressed at Tessera because the fix would land here. Closed there as
+  `transferred:` this entry — the finding *did* land in the framework; what it did not do is become
+  code, and that distinction is the whole content of this entry.
+
+**The gap, in its sharp form.** `FINDINGS.md` + `tessera-findings` is **hub-directed by
+construction**: there is no addressee field, and only Tessera's SessionStart reads the backlog. A
+fact one downstream measures that binds *another downstream's* work has nowhere to go. It ends up in
+`docs/contracts/three-project-cohesion.md`, which is read at **coordination** time, not at **work**
+time.
+
+**But the evidence narrows it, and the narrowing is the valuable part.** Checking the conclave ↔
+arbiter pair (both carry `.tessera/project.yml`, so both are downstreams):
+
+- **Technical findings DID cross.** arbiter reviewed conclave twice; both defects are recorded in
+  conclave at the site, credited by name and date, with the not-fixing rationale
+  (`../conclave/harness/run-t1t3.sh:139`, `:189`). That path works, **because a finding about code
+  has an obvious home — the code.**
+- **What did NOT cross is everything without a line number.** The usage rules that came with those
+  reviews — *"the finder is better at locating than at concluding: take the location, re-derive the
+  consequence"* and *"`--ext ""` or the review is silently narrower than it claims"* — were absent
+  from conclave until 2026-08-07, and they are needed **before** the next run, not after.
+  Symmetrically, conclave's measurement that its local tier scores **0.073 recall** on review, which
+  bounds arbiter's cost work and the D3 seam, was absent from arbiter for ten days.
+
+> **A finding that names a file finds its own way home. A usage rule, a negative result, or a bound
+> on someone else's design does not.** Those are exactly the facts a coordination map is too slow to
+> carry — and note the shape: this is principle #17 one level out. The peer channel exists as a
+> *convention* (write it in the contract, hope the other project reads it at the right moment) where
+> the framework channel is a *hook*.
+
+**The proposed fix, recorded unbuilt** — one optional field and one hook line, not a new store. The
+scanner already globs every `.tessera/` project, already parses `F-NNN` blocks and statuses, already
+emits `--json`:
+
+1. Optional `**To:** <project>` line in the finding shape. **Absent = framework**, so every existing
+   finding stays valid and the contract change is backward-compatible.
+2. `tessera-findings --to <project>` — a filter over parsing the scanner already does.
+3. A SessionStart line in each downstream running `tessera-findings --to <self>`. **This is the
+   load-bearing piece**; without it the change builds a mailbox nobody opens.
+4. `acknowledged:<ref>` added to the status vocabulary. A peer-directed finding's terminal state is
+   not "transferred to the framework", so without it peer findings can never close.
+
+**Impact to weigh if it is ever built:** `docs/contracts/findings.md` is where shape changes land,
+and **tess-dashboard consumes `--json`** — an addressee field has a downstream consumer.
+
+**Explicitly NOT proposed: a coordination database.** It would move facts away from the code they
+describe, need a service running at SessionStart, and could not be branched or reverted with the
+change that motivated it. The evidence against it is already in these repos: arbiter's own docs
+record a test count going stale twice and a commit trail running fifteen behind in a day — both
+hand-maintained mirrors of facts a command could answer. Their rule was **"prefer a command in the
+doc over a number in the doc."** A coordination DB is that failure class with a three-project blast
+radius.
+
+**Why it is not being built now.** n is **2 projects**, and the manual writes are already done. The
+raiser recommended against building it, and that recommendation is the finding's most useful part:
+a mailbox built for one observed pair is a mechanism justified by the case that no longer needs it.
+
+**Revisit when EITHER of these fires:**
+
+- **A third peer pair appears** — i.e. two downstreams other than conclave/arbiter needing to bind
+  each other's work. (Six projects carry `.tessera/project.yml` today; the count is not the trigger,
+  the *pairing* is.)
+- **The same fact is found missing a second time** — a bound, negative result, or usage rule that a
+  peer had measured and the consuming project did not have when it needed it.
+
+**Not yet fired, and the near-miss is worth recording precisely.** This very reconciliation looks
+like an instance and is not one: conclave knew this file's cluster entry was stale, wrote it in its
+own `HANDOFF.md` and flagged the contract in place — and it reached Tessera because a **human
+relayed it**. That is a third *manual write*, not a missed fact. It counts toward the cost of the
+status quo, not toward the trigger. Recording it as a trigger hit would be manufacturing the
+evidence for a thing I want to build, which is the failure mode this entry exists to resist.
+
+### A lane going stale in a peer contract has NO mechanical subject — recorded as a finding about the checker *(2026-08-07)*
+
+- **Status:** Watching. **No check was built for the bug that was actually found**, deliberately, and
+  the standing rule (`CLAUDE.md`: *"every doc-drift bug a human finds becomes an assertion in
+  `scripts/doccheck.py`"*) says that fact must be stated rather than quietly skipped.
+
+**The drift.** `docs/contracts/three-project-cohesion.md` named frozen **pr-arbiter** as the Pattern
+lane's owner while S4, S5 and D4 in the same file already named its successor **`arbiter`**. Found by
+conclave reading the file, not by any check.
+
+**Three candidate checks, measured against it:**
+
+1. **"Every sibling-relative path the docs cite exists."** Mechanical subject, closed extraction,
+   measured 39 citations → 37 resolve, 2 placeholders, 1 peer not checked out — **zero false
+   positives. BUILT** as `sibling-paths-exist`, with brace sets expanded rather than skipped, and
+   peers that are not checked out skipped rather than failed. **It would NOT have caught this bug** —
+   every path involved was on disk. It is here for the class one step out (a peer renaming a file the
+   contract cites), and was falsified against the real repo by deleting
+   `../arbiter/src/arbiter/second_pass.py` and watching it go red.
+2. **"Every project named as a lane Owner is a live Tessera downstream."** **REJECTED on
+   measurement.** pr-arbiter has no `.tessera/project.yml` and never had one — so this check would
+   have fired continuously from the day the contract was written, throughout the entire period when
+   pr-arbiter was the legitimate Pattern owner. **D4 existed precisely because a lane owner need not
+   be a downstream.** *Being a downstream is not the same property as owning a lane*, and a check
+   that conflates them is a proxy predicate (principle #3) wearing a file-existence test.
+3. **"A project named as a lane Owner must not also be described as frozen."** **REJECTED as
+   judgement wearing a regex** — the Owns column is authored prose in an unenforced format, which is
+   exactly the A6 case (2026-07-27) where two of three candidate handoff checks were rejected, one
+   scoring 12 false positives in 13 and one failing open.
+
+**The conclusion, which is the entry:** *"is this lane's owner still the right project?"* is a
+question about the world, not about the file. Its subject is a judgement someone has to make. **The
+honest answer is a human re-read, and the mechanism that actually worked here is the one that already
+exists** — a peer noticed, flagged it **in place with an interim precedence rule** rather than fixing
+it unilaterally, and the owner disposed of it. That is not a checker gap to be closed; it is what the
+peer-contract convention is *for*.
+
+**Revisit when:** a lane goes stale a second time **and** the flag-in-place convention fails to catch
+it. One instance caught by the convention is evidence the convention works, not evidence it needs a
+check behind it.
 
 ---
 

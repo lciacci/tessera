@@ -1640,3 +1640,88 @@ def test_observatory_may_record_superseded_wiring(fake_repo):
     (fake_repo / "docs" / "observatory.md").write_text(
         "`tessera-watch-surface.sh` used to print the Standing patterns block; it spilled.")
     assert doccheck.check_docs_name_the_right_patterns_emitter() == []
+
+
+# ─── BUG (2026-08-07): the cohesion contract's own rule is "evidence is referenced by
+# sibling-relative path so the map survives a machine move" — 30 such citations in that one
+# file, and `check_referenced_paths_exist` only walks REPO_DIRS, so none were verified.
+# Found while renaming the Pattern lane pr-arbiter → arbiter. NOTE, recorded honestly: this
+# check would NOT have caught that rename (every path existed). It guards the class one step
+# out — a peer moving or renaming a file the contract cites — which is why the tests below
+# are written against failures that were NOT just fixed.
+def _peer(fake_repo, name):
+    root = fake_repo.parent / name
+    (root / "src").mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def test_catches_sibling_file_that_moved(fake_repo):
+    _peer(fake_repo, "sibpeer_moved")
+    (fake_repo / "docs" / "contracts" / "c.md").write_text(
+        "The engine lives in `../sibpeer_moved/src/reviewer.py`.")
+    bad = doccheck.check_sibling_paths_exist()
+    assert any("sibpeer_moved/src/reviewer.py" in v for v in bad), bad
+
+
+def test_passes_when_sibling_file_exists(fake_repo):
+    peer = _peer(fake_repo, "sibpeer_ok")
+    (peer / "src" / "reviewer.py").write_text("x = 1\n")
+    (fake_repo / "docs" / "contracts" / "c.md").write_text(
+        "The engine lives in `../sibpeer_ok/src/reviewer.py`.")
+    assert doccheck.check_sibling_paths_exist() == []
+
+
+def test_skips_peer_that_is_not_checked_out(fake_repo):
+    """A peer absent from this machine is unknowable, not a false claim.
+
+    A check that goes red on a fresh clone is one people learn to ignore — and it is
+    pre-commit-blocking here, so it would block every commit on a machine without the peers.
+    """
+    (fake_repo / "docs" / "contracts" / "c.md").write_text(
+        "See `../sibpeer_never_cloned/docs/design.md` for the study.")
+    assert doccheck.check_sibling_paths_exist() == []
+
+
+def test_expands_brace_sets_rather_than_skipping_them(fake_repo):
+    """`{a,b}.py` is a closed list of real files, unlike the repo-path check's placeholder `{}`.
+
+    This is the half that would rot silently: a brace set treated as a placeholder passes
+    while naming three files, any of which may be gone.
+    """
+    peer = _peer(fake_repo, "sibpeer_braces")
+    (peer / "src" / "reviewer.py").write_text("x = 1\n")
+    (peer / "src" / "triage.py").write_text("x = 1\n")
+    (fake_repo / "docs" / "contracts" / "c.md").write_text(
+        "Engine: `../sibpeer_braces/src/{reviewer,second_pass,triage}.py`.")
+    bad = doccheck.check_sibling_paths_exist()
+    assert len(bad) == 1, bad
+    assert "second_pass.py" in bad[0], bad
+
+
+def test_real_repo_sibling_paths_are_green():
+    """The live assertion — every checked-out peer path this repo's docs cite is on disk."""
+    assert doccheck.check_sibling_paths_exist() == []
+
+
+def test_expands_every_brace_set_not_just_the_first(fake_repo):
+    """Two brace sets in one path expand to the CROSS PRODUCT, not one set plus a literal.
+
+    Found by `bin/tessera-verify` on the day the check shipped: `BRACE_SET.search` expanded
+    only the first set, leaving the second literal — and a stat on a literal `{c,d}.py` can
+    never succeed, so the check reported a permanent false violation on a legal citation.
+    Regression-guarded here because a pre-commit-blocking check that can go permanently red
+    is worse than one that misses.
+    """
+    assert doccheck._expand_braces("src/x.py") == ["src/x.py"]
+    assert doccheck._expand_braces("{a,b}/x/{c,d}.py") == [
+        "a/x/c.py", "a/x/d.py", "b/x/c.py", "b/x/d.py"]
+
+    peer = _peer(fake_repo, "sibpeer_two_sets")
+    for d in ("src", "lib"):
+        (peer / d / "inner").mkdir(parents=True, exist_ok=True)
+        (peer / d / "inner" / "keep.py").write_text("x = 1\n")
+    (fake_repo / "docs" / "contracts" / "c.md").write_text(
+        "Engine: `../sibpeer_two_sets/{src,lib}/inner/{keep,gone}.py`.")
+    bad = doccheck.check_sibling_paths_exist()
+    assert len(bad) == 2, bad
+    assert all("gone.py" in v for v in bad), bad

@@ -6,10 +6,56 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-08-06: ADR-0020 evaluated Agent Behavior — the shipped tool is a frontmatter linter, the calibration methodology is the find, and the mirror said every conduct instrument here counts the artifact the conduct emits. Then P3 turned out to be the first concrete instance: its budget sits ABOVE the harness's real spill limit, and the field its hint names is 5% of the overflow.)
+## Handoff — pick up here (2026-08-07: cross-repo cleanup after the conclave/arbiter reconciliation. The observatory's three-project entry was the most stale artifact in the system and it seeds an unwritten ADR; conclave F-002 disposed; the Pattern lane renamed pr-arbiter → arbiter with arbiter notified; D1 and D2 closed as dead open-decisions. The durable lesson: a lane going stale has no mechanical subject, so no check was built for it — and that is the finding.)
 
 *(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
 Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering.)*
+
+### What shipped (2026-08-07) — cross-repo, no code paths touched except doccheck
+
+1. **`docs/observatory.md` lines ~1041–1109 corrected.** Four load-bearing claims were wrong and the
+   entry is the declared *seed for ADR-0008's deferred conclave design note*, so a wrong picture was
+   feeding an unwritten ADR. A `▶ CORRECTED` banner now heads it; the stale bullets are kept and
+   marked, per ADR-0007. What was wrong: the fleet (two generations gone — conclave now carries a
+   **tier ladder**, not a fleet); **"conclave carries both a judge and a router" as the converging
+   design** (judge disproved on three fleets, headroom +0.040/+0.0244 and *shrinking* as the fleet
+   got stronger; router shelved because the fleets **concentrate**); pr-arbiter's Phase-1/2 numbers
+   cited as live evidence (guard (d) says don't); "pr-arbiter Phase 3" as an ADR prerequisite
+   (abandoned 2026-07-28). **What survives and is why it was kept:** the union-recall vs select-best
+   distinction (now guard (a)), all three harvested `codex-review`/`gemini-review` patterns, and
+   "measure headroom offline before building the aggregator" — the discipline that killed the judge.
+2. **conclave F-002 disposed as `transferred:` an observatory entry, NOT `rejected:`.** The finding's
+   own recommendation was *don't build yet*, which is a deferral; `rejected:` would have hidden the
+   revisit trigger from the default backlog with nothing watching it. Backlog is now 0 open.
+3. **Pattern lane renamed `pr-arbiter` → `arbiter`** (Lorenzo signed for arbiter). Title, stub list,
+   engine-evidence paths, S1/S2 consumers and guard (a)'s subject all moved; `pr-arbiter` survives
+   only where it is cited as the frozen study. **`../arbiter/docs/INTEGRATION.md` written** — arbiter
+   had no stub at all — and `../arbiter/docs/NEXT_SESSION.md` carries the notification.
+4. **D1 and D2 closed.** D1 in **two halves**, because only one was ever answered: the
+   review-portability half by ADR-0014 (which names D1 as its decision driver), the **router half
+   evaporated** when conclave shelved the router — there may be no router to home. D2 closed **moot**:
+   `arbiter` is not a gate and nothing gates it, so a metric-for-a-gate decision has no gate. S2 is
+   retained as **design input** ("should arbiter ever add a fleet?" — measured no). D3 alone remains,
+   narrowed to *a conclave fleet at a tier that can review*.
+5. **doccheck `sibling-paths-exist` + 5 tests.** 33 sibling-relative paths across the docs were
+   unverified — in the file whose own rule is that evidence rides sibling-relative paths. Falsified
+   against the real repo (deleted `../arbiter/src/arbiter/second_pass.py`, went red, restored).
+   **It does NOT catch the bug that motivated it** — see the next item.
+6. **`docs/design-principles.md`** — three stale pr-arbiter spots, none flagged by anyone.
+
+**The finding worth carrying: a lane going stale has NO mechanical subject.** Two of three candidate
+checks were rejected *on measurement*, not on taste — "every lane owner is a live downstream" would
+have fired continuously for the entire period pr-arbiter was the legitimate owner (D4 existed
+*because* a lane owner need not be a downstream), and "owner must not also be frozen" is judgement
+wearing a regex, the A6 case again. **The mechanism that actually worked was the convention:** a peer
+noticed, flagged it *in place with an interim precedence rule*, and the owner disposed of it. Full
+reasoning: `docs/observatory.md` → "A lane going stale in a peer contract has NO mechanical subject".
+
+**Unchanged and still the top of the list:** P3's remedy (below, item 1). This session's restore
+receipt read `insufficient` and **corroborates it** — checkpoint 12,472b spilled at SessionStart,
+`task_narrative` never arrived, and the goal field was ~90 concatenated older goals with none of them
+this session's. Orientation came entirely from re-reading files. Note the receipt would have read
+`insufficient` at *any* byte count, since `decisions` has no field in the schema at all.
 
 ### THE ONE THING TO KNOW
 

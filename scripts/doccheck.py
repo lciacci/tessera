@@ -151,6 +151,68 @@ def check_referenced_paths_exist() -> list[str]:
     return sorted(set(bad))
 
 
+SIBLING_PATH = re.compile(r"^\.\./([A-Za-z0-9_.-]+)/(.+)$")
+BRACE_SET = re.compile(r"\{([^}]*)\}")
+
+
+def check_sibling_paths_exist() -> list[str]:
+    """THE FORMAL `ls`, extended ACROSS the repo boundary — for peers that are checked out.
+
+    `check_referenced_paths_exist` only walks REPO_DIRS, so every `../conclave/…`,
+    `../arbiter/…`, `../pr-arbiter/…` citation in the peer contract was unverified. That is
+    30 citations in `docs/contracts/three-project-cohesion.md` alone, in the one file whose
+    own rule is: *"Evidence is referenced by sibling-relative path so the map survives a
+    machine move."* A rule about paths, with nothing checking the paths.
+
+    **Stated plainly: this check would NOT have caught the drift that motivated it** (the
+    Pattern lane naming frozen `pr-arbiter` while S4/S5/D4 named `arbiter` — every path
+    involved existed on disk). It is here for the class one step out, and it is tested
+    against a failure that was NOT just fixed: a peer renaming or moving a file the contract
+    cites. `second_pass.py` getting renamed in `../arbiter` now turns this red instead of
+    rotting silently. Per A6's rule, the lane-CONSISTENCY property has no mechanical subject
+    — the Owns column is authored prose — and stays a human re-read; see the observatory.
+
+    **Skips a peer that is not checked out**, rather than failing. Absence of `../arbiter` on
+    some machine is not a false doc claim, and a check that goes red on a fresh clone is one
+    people learn to ignore. Brace sets are EXPANDED, not skipped: `{a,b}.py` is a closed list
+    of real files, so it is checked, unlike the repo-path check which treats `{}` as a
+    placeholder.
+    """
+    bad = []
+    for doc in _docs():
+        for token in INLINE_CODE.findall(_strip_fences(doc.read_text())):
+            token = token.strip().rstrip(".,;:)").split(":")[0]
+            match = SIBLING_PATH.match(token)
+            if not match or any(c in token for c in " *?$<>|…"):
+                continue
+            peer, rest = match.group(1), match.group(2)
+            root = ROOT.parent / peer
+            if not root.is_dir():
+                continue  # peer not checked out here — unknowable, not false
+            for target in _expand_braces(rest):
+                if not (root / target).exists():
+                    bad.append(f"{_rel(doc)}: names `../{peer}/{target}` — not on disk")
+    return sorted(set(bad))
+
+
+def _expand_braces(path: str) -> list[str]:
+    """Expand EVERY brace set, not just the first — `{a,b}/x/{c,d}.py` is 4 paths.
+
+    Was `BRACE_SET.search` (first set only), found by `bin/tessera-verify` while confirming
+    the check's other three claims: a second brace set stayed literal, and a stat on a
+    literal `{c,d}.py` can never succeed, so it reported a permanent false violation. It
+    fails LOUD rather than open, and no doc cites two sets today — latent, not live — but a
+    pre-commit-blocking check that can go permanently red on a legal citation is not one to
+    leave for later. Recursive so nesting depth is not a second special case.
+    """
+    braces = BRACE_SET.search(path)
+    if not braces:
+        return [path]
+    return [expanded
+            for name in braces.group(1).split(",")
+            for expanded in _expand_braces(path.replace(braces.group(0), name.strip(), 1))]
+
+
 def check_adr_index_complete() -> list[str]:
     """Every ADR on disk is listed in the ADR index. (Found 2026-07-11: 0005 was missing.)"""
     index = ROOT / "docs" / "adr" / "README.md"
@@ -2115,6 +2177,7 @@ CHECKS = {
     "decision-surface-is-wired": check_decision_surface_is_wired,
     "pretooluse-hooks-reach-the-model": check_pretooluse_hooks_reach_the_model,
     "referenced-paths-exist": check_referenced_paths_exist,
+    "sibling-paths-exist": check_sibling_paths_exist,
     "handoff-heading-is-current": check_handoff_heading_is_current,
     "no-phantom-global-skill-body-claim": check_no_phantom_global_skill_body_claim,
     "template-skill-refs-exist": check_template_skill_refs_exist,

@@ -129,7 +129,7 @@ fix provenance**, which is why T2 splits sender from receiver.
 
 **Reframed pattern:** Code-graph handles *active development on familiar code* (continuous, auto-fresh, low context cost). GitNexus handles *evaluation of unfamiliar code* (episodic, deeper queries, justified context weight). They cover different temporal phases of work, not the same problem. iCPG is the intent layer on top of whichever structural tool is appropriate.
 
-**Hybrid case worth flagging:** PR review on someone else's contribution to your code = unfamiliar diff in a familiar repo. Code-graph + its `detect_changes` tool likely covers this; GitNexus only adds value for unusually large or structurally complex PRs. Pr-arbiter leans on this pattern when it graduates.
+**Hybrid case worth flagging:** PR review on someone else's contribution to your code = unfamiliar diff in a familiar repo. Code-graph + its `detect_changes` tool likely covers this; GitNexus only adds value for unusually large or structurally complex PRs. ~~Pr-arbiter leans on this pattern when it graduates.~~ **(2026-08-07: it graduated as `arbiter`, and it does NOT lean on this pattern — it reads a git ref range directly, with no structural-graph layer.)**
 
 ### Verification
 
@@ -1083,7 +1083,7 @@ Tessera exists to do downstream projects, so standing one up is a first-class ca
 - **iCPG behavioral trial** — does the agent actually populate ReasonNodes and contracts well? Does drift detection catch real issues? Decide after dogfood.
 - **Codex auto-review hook** — enable or not. Decide after first weeks.
 - **Agent pipeline thinning** — which agents stay for solo work. Decide after reading `agent-teams.md`.
-- **Pr-arbiter ↔ `/arbiter` integration** — at what point pr-arbiter graduates into a usable tool that backs `/arbiter`.
+- ~~**Pr-arbiter ↔ `/arbiter` integration** — at what point pr-arbiter graduates into a usable tool that backs `/arbiter`.~~ **ANSWERED 2026-07-28, recorded here 2026-08-07: it graduated.** pr-arbiter froze as a research study; the engine ships as **`arbiter`** (`../arbiter`, github.com/lciacci/arbiter) — a CLI reviewing a git ref range, reviewer → independent second pass → two-voice KEEP/DROP/UNSURE triage, exit 1 on high/critical. **What remains open is not "at what point" but a narrower ADR question (contract D3):** a stable conclave fleet standing at a tier that can actually review — the local 30B scores 0.073 recall / 0-of-8 criticals on adversarial review vs claude's 0.509, so task *shape*, not model tier, is the escalation trigger. See `docs/contracts/three-project-cohesion.md`.
 - **Mobile cluster skill review (android-kotlin, android-java, react-native, flutter)** — deferred to install. **Trigger:** before any actual mobile work starts. Do not skip; sort the mobile skills before beginning Android-first development.
 - **GitNexus commercial license** — only blocking if commercial / employer use becomes real; defer.
 
@@ -1186,10 +1186,12 @@ Captured so nothing gets lost. These are *known capabilities* we've decided not 
 - **Evaluate Mnemos against external alternatives at org scale.** The persistent-memory-for-Claude-Code space has matured significantly (Engram, Ori-Mnemos, claude-mem, claude-brain, multiple unrelated "Mnemos" projects, native Claude Code memory). Maggy's Mnemos is fine for personal dogfood; an org-scale evaluation deserves a head-to-head trial.
 - **Shared memory across engineers.** When multiple Tessera users work on the same codebase, do they share an iCPG/Mnemos state, or each maintain their own? Federation question to answer at rollout time.
 
-### Pr-arbiter integration
+### Pr-arbiter integration → **`arbiter` (graduated 2026-07-28; this section corrected 2026-08-07)**
 
-- **Graduation from research artifact to usable tool.** Currently a separate research project (Phase 1 in peer review, Phase 2/3 in design). When mature, integrate as the implementation backing `/arbiter` for code-review use cases.
-- **Multi-persona review.** Pr-arbiter's adversarial corpus (4 personas) maps to a generalization of multi-engine review — same review query against multiple models *and* multiple personas. Becomes available org-wide when ready.
+- ~~**Graduation from research artifact to usable tool.** Currently a separate research project (Phase 1 in peer review, Phase 2/3 in design). When mature, integrate as the implementation backing `/arbiter` for code-review use cases.~~
+  **It graduated. pr-arbiter is FROZEN as a research study — Phase 3 was designed, ratified, and abandoned 2026-07-28, never implemented.** The engine ships as **`arbiter`** (`../arbiter`), a standalone CLI over a git ref range. It is deliberately **not Claude-Code-bound** (plain Python against the Anthropic SDK with a bare client), and **not a gate — nothing gates it.** It is a Tessera downstream in its own right (adopted `.tessera/` at scaffold).
+- **Multi-persona review — the generalization below is now MEASURED, and one half of it is dead.** ~~Pr-arbiter's adversarial corpus (4 personas) maps to a generalization of multi-engine review — same review query against multiple models *and* multiple personas.~~ The *persona/role* axis pays: role-diverse union scores **0.618 recall vs 0.509** for the best single. The *model* axis does not: model-diverse union scored **+0.000 recall for +20 false positives, with zero decorrelated catches**. So the generalization collapses to **one strong model, role-differentiated prompts, no fleet** — which is anti-conflation guard (b) in the cohesion contract, and which `arbiter` built independently before the measurement landed. **Bound:** the measured second arm was a ~7× weaker model, so peer-strength model diversity is *unmeasured*, not disproved.
+- **Note for org rollout:** "becomes available org-wide when ready" now reads differently — the tool exists and is cheap; what is unmeasured is its precision at the tier that would gate. Its own docs demote wiring it as a git hook in favour of **CI on pull requests, non-blocking first**.
 
 ### Hosted models lab
 
