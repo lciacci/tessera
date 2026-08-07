@@ -1609,3 +1609,34 @@ def test_surfaced_check_is_not_satisfied_by_a_comment(fake_repo):
         "#!/bin/bash\n# The Standing patterns used to be printed here; see the observatory.\n")
     bad = doccheck.check_standing_patterns_are_surfaced()
     assert any("nothing emits it" in v for v in bad), bad
+
+
+# ─── BUG (2026-08-06, found by a human asking "no drift?"): moving the standing patterns to
+# their own hook left CLAUDE.md asserting that `tessera-watch-surface.sh` prints them. False
+# the moment the split landed, and doccheck stayed green at 38 checks. The sixth-plus instance
+# of the same shape, and the first one introduced BY the commit that was fixing a delivery bug.
+def test_catches_stale_patterns_emitter_claim(fake_repo):
+    (fake_repo / "docs" / "wiring.md").write_text(
+        "`tessera-watch-surface.sh` prints the handoff pointer and the Standing patterns block.")
+    bad = doccheck.check_docs_name_the_right_patterns_emitter()
+    assert any("tessera-watch-surface.sh" in v for v in bad), bad
+
+
+def test_passes_when_the_right_emitter_is_named(fake_repo):
+    (fake_repo / "docs" / "wiring.md").write_text(
+        "`tessera-patterns-surface.sh` prints the Standing patterns block, in two parts.")
+    assert doccheck.check_docs_name_the_right_patterns_emitter() == []
+
+
+def test_patterns_emitter_check_ignores_unrelated_hook_prose(fake_repo):
+    """A doc naming a surfacer with no standing-patterns claim must not trip the check."""
+    (fake_repo / "docs" / "wiring.md").write_text(
+        "`tessera-findings-surface.sh` injects the downstream findings backlog.")
+    assert doccheck.check_docs_name_the_right_patterns_emitter() == []
+
+
+def test_observatory_may_record_superseded_wiring(fake_repo):
+    """The observatory is the historical record — it MUST be able to describe the old wiring."""
+    (fake_repo / "docs" / "observatory.md").write_text(
+        "`tessera-watch-surface.sh` used to print the Standing patterns block; it spilled.")
+    assert doccheck.check_docs_name_the_right_patterns_emitter() == []

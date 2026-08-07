@@ -1330,6 +1330,35 @@ _HOOK_OUTPUT_CAP = 10_000
 _HOOK_OUTPUT_BUDGET = 9_000
 
 
+def check_docs_name_the_right_patterns_emitter() -> list[str]:
+    """A doc that says hook X prints the standing patterns must name the hook that does.
+
+    ADDED 2026-08-06, and it is a finding about the CHECKER, not just about a doc. Moving
+    the block out of `tessera-watch-surface.sh` left CLAUDE.md asserting that that script
+    "prints the handoff pointer, the Standing patterns block ... and any fired observatory
+    trigger". False the moment the split landed. doccheck stayed green — 38 checks — and a
+    human found it by asking "no drift?", which is precisely how the previous six doc-drift
+    bugs were found and precisely what this file exists to stop happening a seventh time.
+
+    The claim is machine-checkable and was simply never claimed: if a doc names a script in
+    the same sentence as the standing patterns, that script must be the one that emits them.
+    """
+    emitter = "tessera-patterns-surface.sh"
+    bad = []
+    for doc in [ROOT / "CLAUDE.md", *(ROOT / "docs").rglob("*.md")]:
+        if not doc.is_file() or doc.name == "observatory.md":
+            continue           # the observatory records history, including superseded wiring
+        for i, line in enumerate(doc.read_text().splitlines(), 1):
+            if "Standing patterns" not in line and "standing patterns" not in line:
+                continue
+            named = set(re.findall(r"([a-z0-9-]+-surface\.sh)", line))
+            if named and emitter not in named:
+                bad.append(f"{doc.relative_to(ROOT)}:{i}: says {sorted(named)} handles the "
+                           f"standing patterns, but {emitter} emits them — the block moved "
+                           f"2026-08-06 and the doc did not")
+    return bad
+
+
 def check_standing_patterns_fit_the_cap() -> list[str]:
     """The standing patterns must ARRIVE — every one of them, not merely be emitted.
 
@@ -2082,6 +2111,7 @@ CHECKS = {
     "session-logs-are-repo-anchored": check_session_logs_are_repo_anchored,
     "standing-patterns-are-surfaced": check_standing_patterns_are_surfaced,
     "standing-patterns-fit-the-cap": check_standing_patterns_fit_the_cap,
+    "docs-name-the-right-patterns-emitter": check_docs_name_the_right_patterns_emitter,
     "decision-surface-is-wired": check_decision_surface_is_wired,
     "pretooluse-hooks-reach-the-model": check_pretooluse_hooks_reach_the_model,
     "referenced-paths-exist": check_referenced_paths_exist,
