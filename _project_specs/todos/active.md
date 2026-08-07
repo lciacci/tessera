@@ -263,7 +263,9 @@ print(sum('file_exists' in json.dumps(x) for x in c), '/', len(c), 'are file_exi
    2026-08-06 session opened none because it changed no code.
 3. **Carried unchanged from 2026-07-29** (retitled section immediately below, items 1–6 there):
    downstream work is still the whole list for T2; this repo's control surface still has never been
-   independently reviewed (21 extensionless files in `bin/`, invisible to arbiter's default `--ext`);
+   independently reviewed — but **the BLOCKER is gone as of 2026-08-07**: `arbiter@975b491` fixed
+   the extension filter (shebang detection, skipped files reported, `--path` authoritative), so the
+   21 extensionless files in `bin/` are reviewable by default now. The review itself is still owed;
    howler is still missing the spend guard; the iCPG loop still should not be wired downstream yet.
 
 ### Standing patterns
@@ -375,10 +377,16 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    *unconditional*. **A ceiling is a class you decided not to catch; a hole is a member of
    the class you claimed to catch, and a hedge phrased broadly enough turns the second into
    the first.** So: any narrowing of scope must appear in the OUTPUT, not only in the source.
-   Live consequence, unfixed: ~4,500 lines across 21 extensionless `bin/` files — this
+   ~~Live consequence, unfixed: ~4,500 lines across 21 extensionless `bin/` files — this
    framework's entire control surface, `tessera-verify` and `tessera-watch` included — have
-   never been reviewable by default. **The tool you reach for to check your work is in scope
-   for the check.**
+   never been reviewable by default.~~ **FIXED UPSTREAM 2026-08-07 (`arbiter@975b491`,
+   propagated `78c2318`, confirmed on a live diff `73ec7cf`): `is_reviewable()` now does
+   shebang detection, `--path` is authoritative, and skipped files are REPORTED.** The
+   default opens the file. Tessera's control surface is reviewable by default for the first
+   time — and note the fix ships the pattern's own lesson, since the load-bearing half was
+   *announcing the skip*, not widening the filter. **The pattern itself is untouched and is
+   why this line is struck rather than deleted: `The tool you reach for to check your work is
+   in scope for the check.`**
 
 
 ### Do not read T2 early — the stopping rule is binding
