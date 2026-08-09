@@ -133,11 +133,42 @@ def test_invented_verdict_word_is_not_a_verdict(tmp_path):
     assert tv.read_verdict_file(f, 1) is None
 
 
-def test_partial_verdict_file_fills_gaps_with_no_verdict(tmp_path):
+def test_partial_verdict_file_returns_none_so_the_fallback_still_runs(tmp_path):
+    """Inverted 2026-08-09. This test used to assert the gaps were FILLED with NO_VERDICT.
+
+    It was asserting the behaviour `read_verdict_file`'s own docstring disclaims two lines
+    above the return — "None (not a partial list) on ANY problem… returning a half-filled
+    list here would let a malformed file read as 'some claims had no verdict'". Code and
+    comment disagreed, and the test sided with the code, which is how the disagreement
+    survived review in the file that tells its verifier the docstrings here are marketing.
+
+    The cost of the old behaviour was not just the missing fallback: the result carried the
+    "file" channel label — trusted — while two thirds of it was a fabricated NO_VERDICT.
+    """
     f = tmp_path / "v.json"
     _write_verdicts(f, [{"n": 1, "verdict": "CONFIRMED", "evidence": "e"}])
-    v = tv.read_verdict_file(f, 3)
-    assert [x["verdict"] for x in v] == ["CONFIRMED", "NO_VERDICT", "NO_VERDICT"]
+    assert tv.read_verdict_file(f, 3) is None
+
+
+def test_out_of_range_numbering_does_not_misattribute_a_verdict(tmp_path):
+    """The worst case the completeness check kills: a WRONG verdict, not a missing one.
+
+    A verifier numbering from 0 on a 2-claim run wrote n=0 and n=1. `by_n` was non-empty so
+    the old code returned a list, and `by_n.get(1)` — meant for claim 1 — picked up the entry
+    the verifier had written for claim 2. Measured: `[REFUTED, NO_VERDICT]`, i.e. claim 1
+    reported REFUTED on the strength of claim 2's evidence. A falsifier that answers the
+    wrong question with confidence is worse than one that says nothing.
+    """
+    f = tmp_path / "v.json"
+    _write_verdicts(f, [{"n": 0, "verdict": "CONFIRMED", "evidence": "claim 1's evidence"},
+                        {"n": 1, "verdict": "REFUTED", "evidence": "claim 2's evidence"}])
+    assert tv.read_verdict_file(f, 2) is None
+
+
+def test_wholly_out_of_range_numbering_returns_none(tmp_path):
+    f = tmp_path / "v.json"
+    _write_verdicts(f, [{"n": 99, "verdict": "CONFIRMED", "evidence": "e"}])
+    assert tv.read_verdict_file(f, 2) is None
 
 
 def test_file_channel_wins_over_the_final_message(tmp_path, logs, monkeypatch):

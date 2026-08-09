@@ -136,11 +136,20 @@ def build_prompt(claims: list[str], verdict_path: str = VERDICT_FILENAME) -> str
 def read_verdict_file(path: Path, n: int) -> list[dict] | None:
     """The verifier's verdicts as written to disk, or None if unusable.
 
-    None (not a partial list) on ANY problem — absent, unparseable, wrong shape. The caller
-    then falls back to scraping the final message and RECORDS which channel it used, so a
-    silent regression to the fragile channel is visible in the event rather than inferred.
-    Returning a half-filled list here would let a malformed file read as "some claims had no
-    verdict", which is the confusion this whole change exists to remove.
+    None (not a partial list) on ANY problem — absent, unparseable, wrong shape, or SHORT OF A
+    VERDICT FOR EVERY CLAIM. The caller then falls back to scraping the final message and
+    RECORDS which channel it used, so a silent regression to the fragile channel is visible in
+    the event rather than inferred. Returning a half-filled list here would let a malformed
+    file read as "some claims had no verdict", which is the confusion this whole change exists
+    to remove.
+
+    The completeness requirement is the half this docstring promised and the code did not do
+    until 2026-08-09. Two measured consequences of the gap, both worse than the missing
+    fallback: a file answering 1 of 3 claims was returned as `[CONFIRMED, NO_VERDICT,
+    NO_VERDICT]` and labelled channel "file" — the trusted label on an untrusted result — and
+    a verifier that numbered its verdicts from 0 had claim 2's answer reported against claim
+    1. That last one is the falsifier returning a WRONG verdict rather than no verdict, which
+    is the one output this tool must never produce.
     """
     try:
         data = json.loads(path.read_text())
@@ -163,9 +172,9 @@ def read_verdict_file(path: Path, n: int) -> list[dict] | None:
             continue
         by_n[idx] = {"verdict": verdict, "evidence": str(entry.get("evidence") or "").strip()}
 
-    if not by_n:
-        return None
-    return [by_n.get(i + 1, {"verdict": "NO_VERDICT", "evidence": ""}) for i in range(n)]
+    if any(i + 1 not in by_n for i in range(n)):
+        return None  # incomplete is a problem, and a problem means fall back — see above
+    return [by_n[i + 1] for i in range(n)]
 
 
 def parse_verdicts(output: str, n: int) -> list[dict]:

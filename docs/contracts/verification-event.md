@@ -47,8 +47,13 @@ verification — make the falsifier a channel; ADR-0006 decision 4).
   and satisfied the backstop. The falsifier was failing open, which is the failure it exists to
   catch. *Skip is a decision; `spawn_error` is an accident. Only decisions disposition.*
 - `verdict_channel` (present on every judged run) — **how the verdicts physically got here**:
-  `"file"` (the verifier wrote `tessera-verdicts.json` in its worktree — the trusted path) or
-  `"final-message"` (it did not, so the verdicts were scraped from its last chat message).
+  `"file"` (the verifier wrote `tessera-verdicts.json` in its worktree, **with a verdict for
+  every claim** — the trusted path) or `"final-message"` (it did not, so the verdicts were
+  scraped from its last chat message). A file that answers only *some* claims counts as not
+  written: it takes the fallback, because a partial file returned under the trusted label is a
+  trusted label on an untrusted result. Tightened 2026-08-09 — until then a partial file was
+  padded with `NO_VERDICT` and still labelled `"file"`, and a verifier numbering its verdicts
+  from 0 had one claim's answer reported against another's.
   Added 2026-07-26, after three real runs returned zero usable verdicts: the verifier had done
   the work every time, and its own `verify-scan` Stop hook fired afterwards and REPLACED the
   final message, which is what `VERDICT_RE` reads. A verdict returned as a message can be
