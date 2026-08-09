@@ -135,7 +135,7 @@ def p3_restore_integrity(root: Path) -> tuple[bool, str]:
     real = manual = unknown = 0
     probe_keys: list[str] = []
     if log.exists():
-        for line in log.read_text().splitlines():
+        for line in _read_lines(log):
             try:
                 event = json.loads(line)
             except ValueError:
@@ -163,9 +163,17 @@ def p3_restore_integrity(root: Path) -> tuple[bool, str]:
             f"no .mnemos/checkpoint-latest.json — the restore path has NOTHING to deliver on "
             f"the next session start, and EVERY layer reads this one file. {tally}")
 
-    size = ck.stat().st_size
     try:
+        size = ck.stat().st_size
         data = json.loads(ck.read_text())
+    except OSError as exc:
+        # NOT the globbed-log case, and so NOT quiet: a checkpoint that exists and cannot be
+        # read is precisely an UNDELIVERABLE payload, which is what T1 asks about. Reporting
+        # it is the answer; crashing (the old behaviour, via evaluate()) buries it under a
+        # ⚠ that says nothing about the restore path.
+        return True, (
+            f"checkpoint-latest.json exists but cannot be read ({type(exc).__name__}) — the "
+            f"restore path has nothing deliverable on the next session start. {tally}")
     except ValueError:
         return True, (
             f"checkpoint-latest.json is not valid JSON ({size:,}b) — `mnemos resume` cannot "
@@ -257,8 +265,22 @@ def p4_downstream(root: Path) -> tuple[bool, str]:
 
 
 def p5_skills(root: Path) -> tuple[bool, str]:
-    """Skill count — eager-listing token cost the two-stage router would cut."""
-    n = sum(1 for d in (root / ".claude" / "skills").iterdir() if d.is_dir())
+    """Skill count — eager-listing token cost the two-stage router would cut.
+
+    `.claude/skills` IS GITIGNORED (a dogfood symlink built by ./install.sh), so it is
+    ABSENT on every fresh clone. `iterdir()` raises FileNotFoundError there, which
+    evaluate() correctly marks as a crash — and a crash exits 2, which
+    tessera-watch-surface.sh reports as `runner-crashed`. So cloning this repo and running
+    the watcher before install produced a ⚠ INCOMPLETE banner and a degraded event claiming
+    the RUNNER was broken, when the truth is "the mirror is not built yet, and there is
+    nothing to count". Same fresh-clone class as `referenced-paths-exist` (2026-08-09).
+    `is_dir()` follows symlinks, so a dangling mirror link is quiet too — correctly: a link
+    to nowhere has no skills behind it either.
+    """
+    skills = root / ".claude" / "skills"
+    if not skills.is_dir():
+        return False, "no .claude/skills mirror (unbuilt or absent) — nothing to route"
+    n = sum(1 for d in skills.iterdir() if d.is_dir())
     return n >= SKILL_MIN, f"{n} skills (≥{SKILL_MIN} → two-stage hierarchical routing)"
 
 
@@ -300,7 +322,7 @@ def p7_gate_labels(root: Path) -> tuple[bool, str]:
     total = 0
     for project in [root, *_downstream_projects(root)]:
         for log in (project / ".tessera" / "logs").glob("*.jsonl"):
-            for line in log.read_text().splitlines():
+            for line in _read_lines(log):
                 try:
                     event = json.loads(line)
                 except ValueError:
@@ -325,14 +347,28 @@ def p8_doc_drift(root: Path) -> tuple[bool, str]:
     less it gets asked, so drift accumulates fastest exactly when trust is highest. **Trust
     was the failure mode.** That is a #17 failure one level up — the *verification* rode on
     recall, not a channel. This is the channel. See scripts/doccheck.py.
+
+    ── ABSENT AND BROKEN ARE NOT THE SAME ANSWER (arbiter, 2026-08-09) ───────────────────
+
+    This used to be one `except Exception: return False, "doccheck unavailable (failing
+    open)"`. Both a MISSING doccheck and one that raised inside `run()` returned
+    fired=False — and `render()` only ever prints fired/snoozed/crashed results, so that
+    message reached NOBODY. A doc-drift detector whose own failure mode is "docs honest,
+    0 false claims" is standing pattern #2 aimed at the doc channel, and #12: the report
+    was true about what it checked and silent about having checked nothing.
+
+    So: an ImportError means doccheck is not installed here — a legitimate state, quiet.
+    ANYTHING ELSE (a SyntaxError in doccheck, an exception inside run()) propagates, and
+    evaluate() marks P8 `crashed` → ⚠ section, excluded from the fire-log, exit 2. Loud,
+    and distinguishable from a clean green, which is the whole point.
     """
     sys.path.insert(0, str(root / "scripts"))
     try:
         import doccheck
-        doccheck.ROOT = root
-        violations = [v for vs in doccheck.run().values() for v in vs]
-    except Exception:
-        return False, "doccheck unavailable (failing open)"
+    except ImportError:
+        return False, "no scripts/doccheck.py importable here — nothing to check"
+    doccheck.ROOT = root
+    violations = [v for vs in doccheck.run().values() for v in vs]
     if not violations:
         return False, f"docs honest ({len(doccheck.CHECKS)} checks, 0 false claims)"
     head = violations[0] if len(violations) == 1 else f"{violations[0]} (+{len(violations)-1} more)"
@@ -491,25 +527,35 @@ def _read_firelog(root: Path) -> list[list[str]]:
     if not log.exists():
         return []
     runs = []
-    for line in log.read_text().splitlines():
+    for line in _read_lines(log):
         try:
             runs.append(json.loads(line).get("fired", []))
-        except ValueError:
+        except (ValueError, AttributeError):
             pass
     return runs
 
 
-def _count_event(log: Path, event: str) -> int:
-    if not log.exists():
-        return 0
-    return sum(1 for line in log.read_text().splitlines() if _is_event(line, event))
+def _read_lines(path: Path) -> list[str]:
+    """Lines of a log file, or [] if it cannot be read. THE ONE READER FOR GLOBBED LOGS.
 
+    Every caller here found its path with `glob()` and reads it a moment later, so the file
+    can vanish between the two (a rotated or pruned log), be a dangling symlink, or be
+    unreadable — and an OSError inside a predicate lands it in evaluate()'s crash bucket,
+    which prints ⚠ INCOMPLETE and exits 2. A transient log read must not be able to
+    manufacture a crash report about the observatory.
 
-def _is_event(line: str, event: str) -> bool:
+    arbiter (2026-08-09) reported this against P7 and stated P7 was the last one left. It
+    was not: P3's compaction log, P13's degraded scan and `_read_firelog` all had the same
+    unguarded read, and P13 in particular LOOKS guarded — its `try` covers `stat()` only,
+    and `errors="replace"` guards DECODING, not OSError. Fixing the reported row would have
+    left three (#11). P16's inline guard is folded in here too, so there is one definition
+    rather than two: skipping UNDERCOUNTS, which can only ever hold a predicate quieter —
+    it can never manufacture a bar-met or a false fire.
+    """
     try:
-        return json.loads(line).get("event") == event
-    except (ValueError, AttributeError):
-        return False
+        return path.read_text(errors="replace").splitlines()
+    except OSError:
+        return []
 
 
 def _downstream_projects(root: Path) -> list[Path]:
@@ -627,6 +673,20 @@ def p12_skill_registry_drift(root: Path, global_dir: Path | None = None) -> tupl
     or a foreign writer to global (find it BEFORE re-syncing over it; see
     ADR-0010 re-evaluate triggers). Same shape as P1 hook-drift. The last
     unwatched divergence lasted three weeks (6 stale skills, 10 zombies).
+
+    ── IT COMPARES BYTES NOW. IT DID NOT BEFORE. (2026-08-09) ─────────────────────────────
+    This read `filecmp.dircmp(...).diff_files`, whose default is a SHALLOW compare: two
+    files with the same size and the same mtime are declared identical WITHOUT reading
+    either. Measured — 4 bytes vs 4 different bytes, mtimes equalised, and this predicate
+    returned "repo skills/ == global mirror". P1, P4 and P14 all `read_bytes()`; only the
+    skill mirror trusted a stat signature, and `tessera-sync-skills` is `rsync -a`, which
+    PRESERVES mtime, so the two sides routinely share one. F-003's lesson is quoted verbatim
+    in p4_downstream's own docstring one screen up: *"A drift check that doesn't compare
+    bytes isn't a drift check."* This was one. `dircmp` still supplies the tree walk and the
+    left/right-only sets — only the sameness verdict is taken back.
+
+    (`dircmp(..., shallow=False)` exists only on Python 3.13+; this file must run on
+    whatever `python3` resolves to, including macOS's 3.9. Hence the explicit compare.)
     """
     import filecmp
     src = root / "skills"
@@ -636,13 +696,20 @@ def p12_skill_registry_drift(root: Path, global_dir: Path | None = None) -> tupl
 
     drift: list[str] = []
 
+    def same_bytes(a: Path, b: Path) -> bool:
+        try:
+            return a.read_bytes() == b.read_bytes()
+        except OSError:
+            return False       # unreadable is drift; it is never silently "in sync"
+
     def walk(cmp: filecmp.dircmp, rel: str) -> None:
         for n in cmp.left_only:
             drift.append(f"repo-only: {rel}{n}")
         for n in cmp.right_only:
             drift.append(f"global-only: {rel}{n}")
-        for n in cmp.diff_files:
-            drift.append(f"differs: {rel}{n}")
+        for n in cmp.common_files:
+            if not same_bytes(Path(cmp.left) / n, Path(cmp.right) / n):
+                drift.append(f"differs: {rel}{n}")
         for n, sub in cmp.subdirs.items():
             walk(sub, f"{rel}{n}/")
 
@@ -686,7 +753,7 @@ def p13_degraded(root: Path, now: datetime | None = None) -> tuple[bool, str]:
             mtime = datetime.fromtimestamp(log.stat().st_mtime, timezone.utc)
         except OSError:
             continue
-        for line in log.read_text(errors="replace").splitlines():
+        for line in _read_lines(log):
             try:
                 event = json.loads(line)
             except ValueError:
@@ -791,14 +858,11 @@ def p16_t2_receipts(root: Path, now: datetime | None = None) -> tuple[bool, str]
             continue
         key = project.resolve()
         for log in logs.glob("*.jsonl"):
-            try:
-                lines = log.read_text(errors="replace").splitlines()
-            except OSError:
-                # A log can vanish between glob() and read, or be unreadable. `p13_degraded`
-                # already guards its equivalent; this one did not. Skipping UNDERCOUNTS, which
-                # only ever holds the predicate quieter — it can never manufacture a bar-met.
-                continue
-            for line in lines:
+            # Guarded read — see `_read_lines`. This site had the ONLY inline guard, added
+            # when arbiter found the race here (2026-07-29); the guard is now shared, because
+            # a second definition of "how to read a log safely" is how three siblings ended up
+            # without one.
+            for line in _read_lines(log):
                 try:
                     event = json.loads(line)
                 except ValueError:
@@ -874,6 +938,16 @@ def p15_spend_backstop_suppressed(root: Path) -> tuple[bool, str]:
         return False, "spend backstop has never capped — it can fire"
 
     raw = path.read_text().strip()
+    # AN EMPTY FILE IS NOT A LEGACY COUNTER (arbiter, 2026-08-09). `touch`, a truncated
+    # write, or a half-finished `write_text` leaves this empty — and empty fell through to
+    # the non-dict branch below, which announced "holds a legacy global counter ('')" and
+    # told the operator a suppression had occurred. Measured against the mechanism it
+    # reports on: `backstop._read_fires()` returns `{}` for an unreadable or empty file
+    # ON PURPOSE, so the backstop is fully ENABLED in this state. The alarm was not just
+    # mis-worded, it was inverted — a false report of a dead guard from the predicate whose
+    # only job is to say whether the guard is dead.
+    if not raw:
+        return False, "spend backstop counter file is empty — no fires recorded, it can fire"
     try:
         fires = json.loads(raw)
     except ValueError:

@@ -967,3 +967,203 @@ def test_snoozed_predicate_that_crashes_is_reported_not_silenced(tmp_path, monke
     results = tw.evaluate(root)
     assert results[0]["snoozed"] and results[0]["crashed"]
     assert "COULD NOT RUN" in tw.render(results)      # ⚠ section, not 💤
+
+
+# ── Whole-file arbiter review, 2026-08-09. Five CONFIRMED findings, one guard each. ────────
+# Every one of these was watched FAILING against the re-planted defect before being kept
+# (standing pattern #10). Two other reported findings and one advisory were REJECTED on
+# measurement and deliberately have no test: a test asserting a non-defect is a claim that
+# the defect existed.
+
+
+def test_p5_is_quiet_when_the_skills_mirror_is_absent(tmp_path):
+    """F1. `.claude/skills` is GITIGNORED — absent on every fresh clone until ./install.sh.
+
+    `iterdir()` raised FileNotFoundError there, evaluate() marked P5 crashed, main() exited
+    2, and tessera-watch-surface.sh reported `runner-crashed` — a false alarm about the
+    RUNNER on the one state install.sh exists to fix. Reproduced on a real `git clone`.
+    """
+    root = _root(tmp_path)
+    (root / ".claude" / "skills").rmdir()
+    assert tw.p5_skills(root) == (False, "no .claude/skills mirror (unbuilt or absent) "
+                                         "— nothing to route")
+    crashed = [r for r in tw.evaluate(root) if r["predicate"].startswith("P5")]
+    assert crashed and not crashed[0]["crashed"], crashed
+
+
+def test_p5_still_counts_when_the_mirror_is_there(tmp_path):
+    """The guard must not have bought quiet by making P5 quiet everywhere."""
+    root = _root(tmp_path)
+    for i in range(tw.SKILL_MIN):
+        (root / ".claude" / "skills" / f"s{i}").mkdir()
+    fired, detail = tw.p5_skills(root)
+    assert fired is True and f"{tw.SKILL_MIN} skills" in detail
+
+
+def test_p8_stays_quiet_when_doccheck_is_simply_absent(tmp_path):
+    """F3, half one: no doccheck to IMPORT is a legitimate state, not an alarm.
+
+    IN A SUBPROCESS, and the first version of this test is why. In-process, pytest already
+    has the real `scripts/` on sys.path, so `import doccheck` SUCCEEDS and the real checker
+    runs against a tmp root — the absent branch is unreachable from inside this run. The
+    test passed nothing and failed for a reason that had nothing to do with the code.
+    """
+    import subprocess
+    import sys
+    root = _root(tmp_path)
+    (root / "scripts").mkdir()
+    proc = subprocess.run(
+        [sys.executable, "-c",
+         "import sys;"
+         "from importlib.machinery import SourceFileLoader;"
+         "from importlib.util import module_from_spec, spec_from_loader;"
+         f"l = SourceFileLoader('tw', {str(_path)!r});"
+         "m = module_from_spec(spec_from_loader('tw', l)); l.exec_module(m);"
+         "from pathlib import Path;"
+         f"print(m.p8_doc_drift(Path({str(root)!r})))"],
+        capture_output=True, text=True, cwd=str(tmp_path))
+    assert proc.returncode == 0, proc.stderr
+    assert "False" in proc.stdout and "nothing to check" in proc.stdout, proc.stdout
+
+
+def test_p8_lets_a_broken_doccheck_crash_instead_of_reporting_docs_honest(tmp_path,
+                                                                          monkeypatch):
+    """F3, half two — the defect. A doccheck that EXPLODES used to return fired=False, and
+    render() prints only fired/snoozed/crashed, so 'doccheck unavailable' reached nobody:
+    a doc-drift detector reporting a clean run on a checker that never ran (#2, #12).
+    It must now propagate, so evaluate() marks it crashed and main() exits 2.
+    """
+    root = _root(tmp_path)
+    (root / "scripts").mkdir()
+    (root / "scripts" / "doccheck.py").write_text(
+        "CHECKS = {}\n"
+        "def run():\n"
+        "    raise RuntimeError('the doc checker itself is broken')\n")
+    import sys
+    sys.modules.pop("doccheck", None)
+    try:
+        results = tw.evaluate(root)
+    finally:
+        sys.modules.pop("doccheck", None)
+        while str(root / "scripts") in sys.path:
+            sys.path.remove(str(root / "scripts"))
+    p8 = [r for r in results if r["predicate"].startswith("P8")][0]
+    assert p8["crashed"] is True, p8
+    assert "COULD NOT RUN" in tw.render(results)
+
+
+def test_every_globbed_log_read_survives_an_unreadable_file(tmp_path, monkeypatch):
+    """F4 — the CLASS, not the reported row.
+
+    arbiter named P7 and said it was the last unguarded reader. It was not: P3's compaction
+    log, P13's degraded scan and `_read_firelog` had the identical hole, and P13 LOOKS
+    guarded (its try covers stat() only; errors='replace' guards decoding, not OSError).
+    Simulated by making read_text raise, which is what a vanished-between-glob-and-read or
+    permission-denied file does — the real cases cannot be staged as root.
+    """
+    root = _root(tmp_path)
+    (root / ".mnemos").mkdir()
+    (root / ".mnemos" / "checkpoint-latest.json").write_text(
+        json.dumps({"goal": "g", "active_constraints": [], "task_narrative": "n"}))
+    (root / ".mnemos" / "compaction-log.jsonl").write_text('{"event":"compaction_fired"}\n')
+    logs = root / ".tessera" / "logs"
+    logs.mkdir(parents=True)
+    (logs / "s.jsonl").write_text('{"type":"degraded","ts":"2099-01-01T00:00:00Z"}\n')
+    (logs / "watch.jsonl").write_text('{"fired":["P1 hook-drift"]}\n')
+
+    real_read_text = Path.read_text
+
+    def boom(self, *a, **k):
+        # ONLY the .jsonl logs. Patching every read would also hit P3's checkpoint, which is
+        # a different read with a different right answer (it FIRES — see the test below), and
+        # a test that cannot tell those two apart is not testing either.
+        if self.suffix == ".jsonl":
+            raise PermissionError(13, "Permission denied")
+        return real_read_text(self, *a, **k)
+
+    monkeypatch.setattr(Path, "read_text", boom)
+    # Each of the four sites must return a RESULT, not raise. Before the shared reader,
+    # every one of these raised PermissionError.
+    assert tw.p3_restore_integrity(root)[0] is False
+    assert tw.p7_gate_labels(root)[0] is False
+    assert tw.p13_degraded(root)[0] is False
+    assert tw._read_firelog(root) == []
+
+
+def test_p3_reports_an_unreadable_checkpoint_instead_of_crashing(tmp_path, monkeypatch):
+    """F4's sibling, and the one case where quiet would be WRONG.
+
+    A checkpoint that exists and cannot be read is an UNDELIVERABLE payload — exactly the
+    question T1 asks — so P3 must FIRE and say so, not return [] and read as deliverable,
+    and not crash into a ⚠ that says nothing about the restore path.
+    """
+    root = _root(tmp_path)
+    (root / ".mnemos").mkdir()
+    ck = root / ".mnemos" / "checkpoint-latest.json"
+    ck.write_text(json.dumps({"goal": "g", "active_constraints": [], "task_narrative": "n"}))
+    real_read_text = Path.read_text
+
+    def boom(self, *a, **k):
+        if self.name == "checkpoint-latest.json":
+            raise PermissionError(13, "Permission denied")
+        return real_read_text(self, *a, **k)
+
+    monkeypatch.setattr(Path, "read_text", boom)
+    fired, detail = tw.p3_restore_integrity(root)
+    assert fired is True, detail
+    assert "cannot be read" in detail
+
+
+def test_p15_treats_an_empty_counter_file_as_no_counter(tmp_path):
+    """F5. `touch` or a truncated write left this empty, and empty fell into the non-dict
+    branch: "holds a legacy global counter ('')" — a report that the spend backstop had been
+    permanently silenced. Inverted, not merely mis-worded: backstop._read_fires() returns {}
+    for an empty file ON PURPOSE, so the backstop is fully enabled in exactly this state.
+    """
+    root = _root(tmp_path)
+    (root / ".tessera").mkdir()
+    (root / ".tessera" / ".spend-backstop-fires").write_text("   \n")
+    fired, detail = tw.p15_spend_backstop_suppressed(root)
+    assert fired is False, detail
+    assert "legacy" not in detail
+
+
+def test_p15_still_fires_on_a_real_legacy_counter(tmp_path):
+    """The empty-file guard must not have swallowed the state P15 exists for."""
+    root = _root(tmp_path)
+    (root / ".tessera").mkdir()
+    (root / ".tessera" / ".spend-backstop-fires").write_text("47")
+    fired, detail = tw.p15_spend_backstop_suppressed(root)
+    assert fired is True and "legacy global counter" in detail
+
+
+def test_p12_compares_bytes_not_a_stat_signature(tmp_path):
+    """M-2 (mine, not arbiter's). `filecmp.dircmp.diff_files` is a SHALLOW compare: same
+    size + same mtime is declared identical without reading either file. Measured — this
+    predicate returned "repo skills/ == global mirror" on 4 bytes vs 4 different bytes.
+    `tessera-sync-skills` is `rsync -a`, which PRESERVES mtime, so the two sides routinely
+    share one. p4_downstream's own docstring quotes the rule this broke: *a drift check that
+    doesn't compare bytes isn't a drift check* (F-003).
+    """
+    import os
+    root, mirror = tmp_path / "repo", tmp_path / "mirror"
+    (root / "skills" / "base").mkdir(parents=True)
+    (mirror / "base").mkdir(parents=True)
+    a, b = root / "skills" / "base" / "SKILL.md", mirror / "base" / "SKILL.md"
+    a.write_text("AAAA")
+    b.write_text("BBBB")                     # same size, different bytes
+    st = os.stat(a)
+    os.utime(b, (st.st_atime, st.st_mtime))  # ...and now the same mtime
+    fired, detail = tw.p12_skill_registry_drift(root, global_dir=mirror)
+    assert fired is True, detail
+    assert "differs: base/SKILL.md" in detail
+
+
+def test_p12_stays_quiet_on_a_genuinely_identical_mirror(tmp_path):
+    """The byte compare must not turn every mirror into drift."""
+    root, mirror = tmp_path / "repo", tmp_path / "mirror"
+    (root / "skills" / "base").mkdir(parents=True)
+    (mirror / "base").mkdir(parents=True)
+    (root / "skills" / "base" / "SKILL.md").write_text("same")
+    (mirror / "base" / "SKILL.md").write_text("same")
+    assert tw.p12_skill_registry_drift(root, global_dir=mirror)[0] is False
