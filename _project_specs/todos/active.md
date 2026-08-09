@@ -190,36 +190,70 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
    when written, false three runs later — doc drift introduced into the handoff within hours of
    writing it.)*
 
-   > **`bin/tessera-verify` IS NOW DONE — whole-file, and it paid.** 489 lines as pure additions,
-   > ~$0.59, 4 blocking + 3 advisory. Five fixes landed (`ddc0792`…`136cef7`). **`bin/tessera-watch`'s
-   > other ~90% is still the open half of this item**, and the ~4,500 lines across the other 19
-   > extensionless `bin/` files after that.
+   > **`bin/tessera-verify` IS NOW DONE — whole-file, adjudicated, fixed, and falsified.** 489 lines,
+   > $0.59, 4 blocking + 3 advisory. **Seven commits: `ddc0792` `23a38e5` `cab7683` `36cc263`
+   > `136cef7` `985c451` `33cc3b3`.** *(An earlier version of this block said "five fixes,
+   > `ddc0792`…`136cef7`" — accurate when written, stale ninety minutes later. Fourth time in two
+   > days that this file has gone stale inside the session that wrote it.)* **`bin/tessera-watch`'s
+   > other ~90% is the open half**, then ~4,500 lines across the other 19 extensionless `bin/` files.
    >
-   > **The adjudication mattered more than the review.** Of arbiter's 7, three were rejected on
-   > measurement — a path-traversal claim on an env var whose setter can already run any command; an
-   > encoding crash that `locale.getpreferredencoding(False)` returns UTF-8 for on darwin under
-   > `LC_ALL=C LANG=C`; and an `UnboundLocalError` in a `finally` that cannot run, which contradicted
-   > arbiter's own blocking finding. One was right but rated high for what is an empty temp dir.
-   > **Take the finding, re-derive the severity.**
+   > **NEXT SESSION SHOULD BE `bin/tessera-watch`, WHOLE-FILE — and the reason is ordering, not
+   > momentum.** `tessera-watch` OWNS P3's predicate, and P3 is firing right now. Fixing the
+   > checkpoint first means acting on a measurement whose instrument has never been read — and P3
+   > has already been found mis-specified once (2026-08-07, *"three anchors, three proxies"*) and
+   > rewritten by ADR-0015. **Read the reporter before acting on its report.** Hold item 1's P3
+   > part 3 for the session after; it is well-parked (cut measured at 11,253 → 6,642b, mechanism
+   > identified) so deferring it loses nothing.
    >
-   > **And the largest finding was not arbiter's.** `cmd_run` wrote `verdict_channel`
+   > **The adjudication mattered more than the review, and then the falsification mattered more than
+   > the adjudication.** Of arbiter's 7, three were rejected on measurement and one was right but
+   > over-rated. Then `tessera-verify` was run against the fixes AND against my own rejections —
+   > **$2.58 / 33 turns, and $1.84 / 29 turns.** All five fixes CONFIRMED, each with a landmine
+   > watched failing at the pre-fix commit. **One rejection REFUTED — mine.** I measured three
+   > locales, found UTF-8 in all three, and generalised to "this machine"; they were one observation
+   > wearing three coats (PEP 540 auto-enables UTF-8 mode under C/POSIX). See observatory →
+   > *"Three environments are not a machine"*. **Run the falsifier at your REJECTIONS, not just your
+   > fixes — a wrong rejection silently drops a real finding, and it is the only half with no other
+   > reader.**
+   >
+   > **And the largest finding was nobody's review.** `cmd_run` wrote `verdict_channel`
    > `"final-message"`; `cmd_stats` warned on `"message"`. The ⚠ banner announcing a regression to
    > the fragile channel could never fire — in the file rewritten specifically to survive that
    > regression, with a test that built its fixture from a literal no code path emits. Standing
-   > pattern #1 and #10 in one defect, and a reviewer reading the diff had no reason to see it
-   > because both halves are individually correct. **Two static readers on one file is not two
-   > independent reads; running the thing is the third reader.**
+   > pattern #1 and #10 in one defect. A reviewer reading the diff had no reason to see it because
+   > both halves are individually correct. **Two static readers on one file is not two independent
+   > reads; running the thing is the third reader.** The falsifier then found a *second* one the
+   > same way — the ⚠ banner crashing under a forced-ASCII console, i.e. only in the case it exists
+   > to report (`33cc3b3`).
+   >
+   > **Verification runs now record what they cost** (`985c451`): `total_cost_usd`, `num_turns`,
+   > `duration_ms`, `stop_reason`, `permission_denials`. Before this, 27 judged runs carried no cost
+   > at all, so "is the adversarial channel worth it?" was unanswerable. Absent ≠ zero: runs
+   > predating the field stay unmeasured.
    **Arbiter is diff-only by design** — `reviewer.SYSTEM`: *"Focus on changed code (the diff).
    Unchanged code is context, not your target."* There is no whole-file mode; you make the file be
    the diff:
    ```bash
-   arbiter --base $(git hash-object -t tree /dev/null) --head HEAD \
-           --path bin/tessera-watch --path bin/tessera-verify
+   arbiter --base $(git hash-object -t tree /dev/null) --head HEAD --path bin/tessera-watch
    ```
-   1,596 lines as pure additions, so expect ~$10–18 and a high finding count weighted toward
-   long-standing design rather than recent change. **`tessera-verify` is the one to read first**: it
-   is the falsifier this repo reaches for to check everything else, and standing pattern #12's
-   closing line is that the tool you reach for to check your work is in scope for the check.
+   ~~1,596 lines as pure additions, so expect ~$10–18~~ — **MEASURED 2026-08-09 and the estimate was
+   5–10× HIGH: 489 lines cost $0.59, so `tessera-watch`'s 1,107 should land near $1.50.** Struck
+   rather than deleted because the wrong number is the point: **an inflated estimate on a
+   never-done item reads as a reason it is still never done.** Expect a high finding count weighted
+   toward long-standing design rather than recent change.
+
+   **Budget the CYCLE, not the API call.** The review is the cheap part by an order of magnitude.
+   One 489-line review produced 7 commits, two falsifier runs, and most of a session; the real
+   costs are adjudication, fixing, guarding each fix against its own broken state, and
+   falsification ($4.42 of the ~$5.02 total was everything *except* the review). `tessera-watch` is
+   2.3× the lines — plan the session accordingly, and do it on a FRESH context: every defect
+   cluster this repo has logged was authored at the end of a long session.
+
+   ~~**`tessera-verify` is the one to read first**~~ — **done 2026-08-09.** The reason it went first
+   still stands and now transfers to `tessera-watch`: standing pattern #12's closing line is that
+   the tool you reach for to check your work is in scope for the check, and `tessera-watch` is the
+   single reporter for P3, P4, P9 and P11–P16 (A5b: delete it and every one of them goes quiet at
+   once, silently).
 
 **The durable lesson, and it cost two wrong assertions today: citing an artifact is not reading it.**
 The observatory named `tessera-sync-skills` and `install.sh` as evidence before either was opened,
