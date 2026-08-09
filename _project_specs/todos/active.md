@@ -189,6 +189,26 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
    any reviewer. *(An earlier version of this line said the day's run "covered `scripts/` only". True
    when written, false three runs later — doc drift introduced into the handoff within hours of
    writing it.)*
+
+   > **`bin/tessera-verify` IS NOW DONE — whole-file, and it paid.** 489 lines as pure additions,
+   > ~$0.59, 4 blocking + 3 advisory. Five fixes landed (`ddc0792`…`136cef7`). **`bin/tessera-watch`'s
+   > other ~90% is still the open half of this item**, and the ~4,500 lines across the other 19
+   > extensionless `bin/` files after that.
+   >
+   > **The adjudication mattered more than the review.** Of arbiter's 7, three were rejected on
+   > measurement — a path-traversal claim on an env var whose setter can already run any command; an
+   > encoding crash that `locale.getpreferredencoding(False)` returns UTF-8 for on darwin under
+   > `LC_ALL=C LANG=C`; and an `UnboundLocalError` in a `finally` that cannot run, which contradicted
+   > arbiter's own blocking finding. One was right but rated high for what is an empty temp dir.
+   > **Take the finding, re-derive the severity.**
+   >
+   > **And the largest finding was not arbiter's.** `cmd_run` wrote `verdict_channel`
+   > `"final-message"`; `cmd_stats` warned on `"message"`. The ⚠ banner announcing a regression to
+   > the fragile channel could never fire — in the file rewritten specifically to survive that
+   > regression, with a test that built its fixture from a literal no code path emits. Standing
+   > pattern #1 and #10 in one defect, and a reviewer reading the diff had no reason to see it
+   > because both halves are individually correct. **Two static readers on one file is not two
+   > independent reads; running the thing is the third reader.**
    **Arbiter is diff-only by design** — `reviewer.SYSTEM`: *"Focus on changed code (the diff).
    Unchanged code is context, not your target."* There is no whole-file mode; you make the file be
    the diff:
