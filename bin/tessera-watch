@@ -1009,12 +1009,17 @@ def evaluate(root: Path) -> list[dict]:
             detail = (f"PREDICATE CRASHED — {type(exc).__name__}: {exc}. Every OTHER "
                       f"predicate still ran; this one reported nothing, which is not the "
                       f"same as reporting nothing to report.")
-        # A SNOOZE IS HONOURED IN THE RENDER AND DELIBERATELY NOT IN THE EXIT CODE.
-        # `snoozed` is computed independently of `crashed`, so a snoozed predicate that
-        # crashes still renders as 💤 (verified — arbiter reported the opposite and was
-        # wrong). But `main()` still returns 2, because a snooze says "I know this FIRES,
-        # quiet it" — never "I accept this predicate being BROKEN". Those are different
-        # events and only one of them is an operator decision.
+        # A SNOOZE DOES NOT COVER A CRASH — not in the render, not in the exit code.
+        # A snooze says "I know this FIRES, quiet it", never "I accept this predicate being
+        # BROKEN". So a snoozed predicate that crashes still lands in render()'s ⚠ section
+        # and still returns exit 2.
+        #
+        # THE PREVIOUS COMMENT HERE SAID IT RENDERED AS 💤, "verified", AND WAS WRONG BY THE
+        # TIME IT WAS COMMITTED. It was true when written — `snoozed` is computed
+        # independently of `crashed` — and then the crashed section was added to render() two
+        # edits later, which claims a crashed predicate first. The verification was accurate
+        # and the code moved underneath it. A "verified" claim is a fact about a MOMENT; if
+        # you change the behaviour afterwards you own re-checking it (arbiter, 2026-08-09).
         s = snoozes.get(label, {}) if label in snoozed else {}
         out.append({"predicate": label, "fired": fired, "snoozed": label in snoozed,
                     "crashed": crashed, "detail": detail, "snooze_until": s.get("until"),
@@ -1071,9 +1076,14 @@ def render(results: list[dict]) -> str:
                      f" — {r['snooze_reason'] or ''}")
     if not lines:
         return "✓ no Observatory triggers fired"
-    if not fired and crashed:
-        lines.append("(No trigger fired among the predicates that RAN — which is not the "
-                     "same as nothing to report.)")
+    if crashed:
+        # UNCONDITIONAL when anything crashed. This first read `not fired and crashed`,
+        # which left the MIXED case — some fires, some crashes — with no incompleteness
+        # notice at all, so an operator reads the fired set as the whole picture. That is
+        # the same defect the crashed section was added to fix, surviving in the one shape
+        # it was not tested against (arbiter, 2026-08-09).
+        lines.append(f"({len(crashed)} predicate(s) could not run, so this list is "
+                     f"INCOMPLETE — absence of a trigger below is not evidence of absence.)")
     return "\n".join(lines)
 
 

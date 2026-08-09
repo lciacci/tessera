@@ -931,7 +931,7 @@ def test_render_distinguishes_a_crash_from_a_fire(tmp_path, monkeypatch):
     out = tw.render(tw.evaluate(root))
     assert "COULD NOT RUN" in out, out
     assert "Observatory triggers fired" not in out, out      # nothing actually fired
-    assert "not the same as nothing to report" in out, out
+    assert "INCOMPLETE" in out and "not evidence of absence" in out, out
 
 
 def test_render_keeps_crashes_out_of_the_fired_section(tmp_path, monkeypatch):
@@ -941,3 +941,29 @@ def test_render_keeps_crashes_out_of_the_fired_section(tmp_path, monkeypatch):
     out = tw.render(tw.evaluate(root))
     fired_block = out.split("Observatory triggers fired")[1]
     assert "P-real" in fired_block and "P-boom" not in fired_block, out
+
+
+def test_render_flags_incompleteness_even_when_something_fired(tmp_path, monkeypatch):
+    """THE MIXED CASE, which the first version of the footer did not cover: with both fires
+    and crashes it appended nothing, so the operator read the fired set as the whole picture
+    — the same defect the crashed section exists to fix, surviving in the one shape it was
+    not tested against (arbiter, 2026-08-09)."""
+    root = _root(tmp_path)
+    monkeypatch.setattr(tw, "PREDICATES", {"P-boom": _crashing,
+                                           "P-real": lambda r: (True, "genuinely fired")})
+    out = tw.render(tw.evaluate(root))
+    assert "genuinely fired" in out and "INCOMPLETE" in out, out
+    assert "not evidence of absence" in out, out
+
+
+def test_snoozed_predicate_that_crashes_is_reported_not_silenced(tmp_path, monkeypatch):
+    """A snooze says "I know this FIRES, quiet it", never "I accept it being BROKEN". The
+    comment here previously claimed 💤 and was invalidated by a later edit to render()."""
+    root = _root(tmp_path)
+    monkeypatch.setattr(tw, "PREDICATES", {"P-boom": _crashing})
+    monkeypatch.setattr(tw, "active_snooze_labels", lambda r, n: {"P-boom"})
+    monkeypatch.setattr(tw, "_load_snoozes",
+                        lambda r: {"P-boom": {"until": "2099-01-01", "reason": "x"}})
+    results = tw.evaluate(root)
+    assert results[0]["snoozed"] and results[0]["crashed"]
+    assert "COULD NOT RUN" in tw.render(results)      # ⚠ section, not 💤
