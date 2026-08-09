@@ -45,7 +45,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CHARS_PER_TOKEN = 4
 
-EAGER_IMPORT = re.compile(r"^@(\S+)$", re.MULTILINE)
+# Claude Code imports `@path` ANYWHERE — start of line, mid-sentence, trailing space.
+# The first version anchored `^@(\S+)$`, so `See @docs/design-principles.md for the
+# reasoning.` was invisible: 31,346 tokens omitted, meter exit 0, doccheck GREEN. A
+# >2x understatement reported as a confirmed measurement. Found by `bin/tessera-verify`
+# 2026-08-09 — and flagged by it as a "caveat, not a refutation" one run EARLIER, where
+# it was read as minor and not acted on. It was the same defect the whole time.
+EAGER_IMPORT = re.compile(r"(?:^|(?<=\s))@([^\s`]+)", re.MULTILINE)
+FENCE_BLOCK = re.compile(r"```.*?```", re.DOTALL)
 PART_ARGS = re.compile(r"tessera-patterns-surface\.sh\"? --part (\d+) --of (\d+)")
 HOOK_PATH = re.compile(r'exec "\$\{CLAUDE_PROJECT_DIR:-\.\}/([^"]+)"')
 
@@ -65,16 +72,57 @@ def eager_imports(root: Path) -> list[Path]:
     claude_md = root / "CLAUDE.md"
     if not claude_md.exists():
         return []
-    return [root / m for m in EAGER_IMPORT.findall(claude_md.read_text())]
+    body = FENCE_BLOCK.sub("", claude_md.read_text())     # fenced examples are not imports
+    refs = [m.rstrip(".,;:)") for m in EAGER_IMPORT.findall(body)]
+    return [_canonical(root, r) for r in refs if "/" in r]  # a path, not an @handle
+
+
+def _canonical(root: Path, ref: str) -> Path:
+    """Resolve an `@` import to the path whose CONTENT is tracked.
+
+    `.claude/skills` is a **gitignored symlink to `../skills`** created by `install.sh`;
+    `.gitignore` states the rule — "Canonical source is the top-level skills/, commands/,
+    agents/ dirs" (ADR-0010: repo is truth, the mirror is a mirror). So on a fresh clone,
+    before install, the imported path does not exist while its content is right there.
+
+    FOUND BY `bin/tessera-verify` 2026-08-09, refuting this meter's own docstring. The
+    first version took the literal path and skipped it when absent, so a clean worktree
+    measured 9,689 instead of 15,497 — 37% low — and doccheck went red advising that the
+    *wrong* figure be recorded. "Fails differently on every clone" is exactly what the
+    check claimed to have avoided by excluding machine-local state, and it was doing it.
+    """
+    literal = root / ref
+    if literal.exists():
+        return literal
+    if ref.startswith(".claude/"):
+        return root / ref[len(".claude/"):]
+    return literal
 
 
 def _session_start_commands(root: Path) -> list[str]:
-    try:
-        hooks = json.loads((root / ".claude" / "settings.json").read_text())
-        return [h.get("command", "")
-                for entry in hooks["hooks"]["SessionStart"] for h in entry.get("hooks", [])]
-    except (OSError, ValueError, KeyError):
+    """Registered SessionStart commands. Unreadable settings RAISE; unregistered is [].
+
+    The distinction is the whole point: "nothing is registered" is a measurable state
+    (the component is genuinely absent), while "settings.json will not parse" means the
+    meter does not know what is registered. Swallowing the second into [] made an
+    unparseable settings file look like a smaller prefix.
+    """
+    settings = root / ".claude" / "settings.json"
+    if not settings.exists():
         return []
+    try:
+        hooks = json.loads(settings.read_text())
+    except ValueError as exc:
+        raise ValueError(f".claude/settings.json will not parse ({exc}) — the registered "
+                         f"SessionStart output cannot be measured") from exc
+    try:
+        entries = hooks.get("hooks", {}).get("SessionStart", [])
+        return [h.get("command", "") for entry in entries for h in entry.get("hooks", [])]
+    except AttributeError as exc:
+        # Valid JSON, wrong shape (`{"hooks": "oops"}`). Uncaught, this escaped doccheck's
+        # handler and aborted all 41 checks with a traceback instead of one unverifiable.
+        raise ValueError(f".claude/settings.json parses but is not hook-shaped ({exc}) — "
+                         f"the registered SessionStart output cannot be measured") from exc
 
 
 def patterns_parts(root: Path) -> list[str]:
@@ -85,17 +133,18 @@ def patterns_parts(root: Path) -> list[str]:
     precedent for the same reason — reading the source file measured a thing that was true
     while the delivered text was truncated.
     """
+    registered = [m for m in (PART_ARGS.search(c) for c in _session_start_commands(root)) if m]
+    if not registered:
+        return []                      # nothing registered — a measurable absence
     emitter = root / ".claude" / "scripts" / "tessera-patterns-surface.sh"
     if not emitter.exists():
-        return []
+        raise OSError(f"{emitter.relative_to(root)} is registered on SessionStart but "
+                      f"missing — the standing-patterns component cannot be measured")
     out = []
-    for command in _session_start_commands(root):
-        found = PART_ARGS.search(command)
-        if not found:
-            continue
+    for found in registered:
         result = subprocess.run(
             [str(emitter), "--part", found.group(1), "--of", found.group(2)],
-            capture_output=True, text=True, cwd=root, timeout=30, check=False,
+            capture_output=True, text=True, cwd=root, timeout=30, check=True,
         )
         out.append(result.stdout)
     return out
@@ -105,8 +154,10 @@ def tracked_components(root: Path = ROOT) -> dict[str, int]:
     """Deterministic, git-tracked eager context. This is the asserted figure's basis."""
     components = {"CLAUDE.md": tokens((root / "CLAUDE.md").read_text())}
     for path in eager_imports(root):
-        if path.exists():
-            components[str(path.relative_to(root))] = tokens(path.read_text())
+        if not path.exists():
+            raise OSError(f"CLAUDE.md eagerly imports {path.relative_to(root)}, which is "
+                          f"not on disk — the prefix cannot be measured, only understated")
+        components[str(path.relative_to(root))] = tokens(path.read_text())
     parts = patterns_parts(root)
     if parts:
         components["standing patterns (emitted)"] = sum(tokens(p) for p in parts)

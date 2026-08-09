@@ -1786,3 +1786,123 @@ def test_meter_derives_eager_skills_from_claude_md_imports(fake_repo):
 
     (fake_repo / "CLAUDE.md").write_text("head\n")   # de-eagered
     assert prefix_meter.tracked_total(fake_repo) == prefix_meter.tokens("head\n")
+
+
+# ─── FOUND BY `bin/tessera-verify` 2026-08-09, hours after the meter shipped, against the
+# claims its author wrote. Three fail-open defects in one file whose entire purpose is to
+# stop a measurement drifting silently — the check that guards against silent drift was
+# itself silently drifting. Standing pattern #1 aimed at the newest instrument.
+def _emitter_repo(root, script: str, parts: int = 1):
+    (root / "CLAUDE.md").write_text("x" * 4000)
+    emitter = root / ".claude" / "scripts" / "tessera-patterns-surface.sh"
+    emitter.write_text(script)
+    emitter.chmod(0o755)
+    (root / ".claude" / "settings.json").write_text(json.dumps({"hooks": {"SessionStart": [
+        {"hooks": [{"command": f'"$X/.claude/scripts/tessera-patterns-surface.sh" '
+                               f'--part {i} --of {parts}'}]} for i in range(1, parts + 1)]}}))
+    (root / "docs" / "observatory.md").write_text(
+        "**METERED 2026-08-09: 1,000 tokens tracked** — by the meter.\n")
+    return emitter
+
+
+def test_crashing_emitter_is_unverifiable_not_a_smaller_total(fake_repo):
+    """THE DEFECT: `check=False` and no returncode inspection, so an emitter that ran,
+    emitted partial output and DIED was measured as a success — a silently smaller prefix
+    that passed. Exactly the outcome the check's own docstring denied."""
+    _emitter_repo(fake_repo, "#!/bin/sh\nprintf 'xxxx'\nexit 1\n")
+    bad = doccheck.check_eager_prefix_figure_is_current()
+    assert any("unverifiable, not confirmed" in v for v in bad), bad
+
+
+def test_absent_but_registered_emitter_is_unverifiable_not_drift(fake_repo):
+    """Absence used to vanish into `[]`, surfacing as a DRIFT message whose remedy was to
+    re-record the (understated) figure. A wrong remedy is worse than no message."""
+    emitter = _emitter_repo(fake_repo, "#!/bin/sh\nprintf 'xxxx'\n")
+    emitter.unlink()
+    bad = doccheck.check_eager_prefix_figure_is_current()
+    assert any("unverifiable, not confirmed" in v for v in bad), bad
+    assert not any("re-run the meter and update the figure" in v for v in bad), bad
+
+
+def test_unregistered_emitter_is_a_measurable_absence_not_an_error(fake_repo):
+    """The distinction that makes the two tests above meaningful: nothing registered is a
+    real state (no such component), not a failure to measure."""
+    (fake_repo / "CLAUDE.md").write_text("x" * 4000)
+    (fake_repo / "docs" / "observatory.md").write_text(
+        "**METERED 2026-08-09: 1,000 tokens tracked** — by the meter.\n")
+    assert doccheck.check_eager_prefix_figure_is_current() == []
+
+
+def test_unparseable_settings_is_unverifiable(fake_repo):
+    _emitter_repo(fake_repo, "#!/bin/sh\nprintf 'xxxx'\n")
+    (fake_repo / ".claude" / "settings.json").write_text("{not json")
+    bad = doccheck.check_eager_prefix_figure_is_current()
+    assert any("unverifiable, not confirmed" in v for v in bad), bad
+
+
+def test_eager_import_resolves_to_tracked_source_on_a_clean_clone(fake_repo):
+    """THE REFUTED CLAIM. `.claude/skills` is a gitignored symlink `install.sh` creates, so
+    before install the imported path is absent while its content is tracked at `skills/`.
+    The meter skipped it and under-measured by 37% on a clean clone — the very
+    "fails differently on every clone" outcome the docstring claimed to have avoided."""
+    (fake_repo / "skills" / "s").mkdir(parents=True)
+    (fake_repo / "skills" / "s" / "SKILL.md").write_text("y" * 800)
+    (fake_repo / "CLAUDE.md").write_text("head\n@.claude/skills/s/SKILL.md\n")
+    # No .claude/skills symlink at all — the state of a fresh clone.
+    assert not (fake_repo / ".claude" / "skills").exists()
+    total = prefix_meter.tracked_total(fake_repo)
+    assert total == prefix_meter.tokens("head\n@.claude/skills/s/SKILL.md\n") + 200, total
+
+
+def test_missing_eager_import_is_an_error_not_a_silent_skip(fake_repo):
+    """An import that resolves nowhere must stop the measurement. Skipping it understates
+    the prefix, and an understated prefix reads as a real one."""
+    (fake_repo / "CLAUDE.md").write_text("head\n@.claude/skills/gone/SKILL.md\n")
+    with pytest.raises(OSError, match="not on disk"):
+        prefix_meter.tracked_total(fake_repo)
+
+
+# ─── SECOND `bin/tessera-verify` pass, same day. The first pass reported the anchored
+# import regex as "a caveat, not a refutation"; it was read as minor and not acted on.
+# The second pass demonstrated it as a >2x understatement reported GREEN. A caveat from a
+# falsifier is a finding you have not measured yet.
+def _import_repo(root, claude_md: str, imported_chars: int = 800):
+    (root / "docs" / "big.md").write_text("y" * imported_chars)
+    (root / "CLAUDE.md").write_text(claude_md)
+
+
+def test_inline_eager_import_is_measured(fake_repo):
+    """`See @docs/x.md for the reasoning.` is a real Claude Code import. Anchored `^@...$`
+    made it invisible: on the live repo that hid 31,346 tokens behind an exit-0 green."""
+    _import_repo(fake_repo, "head\nSee @docs/big.md for the reasoning.\n")
+    total = prefix_meter.tracked_total(fake_repo)
+    assert total == prefix_meter.tokens("head\nSee @docs/big.md for the reasoning.\n") + 200
+
+
+def test_trailing_space_eager_import_is_measured(fake_repo):
+    _import_repo(fake_repo, "head\n@docs/big.md \n")
+    assert prefix_meter.tracked_total(fake_repo) == prefix_meter.tokens("head\n@docs/big.md \n") + 200
+
+
+def test_fenced_example_is_not_an_import(fake_repo):
+    """Widening the regex must not turn documentation OF the syntax into an import."""
+    body = "head\n```\n@docs/nowhere.md\n```\n"
+    (fake_repo / "CLAUDE.md").write_text(body)
+    assert prefix_meter.tracked_total(fake_repo) == prefix_meter.tokens(body)
+
+
+def test_at_handle_without_a_slash_is_not_an_import(fake_repo):
+    body = "head\nping @lorenzo about it\n"
+    (fake_repo / "CLAUDE.md").write_text(body)
+    assert prefix_meter.tracked_total(fake_repo) == prefix_meter.tokens(body)
+
+
+def test_wrong_shaped_settings_is_unverifiable_not_a_traceback(fake_repo):
+    """`{"hooks": "oops"}` is valid JSON. Uncaught, the AttributeError escaped doccheck's
+    handler and aborted all 41 checks with a traceback instead of one unverifiable line."""
+    (fake_repo / "CLAUDE.md").write_text("x" * 4000)
+    (fake_repo / ".claude" / "settings.json").write_text('{"hooks": "oops"}')
+    (fake_repo / "docs" / "observatory.md").write_text(
+        "**METERED 2026-08-09: 1,000 tokens tracked** — by the meter.\n")
+    bad = doccheck.check_eager_prefix_figure_is_current()
+    assert any("unverifiable, not confirmed" in v for v in bad), bad

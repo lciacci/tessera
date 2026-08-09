@@ -2194,6 +2194,16 @@ def check_eager_prefix_figure_is_current() -> list[str]:
     Only the TRACKED total is asserted. `prefix_meter` also measures the handoff surfacer
     (varies with fired triggers) and the Mnemos checkpoint (machine-local, gitignored);
     asserting either would make this fail differently on every clone.
+
+    CORRECTED 2026-08-09, same day, by `bin/tessera-verify` — the paragraph above was true
+    of what this check EXCLUDED and false about what it included. `.claude/skills` is a
+    gitignored symlink `install.sh` creates, so on a fresh clone the two eagerly-imported
+    SKILL.md files were absent, the meter silently skipped them, and this check went red
+    at -37% telling the reader to record a figure that was wrong. The claim "cannot fail
+    differently on every clone" was being violated by the very component it named. Fixed
+    in `prefix_meter._canonical`, which resolves an import to its tracked source. Kept as
+    a correction rather than a rewrite because the docstring asserting the property while
+    breaking it is the more useful thing to have on the record.
     """
     doc = ROOT / "docs" / "observatory.md"
     if not doc.exists():
@@ -2212,7 +2222,7 @@ def check_eager_prefix_figure_is_current() -> list[str]:
         return ["scripts/prefix_meter.py measured 0 tokens of eager prefix — either "
                 "CLAUDE.md's @ imports are gone or the meter is broken; both are findings"]
     if abs(actual - claimed) / actual > PREFIX_BAND:
-        drift = (actual - claimed) / claimed
+        drift = (actual - claimed) / actual      # same denominator as the band, or the
         return [f"docs/observatory.md: METERED figure is {claimed:,} tokens but "
                 f"scripts/prefix_meter.py measures {actual:,} ({drift:+.0%}) — re-run the "
                 f"meter and update the figure and its composition breakdown"]
