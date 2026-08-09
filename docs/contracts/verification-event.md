@@ -61,6 +61,19 @@ verification — make the falsifier a channel; ADR-0006 decision 4).
   green/red** — a `final-message` verdict is still a verdict. It is recorded on every judged
   run, including successes, so that a silent drift back to the fragile channel is *visible*
   rather than something you would have to infer from a rise in NO_VERDICT.
+- `run` (optional, present on every judged run since 2026-08-09) — **what the run cost**:
+  `total_cost_usd`, `num_turns`, `duration_ms`, `stop_reason`, `subtype`, and
+  `permission_denials` (a count, present only when non-zero). Read from
+  `claude -p --output-format json`. Added because this is the one tool in the repo that spends
+  real money on demand and recorded *nothing* about it — 27 judged runs, not one with a cost,
+  so "is the adversarial channel worth what it costs?" was unanswerable by construction.
+  Metered API spend is deliberately outside the spend guard (see spend-authorization.md), which
+  is a stated boundary rather than a hole, but it does mean nothing else was ever going to
+  record this. **Absent means not measured, never zero** — same rule as `verdict_channel`'s
+  `unrecorded` bucket, and for the same reason: runs predating the field must not read as free.
+  `stop_reason`/`subtype` are load-bearing rather than decoration — a run that exhausts
+  `MAX_TURNS` writes an incomplete verdict file, which correctly reads as no verdict, and
+  without these that is indistinguishable from a verifier that simply answered badly.
 - `raw_excerpt` (optional) — the last 2000 chars of verifier output, recorded only when some
   verdict is NO_VERDICT. Without it an unparseable answer was undiagnosable: `VERDICT_RE` is
   end-of-line anchored, so decoration (`**VERDICT 1: CONFIRMED**`, a trailing clause) misses

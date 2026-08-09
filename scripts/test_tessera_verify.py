@@ -95,7 +95,7 @@ def _run_with_fake_verifier(tmp_path, monkeypatch, *, stdout, verdict_file,
     def fake(prompt, cwd, model, timeout):
         if verdict_file is not None:
             _write_verdicts(target, verdict_file)
-        return stdout
+        return stdout, {}
 
     monkeypatch.setattr(tv, "spawn_verifier", fake)
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "s1")
@@ -389,12 +389,12 @@ def test_worktree_mutations_never_reach_source_tree(repo):
 
 # --- run / skip / self-test end-to-end (spawn mocked) --------------------------
 
-def _mock_spawn(monkeypatch, output):
+def _mock_spawn(monkeypatch, output, metrics=None):
     calls = {}
 
     def fake(prompt, cwd, model, timeout):
         calls["prompt"], calls["cwd"] = prompt, cwd
-        return output
+        return output, (metrics or {})
 
     monkeypatch.setattr(tv, "spawn_verifier", fake)
     return calls
@@ -610,3 +610,71 @@ def test_a_non_utf8_verdict_file_is_unusable_not_fatal(tmp_path):
     f = tmp_path / "v.json"
     f.write_bytes(b'{"verdicts": [{"n": 1, "verdict": "CONFIRMED", "evidence": "\xff\xfe"}]}')
     assert tv.read_verdict_file(f, 1) is None
+
+
+# --- what the run cost (2026-08-09) -------------------------------------------------
+#
+# 27 judged runs in the live log, not one carrying a cost. The one tool in the repo that
+# spends real money on demand recorded nothing about it, and metered API spend is deliberately
+# outside the spend guard, so nothing else was going to.
+
+# Trimmed from a REAL `claude -p --output-format json` run, not invented. The shape is an
+# external contract this repo does not control; a fabricated fixture would test our idea of it.
+REAL_ENVELOPE = json.dumps({
+    "is_error": False, "duration_api_ms": 2070, "num_turns": 1, "stop_reason": "end_turn",
+    "session_id": "bec0c80f", "total_cost_usd": 0.0118004,
+    "usage": {"input_tokens": 10, "output_tokens": 59},
+    "permission_denials": [], "subtype": "success", "result": "probe-ok",
+    "type": "result", "duration_ms": 1330,
+})
+
+
+def test_the_real_cli_envelope_yields_text_and_metrics():
+    text, metrics = tv.parse_cli_envelope(REAL_ENVELOPE)
+    assert text == "probe-ok"
+    assert metrics["total_cost_usd"] == 0.0118004
+    assert metrics["num_turns"] == 1
+    assert metrics["duration_ms"] == 1330
+    assert metrics["stop_reason"] == "end_turn"
+    assert "permission_denials" not in metrics  # empty list is not a denial
+
+
+def test_permission_denials_are_counted():
+    """2026-07-21: the nested spawn was refused by the permission classifier, silently."""
+    env = json.loads(REAL_ENVELOPE)
+    env["permission_denials"] = [{"tool": "Bash"}, {"tool": "Write"}]
+    assert tv.parse_cli_envelope(json.dumps(env))[1]["permission_denials"] == 2
+
+
+def test_a_non_json_envelope_costs_the_metrics_never_the_verdicts(tmp_path):
+    """The CLI's output shape is not ours. Losing it must degrade to the old behaviour."""
+    plain = "VERDICT 1: CONFIRMED\nEVIDENCE 1: ran the thing\n"
+    text, metrics = tv.parse_cli_envelope(plain)
+    assert text == plain
+    assert metrics == {}
+    assert tv.parse_verdicts(text, 1)[0]["verdict"] == "CONFIRMED"
+
+
+def test_json_without_a_result_field_falls_back_to_raw_stdout():
+    body = json.dumps({"type": "result", "num_turns": 3})
+    text, metrics = tv.parse_cli_envelope(body)
+    assert text == body
+    assert metrics["num_turns"] == 3
+
+
+def test_the_cost_lands_on_the_event(tmp_path, logs, monkeypatch):
+    _mock_worktree(monkeypatch, tmp_path)
+    _mock_spawn(monkeypatch, "VERDICT 1: CONFIRMED\nEVIDENCE 1: ok\n",
+                metrics={"total_cost_usd": 1.23, "num_turns": 9, "subtype": "success"})
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "s1")
+    tv.main(["--claim", "x"])
+    assert _last_event(logs)["data"]["run"]["total_cost_usd"] == 1.23
+
+
+def test_a_run_with_no_metrics_records_no_run_field(tmp_path, logs, monkeypatch):
+    """Absent must stay distinguishable from zero — the `unrecorded` lesson, again."""
+    _mock_worktree(monkeypatch, tmp_path)
+    _mock_spawn(monkeypatch, "VERDICT 1: CONFIRMED\nEVIDENCE 1: ok\n")
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "s1")
+    tv.main(["--claim", "x"])
+    assert "run" not in _last_event(logs)["data"]

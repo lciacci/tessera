@@ -201,6 +201,7 @@ def build_event(
     spawn_error: str | None = None,
     raw_output: str | None = None,
     verdict_channel: str | None = None,
+    run_metrics: dict | None = None,
 ) -> dict:
     data: dict = {
         "claims": [
@@ -217,6 +218,14 @@ def build_event(
     # regression worth seeing, and you cannot see it from the verdicts alone.
     if verdict_channel:
         data["verdict_channel"] = verdict_channel
+    # What the run COST — cost/turns/duration, plus stop_reason and any permission denials.
+    # This tool spends real money on demand and recorded none of it: 27 judged runs, zero with
+    # a cost, so the obvious question about an adversarial channel — is it worth what it costs
+    # — had no data behind it at all. `stop_reason`/`subtype` are here because hitting
+    # MAX_TURNS produces an incomplete verdict file, which now correctly reads as NO_VERDICT;
+    # without them that is indistinguishable from a verifier that simply answered badly.
+    if run_metrics:
+        data["run"] = run_metrics
     if reason:
         data["reason"] = reason
     # A run the verifier could not perform is recorded — silence would be worse — but it is
@@ -356,8 +365,52 @@ class VerifierDidNotRun(Exception):
     """The verifier process never produced a judgement — distinct from judging badly."""
 
 
-def spawn_verifier(prompt: str, cwd: Path, model: str, timeout: int) -> str:
+def parse_cli_envelope(stdout: str) -> tuple:
+    """`claude -p --output-format json` → (final message text, run metrics).
+
+    Falls back to treating the whole of stdout as the text when the envelope is not the JSON
+    we expect, which is exactly the pre-2026-08-09 behaviour — so a CLI that changes shape
+    costs us the metrics, never the verdicts. The metrics are the disposable half; say so in
+    the code rather than trusting a future reader to work out which matters.
+
+    HONEST LIMIT: that fallback is weaker than it looks. If the envelope IS json but `result`
+    is missing, the raw JSON reaches `parse_verdicts` with its newlines escaped as `\\n`, and
+    `VERDICT_RE` is `^`-anchored under re.MULTILINE, so it would match nothing. This is
+    tolerable only because the file is the primary channel and the message is the fallback to
+    the fallback. If that ever stops being true, this needs unescaping, not a comment.
+    """
+    try:
+        env = json.loads(stdout)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return stdout, {}
+    if not isinstance(env, dict):
+        return stdout, {}
+    text = env.get("result")
+    if not isinstance(text, str):
+        text = stdout
+    metrics = {
+        k: env[k]
+        for k in ("total_cost_usd", "num_turns", "duration_ms", "stop_reason", "subtype")
+        if k in env
+    }
+    # Recorded because of 2026-07-21: the nested spawn was refused by the permission
+    # classifier and the refusal was SILENT. A denial no longer has to be inferred from a
+    # verdict that never arrived.
+    denials = env.get("permission_denials")
+    if isinstance(denials, list) and denials:
+        metrics["permission_denials"] = len(denials)
+    return text, metrics
+
+
+def spawn_verifier(prompt: str, cwd: Path, model: str, timeout: int) -> tuple:
     """Headless claude, clean context, cwd = the disposable worktree.
+
+    Returns (final message text, run metrics). The metrics exist because this is the one tool
+    in the repo that spends real money on demand and recorded NOTHING about it: 27 judged runs
+    in the log, not one carrying a cost, so "is the falsifier worth what it costs?" was
+    unanswerable by construction. Metered API spend is deliberately outside the spend guard
+    (docs/contracts/spend-authorization.md, 2026-07-29) — that is a boundary, not a hole, but
+    it does mean nothing else was ever going to record this.
 
     THIS FUNCTION USED TO `return result.stdout` AND DISCARD returncode AND stderr. A spawn
     that never ran returned "" — which parse_verdicts rendered as NO_VERDICT, indistinguishable
@@ -382,6 +435,8 @@ def spawn_verifier(prompt: str, cwd: Path, model: str, timeout: int) -> str:
                 model,
                 "--max-turns",
                 str(MAX_TURNS),
+                "--output-format",
+                "json",
                 "--dangerously-skip-permissions",
             ],
             cwd=cwd,
@@ -400,7 +455,7 @@ def spawn_verifier(prompt: str, cwd: Path, model: str, timeout: int) -> str:
     if not result.stdout.strip():
         detail = (result.stderr or "").strip() or "no output on either stream"
         raise VerifierDidNotRun(f"claude exited 0 but produced no stdout: {detail[:600]}")
-    return result.stdout
+    return parse_cli_envelope(result.stdout)
 
 
 # --- commands ---------------------------------------------------------------------
@@ -428,7 +483,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     # an ignore rule, and none of them defeat an unlink.
     verdict_file.unlink(missing_ok=True)
     try:
-        output = spawn_verifier(
+        output, metrics = spawn_verifier(
             build_prompt(claims, str(verdict_file)), wt, args.model, args.timeout
         )
         # MUST happen before the `finally` deletes the worktree. The previous shape parsed
@@ -459,9 +514,13 @@ def cmd_run(args: argparse.Namespace) -> int:
         verdicts, channel = parse_verdicts(output, len(claims)), CHANNEL_MESSAGE
     event = build_event(
         claims, verdicts, _session_id(), self_test=args.self_test, model=args.model,
-        raw_output=output, verdict_channel=channel,
+        raw_output=output, verdict_channel=channel, run_metrics=metrics,
     )
     append_event(event)
+    if metrics.get("total_cost_usd") is not None:
+        print(f"\nrun: ${metrics['total_cost_usd']:.2f} · {metrics.get('num_turns', '?')} turns "
+              f"· {metrics.get('duration_ms', 0) / 1000:.0f}s · {metrics.get('subtype', '?')}",
+              file=sys.stderr)
     for c, v in zip(claims, verdicts):
         print(f"{v['verdict']:<11} {c}")
         if v["evidence"]:
