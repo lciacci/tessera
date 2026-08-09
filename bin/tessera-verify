@@ -605,7 +605,33 @@ def cmd_stats(_args: argparse.Namespace) -> int:
     return 0
 
 
+def force_utf8_console() -> None:
+    """Make stdout/stderr UTF-8 regardless of locale, because the log sites alone were not enough.
+
+    2026-08-09 pinned `encoding="utf-8"` on all three JSONL I/O sites and stopped there. The
+    console was left on the locale, and the falsifier found what that costs: under
+    `PYTHONUTF8=0 LC_ALL=C` (US-ASCII on this very machine — no exotic host, no code change)
+    `cmd_stats` dies with UnicodeEncodeError while printing the ⚠ banner, and `cmd_run` dies
+    printing a non-ASCII claim.
+
+    Read what that means before deciding it is cosmetic: the banner exists to announce a
+    regression to the fragile verdict channel, and it is the ONLY output that crashes — so the
+    failure appears exactly and only in the case the banner was written to report. Standing
+    pattern #1, inside the fix for standing pattern #1, one commit later.
+
+    Best-effort by construction. A console that cannot be reconfigured (a replaced stream, a
+    closed fd) must not take the verdict down with it — this function exists to prevent a
+    crash, so it must not become one.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError, OSError):
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    force_utf8_console()
     p = argparse.ArgumentParser(description="Adversarial verification of explicit claims.")
     sub = p.add_subparsers(dest="cmd")
 

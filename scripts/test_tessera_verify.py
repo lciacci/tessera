@@ -11,6 +11,7 @@ import importlib.util
 import json
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -678,3 +679,76 @@ def test_a_run_with_no_metrics_records_no_run_field(tmp_path, logs, monkeypatch)
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "s1")
     tv.main(["--claim", "x"])
     assert "run" not in _last_event(logs)["data"]
+
+
+# --- the console is UTF-8 too, not just the log (2026-08-09, found by the falsifier) -------
+
+ASCII_CONSOLE = {"PYTHONUTF8": "0", "PYTHONCOERCECLOCALE": "0", "LC_ALL": "C", "LANG": "C"}
+
+
+def _repo_with_message_channel_event(tmp_path):
+    """A repo whose log holds a final-message event — the state that makes stats print ⚠."""
+    r = tmp_path / "repo"
+    (r / ".tessera" / "logs").mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(r)], check=True)
+    ev = {"type": "verification", "ts": "2026-08-09T00:00:00Z", "session_id": "x",
+          "source": "tessera-verify",
+          "data": {"claims": [{"text": "a claim", "verdict": "CONFIRMED", "evidence": "e"}],
+                   "self_test": False, "skipped": False, "model": "opus",
+                   "verdict_channel": "final-message"}}
+    (r / ".tessera" / "logs" / "x.jsonl").write_text(json.dumps(ev) + "\n")
+    return r
+
+
+def _stats_under(env_extra, cwd):
+    import os
+    tool = str(Path(__file__).parent.parent / "bin" / "tessera-verify")
+    return subprocess.run([sys.executable, tool, "stats"], cwd=cwd,
+                          env={**os.environ, **env_extra}, capture_output=True)
+
+
+def test_the_warning_banner_survives_a_forced_ascii_console(tmp_path):
+    """Subprocess, because this is about the interpreter's stdio encoding, not our strings.
+
+    The banner is the only output that carries a non-ASCII glyph, so before this fix `stats`
+    crashed precisely and only when it had a fragile-channel run to report.
+    """
+    r = _repo_with_message_channel_event(tmp_path)
+    done = _stats_under(ASCII_CONSOLE, r)
+    assert done.returncode == 0, done.stderr.decode("utf-8", "replace")
+    assert "⚠" in done.stdout.decode("utf-8"), done.stdout
+
+
+def test_a_non_ascii_claim_prints_under_a_forced_ascii_console(tmp_path, logs, monkeypatch):
+    """The other half: cmd_run echoes each claim back, and claims are free text.
+
+    The first version of this test ran under pytest's own stdout — already UTF-8 capable — so
+    it passed with the fix REMOVED. It asserted nothing about an ASCII console despite its
+    name: #10's fiction, written into the guard for a bug found by the falsifier, in the same
+    session that inverted a different test for the same reason. Now it binds stdout to a real
+    ascii-encoded stream, which is what makes it fail without `force_utf8_console`.
+    """
+    import io
+    _mock_worktree(monkeypatch, tmp_path)
+    _mock_spawn(monkeypatch, "VERDICT 1: CONFIRMED\nEVIDENCE 1: ok\n")
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "s1")
+
+    ascii_console = io.TextIOWrapper(io.BytesIO(), encoding="ascii", errors="strict")
+    monkeypatch.setattr(sys, "stdout", ascii_console)
+    assert tv.main(["--claim", "café — naïve 日本語"]) == 0
+    ascii_console.flush()
+    assert "café" in ascii_console.buffer.getvalue().decode("utf-8")
+
+
+def test_reconfigure_failure_never_takes_the_run_down():
+    """This function exists to prevent a crash; it must not become one."""
+    class Hostile:
+        def reconfigure(self, **_kw):
+            raise ValueError("underlying buffer has been detached")
+
+    saved = sys.stdout
+    sys.stdout = Hostile()
+    try:
+        tv.force_utf8_console()   # must not raise
+    finally:
+        sys.stdout = saved
