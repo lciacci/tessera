@@ -48,6 +48,7 @@ Auto-generated below as ADRs are created. Update when adding a new ADR.
 | 0018 | 2026-07-27 | One drift event per dimension — the composite event made three separate things ambiguous | Accepted |
 | 0019 | 2026-07-27 | Close the iCPG loop — author intent deliberately, record it automatically, never the reverse | Accepted |
 | 0020 | 2026-08-06 | Agent Behavior — the format is a linter, the calibration methodology is the find, and Tessera's conduct instruments all count artifacts | Watching |
+| 0021 | 2026-08-08 | Deep Agents — rejected on layer, and the mirror is that our prefix measurement is frozen prose | Accepted |
 
 ---
 
