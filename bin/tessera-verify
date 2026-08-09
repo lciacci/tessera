@@ -306,17 +306,33 @@ def make_worktree(root: Path) -> Path:
     the source tree cannot be affected. remove_worktree deletes the whole thing.
     """
     wt = Path(tempfile.mkdtemp(prefix="tessera-verify-"))
-    _git(root, "worktree", "add", "--detach", str(wt), "HEAD")
-    diff = subprocess.run(
-        ["git", "-C", str(root), "diff", "HEAD", "--binary"], check=True, capture_output=True
-    ).stdout
-    if diff.strip():
-        subprocess.run(["git", "-C", str(wt), "apply"], input=diff, check=True)
-    untracked = _git(root, "ls-files", "--others", "--exclude-standard").stdout.decode().splitlines()
-    for rel in untracked:
-        src, dst = root / rel, wt / rel
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dst)
+    # Every step below can fail — `worktree add` on a repo with no commits, `apply` on a diff
+    # that will not land, `copy2` on a dangling untracked symlink. `cmd_run`'s try/finally
+    # cannot clean up after any of them: it binds `wt` from this function's RETURN value, so a
+    # raise here means the finally never runs and the directory (plus, past the first step, a
+    # git admin record in .git/worktrees) is orphaned. Measured 2026-08-09 against a commitless
+    # repo: CalledProcessError, one leaked temp dir. Cleaning up here is the only place with
+    # both the handle and the knowledge that construction did not finish.
+    try:
+        _git(root, "worktree", "add", "--detach", str(wt), "HEAD")
+        diff = subprocess.run(
+            ["git", "-C", str(root), "diff", "HEAD", "--binary"], check=True, capture_output=True
+        ).stdout
+        if diff.strip():
+            subprocess.run(["git", "-C", str(wt), "apply"], input=diff, check=True)
+        untracked = (
+            _git(root, "ls-files", "--others", "--exclude-standard").stdout.decode().splitlines()
+        )
+        for rel in untracked:
+            src, dst = root / rel, wt / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+    except BaseException:
+        # BaseException, not Exception: a KeyboardInterrupt mid-build orphans the worktree just
+        # as thoroughly, and remove_worktree already swallows its own errors, so this cannot
+        # mask the original failure.
+        remove_worktree(root, wt)
+        raise
     return wt
 
 

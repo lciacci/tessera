@@ -9,7 +9,9 @@ acceptance run are for (spec 12 criteria 1 and 5).
 import importlib.machinery
 import importlib.util
 import json
+import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -539,3 +541,44 @@ def test_worktree_carries_untracked_state_when_run_from_a_subdirectory(repo, mon
         assert not (wt / "inside.txt").exists(), "copied to the worktree root by subdir path"
     finally:
         tv.remove_worktree(tv.repo_root(), wt)
+
+
+# --- a half-built worktree cleans up after itself (2026-08-09) ----------------------
+
+
+def test_failed_worktree_creation_leaves_no_temp_dir(tmp_path, monkeypatch):
+    """`git worktree add` fails on a repo with no commits. The mkdtemp already happened."""
+    bare = tmp_path / "nocommits"
+    bare.mkdir()
+    subprocess.run(["git", "init", "-q", str(bare)], check=True)
+    spool = tmp_path / "spool"
+    spool.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(spool))
+
+    with pytest.raises(subprocess.CalledProcessError):
+        tv.make_worktree(bare)
+    assert list(spool.iterdir()) == [], "orphaned temp dir from a half-built worktree"
+
+
+def test_failure_after_the_worktree_exists_also_deregisters_it(repo, tmp_path, monkeypatch):
+    """The worse half: past `worktree add`, a raise orphans a .git/worktrees admin record too.
+
+    Those records are what `remove_worktree`'s trailing `prune` exists to clear, and a leaked
+    one persists long after the directory is gone.
+    """
+    (repo / "untracked.txt").write_text("x\n")
+    spool = tmp_path / "spool"
+    spool.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(spool))
+    monkeypatch.setattr(shutil, "copy2", _raise_disk_full)
+
+    with pytest.raises(OSError):
+        tv.make_worktree(repo)
+    assert list(spool.iterdir()) == []
+    listed = subprocess.run(["git", "-C", str(repo), "worktree", "list"],
+                            capture_output=True, text=True, check=True).stdout
+    assert "tessera-verify-" not in listed, f"orphaned worktree registration:\n{listed}"
+
+
+def _raise_disk_full(*_a, **_kw):
+    raise OSError("no space left on device")
