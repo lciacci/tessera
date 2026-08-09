@@ -263,9 +263,39 @@ def test_stats_empty_logs(logs):
 
 
 def test_stats_breaks_out_the_verdict_channel(logs):
-    _log_verification(logs, "s1", ["CONFIRMED"], channel="file")
-    _log_verification(logs, "s2", ["CONFIRMED"], channel="message")
-    assert tv.stats_summary(logs)["channels"] == {"file": 1, "message": 1}
+    _log_verification(logs, "s1", ["CONFIRMED"], channel=tv.CHANNEL_FILE)
+    _log_verification(logs, "s2", ["CONFIRMED"], channel=tv.CHANNEL_MESSAGE)
+    assert tv.stats_summary(logs)["channels"] == {tv.CHANNEL_FILE: 1, tv.CHANNEL_MESSAGE: 1}
+
+
+def test_the_message_channel_warning_fires_on_what_cmd_run_actually_writes(
+    tmp_path, logs, monkeypatch, capsys
+):
+    """End-to-end writer→reader, because a fabricated literal is how this broke.
+
+    The previous version of the test above built its fixture with `channel="message"` — a
+    value NO code path can produce — while `cmd_run` wrote `"final-message"` and `cmd_stats`
+    warned on `"message"`. Both halves passed their tests and the ⚠ regression banner could
+    never fire: the detector for the exact failure this tool was rewritten to survive was
+    dead, in the file whose premise is that channel. Standing pattern #1, and #10 for the
+    guard that missed it.
+
+    So this test names no channel literal at all. It drives the real fallback path — a
+    verifier that answers but writes no verdict file — and asserts the banner appears. Rename
+    or re-inline the constant and it still holds; break writer/reader agreement and it fails.
+    """
+    _mock_worktree(monkeypatch, tmp_path)  # an empty worktree: no tessera-verdicts.json
+    _mock_spawn(monkeypatch, "VERDICT 1: CONFIRMED\nEVIDENCE 1: ok\n")
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "s1")
+    tv.main(["--claim", "x"])
+
+    logged = json.loads((logs / "s1.jsonl").read_text())
+    assert logged["data"]["verdict_channel"] == tv.CHANNEL_MESSAGE, "not the fallback path"
+
+    capsys.readouterr()
+    tv.cmd_stats(None)
+    out = capsys.readouterr().out
+    assert "⚠" in out, f"a message-channel run did not raise the regression banner:\n{out}"
 
 
 def test_a_run_with_no_recorded_channel_is_not_counted_as_message(logs):

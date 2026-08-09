@@ -2076,3 +2076,56 @@ def test_dangling_mirror_symlink_fails_even_when_canonical_dir_is_missing(fake_r
     assert not (fake_repo / "agents").exists()
     bad = doccheck.check_mirror_links_are_symlinks()
     assert any("dangling" in v for v in bad), bad
+
+
+# ── verdict-channel-literals-match-contract ───────────────────────────────────
+#
+# BUG (2026-08-09): `cmd_run` wrote verdict_channel "final-message"; `cmd_stats` warned on
+# "message". The ⚠ banner for a regression to the fragile channel could never fire, in the
+# file rewritten specifically to survive that regression. Three copies of one vocabulary —
+# writer, reader, contract — and no check tied any two together.
+
+def _fake_verify_tool(repo: Path, body: str) -> None:
+    (repo / "bin").mkdir(exist_ok=True)
+    (repo / "bin" / "tessera-verify").write_text(body)
+
+
+def _channel_contract(repo: Path, text: str) -> None:
+    (repo / "docs" / "contracts" / "verification-event.md").write_text(text)
+
+
+def test_catches_a_channel_the_contract_never_documents(fake_repo):
+    _fake_verify_tool(fake_repo, 'CHANNEL_FILE = "file"\nCHANNEL_MESSAGE = "final-message"\n')
+    _channel_contract(fake_repo, 'verdict_channel is "file" when trusted.')
+    bad = doccheck.check_verdict_channel_literals_match_contract()
+    assert any("final-message" in v for v in bad), bad
+
+
+def test_passes_when_the_contract_documents_both_channels(fake_repo):
+    _fake_verify_tool(fake_repo, 'CHANNEL_FILE = "file"\nCHANNEL_MESSAGE = "final-message"\n')
+    _channel_contract(fake_repo, 'verdict_channel: "file" (trusted) | "final-message" (scraped)')
+    assert doccheck.check_verdict_channel_literals_match_contract() == []
+
+
+def test_a_renamed_constant_FAILS_rather_than_skipping(fake_repo):
+    """The failure mode this check must not have.
+
+    A guard that silently passes when it can no longer find its subject is decoration —
+    2026-07-27's declared-vocabulary guard keyed on a `_check_` prefix and one rename walked
+    straight past it. Losing the anchor here has to be loud.
+    """
+    _fake_verify_tool(fake_repo, 'CHANNEL_A = "file"\nCHANNEL_B = "final-message"\n')
+    _channel_contract(fake_repo, 'verdict_channel: "file" | "final-message"')
+    bad = doccheck.check_verdict_channel_literals_match_contract()
+    assert any("no longer be checked" in v for v in bad), bad
+
+
+def test_no_channel_claim_means_nothing_to_check(fake_repo):
+    _fake_verify_tool(fake_repo, 'CHANNEL_FILE = "file"\nCHANNEL_MESSAGE = "final-message"\n')
+    _channel_contract(fake_repo, "This contract says nothing about channels.")
+    assert doccheck.check_verdict_channel_literals_match_contract() == []
+
+
+def test_the_live_repo_agrees_with_its_own_contract():
+    """No fixture: the real bin/tessera-verify against the real contract."""
+    assert doccheck.check_verdict_channel_literals_match_contract() == []

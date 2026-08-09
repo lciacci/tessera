@@ -974,6 +974,54 @@ def check_spend_backstop_is_wired() -> list[str]:
     return []
 
 
+def check_verdict_channel_literals_match_contract() -> list[str]:
+    """The contract documents two `verdict_channel` values; the code must define those two.
+
+    There are THREE copies of this vocabulary — `cmd_run` writes it, `cmd_stats` reads it, and
+    docs/contracts/verification-event.md documents it — and on 2026-08-09 two of them had
+    drifted apart for long enough that the ⚠ banner announcing a regression to the fragile
+    channel could not fire at all. A shared constant now makes the writer/reader pair
+    unrepresentable-apart; this closes the doc as the third copy.
+
+    SCOPE, stated because a narrowing that lives only in the source is standing pattern #12:
+    this checks the DOC against the code's declared vocabulary and nothing else. It cannot see
+    a literal re-inlined at a use site — that is covered behaviourally by
+    test_tessera_verify.py::test_the_message_channel_warning_fires_on_what_cmd_run_actually_writes,
+    which drives writer→reader and names no literal.
+
+    The module is loaded INSIDE the function on purpose. A module-level import here would take
+    every other check down with it if it ever failed — which is exactly what happened to this
+    file on 2026-08-09 with `import prefix_meter`.
+    """
+    import importlib.machinery
+    import importlib.util
+
+    contract = ROOT / "docs" / "contracts" / "verification-event.md"
+    tool = ROOT / "bin" / "tessera-verify"
+    if not contract.exists() or "verdict_channel" not in contract.read_text(encoding="utf-8"):
+        return []  # no claim, nothing to check
+    try:
+        loader = importlib.machinery.SourceFileLoader("_tv_doccheck", str(tool))
+        spec = importlib.util.spec_from_loader("_tv_doccheck", loader)
+        mod = importlib.util.module_from_spec(spec)
+        loader.exec_module(mod)
+        channels = {mod.CHANNEL_FILE, mod.CHANNEL_MESSAGE}
+    except Exception as e:  # noqa: BLE001 — a rename or a syntax error must FAIL, never skip
+        return [f"bin/tessera-verify does not expose CHANNEL_FILE/CHANNEL_MESSAGE ({e!r}) — "
+                "docs/contracts/verification-event.md documents a verdict_channel vocabulary "
+                "that can no longer be checked against the code"]
+
+    text = contract.read_text(encoding="utf-8")
+    missing = sorted(c for c in channels if f'"{c}"' not in text)
+    if missing:
+        return [f"bin/tessera-verify can emit verdict_channel {missing} but "
+                "docs/contracts/verification-event.md never documents "
+                f"{'them' if len(missing) > 1 else 'it'} — the contract is the third copy of "
+                "this vocabulary, and the last time two copies drifted the regression banner "
+                "went dead for weeks"]
+    return []
+
+
 def check_verify_scan_is_wired() -> list[str]:
     """Spec 12's verification contract claims a fail-LOUD Stop hook triggers the falsifier.
 
@@ -2361,6 +2409,7 @@ CHECKS = {
     "spend-guard-is-wired": check_spend_guard_is_wired,
     "spend-backstop-is-wired": check_spend_backstop_is_wired,
     "verify-scan-is-wired": check_verify_scan_is_wired,
+    "verdict-channel-literals-match-contract": check_verdict_channel_literals_match_contract,
     "runtime-state-is-not-tracked": check_runtime_state_is_not_tracked,
     "no-bare-python3-with-toolchain-import": check_no_bare_python3_with_toolchain_import,
     "bin-scripts-are-stdlib-only": check_bin_scripts_are_stdlib_only,

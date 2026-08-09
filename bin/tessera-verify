@@ -67,6 +67,22 @@ EVIDENCE_RE = re.compile(r"^EVIDENCE\s+(\d+):\s*(.+)$", re.MULTILINE)
 VERDICT_FILENAME = "tessera-verdicts.json"
 VALID_VERDICTS = ("CONFIRMED", "REFUTED", "PARTIAL")
 
+# The two `verdict_channel` values, as CONSTANTS rather than literals typed at each site.
+#
+# They were literals, and they drifted: cmd_run wrote "final-message" (the value
+# docs/contracts/verification-event.md documents) while cmd_stats sorted on and warned about
+# "message". The ⚠ banner announcing a regression to the fragile channel therefore could not
+# fire — measured 2026-08-09, `stats_summary` returning `{'final-message': 1}` against a reader
+# looking for `message`. Standing pattern #1, in the file whose entire premise is that channel:
+# the detector for the failure this tool was rewritten to survive was itself dead.
+#
+# The test that should have caught it built its fixture with `channel="message"` — a value no
+# code path can produce — so the guard passed against a fiction (#10). A shared constant makes
+# writer/reader divergence unrepresentable; doccheck `verdict-channel-literals-match-contract`
+# ties them to the contract doc, which is the third copy.
+CHANNEL_FILE = "file"
+CHANNEL_MESSAGE = "final-message"
+
 PROMPT_HEADER = """\
 You are an adversarial verifier. Your ONLY job is to FALSIFY the claims below.
 
@@ -370,9 +386,9 @@ def cmd_run(args: argparse.Namespace) -> int:
     finally:
         remove_worktree(root, wt)
     if from_file is not None:
-        verdicts, channel = from_file, "file"
+        verdicts, channel = from_file, CHANNEL_FILE
     else:
-        verdicts, channel = parse_verdicts(output, len(claims)), "final-message"
+        verdicts, channel = parse_verdicts(output, len(claims)), CHANNEL_MESSAGE
     event = build_event(
         claims, verdicts, _session_id(), self_test=args.self_test, model=args.model,
         raw_output=output, verdict_channel=channel,
@@ -382,7 +398,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         print(f"{v['verdict']:<11} {c}")
         if v["evidence"]:
             print(f"            {v['evidence']}")
-    if channel == "final-message":
+    if channel == CHANNEL_MESSAGE:
         print(
             "\nNOTE: the verifier did not write the verdict file; these verdicts were scraped\n"
             "from its final message. That channel is not reliable — a Stop hook can replace the\n"
@@ -454,9 +470,9 @@ def cmd_stats(_args: argparse.Namespace) -> int:
     if ch:
         # Ordered file-first: `file` is the fix, `message` is the regression, and a reader
         # scanning the line should hit the number that matters before the historical one.
-        order = sorted(ch, key=lambda k: {"file": 0, "message": 1}.get(k, 2))
+        order = sorted(ch, key=lambda k: {CHANNEL_FILE: 0, CHANNEL_MESSAGE: 1}.get(k, 2))
         print("verdict channel: " + " / ".join(f"{ch[k]} {k}" for k in order))
-        if ch.get("message"):
+        if ch.get(CHANNEL_MESSAGE):
             print("  ⚠ a run landed on the MESSAGE channel — the 2026-07-26 failure mode, "
                   "where a Stop hook overwrites the final message and the verdicts vanish.")
     return 0
