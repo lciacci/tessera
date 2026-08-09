@@ -302,7 +302,14 @@ def p6_escalations(root: Path) -> tuple[bool, str]:
         except (OSError, json.JSONDecodeError):
             open_count += 1  # unreadable packet counts as needs-attention, never dropped
             continue
-        if (packet.get("status") or "open").split(":", 1)[0].strip() == "open":
+        status = packet.get("status")
+        if status is not None and not isinstance(status, str):
+            # A non-string status crashed `.split` — and the packet above already decided
+            # that a packet it cannot understand counts as needs-attention rather than
+            # being dropped. Same rule, one line further down: never silently, never fatally.
+            open_count += 1
+            continue
+        if (status or "open").split(":", 1)[0].strip() == "open":
             open_count += 1
     return open_count > 0, f"{open_count} open escalations (→ `tessera-escalate list`)"
 
@@ -763,8 +770,18 @@ def p13_degraded(root: Path, now: datetime | None = None) -> tuple[bool, str]:
             stamp = event.get("ts") or ""
             try:
                 when = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
-            except ValueError:
-                when = mtime          # blank//unparseable ts — see docstring
+            except (ValueError, AttributeError):
+                when = mtime          # blank/unparseable/non-string ts — see docstring
+            if when.tzinfo is None:
+                # A NAIVE stamp PARSES and then explodes on the subtraction below
+                # ("can't subtract offset-naive and offset-aware datetimes"), so the
+                # except above never sees it. `tessera-degraded` always writes Z — but
+                # this predicate scans EVERY .jsonl in .tessera/logs, written by five
+                # producers (gate, spend, override, restore, degraded) and by whatever a
+                # downstream adds next. One producer omitting an offset would crash the
+                # spec-11 channel: the one predicate whose job is to report that something
+                # else broke. Treated as UTC, which is what every current writer means.
+                when = when.replace(tzinfo=timezone.utc)
             if (now - when).days <= DEGRADED_WINDOW_DAYS:
                 data = event.get("data") or {}
                 recent.append(f"{data.get('component', '?')}/{data.get('reason', '?')}")

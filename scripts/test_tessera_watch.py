@@ -1167,3 +1167,49 @@ def test_p12_stays_quiet_on_a_genuinely_identical_mirror(tmp_path):
     (root / "skills" / "base" / "SKILL.md").write_text("same")
     (mirror / "base" / "SKILL.md").write_text("same")
     assert tw.p12_skill_registry_drift(root, global_dir=mirror)[0] is False
+
+
+# ── Two more, found reading the file rather than in arbiter's list. Both need a foreign
+#    writer to trigger — no producer emits either shape today — and both crash a predicate
+#    on INPUT, which is the one thing the single reporter for P3/P4/P9/P11–P16 must not do.
+
+
+def test_p13_survives_a_degraded_event_with_a_naive_timestamp(tmp_path):
+    """A naive `ts` PARSES and then explodes on the aware-minus-naive subtraction, so the
+    except around fromisoformat never sees it. `tessera-degraded` always writes Z — but
+    P13 scans EVERY .jsonl in .tessera/logs, written by five producers, and a crash here
+    silences the spec-11 channel: the predicate whose job is reporting that something else
+    could not do its job.
+    """
+    root = _root(tmp_path)
+    logs = root / ".tessera" / "logs"
+    logs.mkdir(parents=True)
+    now = _dt.datetime.now(_dt.timezone.utc)
+    naive = now.replace(tzinfo=None).isoformat()          # no offset, otherwise identical
+    (logs / "s.jsonl").write_text(json.dumps(
+        {"type": "degraded", "ts": naive,
+         "data": {"component": "hook", "reason": "toolchain-missing"}}) + "\n")
+    fired, detail = tw.p13_degraded(root, now=now)
+    assert fired is True, detail
+    assert "hook/toolchain-missing" in detail
+
+
+def test_p6_counts_a_malformed_status_as_needing_attention(tmp_path):
+    """A non-string `status` crashed `.split`. The packet-level guard right above already
+    decided that a packet P6 cannot understand counts as needs-attention rather than being
+    dropped; this applies the same rule one line further down."""
+    root = _root(tmp_path)
+    esc = root / ".tessera" / "escalations"
+    esc.mkdir(parents=True)
+    (esc / "e.json").write_text(json.dumps({"status": 3, "summary": "x"}))
+    fired, detail = tw.p6_escalations(root)
+    assert fired is True and "1 open escalations" in detail
+
+
+def test_p6_still_ignores_a_resolved_packet(tmp_path):
+    """The malformed-status guard must not have made every packet count as open."""
+    root = _root(tmp_path)
+    esc = root / ".tessera" / "escalations"
+    esc.mkdir(parents=True)
+    (esc / "e.json").write_text(json.dumps({"status": "resolved:2026-08-09"}))
+    assert tw.p6_escalations(root)[0] is False
