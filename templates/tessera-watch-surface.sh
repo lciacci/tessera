@@ -125,7 +125,7 @@ rc=$?
 # and conflating it with 0 is how a broken watcher reads as a clean session.
 if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
   degraded --component tessera-watch --reason runner-crashed \
-    --detail "bin/tessera-watch exited $rc; predicates were not evaluated this session"
+    --detail "bin/tessera-watch exited $rc; at least one predicate crashed or the run failed outright — this session's observatory coverage is INCOMPLETE, not clean"
   exit 0
 fi
 [ "$rc" -eq 1 ] || exit 0

@@ -780,7 +780,14 @@ def p16_t2_receipts(root: Path, now: datetime | None = None) -> tuple[bool, str]
             continue
         key = project.resolve()
         for log in logs.glob("*.jsonl"):
-            for line in log.read_text(errors="replace").splitlines():
+            try:
+                lines = log.read_text(errors="replace").splitlines()
+            except OSError:
+                # A log can vanish between glob() and read, or be unreadable. `p13_degraded`
+                # already guards its equivalent; this one did not. Skipping UNDERCOUNTS, which
+                # only ever holds the predicate quieter — it can never manufacture a bar-met.
+                continue
+            for line in lines:
                 try:
                     event = json.loads(line)
                 except ValueError:
@@ -799,11 +806,24 @@ def p16_t2_receipts(root: Path, now: datetime | None = None) -> tuple[bool, str]
                       f"is satisfied, so the read is now legitimate. Read the four signals "
                       f"there first — only ONE of them is evidence about Mnemos.")
 
+    # WHICH dimension is short, not "under the bar". The bars are AND-ed deliberately (see
+    # THREE projects, above), so one can be met while the other is not — and then this arm
+    # said "under the 10/3 bar" while quoting a receipt count ABOVE 10, contradicting itself.
+    # arbiter flagged it 2026-08-07 and correctly did not call it a logic bug: the AND is
+    # intended, the SENTENCE was wrong. Naming the short dimension also makes the message
+    # actionable — "get a third project reporting" is a different job from "wait for volume".
+    short = []
+    if total < T2_RECEIPT_BAR:
+        short.append(f"receipts {total}/{T2_RECEIPT_BAR}")
+    if len(per_project) < T2_PROJECT_BAR:
+        short.append(f"projects {len(per_project)}/{T2_PROJECT_BAR}")
+    shortfall = " and ".join(short) or "neither dimension"
+
     elapsed = (now - T2_SHIPPED).days
     if elapsed >= T2_PATIENCE_DAYS:
         return True, (f"T2 has run {elapsed} days and collected {total} receipt(s) across "
-                      f"{len(per_project)} project(s) ({breakdown}), under the "
-                      f"{T2_RECEIPT_BAR}/{T2_PROJECT_BAR} bar. THE FINDING IS THE RATE, NOT "
+                      f"{len(per_project)} project(s) ({breakdown}); still short on "
+                      f"{shortfall}. THE FINDING IS THE RATE, NOT "
                       f"MNEMOS — read signal 1 (is the ask landing?) in docs/observatory.md. "
                       f"Do NOT read the thin data as a verdict; that substitution is what the "
                       f"stopping rule exists to prevent.")
@@ -943,26 +963,60 @@ PREDICATES = {
 
 
 def evaluate(root: Path) -> list[dict]:
-    """Run every predicate; one result dict each. Mark any with an active snooze."""
+    """Run every predicate; one result dict each. Mark any with an active snooze.
+
+    ISOLATED PER PREDICATE (2026-08-09, arbiter). This loop had no `try`, so one predicate
+    raising took down EVERY predicate's run — P16's unguarded `log.read_text()` was the
+    reported instance, but the loop is the defect: six other reads here are equally
+    unguarded, and fixing only P16 would be fixing the row rather than the pattern (#11).
+
+    **The reported mitigation did not hold, and measuring it is what made this urgent.**
+    active.md said a crash exits non-zero so `tessera-watch-surface.sh` emits
+    `degraded --reason runner-crashed` — "loud, not silent". Measured: an unhandled Python
+    exception exits **1**, and the surfacer reads 1 as *something fired*. A session got
+    `=== OBSERVATORY WATCH ===` followed by nothing, and no degraded event. A header
+    advertising fired triggers over an empty body is standing pattern #12's exact shape, and
+    the claim that it failed loud is what lowered the item's priority.
+
+    So a crash must stay DISTINGUISHABLE, not merely survivable: it is marked `crashed`,
+    rendered, excluded from the fire-log, and turned into exit **2** by `main()`, which is
+    the code the surfacer already treats as a crash. That makes the documented mitigation
+    true for the first time.
+    """
     snoozed = active_snooze_labels(root, datetime.now(timezone.utc))
     snoozes = _load_snoozes(root)
     out = []
     for label, pred in PREDICATES.items():
-        fired, detail = pred(root)
+        crashed = False
+        try:
+            fired, detail = pred(root)
+        except Exception as exc:                                  # noqa: BLE001 — see above
+            fired, crashed = True, True
+            detail = (f"PREDICATE CRASHED — {type(exc).__name__}: {exc}. Every OTHER "
+                      f"predicate still ran; this one reported nothing, which is not the "
+                      f"same as reporting nothing to report.")
         s = snoozes.get(label, {}) if label in snoozed else {}
         out.append({"predicate": label, "fired": fired, "snoozed": label in snoozed,
-                    "detail": detail, "snooze_until": s.get("until"),
+                    "crashed": crashed, "detail": detail, "snooze_until": s.get("until"),
                     "snooze_reason": s.get("reason")})
     return out
 
 
 def append_log(root: Path, results: list[dict]) -> None:
-    """Append this run's fired set to the fire-log (feeds kill + graduate decisions)."""
+    """Append this run's fired set to the fire-log (feeds kill + graduate decisions).
+
+    CRASHES ARE EXCLUDED. This log is the evidence base for retiring a predicate that never
+    fires and graduating one that always does; a crash is the absence of a measurement, not
+    a fire, and counting it as one would let a broken predicate look busy in exactly the
+    statistics used to decide whether it earns its place.
+    """
     log = root / ".tessera" / "logs" / "watch.jsonl"
     log.parent.mkdir(parents=True, exist_ok=True)
     entry = {
         "ts": datetime.now(timezone.utc).isoformat(),
-        "fired": [r["predicate"] for r in results if r["fired"] and not r["snoozed"]],
+        "fired": [r["predicate"] for r in results
+                  if r["fired"] and not r["snoozed"] and not r.get("crashed")],
+        "crashed": [r["predicate"] for r in results if r.get("crashed")],
     }
     with log.open("a") as f:
         f.write(json.dumps(entry) + "\n")
@@ -1024,8 +1078,30 @@ def main() -> int:
     if args.log:
         append_log(ROOT, results)
     print(json.dumps(results, indent=2) if args.json else render(results))
+    # 2 BEFORE 1, and the order is the fix. `tessera-watch-surface.sh` reads 0 as "nothing
+    # fired", 1 as "something fired", anything else as a crash — but an unhandled exception
+    # also exits 1, so before this a dead watcher was indistinguishable from a firing one and
+    # the surfacer printed an OBSERVATORY WATCH header over an empty body. Measured, not
+    # assumed: no `degraded` event was written in that state.
+    if any(r.get("crashed") for r in results):
+        return 2
     return 1 if any(r["fired"] and not r["snoozed"] for r in results) else 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    # ANY unhandled failure exits 2, not Python's default 1. `tessera-watch-surface.sh`
+    # discriminates 0 = nothing fired, 1 = something fired, anything else = crash — and
+    # Python's default collides with "fired", so a dead watcher was indistinguishable from
+    # a firing one and the session got an OBSERVATORY WATCH header over an empty body.
+    #
+    # `evaluate()` already isolates a crashing PREDICATE, but that fixed the row: a failure
+    # in render(), append_log(), snooze handling or argument parsing would still exit 1 and
+    # be misread. This is the class (#11). The traceback still goes to stderr for a human.
+    try:
+        raise SystemExit(main())
+    except SystemExit:
+        raise
+    except BaseException:
+        import traceback
+        traceback.print_exc()
+        raise SystemExit(2)

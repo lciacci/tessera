@@ -830,3 +830,81 @@ def test_p16_counts_same_named_projects_separately(tmp_path):
 
     assert fired is True, f"three same-named projects collapsed into fewer: {detail}"
     assert "12 downstream restore receipts across 3 projects" in detail
+
+
+# ─── Two defects arbiter reported 2026-08-07, relayed by hand into active.md item 7, fixed
+# 2026-08-09. The reported MITIGATION was measured and did not hold, which is what made them
+# urgent: active.md said a crash exits non-zero so the surfacer emits `runner-crashed`,
+# "loud, not silent". An unhandled Python exception exits 1 — and the surfacer reads 1 as
+# "something fired". A session got `=== OBSERVATORY WATCH ===` over an empty body and NO
+# degraded event. Measured before fixing; each test below plants the failure.
+def _crashing(_root):
+    raise OSError("simulated: log vanished between glob and read")
+
+
+def test_one_crashing_predicate_does_not_take_down_the_others(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    monkeypatch.setattr(tw, "PREDICATES", {"P-boom": _crashing,
+                                           "P-ok": lambda r: (False, "fine")})
+    results = tw.evaluate(root)
+    assert len(results) == 2, results
+    assert any(r["predicate"] == "P-ok" and r["detail"] == "fine" for r in results)
+
+
+def test_a_crashed_predicate_is_marked_and_named(tmp_path, monkeypatch):
+    """It must be DISTINGUISHABLE, not merely survivable — silently swallowing the crash
+    would trade a loud failure for a quiet one, which is the fail-open class itself."""
+    root = _root(tmp_path)
+    monkeypatch.setattr(tw, "PREDICATES", {"P-boom": _crashing})
+    r = tw.evaluate(root)[0]
+    assert r["crashed"] is True and r["fired"] is True
+    assert "PREDICATE CRASHED" in r["detail"] and "OSError" in r["detail"]
+
+
+def test_crashed_predicates_are_excluded_from_the_fire_log(tmp_path, monkeypatch):
+    """The fire-log feeds retire/graduate decisions. A crash is the ABSENCE of a
+    measurement; counting it as a fire lets a broken predicate look busy in the statistics
+    used to decide whether it earns its slot."""
+    root = _root(tmp_path)
+    monkeypatch.setattr(tw, "PREDICATES", {"P-boom": _crashing,
+                                           "P-real": lambda r: (True, "genuinely fired")})
+    tw.append_log(root, tw.evaluate(root))
+    entry = json.loads((root / ".tessera" / "logs" / "watch.jsonl").read_text().strip())
+    assert entry["fired"] == ["P-real"], entry
+    assert entry["crashed"] == ["P-boom"], entry
+
+
+def test_p16_survives_an_unreadable_log(tmp_path, monkeypatch):
+    """The reported defect itself: an unguarded read_text() in p16_t2_receipts. Skipping
+    UNDERCOUNTS, which can only hold the predicate quieter — never manufacture a bar-met."""
+    root = _root(tmp_path)
+    proj = tmp_path.parent / "downstream-probe"
+    (proj / ".tessera" / "logs").mkdir(parents=True, exist_ok=True)
+    bad = proj / ".tessera" / "logs" / "x.jsonl"
+    bad.write_text("{}\n")
+    monkeypatch.setattr(tw, "_downstream_projects", lambda r: [proj])
+    monkeypatch.setattr(Path, "read_text",
+                        lambda self, **kw: (_ for _ in ()).throw(OSError("gone"))
+                        if self == bad else "")
+    fired, detail = tw.p16_t2_receipts(root)
+    assert "T2" in detail                      # returned a verdict rather than raising
+
+
+def test_p16_under_bar_message_names_which_dimension_is_short(tmp_path, monkeypatch):
+    """The second defect: the bars are AND-ed deliberately, so one can be met while the
+    other is not — and the elapsed arm then said "under the 10/3 bar" while quoting a
+    receipt count ABOVE 10. The AND is intended; the SENTENCE was wrong."""
+    root = _root(tmp_path)
+    projects = []
+    for i in range(2):                          # 2 projects — under the 3-project bar
+        p = tmp_path.parent / f"probe-{i}"
+        (p / ".tessera" / "logs").mkdir(parents=True, exist_ok=True)
+        (p / ".tessera" / "logs" / "a.jsonl").write_text(
+            "\n".join(json.dumps({"type": "restore_receipt"}) for _ in range(9)) + "\n")
+        projects.append(p)                      # 18 receipts — OVER the 10-receipt bar
+    monkeypatch.setattr(tw, "_downstream_projects", lambda r: projects)
+    late = tw.T2_SHIPPED + _dt.timedelta(days=tw.T2_PATIENCE_DAYS + 1)
+    fired, detail = tw.p16_t2_receipts(root, now=late)
+    assert fired
+    assert "projects 2/3" in detail, detail
+    assert "under the" not in detail, detail   # the self-contradicting phrasing is gone

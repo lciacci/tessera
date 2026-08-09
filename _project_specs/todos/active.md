@@ -6,7 +6,235 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-08-07: cross-repo cleanup after the conclave/arbiter reconciliation. The observatory's three-project entry was the most stale artifact in the system and it seeds an unwritten ADR; conclave F-002 disposed; the Pattern lane renamed pr-arbiter → arbiter with arbiter notified; D1 and D2 closed as dead open-decisions; two live `bin/tessera-watch` defects relayed in by hand from arbiter, item 7. The durable lesson: a lane going stale has no mechanical subject, so no check was built for it — and that is the finding.)
+## Handoff — pick up here (2026-08-09: deep-agents evaluated and REJECTED on layer — ADR-0021 — and its one adopted pattern, a reproducible eager-prefix meter, was then taken apart by three independent review passes that found ten defects in ~230 lines. The `.claude` dogfood symlinks turned out to have no owner at all. Claude Code's import loader was measured rather than reasoned about. Both arbiter-reported `tessera-watch` defects fixed — and the mitigation that had lowered their priority was itself false.)
+
+*(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
+Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering.)*
+
+### THE ONE THING TO KNOW
+
+> ### ⚠ ITEM 7's MITIGATION WAS FALSE, AND IT IS WHY THOSE DEFECTS SAT AT LOW PRIORITY.
+>
+> The 2026-08-07 handoff said of the unguarded `read_text()` in `p16_t2_receipts`: *"this fails
+> LOUD rather than silent — it is a robustness bug, not a silent-failure one,"* because
+> `tessera-watch-surface.sh` emits `degraded --reason runner-crashed` on a non-zero exit.
+>
+> **Measured 2026-08-09: an unhandled Python exception exits 1, and the surfacer reads 1 as
+> "something fired."** A session received `=== OBSERVATORY WATCH ===` followed by **nothing**, and
+> **no degraded event was written**. It was a silent-failure bug wearing a fire's clothing —
+> standing pattern #12 — and the sentence that reclassified it is what kept it at the bottom of
+> the list for two days.
+>
+> The reasoning was sound and the premise was never checked. `rc=1` genuinely does mean "fired";
+> nobody asked what *else* exits 1. **A mitigation claim is a claim: it needs the same evidence as
+> the defect it downgrades.**
+
+### What shipped (2026-08-09)
+
+1. **ADR-0021 — deep-agents `v0.7`, verdict REJECT.** Not Watching: there is no condition under
+   which Tessera adopts a library that supplies an agent loop, and a Watching status with no
+   reachable adoption path is a fiction that generates work forever. The first draft said Watching
+   by anchoring on ADR-0020, whose target was a format we could plausibly have used; that premise
+   did not transfer. **Adopted, idea-only:** base input tokens as a *tracked metric*. **Recorded
+   without a trigger:** `dcode`'s hook contract is a near-clone (same events plus
+   `PostToolUseFailure`/`SubagentStart|Stop`, `CLAUDE_PROJECT_DIR` unchanged), so "Claude Code only"
+   is a claim about the Mnemos half, not the hooks half. **Third independent convergence** on
+   enforcing boundaries at the tool layer rather than model self-policing.
+   *Their headline does not survive its own footnote: reward CIs span zero for every model, so what
+   is demonstrated is the cost drop, not the absence of harm. This is NOT licence to trim our prefix.*
+2. **`scripts/prefix_meter.py` + doccheck `eager-prefix-figure-is-current`.** The ~15.6k figure was a
+   one-shot chars/4 estimate frozen in prose on 2026-07-30. **Metered 15,497 tracked; 15,762
+   comparable against ~15,600 — flat.** The meter's first act CONFIRMED the observatory entry. What
+   the frozen number hid: the total is flat while the composition is not — `CLAUDE.md` is 47% and the
+   only component that grows. Drift check, **not** a ceiling; the entry already established size is
+   an artifact.
+3. **Ten defects found in that ~230 lines, by three passes, none by me.** Two `tessera-verify` runs:
+   a crashing emitter measured as success (`check=False`), an absent-but-registered emitter reported
+   as *drift with the wrong remedy*, `.claude/skills` resolution under-measuring a clean clone by
+   37%, and — the largest — `^@(\S+)$` missing the inline import form, hiding 31,346 tokens behind an
+   exit-0 green. Then arbiter: a **module-level `import prefix_meter` that killed all 41 checks**, so
+   the check's own try/except was unreachable. Standing pattern #1 in the code written to guard
+   against it.
+4. **`referenced-paths-exist` was RED on a clean clone** — docs name `.claude/skills/...`, a
+   gitignored symlink. The pre-commit gate blocked on any fresh clone. Fixed by resolving the three
+   mirror dirs to their tracked sources; **the narrowness is load-bearing** and guarded both ways.
+5. **The `.claude` dogfood symlinks had NO OWNER.** Hand-made 2026-06-24; `install.sh` never touched
+   them. Now created idempotently, asserted by `verify()` (machine state) and by doccheck's
+   `mirror-links-are-symlinks` (repo state, absence green). **Framework-only** — downstreams get
+   skills via the global union (ADR-0009) and have no `skills/` to point at; none of the six has
+   these and none should.
+6. **Claude Code's loader MEASURED** (fixture + nested `claude -p`). Anchored, **inline**, and
+   **through a symlink** all load; absent loads nothing. Confirms the widened regex, which had been
+   fixed on inference. And corrects "silently": **the literal `@path` line survives in EVERY case,
+   resolved or not**, so its presence carries no information — you cannot tell a live import from a
+   dead one by reading `CLAUDE.md`.
+7. **Both arbiter-reported `tessera-watch` defects fixed**, plus the class beneath them.
+   `evaluate()` now isolates each predicate (six other unguarded reads existed — fixing only P16
+   would have been fixing the row); a crash is marked, rendered, **excluded from the fire-log**, and
+   turned into **exit 2**, which is the code the surfacer already treats as a crash. `__main__` maps
+   *any* unhandled failure to 2, closing the render/append_log/argparse half. P16's read is guarded;
+   its under-bar message now names **which dimension** is short instead of saying "under the 10/3
+   bar" while quoting a count above 10. *The AND is intended — the docstring is explicit — so the
+   logic stands and only the sentence changed.*
+
+### Corrections to earlier records, kept rather than overwritten
+
+- **The observatory's mirror-divergence attribution was wrong.** It named `tessera-sync-skills` /
+  ADR-0010 as owner. Those own `~/.claude/skills` — the **global** mirror, a real copy. The
+  project-local symlink is a different object with no owner. Corrected in place.
+- **"Found independently twice" was over-weighted.** `tessera-verify` and arbiter both flagged the
+  literal-vs-symlink branch, and that was treated as corroboration. **Two static readers noting the
+  same branch is one finding twice** — correlated, not independent. What settled it was reading
+  `install.sh` and finding neither reviewer's premise held.
+
+### Next — unchanged in priority; item 7 of 2026-08-07 is now CLOSED
+
+1. **P3 part 3** — the `write_checkpoint` defect (no `decisions` field in the schema, empty
+   `current_subgoal`/`working_memory`, corrupted `progress`). **This session's receipt read
+   `insufficient` on `goal`, corroborating the prediction a third time**: orientation came from
+   `progress` (commit subjects) and re-reading files, never from the checkpoint. **Part 4** —
+   `delivered_chars` in `scripts/restore/offer.py`; still *do it when the hook is next touched for
+   another reason*.
+2. **ADR-0020's fixture matrix** in `scripts/mnemos/eval_correction.py` — five case types, the
+   lucky-correct negative load-bearing. Untouched; ADR-0020 still `Executed: not yet`.
+3. **Carried from 2026-07-29:** downstream T2 work (conclave, then howler — *do real work, not T2
+   work*); **this repo's `bin/` control surface still unreviewed** — the blocker is gone and today's
+   arbiter run covered `scripts/` only, so `tessera-verify` and `tessera-watch` remain the two worth
+   doing first; **howler missing the entire spend guard** (14 files); don't wire iCPG downstream yet;
+   caching closed except quarry.
+
+**The durable lesson, and it cost two wrong assertions today: citing an artifact is not reading it.**
+The observatory named `tessera-sync-skills` and `install.sh` as evidence before either was opened,
+and both citations were wrong. A wrong citation is worse than silence because it reads as sourced.
+Note what has no mechanical subject here — "did the author open the file they cited" is unobservable,
+so this is a human re-read, not a check (#3's corollary). **What actually caught it every time was
+the adversarial layer**, which is built on the assumption that assertions outrun reading. That
+assumption is correct and load-bearing.
+
+---
+
+### Standing patterns
+
+*(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` prints this block at
+SessionStart; doccheck `standing-patterns-are-surfaced` guards it. These are the lessons this
+repo has paid for MORE THAN ONCE. They are cross-cutting, so no ADR owns them and no
+file-anchored surfacer can find them — that is exactly why they are printed verbatim.
+Add a line only when a lesson recurs; the value is that the list is short enough to read.)*
+
+1. **A component ships, and the thing that would tell you it is broken is also broken.**
+   Instances: F-001's interpreter, the dead ingest pipe, the falsifier's swallowed spawn
+   failure, P4 counting projects not bytes, `tessera-hooks status` advertising a drift check
+   it never ran, the fleet on a retired gate vocabulary, twelve hooks silently no-op'ing on a
+   wrong cwd, the anchor fix that would have cd'd the global tier to `$HOME`, and the
+   decision-surface hook — built to defeat this exact pattern — shipped silent by it (2026-07-24),
+   and the spend backstop, whose own global fire-counter sat at 47 against a cap of 3 so it had
+   returned "nothing to report" on every session for weeks (2026-07-27).
+   **Before shipping a check, ask what would tell you the check itself died.**
+   **Sharpened 2026-07-27:** a guard written for a bug and tested against that same bug is
+   verified against ONE example. `drift-dimensions-have-producers` passed its own tests while
+   blind to two of the three dimensions that motivated it; only `bin/tessera-verify`, given the
+   claim explicitly, found it. **Test a new check against the failures you did NOT just fix.**
+   **And its purest instance to date, A5b (2026-07-27): `rm bin/tessera-watch` and SessionStart
+   printed a completely normal handoff.** Every predicate — P3, P4, P9, P11–P15 — went quiet at
+   once, because the reporter for all of them WAS the thing deleted. The `settings.json` trailing
+   branch could not cover it: that reports a hook SCRIPT missing, never a hook that ran perfectly
+   with its RUNNER gone. Fixed in three surfacers, guarded by chaos probes 9–11.
+2. **It did not break — it produced something plausible.** The fail-open class. A mechanism
+   that fails open needs a paired signal that fails LOUD. Proven again 2026-07-24: a
+   *wrong* error message was the only reason a session-wide cwd bug surfaced, while twelve
+   correct-looking `exit 0`s said nothing. Spec 11 is the systematic answer. Again 2026-07-26:
+   `gate/ratio.py` from a foreign cwd printed a clean, well-formatted report of ZERO gates over
+   ZERO sessions — the anchored run reports 27/142/1039. A read path that fails open does not
+   look broken, it looks like good news.
+3. **Name the pain, not the artifact that correlates with it.** Three retired proxy
+   predicates so far: retired-P2 (verb count), old-P4 (project count), the sqlfluff trigger
+   (file existence). If a predicate measures a stand-in, it will fire correctly and mean
+   nothing. **Now scored against the auditor twice** — the `grep -c degraded` count that
+   produced three wrong spec-11 findings (2026-07-26), and "the chaos suite lacks a conftest"
+   (2026-07-27), which was confidently proposed, was WRONG (chaos measured clean), and was
+   refuted only by probing each suite and watching which one wrote to the journal.
+   **When auditing, measure the property. Counting the artifact is the same error you are
+   auditing for, aimed at yourself.**
+   **Corollary, from A6 (2026-07-27): a mechanical check needs a mechanical SUBJECT.** Two of
+   three candidate handoff checks were rejected on measurement — "a closed entry must name an
+   existing path" scored 12 false positives in 13, and "an item closed in the index must be
+   struck through in its body" FAILED OPEN, because the prose format it keyed on was invented one
+   day and the next section did not use it. Retired figures are a closed list of exact strings and
+   shipped; "is this status consistent" is a judgement wearing a regex. **When the subject is
+   authored prose in an unenforced format, the honest answer is a human re-read, not a check.**
+4. **An interpreter is a path, not a name** (F-001). Generalises past interpreters: any
+   NAME resolved through a mutable, ordered lookup — `python3`, a `tessera-*` binary on
+   PATH, a bare relative hook path against an inherited cwd — is a landmine.
+5. **Ship both halves or neither** — and note that this is violated by TIME as often as by a
+   missing `cp`. The fleet went stale with every component correctly installed.
+6. **Green is only meaningful if failing it actually stops something.** P8 alone let a red
+   commit through; the pre-commit hook is what made doccheck load-bearing.
+7. **A test is never evidence about the thing it tests.** Manual `/compact` cannot validate
+   the compaction-recovery layer; P3 counts only non-manual events.
+8. **Never subtract from a knowledge artifact you have not read. Harvest before you cut**
+   (ADR-0007). Code has grep and tests as safeguards; prose has neither.
+9. **A mechanism that RUNS has not necessarily REACHED its audience.** Verify the delivery
+   channel, not just that the code produced output. A PreToolUse hook's stdout goes to the
+   debug log, not the model — `decision-surface`, `mnemos-pre-edit`, and Layer-3 compaction
+   recovery all "ran" while silent to the model. Self-testing proved they *produced* text;
+   only review and the docs proved the harness *delivered* none of it. Test the real path to
+   the real audience, and let an independent reviewer check what you didn't think to.
+   **Now proven against the falsifier itself (2026-07-26):** `bin/tessera-verify` did the whole
+   job — planted landmines, executed, reverted — and then its OWN `verify-scan` Stop hook fired,
+   and that skip acknowledgment became its final message, which is what `parse_verdicts` reads.
+   0 usable verdicts in 3 real attempts. The channel was eaten by the backstop the tool belongs
+   to. **Corollary worth its own sentence: a verdict returned as a MESSAGE can be overwritten;
+   a verdict written to a FILE cannot.** Acted on same day — the verifier now writes
+   `tessera-verdicts.json` and a live self-test came back `verdict_channel: "file"`. Note the
+   fix's own near-miss, which is the pattern one layer down: the worktree builder copies
+   untracked files IN, so a stale verdict file would have been read as this run's answer —
+   a false CONFIRMED from a verifier that wrote nothing. **When you move a channel, ask what
+   else can write to the new one.**
+
+10. **A guard tested against the code you just fixed proves nothing.** It must be
+   run against the BROKEN state, or it is decoration that passes. Three in one session
+   (2026-07-27): the declared-vocabulary test keyed on a `_check_` prefix and a rename
+   walked past it; a test scanned `cmd_record`'s source and matched the COMMENT
+   documenting the removal; doccheck's `insert-or-ignore-needs-a-real-key` scanned
+   forward from the statement while the uuid is generated on the line ABOVE, so
+   re-introducing the real defect left it green. Each was caught only by deliberately
+   re-planting the bug. **Corollary: a guard that reads SOURCE must not key on a
+   naming convention or match prose about the code — strip comments, match calls.**
+
+11. **Fix the pattern, not the row where you found it.** `INSERT OR IGNORE` on a
+   uuid-only-unique table shipped THREE times — `drift_events` (700 rows = 154 distinct
+   x 31 scans), `edges` (995/891), `mnemo_nodes` (485 auto-commit rows for 319 distinct
+   messages, live and costing data). The commit fixing the second said "fix the pattern,
+   not the row" in its own message and then fixed only the row; an independent reviewer
+   found the third hours later. **A defect class that has recurred becomes a doccheck
+   assertion, or the next instance is found the same way — by someone counting rows
+   months later.**
+
+12. **A report can be entirely TRUE and still be a false green. Ask what it did NOT cover.**
+   Distinct from #1 and #9: nothing broke, and the output was delivered and accurate.
+   arbiter printed `1 file(s) reviewed · 0 blocking` — true — having silently dropped every
+   extensionless file, including the only file under review; the same default had skipped
+   `bin/tessera-new-project` in an earlier run that DID report findings from the `.sh` files
+   beside it, so the report looked like a working review of the whole diff. Its docstring
+   documented the skip. Its output never did, and the output is what anyone reads.
+   **Second instance of the shape** — on 2026-07-27 the spend contract's "known ceiling,
+   inherited" hedge absorbed five plain-literal bypasses of a control it called
+   *unconditional*. **A ceiling is a class you decided not to catch; a hole is a member of
+   the class you claimed to catch, and a hedge phrased broadly enough turns the second into
+   the first.** So: any narrowing of scope must appear in the OUTPUT, not only in the source.
+   ~~Live consequence, unfixed: ~4,500 lines across 21 extensionless `bin/` files — this
+   framework's entire control surface, `tessera-verify` and `tessera-watch` included — have
+   never been reviewable by default.~~ **FIXED UPSTREAM 2026-08-07 (`arbiter@975b491`,
+   propagated `78c2318`, confirmed on a live diff `73ec7cf`): `is_reviewable()` now does
+   shebang detection, `--path` is authoritative, and skipped files are REPORTED.** The
+   default opens the file. Tessera's control surface is reviewable by default for the first
+   time — and note the fix ships the pattern's own lesson, since the load-bearing half was
+   *announcing the skip*, not widening the filter. **The pattern itself is untouched and is
+   why this line is struck rather than deleted: `The tool you reach for to check your work is
+   in scope for the check.`**
+
+
+## Handoff — 2026-08-07 (cross-repo cleanup after the conclave/arbiter reconciliation. The observatory's three-project entry was the most stale artifact in the system and it seeds an unwritten ADR; conclave F-002 disposed; the Pattern lane renamed pr-arbiter → arbiter with arbiter notified; D1 and D2 closed as dead open-decisions; two live `bin/tessera-watch` defects relayed in by hand from arbiter, item 7. The durable lesson: a lane going stale has no mechanical subject, so no check was built for it — and that is the finding.)
 
 *(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
 Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering.)*
@@ -279,127 +507,6 @@ print(sum('file_exists' in json.dumps(x) for x in c), '/', len(c), 'are file_exi
    the extension filter (shebang detection, skipped files reported, `--path` authoritative), so the
    21 extensionless files in `bin/` are reviewable by default now. The review itself is still owed;
    howler is still missing the spend guard; the iCPG loop still should not be wired downstream yet.
-
-### Standing patterns
-
-*(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` prints this block at
-SessionStart; doccheck `standing-patterns-are-surfaced` guards it. These are the lessons this
-repo has paid for MORE THAN ONCE. They are cross-cutting, so no ADR owns them and no
-file-anchored surfacer can find them — that is exactly why they are printed verbatim.
-Add a line only when a lesson recurs; the value is that the list is short enough to read.)*
-
-1. **A component ships, and the thing that would tell you it is broken is also broken.**
-   Instances: F-001's interpreter, the dead ingest pipe, the falsifier's swallowed spawn
-   failure, P4 counting projects not bytes, `tessera-hooks status` advertising a drift check
-   it never ran, the fleet on a retired gate vocabulary, twelve hooks silently no-op'ing on a
-   wrong cwd, the anchor fix that would have cd'd the global tier to `$HOME`, and the
-   decision-surface hook — built to defeat this exact pattern — shipped silent by it (2026-07-24),
-   and the spend backstop, whose own global fire-counter sat at 47 against a cap of 3 so it had
-   returned "nothing to report" on every session for weeks (2026-07-27).
-   **Before shipping a check, ask what would tell you the check itself died.**
-   **Sharpened 2026-07-27:** a guard written for a bug and tested against that same bug is
-   verified against ONE example. `drift-dimensions-have-producers` passed its own tests while
-   blind to two of the three dimensions that motivated it; only `bin/tessera-verify`, given the
-   claim explicitly, found it. **Test a new check against the failures you did NOT just fix.**
-   **And its purest instance to date, A5b (2026-07-27): `rm bin/tessera-watch` and SessionStart
-   printed a completely normal handoff.** Every predicate — P3, P4, P9, P11–P15 — went quiet at
-   once, because the reporter for all of them WAS the thing deleted. The `settings.json` trailing
-   branch could not cover it: that reports a hook SCRIPT missing, never a hook that ran perfectly
-   with its RUNNER gone. Fixed in three surfacers, guarded by chaos probes 9–11.
-2. **It did not break — it produced something plausible.** The fail-open class. A mechanism
-   that fails open needs a paired signal that fails LOUD. Proven again 2026-07-24: a
-   *wrong* error message was the only reason a session-wide cwd bug surfaced, while twelve
-   correct-looking `exit 0`s said nothing. Spec 11 is the systematic answer. Again 2026-07-26:
-   `gate/ratio.py` from a foreign cwd printed a clean, well-formatted report of ZERO gates over
-   ZERO sessions — the anchored run reports 27/142/1039. A read path that fails open does not
-   look broken, it looks like good news.
-3. **Name the pain, not the artifact that correlates with it.** Three retired proxy
-   predicates so far: retired-P2 (verb count), old-P4 (project count), the sqlfluff trigger
-   (file existence). If a predicate measures a stand-in, it will fire correctly and mean
-   nothing. **Now scored against the auditor twice** — the `grep -c degraded` count that
-   produced three wrong spec-11 findings (2026-07-26), and "the chaos suite lacks a conftest"
-   (2026-07-27), which was confidently proposed, was WRONG (chaos measured clean), and was
-   refuted only by probing each suite and watching which one wrote to the journal.
-   **When auditing, measure the property. Counting the artifact is the same error you are
-   auditing for, aimed at yourself.**
-   **Corollary, from A6 (2026-07-27): a mechanical check needs a mechanical SUBJECT.** Two of
-   three candidate handoff checks were rejected on measurement — "a closed entry must name an
-   existing path" scored 12 false positives in 13, and "an item closed in the index must be
-   struck through in its body" FAILED OPEN, because the prose format it keyed on was invented one
-   day and the next section did not use it. Retired figures are a closed list of exact strings and
-   shipped; "is this status consistent" is a judgement wearing a regex. **When the subject is
-   authored prose in an unenforced format, the honest answer is a human re-read, not a check.**
-4. **An interpreter is a path, not a name** (F-001). Generalises past interpreters: any
-   NAME resolved through a mutable, ordered lookup — `python3`, a `tessera-*` binary on
-   PATH, a bare relative hook path against an inherited cwd — is a landmine.
-5. **Ship both halves or neither** — and note that this is violated by TIME as often as by a
-   missing `cp`. The fleet went stale with every component correctly installed.
-6. **Green is only meaningful if failing it actually stops something.** P8 alone let a red
-   commit through; the pre-commit hook is what made doccheck load-bearing.
-7. **A test is never evidence about the thing it tests.** Manual `/compact` cannot validate
-   the compaction-recovery layer; P3 counts only non-manual events.
-8. **Never subtract from a knowledge artifact you have not read. Harvest before you cut**
-   (ADR-0007). Code has grep and tests as safeguards; prose has neither.
-9. **A mechanism that RUNS has not necessarily REACHED its audience.** Verify the delivery
-   channel, not just that the code produced output. A PreToolUse hook's stdout goes to the
-   debug log, not the model — `decision-surface`, `mnemos-pre-edit`, and Layer-3 compaction
-   recovery all "ran" while silent to the model. Self-testing proved they *produced* text;
-   only review and the docs proved the harness *delivered* none of it. Test the real path to
-   the real audience, and let an independent reviewer check what you didn't think to.
-   **Now proven against the falsifier itself (2026-07-26):** `bin/tessera-verify` did the whole
-   job — planted landmines, executed, reverted — and then its OWN `verify-scan` Stop hook fired,
-   and that skip acknowledgment became its final message, which is what `parse_verdicts` reads.
-   0 usable verdicts in 3 real attempts. The channel was eaten by the backstop the tool belongs
-   to. **Corollary worth its own sentence: a verdict returned as a MESSAGE can be overwritten;
-   a verdict written to a FILE cannot.** Acted on same day — the verifier now writes
-   `tessera-verdicts.json` and a live self-test came back `verdict_channel: "file"`. Note the
-   fix's own near-miss, which is the pattern one layer down: the worktree builder copies
-   untracked files IN, so a stale verdict file would have been read as this run's answer —
-   a false CONFIRMED from a verifier that wrote nothing. **When you move a channel, ask what
-   else can write to the new one.**
-
-10. **A guard tested against the code you just fixed proves nothing.** It must be
-   run against the BROKEN state, or it is decoration that passes. Three in one session
-   (2026-07-27): the declared-vocabulary test keyed on a `_check_` prefix and a rename
-   walked past it; a test scanned `cmd_record`'s source and matched the COMMENT
-   documenting the removal; doccheck's `insert-or-ignore-needs-a-real-key` scanned
-   forward from the statement while the uuid is generated on the line ABOVE, so
-   re-introducing the real defect left it green. Each was caught only by deliberately
-   re-planting the bug. **Corollary: a guard that reads SOURCE must not key on a
-   naming convention or match prose about the code — strip comments, match calls.**
-
-11. **Fix the pattern, not the row where you found it.** `INSERT OR IGNORE` on a
-   uuid-only-unique table shipped THREE times — `drift_events` (700 rows = 154 distinct
-   x 31 scans), `edges` (995/891), `mnemo_nodes` (485 auto-commit rows for 319 distinct
-   messages, live and costing data). The commit fixing the second said "fix the pattern,
-   not the row" in its own message and then fixed only the row; an independent reviewer
-   found the third hours later. **A defect class that has recurred becomes a doccheck
-   assertion, or the next instance is found the same way — by someone counting rows
-   months later.**
-
-12. **A report can be entirely TRUE and still be a false green. Ask what it did NOT cover.**
-   Distinct from #1 and #9: nothing broke, and the output was delivered and accurate.
-   arbiter printed `1 file(s) reviewed · 0 blocking` — true — having silently dropped every
-   extensionless file, including the only file under review; the same default had skipped
-   `bin/tessera-new-project` in an earlier run that DID report findings from the `.sh` files
-   beside it, so the report looked like a working review of the whole diff. Its docstring
-   documented the skip. Its output never did, and the output is what anyone reads.
-   **Second instance of the shape** — on 2026-07-27 the spend contract's "known ceiling,
-   inherited" hedge absorbed five plain-literal bypasses of a control it called
-   *unconditional*. **A ceiling is a class you decided not to catch; a hole is a member of
-   the class you claimed to catch, and a hedge phrased broadly enough turns the second into
-   the first.** So: any narrowing of scope must appear in the OUTPUT, not only in the source.
-   ~~Live consequence, unfixed: ~4,500 lines across 21 extensionless `bin/` files — this
-   framework's entire control surface, `tessera-verify` and `tessera-watch` included — have
-   never been reviewable by default.~~ **FIXED UPSTREAM 2026-08-07 (`arbiter@975b491`,
-   propagated `78c2318`, confirmed on a live diff `73ec7cf`): `is_reviewable()` now does
-   shebang detection, `--path` is authoritative, and skipped files are REPORTED.** The
-   default opens the file. Tessera's control surface is reviewable by default for the first
-   time — and note the fix ships the pattern's own lesson, since the load-bearing half was
-   *announcing the skip*, not widening the filter. **The pattern itself is untouched and is
-   why this line is struck rather than deleted: `The tool you reach for to check your work is
-   in scope for the check.`**
-
 
 ### Do not read T2 early — the stopping rule is binding
 
