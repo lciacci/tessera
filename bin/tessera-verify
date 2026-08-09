@@ -151,8 +151,8 @@ def read_verdict_file(path: Path, n: int) -> list[dict] | None:
     is the one output this tool must never produce.
     """
     try:
-        data = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError):
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return None
     entries = data.get("verdicts") if isinstance(data, dict) else None
     if not isinstance(entries, list):
@@ -287,7 +287,7 @@ def logs_dir() -> Path:
 def append_event(event: dict) -> Path:
     path = logs_dir() / f"{event['session_id']}.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "a") as f:
+    with open(path, "a", encoding="utf-8") as f:
         f.write(json.dumps(event, ensure_ascii=False) + "\n")
     return path
 
@@ -501,7 +501,7 @@ def stats_summary(logs_dir: Path) -> dict:
     # the reader would see message-channel verdicts and conclude the fix had come undone.
     channels: dict[str, int] = {}
     for log in sorted(logs_dir.glob("*.jsonl")):
-        for line in log.read_text().splitlines():
+        for line in log.read_text(encoding="utf-8").splitlines():
             try:
                 ev = json.loads(line)
             except json.JSONDecodeError:

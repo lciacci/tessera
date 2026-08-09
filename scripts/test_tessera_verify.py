@@ -582,3 +582,31 @@ def test_failure_after_the_worktree_exists_also_deregisters_it(repo, tmp_path, m
 
 def _raise_disk_full(*_a, **_kw):
     raise OSError("no space left on device")
+
+
+# --- the log is UTF-8 by declaration, not by locale (2026-08-09) --------------------
+
+
+def test_non_ascii_survives_a_write_read_round_trip(logs, monkeypatch):
+    """`append_event` writes with ensure_ascii=False, so the bytes really are UTF-8.
+
+    Both ends used to rely on `locale.getpreferredencoding(False)`. On darwin that is UTF-8
+    even under `LC_ALL=C LANG=C` (measured), so this cannot fail here — which is exactly why
+    it needed pinning rather than trusting: 32 of the live log files already carry non-ASCII,
+    so the first non-UTF-8 host would have hit it on the first `stats` call.
+    """
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "s1")
+    claim = "the ⚠ banner fires — naïve résumé, 日本語"
+    tv.append_event(tv.build_event([claim], [{"verdict": "CONFIRMED", "evidence": "ran ✓"}],
+                                   "s1", verdict_channel=tv.CHANNEL_FILE))
+    assert (logs / "s1.jsonl").read_bytes().decode("utf-8")
+    assert _last_event(logs)["data"]["claims"][0]["text"] == claim
+    assert tv.stats_summary(logs)["confirmed"] == 1
+
+
+def test_a_non_utf8_verdict_file_is_unusable_not_fatal(tmp_path):
+    """The contract is "None on ANY problem". Undecodable bytes are a problem, and used to
+    escape the except clause entirely — UnicodeDecodeError is a ValueError, not an OSError."""
+    f = tmp_path / "v.json"
+    f.write_bytes(b'{"verdicts": [{"n": 1, "verdict": "CONFIRMED", "evidence": "\xff\xfe"}]}')
+    assert tv.read_verdict_file(f, 1) is None
