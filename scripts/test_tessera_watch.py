@@ -627,9 +627,23 @@ def _icpg_repo(tmp_path, *, with_db=True):
 
 
 def _past_the_mnemos_checks(tmp_path, monkeypatch, root, *, icpg):
-    """Build a fake `mnemos` whose shebang is THIS interpreter, so P9 clears the mnemos
-    gates and actually reaches the icpg branch. Without this the test short-circuits on an
-    unreadable shebang and asserts nothing — which is how a vacuous test looks."""
+    """Clear P9's mnemos gates so the test actually reaches the icpg branch.
+
+    THE PROBE IS STUBBED, AND THAT IS THE POINT. This used to write a fake `mnemos` whose
+    shebang was `sys.executable` and let P9 really run `<interp> -c "import mnemos"` — which
+    only clears the gate when the interpreter running pytest happens to have mnemos
+    installed. On a fresh clone's bare venv it does not, so P9 returned at the EARLIER gate
+    ("...CANNOT import mnemos — F-001 exactly") and the assertions below were about a branch
+    that never ran. It failed loudly rather than silently, so it was never a false green —
+    but the suite could not tell "the icpg branch regressed" from "your venv lacks mnemos".
+
+    The docstring it replaces worried about exactly this ("which is how a vacuous test
+    looks") and closed the shebang-readability half while leaving importability ambient. A
+    test's premise must not rest on an unstated property of whichever interpreter runs it
+    (#4, one level up from interpreters-are-paths). So the mnemos import is stubbed to
+    succeed and the base_prefix to a manager-independent path; the icpg probe is left REAL,
+    because it is the thing under test.
+    """
     import sys
     fake = tmp_path / "mnemos"
     fake.write_text(f"#!{sys.executable}\n")
@@ -637,6 +651,17 @@ def _past_the_mnemos_checks(tmp_path, monkeypatch, root, *, icpg):
                         lambda n: icpg if n == "icpg" else str(fake))
     (root / ".python-version").write_text("3.13\n")
     (root / ".venv" / "bin" / "python").write_text("x")
+
+    real_run = tw.subprocess.run
+
+    def stub(cmd, *a, **k):
+        if len(cmd) >= 3 and cmd[1] == "-c" and cmd[2] == "import mnemos":
+            return SimpleNamespace(returncode=0, stdout="", stderr=b"")
+        if len(cmd) >= 3 and cmd[1] == "-c" and "base_prefix" in cmd[2]:
+            return SimpleNamespace(returncode=0, stdout="/uv/managed/base", stderr=b"")
+        return real_run(cmd, *a, **k)      # the icpg probe stays REAL
+
+    monkeypatch.setattr(tw.subprocess, "run", stub)
 
 
 def test_p9_fires_when_a_repo_uses_icpg_but_icpg_is_unresolvable(tmp_path, monkeypatch):
@@ -658,12 +683,29 @@ def test_p9_silent_on_repos_that_do_not_use_icpg(tmp_path, monkeypatch):
     assert "icpg" not in detail or "ok" in detail
 
 
-def test_p9_icpg_branch_is_reachable_on_the_real_repo():
-    """Non-vacuity: this repo HAS .icpg/reason.db, so the branch is live rather than
-    dead code that would never have run."""
-    assert (Path(__file__).resolve().parent.parent / ".icpg" / "reason.db").exists()
-    fired, detail = tw.p9_interpreter_drift(Path(__file__).resolve().parent.parent)
-    assert "icpg ok" in detail or "icpg" in detail, detail
+def test_p9_icpg_branch_is_reachable_when_the_db_is_present(tmp_path, monkeypatch):
+    """Non-vacuity: the icpg branch is live code, not a branch nothing can enter.
+
+    IT NO LONGER ASSERTS ON THE REAL REPO, AND THAT WAS THE DEFECT. It read
+    `assert (repo/'.icpg'/'reason.db').exists()` — a GITIGNORED runtime artifact made a
+    precondition of the repo's own test suite, so a fresh clone was red before anyone
+    touched the code. Third instance in one day of the same category error (doccheck's
+    referenced-paths-exist, P5's crash on .claude/skills, this).
+
+    The machine claim did not vanish, it MOVED to where machine claims belong: install.sh's
+    verify() now asserts .icpg/reason.db, and install.sh now creates it — which is the real
+    finding underneath, since nothing had ever owned that file. What stays here is the only
+    half a test can answer: given a db, the branch executes.
+    """
+    root = _icpg_repo(tmp_path)
+    _past_the_mnemos_checks(tmp_path, monkeypatch, root, icpg=None)
+    _, detail = tw.p9_interpreter_drift(root)
+    assert "icpg" in detail, detail
+    # ...and it is genuinely the db that opens it: same fixture, no db, no icpg in the answer.
+    bare = _icpg_repo(tmp_path / "nodb", with_db=False)
+    _past_the_mnemos_checks(tmp_path / "nodb", monkeypatch, bare, icpg=None)
+    _, quiet = tw.p9_interpreter_drift(bare)
+    assert "silently dead" not in quiet, quiet
 
 
 # ── P15: the spend backstop's own cap had become a permanent kill switch ───────────────

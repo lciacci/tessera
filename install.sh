@@ -141,6 +141,25 @@ install_venv() {
     err "toolchain install into venv failed"; return 1
   }
 
+  # `.icpg/reason.db` HAD NO OWNER. Nothing here created it; the only `icpg init` in the
+  # repo is bin/tessera-new-project's, which scaffolds DOWNSTREAM projects. This repo's own
+  # database was hand-made and nothing maintained it — the same gap as the .claude dogfood
+  # symlinks (found and fixed 2026-08-09 the same day), and it matters more, because iCPG is
+  # wired into this repo's LIVE hooks: mnemos-pre-edit.sh shells out to `icpg`, the Stop
+  # recorder attributes symbols to the open intent, and a PreToolUse hook asks for one
+  # (ADR-0019). All of it rides a database no installer produced. Found because two P9 tests
+  # asserted the db exists and went red on a fresh clone; relocating that assertion into
+  # verify() would have made THIS script fail, which is what exposed the missing owner.
+  #
+  # BY PATH, never by name (#4). Idempotent — measured against a copy of the live db: all 12
+  # CREATEs are IF NOT EXISTS, and re-init preserved 29 ReasonNodes / 1,115 symbols /
+  # 1,435 edges. Non-fatal here on purpose: verify() is the gate, so a failure is REPORTED
+  # rather than aborting an install whose other 95% succeeded.
+  if [ -x "$root/.venv/bin/icpg" ]; then
+    ( cd "$root" && "$root/.venv/bin/icpg" init >/dev/null 2>&1 ) \
+      || warn "icpg init failed — verify() will report the missing .icpg/reason.db"
+  fi
+
   # A DISPOSABLE CHECKOUT MUST NOT REPOINT THE MACHINE'S GLOBAL LINKS. `bin/tessera-verify`
   # spawns a headless verifier in a temp git worktree with --dangerously-skip-permissions; if
   # that agent runs install.sh to falsify a claim, the `ln -sf` below aimed ~/.local/bin at
@@ -300,6 +319,24 @@ verify() {
     esac
   else
     err "no venv at $root/.venv — run ./install.sh"
+    fail=1
+  fi
+
+  # 3a. iCPG's database EXISTS. Machine state, so it is asserted here rather than in the test
+  # suite — where it lived until 2026-08-09 as `assert (root/'.icpg'/'reason.db').exists()`
+  # inside scripts/test_tessera_watch.py, which made a gitignored runtime artifact a
+  # precondition of the repo's tests and went red on every fresh clone. Third instance that
+  # day of one category error: a MACHINE fact asserted where a REPO fact belongs (the others
+  # were doccheck's referenced-paths-exist and P5's crash on .claude/skills).
+  #
+  # This is a real assertion now, not a relocation: three live hooks shell out to `icpg`, and
+  # without the db they fail open into "this file has no intents" — F-001's confound, where
+  # empty reads as unused when it means unreachable.
+  if [ -f "$REPO/.icpg/reason.db" ]; then
+    ok "iCPG database present (.icpg/reason.db)"
+  else
+    err "no .icpg/reason.db — mnemos-pre-edit's intent half and the Stop recorder fail open"
+    err "    into silence, and P9 cannot see it either (it gates on this file existing)."
     fail=1
   fi
 
