@@ -2028,7 +2028,12 @@ def test_wrong_target_fails_even_when_canonical_dir_is_missing(fake_repo):
     (fake_repo / ".claude" / "skills").symlink_to(Path("..") / "elsewhere")
     assert not (fake_repo / "skills").exists()
     bad = doccheck.check_mirror_links_are_symlinks()
-    assert any("not skills/" in v for v in bad), bad
+    # Assert the message NAMES BOTH the mirror and the wrong target it points at, rather
+    # than the connective phrasing between them. arbiter raised the substring `not skills/`
+    # twice as brittle; the first rejection was right that the test passes and wrong that
+    # there was nothing to improve — keying on wording tests the sentence, keying on both
+    # identifiers tests what an operator actually needs the message to tell them.
+    assert any(".claude/skills" in v and "elsewhere" in v for v in bad), bad
 
 
 def test_symlinked_mirrors_are_green(fake_repo):

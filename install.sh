@@ -196,16 +196,20 @@ verify() {
   # directory here is the failure — it reads as installed and silently shadows skills/.
   for d in skills commands agents; do
     [ -d "$REPO/$d" ] || continue
-    # Three conditions, and the third is a REGRESSION FIX. Replacing `-ef` with a readlink
-    # string match dropped the existence guarantee `-ef` gave for free: a DANGLING link
-    # whose recorded target is still "../skills" matched the string and reported ✓ ok while
-    # the eager @ imports resolved to nothing. The comment here claimed readlink was the
-    # improvement for dangling links — it made that exact case worse (arbiter, 2026-08-09).
-    # readlink is still right for comparing the TARGET (POSIX does not specify that `-ef`
-    # follows symlinks); it just is not sufficient on its own.
-    if [ -L "$REPO/.claude/$d" ] \
-       && [ "$(readlink "$REPO/.claude/$d")" = "../$d" ] \
-       && [ -d "$REPO/.claude/$d" ]; then
+    # Three properties, none of them a string comparison. Two rounds of arbiter findings
+    # landed here and each rejected an assumption:
+    #   -L  it is a SYMLINK — a real directory holding a copy must still fail
+    #   -d  it RESOLVES — `-d` follows the link, so a dangling one dies here. The readlink
+    #       string match this replaced passed a dangling link whose recorded target was
+    #       still "../skills", reporting ✓ ok while the @ imports resolved to nothing.
+    #   pwd -P  it points at the RIGHT place, compared by PHYSICAL PATH rather than by the
+    #       target's written form. A functional link created as an absolute path
+    #       (`ln -s /abs/…/skills`) resolves correctly and would have been reported broken
+    #       by the string match — target-form equivalence is not functional equivalence.
+    # `-ef` is deliberately avoided: POSIX does not specify that `test` follows symlinks.
+    if [ -L "$REPO/.claude/$d" ] && [ -d "$REPO/.claude/$d" ] \
+       && [ "$(cd "$REPO/.claude/$d" 2>/dev/null && pwd -P)" \
+          = "$(cd "$REPO/$d" 2>/dev/null && pwd -P)" ]; then
       ok ".claude/$d -> ../$d"
     else
       err ".claude/$d is not a symlink to ../$d — CLAUDE.md's eager @ imports will not"
