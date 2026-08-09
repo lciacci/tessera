@@ -51,6 +51,11 @@ CHARS_PER_TOKEN = 4
 # >2x understatement reported as a confirmed measurement. Found by `bin/tessera-verify`
 # 2026-08-09 — and flagged by it as a "caveat, not a refutation" one run EARLIER, where
 # it was read as minor and not acted on. It was the same defect the whole time.
+#
+# CONFIRMED BY MEASUREMENT the same day, having first been fixed on inference: a fixture
+# with a unique canary behind each import form, read back by a nested `claude -p` session.
+# Anchored, inline, and through-a-symlink all load; absent loads nothing. See
+# docs/observatory.md → "The eager prefix is ~15.6k tokens".
 EAGER_IMPORT = re.compile(r"(?:^|(?<=\s))@([^\s`]+)", re.MULTILINE)
 FENCE_BLOCK = re.compile(r"```.*?```", re.DOTALL)
 

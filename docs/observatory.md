@@ -2663,8 +2663,20 @@ divergence to `tessera-sync-skills` under ADR-0010.
 
 **The finding underneath, which neither reviewer reached:** `CLAUDE.md` eagerly `@`-imports
 `.claude/skills/{base,mnemos}/SKILL.md`. On a clone without those symlinks — the state of *every*
-fresh clone — the imports resolve to nothing and ~5,800 tokens of eagerly-loaded skills silently do
-not load, with nothing to say so. Now owned: `install.sh` creates the three links idempotently and
+fresh clone — the imports resolve to nothing and ~5,800 tokens of eagerly-loaded skills do not load.
+
+**MEASURED 2026-08-09, not inferred** — a fixture with four import forms and a unique canary in
+each, read back by a nested `claude -p` session. Anchored (`@./present.md`), **inline**
+(`see @./present2.md for the reasoning.`) and **through a symlink** all load their content; the
+absent one loads nothing. Two consequences worth keeping:
+- **The inline form loads**, which is what makes the widened `EAGER_IMPORT` regex in
+  `scripts/prefix_meter.py` correct. That was fixed on inference after `bin/tessera-verify` found
+  it; it is now measured.
+- **The literal `@path` line survives into context in EVERY case, resolved or not.** So its
+  presence carries no information — from inside a session you cannot distinguish a live import from
+  a dead one by reading `CLAUDE.md`; you would have to already know what content should have
+  arrived. *That* is what makes the failure undetectable in-session, and it is a stronger statement
+  than "silent": there is a visible artifact, and it looks identical in both states. Now owned: `install.sh` creates the three links idempotently and
 its `verify()` asserts them (machine state), while doccheck asserts the shape and treats absence as
 green (repo state, and it runs in pre-commit). Same split the doc-claims contract already draws —
 existence is a local fact, the shared one is what gets asserted. **Framework-only, deliberately:
