@@ -98,10 +98,25 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
 2. **ADR-0020's fixture matrix** in `scripts/mnemos/eval_correction.py` — five case types, the
    lucky-correct negative load-bearing. Untouched; ADR-0020 still `Executed: not yet`.
 3. **Carried from 2026-07-29:** downstream T2 work (conclave, then howler — *do real work, not T2
-   work*); **this repo's `bin/` control surface still unreviewed** — the blocker is gone and today's
-   arbiter run covered `scripts/` only, so `tessera-verify` and `tessera-watch` remain the two worth
-   doing first; **howler missing the entire spend guard** (14 files); don't wire iCPG downstream yet;
+   work*); **howler missing the entire spend guard** (14 files); don't wire iCPG downstream yet;
    caching closed except quarry.
+4. **The `bin/` control surface has still never had a WHOLE-FILE review, and the distinction is the
+   item.** Four arbiter passes on 2026-08-09 covered `bin/tessera-watch`'s *changed lines* — roughly
+   120 of its 1,107 — so the other ~90% and all 489 lines of `bin/tessera-verify` remain unread by
+   any reviewer. *(An earlier version of this line said the day's run "covered `scripts/` only". True
+   when written, false three runs later — doc drift introduced into the handoff within hours of
+   writing it.)*
+   **Arbiter is diff-only by design** — `reviewer.SYSTEM`: *"Focus on changed code (the diff).
+   Unchanged code is context, not your target."* There is no whole-file mode; you make the file be
+   the diff:
+   ```bash
+   arbiter --base $(git hash-object -t tree /dev/null) --head HEAD \
+           --path bin/tessera-watch --path bin/tessera-verify
+   ```
+   1,596 lines as pure additions, so expect ~$10–18 and a high finding count weighted toward
+   long-standing design rather than recent change. **`tessera-verify` is the one to read first**: it
+   is the falsifier this repo reaches for to check everything else, and standing pattern #12's
+   closing line is that the tool you reach for to check your work is in scope for the check.
 
 **The durable lesson, and it cost two wrong assertions today: citing an artifact is not reading it.**
 The observatory named `tessera-sync-skills` and `install.sh` as evidence before either was opened,
