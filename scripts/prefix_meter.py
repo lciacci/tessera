@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+"""Measure Tessera's eager context prefix — what is in the window before any work happens.
+
+ADR-0021's one adopted pattern. Deep Agents tracks *base input tokens* as a defined,
+per-release metric ("tokens associated with the builtin prompt, tools, and middleware")
+and cut it ~6k → ~2k. Tessera measured its equivalent ONCE — 2026-07-30, chars/4, ~15,600
+— and froze the figure in a paragraph of `docs/observatory.md`. The standing-patterns
+split and every CLAUDE.md edit since have moved it, and nothing said so.
+
+**A one-shot number in prose that nothing recomputes is a doc claim**, which is the class
+this repo has paid for repeatedly. So the number becomes a measurement, and doccheck's
+`eager-prefix-figure-is-current` asserts the quoted figure still matches.
+
+TWO THINGS THIS DELIBERATELY DOES NOT DO.
+
+1. **It does not gate on a ceiling.** `docs/observatory.md` → "The eager prefix is ~15.6k
+   tokens — and the size of it is NOT the argument" established that the token count is an
+   *artifact*; the pain would be a miss attributable to dilution, which is unmeasured.
+   Failing a build on a threshold would be principle #3's error aimed at the eager load.
+   This reports drift against a recorded figure. It has no opinion on whether the figure
+   should be smaller.
+
+2. **It does not assert machine-local state.** The 2026-07-30 total folded in the Mnemos
+   checkpoint (~2,600) for "~18k in practice". The checkpoint is per-machine, per-session,
+   and gitignored — asserting it would make the check fail differently on every clone,
+   which is how a check earns a `--no-verify` habit. Local components are MEASURED and
+   REPORTED, never asserted. `tracked_total()` is the asserted figure.
+
+Estimated at chars/4, the same method as the original measurement, so the figures are
+comparable. That is an ESTIMATE and not a token count; use the API's `count_tokens` if a
+decision ever rests on the exact number. The claim being checked is "~", not "=".
+
+Stdlib only — `scripts/doccheck.py` imports this, and doccheck is kept stdlib-only so it
+runs on bare `python3` from the pre-commit hook.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+CHARS_PER_TOKEN = 4
+
+EAGER_IMPORT = re.compile(r"^@(\S+)$", re.MULTILINE)
+PART_ARGS = re.compile(r"tessera-patterns-surface\.sh\"? --part (\d+) --of (\d+)")
+HOOK_PATH = re.compile(r'exec "\$\{CLAUDE_PROJECT_DIR:-\.\}/([^"]+)"')
+
+
+def tokens(text: str) -> int:
+    """Estimate tokens at chars/4 — the method the 2026-07-30 measurement used."""
+    return round(len(text) / CHARS_PER_TOKEN)
+
+
+def eager_imports(root: Path) -> list[Path]:
+    """The `@`-imported files CLAUDE.md pulls in eagerly.
+
+    DERIVED, not hardcoded: de-eagering a skill (ADR-0008) or adding one must move the
+    meter without anyone remembering to edit it. A hardcoded list would keep reporting the
+    old corpus and read as stable — the exact failure this file exists to prevent.
+    """
+    claude_md = root / "CLAUDE.md"
+    if not claude_md.exists():
+        return []
+    return [root / m for m in EAGER_IMPORT.findall(claude_md.read_text())]
+
+
+def _session_start_commands(root: Path) -> list[str]:
+    try:
+        hooks = json.loads((root / ".claude" / "settings.json").read_text())
+        return [h.get("command", "")
+                for entry in hooks["hooks"]["SessionStart"] for h in entry.get("hooks", [])]
+    except (OSError, ValueError, KeyError):
+        return []
+
+
+def patterns_parts(root: Path) -> list[str]:
+    """Run each registered standing-patterns part and return its output.
+
+    Run rather than read: the parts are chunked at emit time, so what reaches the model is
+    the subprocess output and nothing else. `standing-patterns-fit-the-cap` set this
+    precedent for the same reason — reading the source file measured a thing that was true
+    while the delivered text was truncated.
+    """
+    emitter = root / ".claude" / "scripts" / "tessera-patterns-surface.sh"
+    if not emitter.exists():
+        return []
+    out = []
+    for command in _session_start_commands(root):
+        found = PART_ARGS.search(command)
+        if not found:
+            continue
+        result = subprocess.run(
+            [str(emitter), "--part", found.group(1), "--of", found.group(2)],
+            capture_output=True, text=True, cwd=root, timeout=30, check=False,
+        )
+        out.append(result.stdout)
+    return out
+
+
+def tracked_components(root: Path = ROOT) -> dict[str, int]:
+    """Deterministic, git-tracked eager context. This is the asserted figure's basis."""
+    components = {"CLAUDE.md": tokens((root / "CLAUDE.md").read_text())}
+    for path in eager_imports(root):
+        if path.exists():
+            components[str(path.relative_to(root))] = tokens(path.read_text())
+    parts = patterns_parts(root)
+    if parts:
+        components["standing patterns (emitted)"] = sum(tokens(p) for p in parts)
+    return components
+
+
+def unasserted_components(root: Path = ROOT) -> dict[str, int]:
+    """Real eager context that cannot be asserted, for two DIFFERENT reasons.
+
+    The handoff surfacer varies with repo state — it prints fired observatory triggers, so
+    its output is smaller on a quiet day than on a loud one. The Mnemos checkpoint is
+    per-machine and gitignored. Both are genuinely in the window; neither can be pinned to
+    a figure without the check failing for reasons unrelated to drift.
+
+    They are here because omitting them silently would make the tracked total look like a
+    complete measurement, and the 2026-07-30 figure it is compared against INCLUDED the
+    handoff. Comparing two totals with different bases is how "roughly unchanged" gets
+    concluded from numbers that were never measuring the same thing.
+    """
+    out = {}
+    surfacer = root / ".claude" / "scripts" / "tessera-watch-surface.sh"
+    if surfacer.exists():
+        result = subprocess.run([str(surfacer)], capture_output=True, text=True,
+                                cwd=root, timeout=60, check=False)
+        out["handoff surfacer (varies with fired triggers)"] = tokens(result.stdout)
+    checkpoint = root / ".mnemos" / "checkpoint-latest.json"
+    if checkpoint.exists():
+        out[".mnemos/checkpoint-latest.json (machine-local)"] = tokens(checkpoint.read_text())
+    return out
+
+
+def tracked_total(root: Path = ROOT) -> int:
+    return sum(tracked_components(root).values())
+
+
+def _render(title: str, components: dict[str, int]) -> None:
+    if not components:
+        return
+    print(f"\n{title}")
+    for name, count in sorted(components.items(), key=lambda kv: -kv[1]):
+        print(f"  {count:>7,}  {name}")
+
+
+def main() -> int:
+    tracked, rest = tracked_components(), unasserted_components()
+    print("EAGER CONTEXT PREFIX — tokens present before any work happens")
+    print("(chars/4 estimate, the 2026-07-30 method; not a token count)")
+    _render("Tracked — reproducible from the repo, asserted by doccheck:", tracked)
+    print(f"  {sum(tracked.values()):>7,}  TOTAL (tracked)")
+    _render("Measured, reported, NEVER asserted — varying or machine-local:", rest)
+    if rest:
+        print(f"  {sum(tracked.values()) + sum(rest.values()):>7,}  TOTAL (in practice)")
+    print("\nSize is not an argument for cutting — see docs/observatory.md,")
+    print("'The eager prefix is ~15.6k tokens — and the size of it is NOT the argument'.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

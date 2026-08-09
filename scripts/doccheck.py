@@ -34,6 +34,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import prefix_meter  # noqa: E402  — sibling module, stdlib-only like this one
+
 ROOT = Path(__file__).resolve().parent.parent
 
 # Docs held to their claims about THIS repo's disk state. The exclusions are not
@@ -2165,7 +2168,59 @@ def check_tier_vocabulary_is_consistent() -> list[str]:
     return bad
 
 
+METERED_FIGURE = re.compile(r"METERED [\d-]+: ([\d,]+) tokens tracked")
+PREFIX_BAND = 0.05
+
+
+def check_eager_prefix_figure_is_current() -> list[str]:
+    """The metered eager-prefix figure in the observatory must match what the meter measures.
+
+    ADDED 2026-08-09 (ADR-0021). `docs/observatory.md` carried "~15,600 tokens" as a one-shot
+    chars/4 estimate taken on 2026-07-30 and never recomputed, while the standing-patterns
+    split and repeated CLAUDE.md growth moved the composition underneath it. Nothing could
+    have said so: a number frozen in prose is a doc claim, and this file exists because doc
+    claims drift.
+
+    Deliberately a DRIFT check and not a ceiling. `docs/observatory.md` → "The eager prefix
+    is ~15.6k tokens — and the size of it is NOT the argument" established that the count is
+    an artifact and the pain (dilution) is unmeasured; failing a commit on a threshold would
+    be principle #3's error aimed at the eager load. This asserts only that the recorded
+    number is still true.
+
+    The 5% band mechanizes the "~" the prose actually claims. Exact equality would fire on
+    every wording tweak to CLAUDE.md, and a check that fires on noise teaches `--no-verify`
+    — which is how a load-bearing check stops being load-bearing.
+
+    Only the TRACKED total is asserted. `prefix_meter` also measures the handoff surfacer
+    (varies with fired triggers) and the Mnemos checkpoint (machine-local, gitignored);
+    asserting either would make this fail differently on every clone.
+    """
+    doc = ROOT / "docs" / "observatory.md"
+    if not doc.exists():
+        return []
+    found = METERED_FIGURE.search(doc.read_text())
+    if not found:
+        return ["docs/observatory.md: no `METERED <date>: <n> tokens tracked` figure — "
+                "the eager prefix is unmetered again, so nothing can detect its drift"]
+    claimed = int(found.group(1).replace(",", ""))
+    try:
+        actual = prefix_meter.tracked_total(ROOT)
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        return [f"scripts/prefix_meter.py could not measure the eager prefix ({exc}) — "
+                f"the figure in docs/observatory.md is unverifiable, not confirmed"]
+    if not actual:
+        return ["scripts/prefix_meter.py measured 0 tokens of eager prefix — either "
+                "CLAUDE.md's @ imports are gone or the meter is broken; both are findings"]
+    if abs(actual - claimed) / actual > PREFIX_BAND:
+        drift = (actual - claimed) / claimed
+        return [f"docs/observatory.md: METERED figure is {claimed:,} tokens but "
+                f"scripts/prefix_meter.py measures {actual:,} ({drift:+.0%}) — re-run the "
+                f"meter and update the figure and its composition breakdown"]
+    return []
+
+
 CHECKS = {
+    "eager-prefix-figure-is-current": check_eager_prefix_figure_is_current,
     "tier-vocabulary-is-consistent": check_tier_vocabulary_is_consistent,
     "handoff-retires-its-own-figures": check_handoff_retires_its_own_figures,
     "drift-dimensions-have-producers": check_drift_dimensions_have_producers,

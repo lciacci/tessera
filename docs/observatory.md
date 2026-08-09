@@ -2608,10 +2608,34 @@ marker — is worth more than the 29%.
   *for sessions on Tessera itself*. There is not — Claude Code owns `cache_control` in its own
   sessions, so there is no marker to place. The measurement fell out sideways.
 
-**Measured, per session, before any work happens:** `CLAUDE.md` ~6,950 tok · `.claude/skills/mnemos`
-~4,390 · `.claude/skills/base` ~1,470 · the SessionStart surfacer (handoff + standing patterns)
-~2,790 — **~15,600 tokens**, plus the Mnemos checkpoint (~2,600) for ~18k in practice. (Estimated at
-chars/4; `count_tokens` if a decision ever rests on it.)
+**Measured 2026-07-30, per session, before any work happens:** `CLAUDE.md` ~6,950 tok ·
+`.claude/skills/mnemos` ~4,390 · `.claude/skills/base` ~1,470 · the SessionStart surfacer (handoff +
+standing patterns) ~2,790 — **~15,600 tokens**, plus the Mnemos checkpoint (~2,600) for ~18k in
+practice. (Estimated at chars/4; `count_tokens` if a decision ever rests on it.)
+
+**METERED 2026-08-09: 15,497 tokens tracked** — recomputed by `scripts/prefix_meter.py`, which
+doccheck's `eager-prefix-figure-is-current` asserts this figure against within 5%. **The figure
+above was a one-shot number frozen in prose, and that is the class of claim this repo keeps paying
+for** — ADR-0021's adopted pattern, taken from Deep Agents, which tracks its base input tokens as a
+defined per-release metric rather than a paragraph. Composition today: `CLAUDE.md` 7,307 ·
+`.claude/skills/mnemos` 4,354 · standing patterns as *emitted* 2,382 · `.claude/skills/base` 1,454;
+plus, measured but **never asserted**, the handoff surfacer 265 (varies with fired triggers) and the
+checkpoint 1,822 (machine-local) — 17,584 in practice.
+
+**The comparable total is 15,762 against 15,600, and the flatness is the result.** Ten days, a
+standing-patterns split and repeated `CLAUDE.md` growth, and the prefix has moved ~1%: `CLAUDE.md`
++357, the surfacer −143. So the meter's first act is to *confirm* this entry rather than overturn
+it. Three cautions on reading it. **The bases differ** — 15,497 is tracked-only and excludes the
+handoff surfacer, so it is 15,762 that compares to 15,600; quoting the smaller number against the
+older one would manufacture a decline. **A flat total is not a flat composition**: `CLAUDE.md` now
+carries 47% of the prefix and is the only component that grows, while the two skills have only
+shrunk. And **141 of `CLAUDE.md`'s +357 is the line documenting the meter itself** — the instrument
+grew what it measures, which is small here and would not stay small if every future check bought
+its own paragraph in the highest-value context position in the repo.
+
+**The meter reports drift and has NO opinion on whether the figure should be smaller** — the
+argument below is unchanged by it, and a threshold here would be principle #3's error aimed at the
+eager load.
 
 **Caching makes that CHEAP, not FREE, and the distinction is the point.** A large, stable, turn-to-turn-
 identical prefix is the *ideal* caching case — written once at 1.25×, read at 0.1× thereafter. So

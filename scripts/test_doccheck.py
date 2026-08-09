@@ -21,6 +21,7 @@ from pathlib import Path
 import pytest
 
 import doccheck
+import prefix_meter
 
 
 @pytest.fixture
@@ -1725,3 +1726,63 @@ def test_expands_every_brace_set_not_just_the_first(fake_repo):
     bad = doccheck.check_sibling_paths_exist()
     assert len(bad) == 2, bad
     assert all("gone.py" in v for v in bad), bad
+
+
+# ─── ADR-0021 (2026-08-09): the eager-prefix figure in docs/observatory.md was a one-shot
+# chars/4 estimate taken 2026-07-30 and never recomputed. Not a bug a human found — a bug
+# a human COULD NOT find, because a frozen number in prose looks identical whether it is
+# current or ten days stale. Deep Agents tracks the same quantity as a per-release metric;
+# that mirror is what made ours visible as a doc claim. Each test below plants the failure
+# rather than confirming the fix (standing pattern #10).
+def _metered_repo(root, claude_md: str, figure: str):
+    (root / "CLAUDE.md").write_text(claude_md)
+    (root / "docs" / "observatory.md").write_text(
+        f"### The eager prefix\n\n**METERED 2026-08-09: {figure} tokens tracked** — by the meter.\n")
+
+
+def test_catches_drifted_eager_prefix_figure(fake_repo):
+    _metered_repo(fake_repo, "x" * 4000, "500")       # 4000 chars ≈ 1000 tokens, not 500
+    bad = doccheck.check_eager_prefix_figure_is_current()
+    assert any("METERED figure is 500" in v and "1,000" in v for v in bad), bad
+
+
+def test_catches_missing_eager_prefix_figure(fake_repo):
+    (fake_repo / "CLAUDE.md").write_text("x" * 4000)
+    (fake_repo / "docs" / "observatory.md").write_text("The prefix is about 15.4k tokens.\n")
+    bad = doccheck.check_eager_prefix_figure_is_current()
+    assert any("unmetered again" in v for v in bad), bad
+
+
+def test_passes_when_eager_prefix_figure_matches(fake_repo):
+    _metered_repo(fake_repo, "x" * 4000, "1,000")
+    assert doccheck.check_eager_prefix_figure_is_current() == []
+
+
+def test_tolerates_wording_tweaks_within_the_band(fake_repo):
+    """A 5% band mechanizes the "~" the prose claims. A check that fires on every reworded
+    sentence teaches `--no-verify`, which is how a load-bearing check stops being one."""
+    _metered_repo(fake_repo, "x" * 4120, "1,000")     # +3%, a wording-sized change
+    assert doccheck.check_eager_prefix_figure_is_current() == []
+
+
+def test_unmeasurable_prefix_is_reported_not_silently_green(fake_repo):
+    """THE ONE THAT MATTERS. If the meter cannot run, the figure is UNVERIFIED — and an
+    unverified claim must not read as a confirmed one. Standing pattern #1 aimed at this
+    check: what tells you the check itself died?"""
+    (fake_repo / "docs" / "observatory.md").write_text(
+        "**METERED 2026-08-09: 15,356 tokens tracked** — by the meter.\n")
+    # No CLAUDE.md at all: the meter cannot measure anything.
+    bad = doccheck.check_eager_prefix_figure_is_current()
+    assert any("unverifiable, not confirmed" in v for v in bad), bad
+
+
+def test_meter_derives_eager_skills_from_claude_md_imports(fake_repo):
+    """De-eagering a skill must move the meter without anyone editing it. A hardcoded list
+    would keep reporting the old corpus and read as stable — the failure being guarded."""
+    (fake_repo / ".claude" / "skills" / "s").mkdir(parents=True)
+    (fake_repo / ".claude" / "skills" / "s" / "SKILL.md").write_text("y" * 800)
+    (fake_repo / "CLAUDE.md").write_text("head\n@.claude/skills/s/SKILL.md\n")
+    assert prefix_meter.tracked_total(fake_repo) == prefix_meter.tokens("head\n@.claude/skills/s/SKILL.md\n") + 200
+
+    (fake_repo / "CLAUDE.md").write_text("head\n")   # de-eagered
+    assert prefix_meter.tracked_total(fake_repo) == prefix_meter.tokens("head\n")

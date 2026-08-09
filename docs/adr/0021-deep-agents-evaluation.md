@@ -2,7 +2,7 @@
 
 - **Date:** 2026-08-08
 - **Status:** Accepted
-- **Executed:** not yet
+- **Executed:** 2026-08-09 — `scripts/prefix_meter.py`, `scripts/doccheck.py` (`eager-prefix-figure-is-current`), `scripts/test_doccheck.py`, `docs/observatory.md`, `CLAUDE.md`. The single adopted pattern shipped the day after the decision. Its first act was to **confirm** the 2026-07-30 entry rather than overturn it: 15,621 comparable against ~15,600, flat across ten days. It also surfaced something the frozen figure could not — the total is flat while the *composition* is not, `CLAUDE.md` now being 47% of the prefix and the only component that grows.
 - **Decision driver:** New tool surfaced. Lorenzo: "eval https://www.langchain.com/blog/deep-agents-v0-7".
 
 ---
