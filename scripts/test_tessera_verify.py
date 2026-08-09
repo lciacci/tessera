@@ -27,7 +27,7 @@ SPEC.loader.exec_module(tv)
 @pytest.fixture()
 def logs(tmp_path, monkeypatch):
     d = tmp_path / "logs"
-    monkeypatch.setattr(tv, "LOGS", d)
+    monkeypatch.setattr(tv, "logs_dir", lambda: d)
     return d
 
 
@@ -504,3 +504,38 @@ def test_spawn_failure_exits_2_and_logs_spawn_error(tmp_path, logs, monkeypatch)
     assert "blocked by classifier" in logged["data"]["spawn_error"]
     # Still recorded — silence would be worse — but marked as never-ran.
     assert logged["data"]["claims"][0]["verdict"] == "NO_VERDICT"
+
+
+# --- the anchor is the repo, not the cwd (2026-08-09) -------------------------------
+
+
+def test_repo_root_ignores_which_subdirectory_you_are_standing_in(repo, monkeypatch):
+    (repo / "deep" / "nested").mkdir(parents=True)
+    monkeypatch.chdir(repo / "deep" / "nested")
+    assert tv.repo_root().resolve() == repo.resolve()
+    assert tv.logs_dir().resolve() == (repo / ".tessera" / "logs").resolve()
+
+
+def test_worktree_carries_untracked_state_when_run_from_a_subdirectory(repo, monkeypatch):
+    """The tier-1 property degraded silently one directory down.
+
+    `git diff HEAD` emits repo-root-relative paths but `git ls-files --others` emits
+    SUBDIR-relative ones, and they were joined against the worktree root either way. Measured
+    before the fix: `sub/inside.txt` landed at the worktree ROOT as `inside.txt`, and
+    `outside.txt` was never copied at all — while the tool reported nothing wrong.
+
+    Anchoring on the git toplevel is what makes the two halves agree, so this drives
+    `cmd_run`'s real path (`repo_root()`) rather than passing the root in by hand.
+    """
+    (repo / "sub").mkdir()
+    (repo / "sub" / "inside.txt").write_text("I\n")
+    (repo / "outside.txt").write_text("O\n")
+    monkeypatch.chdir(repo / "sub")
+
+    wt = tv.make_worktree(tv.repo_root())
+    try:
+        assert (wt / "sub" / "inside.txt").read_text() == "I\n", "untracked file misplaced"
+        assert (wt / "outside.txt").read_text() == "O\n", "untracked file outside cwd dropped"
+        assert not (wt / "inside.txt").exists(), "copied to the worktree root by subdir path"
+    finally:
+        tv.remove_worktree(tv.repo_root(), wt)
