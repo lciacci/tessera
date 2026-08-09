@@ -6,7 +6,7 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-08-09: deep-agents evaluated and REJECTED on layer — ADR-0021 — and its one adopted pattern, a reproducible eager-prefix meter, was then taken apart by three independent review passes that found ten defects in ~230 lines. The `.claude` dogfood symlinks turned out to have no owner at all. Claude Code's import loader was measured rather than reasoned about. Both arbiter-reported `tessera-watch` defects fixed — and the mitigation that had lowered their priority was itself false.)
+## Handoff — pick up here (2026-08-09: deep-agents evaluated and REJECTED on layer — ADR-0021 — and its one adopted pattern, a reproducible eager-prefix meter, was then taken apart by FIVE review passes across ~350 lines, several finding defects in the code written to fix the previous pass. The `.claude` dogfood symlinks turned out to have no owner at all. Claude Code's import loader was measured rather than reasoned about. Both arbiter-reported `tessera-watch` defects fixed — and the mitigation that had lowered their priority was itself false.)
 
 *(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
 Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering.)*
@@ -58,7 +58,9 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
    the frozen number hid: the total is flat while the composition is not — `CLAUDE.md` is 47% and the
    only component that grows. Drift check, **not** a ceiling; the entry already established size is
    an artifact.
-3. **Ten defects found in that ~230 lines, by three passes, none by me.** Two `tessera-verify` runs:
+3. **FIVE review passes, none of the findings mine.** *(This item said "ten defects, three passes"
+   until the session ended — written accurately mid-session and stale by evening, in the handoff,
+   for the third time in one day. The count below is final.)* Two `tessera-verify` runs:
    a crashing emitter measured as success (`check=False`), an absent-but-registered emitter reported
    as *drift with the wrong remedy*, `.claude/skills` resolution under-measuring a clean clone by
    37%, and — the largest — `^@(\S+)$` missing the inline import form, hiding 31,346 tokens behind an
@@ -86,6 +88,32 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
    its under-bar message now names **which dimension** is short instead of saying "under the 10/3
    bar" while quoting a count above 10. *The AND is intended — the docstring is explicit — so the
    logic stands and only the sentence changed.*
+
+8. **Three further fix rounds after item 7, from arbiter passes 2–4** (`f8b63d0`, `dff7f22`,
+   `ecb8ba4`). The pattern across them is that each round found a defect in the previous round's
+   fix, and the finding rate fell 10 → 3 → 3 with 6 of the last 9 dropped by triage — convergence,
+   not a fresh vein.
+   - **`mirror-links-are-symlinks` had a REPRESENTABLE DIVERGENCE** — the check shipped that morning
+     to make divergence unrepresentable. `elif target.exists() and …` short-circuited, so a symlink
+     to a wrong-but-existing path passed whenever the canonical dir was absent. Reproduced before
+     fixing.
+   - **`render()` never read the `crashed` field added the commit before**, so "0 fired, 2 crashed"
+     rendered in the same shape as "2 fired". The exit-code fix had taught the *surfacer* the
+     difference while the human-facing text still conflated them — #9 one layer in.
+   - **The `install.sh` symlink check had an assumption rejected in each of two rounds** and ended
+     with no string comparison at all: `-L` + `-d` (kills dangling) + `pwd -P` equality (form-
+     independent, so an absolute-but-functional link is not falsely rejected). `-ef` stays rejected:
+     POSIX does not specify that `test` follows symlinks.
+   - **A "verified" comment was false by the time it was committed** — true when written, then
+     invalidated two edits later by the `render()` change it described. A verification is a fact
+     about a MOMENT; changing the behaviour afterwards means owning the re-check.
+   - **Five findings rejected on measurement, not taste**: the duplicate-`@import` "understatement"
+     (an import named twice is loaded once), the snooze-bypass claim (renders 💤 — tested), the
+     generator-`.throw` claim (raises `OSError`, not `StopIteration` — tested), and bare `python3`
+     in a stdlib-only call (which CLAUDE.md's split explicitly sanctions and doccheck enforces).
+     **One rejection was later half-reversed** — the "brittle substring" finding, raised twice, was
+     right that the assertion keyed on wording even though it was wrong that the test failed. *A
+     rejected finding is not always a wrong one.*
 
 ### Corrections to earlier records, kept rather than overwritten
 
