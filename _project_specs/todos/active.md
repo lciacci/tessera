@@ -29,6 +29,16 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
 > nobody asked what *else* exits 1. **A mitigation claim is a claim: it needs the same evidence as
 > the defect it downgrades.**
 
+> **P13 and G-a are RED at SessionStart and both are correct — do not chase them.** P13 reports 4
+> `standing-patterns/block-missing` events from **2026-08-09 16:35**: this session's handoff edit
+> orphaned the standing-patterns block for a few minutes, the surfacer caught it, and it was fixed
+> the same hour. G-a then fires because P13 fired three runs running. **They age out of P13's 7-day
+> window on 2026-08-16.** Neither was snoozed, deliberately: snoozing P13 would suppress the spec-11
+> channel so a genuinely new degradation would go unreported, and snoozing G-a blinds the streak
+> detector for every predicate — the same problem one level up. A red you know the cause of beats a
+> quiet channel. *(A simulated `runner-crashed` event from landmine testing WAS removed — it never
+> happened. These four did.)*
+
 ### What shipped (2026-08-09)
 
 1. **ADR-0021 — deep-agents `v0.7`, verdict REJECT.** Not Watching: there is no condition under
