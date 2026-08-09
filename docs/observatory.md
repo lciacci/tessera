@@ -2637,6 +2637,19 @@ its own paragraph in the highest-value context position in the repo.
 argument below is unchanged by it, and a threshold here would be principle #3's error aimed at the
 eager load.
 
+**One unresolved tension, found independently twice on the day the meter shipped** — by
+`bin/tessera-verify` and then by arbiter, which is the reason it is recorded rather than noted in
+passing. `prefix_meter.canonical_path` prefers the literal path and falls back to the tracked source
+only when the literal is absent. On a machine where `.claude/skills` is a **real directory** rather
+than the symlink `install.sh` makes, a stale local copy is what gets measured — and a doc naming a
+deleted skill file goes green. **The two consumers want opposite things**: the meter should measure
+what *actually loads* (the mirror, divergence included, because that is the real prefix), while
+`referenced-paths-exist` should assert the *tracked source*. Resolving it inside the shared resolver
+would make one of them wrong. The honest reading is that mirror-vs-source divergence is a defect in
+its own right, owned by `tessera-sync-skills` under ADR-0010 (repo is truth), and neither consumer
+should paper over it. **No divergence check exists today** — that is the gap, and it is a different
+one from the gap the meter closed.
+
 **Caching makes that CHEAP, not FREE, and the distinction is the point.** A large, stable, turn-to-turn-
 identical prefix is the *ideal* caching case — written once at 1.25×, read at 0.1× thereafter. So
 cost is not an argument against it. **Attention still is**, and someone reasoning "caching is on,

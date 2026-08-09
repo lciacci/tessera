@@ -60,7 +60,6 @@ MIRROR_DIRS = {".claude/skills": "skills",
                ".claude/commands": "commands",
                ".claude/agents": "agents"}
 PART_ARGS = re.compile(r"tessera-patterns-surface\.sh\"? --part (\d+) --of (\d+)")
-HOOK_PATH = re.compile(r'exec "\$\{CLAUDE_PROJECT_DIR:-\.\}/([^"]+)"')
 
 
 def tokens(text: str) -> int:
@@ -167,7 +166,19 @@ def patterns_parts(root: Path) -> list[str]:
 
 def tracked_components(root: Path = ROOT) -> dict[str, int]:
     """Deterministic, git-tracked eager context. This is the asserted figure's basis."""
-    components = {"CLAUDE.md": tokens((root / "CLAUDE.md").read_text())}
+    claude_md = root / "CLAUDE.md"
+    if not claude_md.exists():
+        raise OSError("CLAUDE.md is not on disk — the eager prefix cannot be measured. "
+                      "(Raised explicitly so the reason reaches doccheck's report; the "
+                      "bare FileNotFoundError this replaced said nothing useful there.)")
+    components = {"CLAUDE.md": tokens(claude_md.read_text())}
+
+    # DEDUPED ON PURPOSE, and by a dict rather than by accident. An import named twice in
+    # CLAUDE.md is loaded ONCE, so counting it once is the correct total — arbiter read the
+    # dict overwrite as a bug understating the figure and proposed accumulating counts,
+    # which would over-report. The behaviour was right and undesigned; this makes it a
+    # decision. A self-referential `@CLAUDE.md` collapses onto the same key for the same
+    # reason and is likewise counted once.
     for path in eager_imports(root):
         if not path.exists():
             raise OSError(f"CLAUDE.md eagerly imports {path.relative_to(root)}, which is "

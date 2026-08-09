@@ -34,8 +34,23 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import prefix_meter  # noqa: E402  — sibling module, stdlib-only like this one
+def _prefix_meter():
+    """Import the sibling meter LAZILY, the way decision_surface and report_settings are.
+
+    It was a module-level `import prefix_meter` for exactly one day. Found by arbiter
+    2026-08-09: a missing or syntactically broken `prefix_meter.py` killed the whole
+    doccheck process with a traceback before any check ran, so the pre-commit hook lost
+    all 41 checks — and `check_eager_prefix_figure_is_current`'s own try/except, written
+    to turn precisely this into one reported line, could never be reached.
+
+    Standing pattern #1, in the code written to guard against standing pattern #1: the
+    thing that would tell you the meter is broken was killed by the meter being broken.
+    It also made the safety-script probe (which `__import__`s doccheck under the oldest
+    supported Python) carry a hidden transitive dependency invisible to SAFETY_SCRIPTS.
+    """
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import prefix_meter
+    return prefix_meter
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -142,8 +157,22 @@ def check_referenced_paths_exist() -> list[str]:
     This is design-principles.md:560's lesson, finally mechanized: "when a doc claims N
     layers, `ls` all N." It is what would have caught the phantom `mnemos-compact-recovery.sh`
     — a 167-line script named by three docs and existing in none of them, for six weeks.
+
+    Paths under the three gitignored mirror symlinks resolve to their tracked sources via
+    `prefix_meter.canonical_path`. If that import fails the check DEGRADES rather than
+    dying or going blind: it falls back to literal resolution — its behaviour before
+    2026-08-09 — and says so, because a silently literal run is red on a clean clone for
+    reasons no reader could diagnose from the message.
     """
-    bad = []
+    degraded = []
+    try:
+        canonical = _prefix_meter().canonical_path
+    except Exception as exc:
+        canonical = lambda root, ref: root / ref                          # noqa: E731
+        degraded = [f"scripts/prefix_meter.py cannot be imported ({exc}) — mirror-symlink "
+                    f"resolution is OFF, so paths under .claude/{{skills,commands,agents}} "
+                    f"are checked literally and will report false violations pre-install"]
+    bad = list(degraded)
     for doc in _docs():
         for token in INLINE_CODE.findall(_strip_fences(doc.read_text())):
             token = token.strip().rstrip(".,;:)").split(":")[0]  # strip file:symbol suffixes
@@ -154,7 +183,7 @@ def check_referenced_paths_exist() -> list[str]:
             exempt = PATH_ALLOWLIST | PLANNED_PATHS
             if any(token.rstrip("/") == p or token.startswith(p + "/") for p in exempt):
                 continue
-            if not prefix_meter.canonical_path(ROOT, token).exists():
+            if not canonical(ROOT, token).exists():
                 bad.append(f"{_rel(doc)}: names `{token}` — not on disk")
     return sorted(set(bad))
 
@@ -2218,8 +2247,17 @@ def check_eager_prefix_figure_is_current() -> list[str]:
         return ["docs/observatory.md: no `METERED <date>: <n> tokens tracked` figure — "
                 "the eager prefix is unmetered again, so nothing can detect its drift"]
     claimed = int(found.group(1).replace(",", ""))
+    # Two steps, not one. IMPORT failure must catch broadly — a broken sibling raises
+    # SyntaxError, not ImportError, and the first version of this fix caught only the
+    # latter and still died on the case it was written for. MEASUREMENT failure stays
+    # narrow, so a genuine bug in the meter surfaces instead of being swallowed.
     try:
-        actual = prefix_meter.tracked_total(ROOT)
+        meter = _prefix_meter()
+    except Exception as exc:
+        return [f"scripts/prefix_meter.py cannot be imported ({exc}) — the figure in "
+                f"docs/observatory.md is unverifiable, not confirmed"]
+    try:
+        actual = meter.tracked_total(ROOT)
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         return [f"scripts/prefix_meter.py could not measure the eager prefix ({exc}) — "
                 f"the figure in docs/observatory.md is unverifiable, not confirmed"]

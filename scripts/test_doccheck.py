@@ -1945,3 +1945,50 @@ def test_non_mirror_claude_path_does_not_resolve_via_its_namesake(fake_repo):
     (fake_repo / "docs" / "x.md").write_text("See `.claude/scripts/real.py`.")
     bad = doccheck.check_referenced_paths_exist()
     assert any(".claude/scripts/real.py" in v for v in bad), bad
+
+
+# ─── FOUND BY ARBITER 2026-08-09, in the code written to guard against this exact shape.
+# `import prefix_meter` was module-level for one day: a missing or SYNTACTICALLY BROKEN
+# sibling killed the whole doccheck process before any check ran, so the pre-commit hook
+# lost all 41 checks — and eager-prefix-figure-is-current's own try/except, written to turn
+# this into one reported line, was unreachable. Standing pattern #1, self-inflicted.
+# The first fix caught only ImportError and still died on a syntax error; that near-miss is
+# why both tests below raise SyntaxError rather than ImportError.
+def _meter_raises(monkeypatch, exc):
+    monkeypatch.setattr(doccheck, "_prefix_meter",
+                        lambda: (_ for _ in ()).throw(exc))
+
+
+def test_broken_meter_degrades_the_prefix_check_instead_of_killing_doccheck(fake_repo, monkeypatch):
+    _meter_raises(monkeypatch, SyntaxError("'(' was never closed"))
+    (fake_repo / "docs" / "observatory.md").write_text(
+        "**METERED 2026-08-09: 1,000 tokens tracked** — by the meter.\n")
+    bad = doccheck.check_eager_prefix_figure_is_current()
+    assert any("cannot be imported" in v and "unverifiable" in v for v in bad), bad
+
+
+def test_broken_meter_degrades_path_checking_and_says_so(fake_repo, monkeypatch):
+    """Degrade, do not die AND do not go blind: fall back to literal resolution — the
+    pre-2026-08-09 behaviour — and report that mirror resolution is off, because a silently
+    literal run is red on a clean clone for reasons no reader could diagnose."""
+    _meter_raises(monkeypatch, SyntaxError("'(' was never closed"))
+    (fake_repo / "docs" / "x.md").write_text("See `scripts/ghost.py`.")
+    bad = doccheck.check_referenced_paths_exist()
+    assert any("resolution is OFF" in v for v in bad), bad
+    assert any("ghost.py" in v for v in bad), bad      # still checking, not blind
+
+
+def test_duplicate_eager_import_is_counted_once(fake_repo):
+    """DELIBERATE, not incidental. An import named twice is LOADED once, so one count is
+    the correct total. arbiter read the dict overwrite as an understating bug and proposed
+    accumulating counts, which would over-report."""
+    (fake_repo / "skills" / "s").mkdir(parents=True)
+    (fake_repo / "skills" / "s" / "SKILL.md").write_text("y" * 800)
+    body = "head\n@.claude/skills/s/SKILL.md\nmore @.claude/skills/s/SKILL.md again\n"
+    (fake_repo / "CLAUDE.md").write_text(body)
+    assert prefix_meter.tracked_total(fake_repo) == prefix_meter.tokens(body) + 200
+
+
+def test_absent_claude_md_raises_a_descriptive_error(fake_repo):
+    with pytest.raises(OSError, match="CLAUDE.md is not on disk"):
+        prefix_meter.tracked_total(fake_repo)
