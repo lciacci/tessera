@@ -196,7 +196,11 @@ verify() {
   # directory here is the failure — it reads as installed and silently shadows skills/.
   for d in skills commands agents; do
     [ -d "$REPO/$d" ] || continue
-    if [ -L "$REPO/.claude/$d" ] && [ "$REPO/.claude/$d/" -ef "$REPO/$d/" ]; then
+    # readlink, NOT `-ef` with trailing slashes. POSIX does not specify that `test -ef`
+    # follows symlinks; the trailing-slash trick relies on the OS stat() dereferencing it,
+    # and on a DANGLING link `-ef` fails for a reason the message would misattribute.
+    # Comparing the recorded target is exact and says what is actually wrong (arbiter, 2026-08-09).
+    if [ -L "$REPO/.claude/$d" ] && [ "$(readlink "$REPO/.claude/$d")" = "../$d" ]; then
       ok ".claude/$d -> ../$d"
     else
       err ".claude/$d is not a symlink to ../$d — CLAUDE.md's eager @ imports will not"

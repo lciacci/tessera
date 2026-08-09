@@ -34,6 +34,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parent.parent
+
+
 def _prefix_meter():
     """Import the sibling meter LAZILY, the way decision_surface and report_settings are.
 
@@ -52,7 +55,6 @@ def _prefix_meter():
     import prefix_meter
     return prefix_meter
 
-ROOT = Path(__file__).resolve().parent.parent
 
 # Docs held to their claims about THIS repo's disk state. The exclusions are not
 # laziness — they are the whole design. A first cut checked every .md and produced 98
@@ -2309,10 +2311,17 @@ def check_mirror_links_are_symlinks() -> list[str]:
             bad.append(f"{mirror} exists but is NOT a symlink — a real directory here "
                        f"shadows {canonical}/ with a copy nothing syncs")
         elif not link.exists():
-            # Dangling. Caught explicitly: without this it would fall to the `target.exists()`
-            # branch and PASS whenever the canonical dir is also missing.
+            # Dangling. Caught explicitly: without this it would fall to the target branch
+            # and PASS whenever the canonical dir is also missing.
             bad.append(f"{mirror} is a dangling symlink to {os.readlink(link)}")
-        elif target.exists() and link.resolve() != target.resolve():
+        elif link.resolve() != (ROOT / canonical).resolve():
+            # COMPARE THE TARGET UNCONDITIONALLY. This read `target.exists() and …` for four
+            # hours: with the canonical dir absent, the condition short-circuited and a
+            # symlink pointing at a WRONG BUT EXISTING path passed silently. Demonstrated by
+            # arbiter 2026-08-09 and reproduced — `.claude/skills -> ../elsewhere` with no
+            # `skills/` returned clean. A representable divergence, inside the check whose
+            # entire purpose is to make divergence unrepresentable. `Path.resolve()` is
+            # non-strict, so it compares fine when the canonical dir does not exist.
             bad.append(f"{mirror} is a symlink to {link.resolve()}, not {canonical}/")
     return sorted(bad)
 

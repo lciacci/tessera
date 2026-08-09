@@ -2007,9 +2007,28 @@ def _mirror_repo(root):
 
 def test_absent_mirrors_are_green(fake_repo):
     """Every fresh clone, before ./install.sh. This check runs in the pre-commit hook, so
-    absence must not block; it is machine state and belongs to install.sh's verify()."""
+    absence must not block; it is machine state and belongs to install.sh's verify().
+
+    The canonical dirs are created and then asserted ABSENT-as-mirrors, which is the real
+    pre-install shape: `skills/` present, `.claude/skills` not yet linked. arbiter noted the
+    first version was vacuous — `_mirror_repo`'s setup had no effect on the assertion, so it
+    could not distinguish this state from "nothing exists at all". Both are now asserted."""
     _mirror_repo(fake_repo)
+    assert (fake_repo / "skills").is_dir()                     # canonical present…
+    assert not (fake_repo / ".claude" / "skills").exists()     # …mirror not yet linked
     assert doccheck.check_mirror_links_are_symlinks() == []
+
+
+def test_wrong_target_fails_even_when_canonical_dir_is_missing(fake_repo):
+    """THE HOLE arbiter found, four hours after this check shipped. `target.exists() and …`
+    short-circuited, so a symlink pointing at a wrong-but-EXISTING path passed whenever the
+    canonical dir was absent — a representable divergence inside the check whose whole
+    purpose is to make divergence unrepresentable."""
+    (fake_repo / "elsewhere").mkdir()
+    (fake_repo / ".claude" / "skills").symlink_to(Path("..") / "elsewhere")
+    assert not (fake_repo / "skills").exists()
+    bad = doccheck.check_mirror_links_are_symlinks()
+    assert any("not skills/" in v for v in bad), bad
 
 
 def test_symlinked_mirrors_are_green(fake_repo):

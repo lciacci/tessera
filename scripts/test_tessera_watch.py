@@ -870,6 +870,10 @@ def test_crashed_predicates_are_excluded_from_the_fire_log(tmp_path, monkeypatch
                                            "P-real": lambda r: (True, "genuinely fired")})
     tw.append_log(root, tw.evaluate(root))
     entry = json.loads((root / ".tessera" / "logs" / "watch.jsonl").read_text().strip())
+    # Assert the KEY exists before its value: a missing key raises KeyError, which pytest
+    # reports as an ERROR rather than a FAILURE — the contract violation then reads as test
+    # noise instead of the omission it is (arbiter, 2026-08-09).
+    assert "crashed" in entry, entry
     assert entry["fired"] == ["P-real"], entry
     assert entry["crashed"] == ["P-boom"], entry
 
@@ -883,9 +887,15 @@ def test_p16_survives_an_unreadable_log(tmp_path, monkeypatch):
     bad = proj / ".tessera" / "logs" / "x.jsonl"
     bad.write_text("{}\n")
     monkeypatch.setattr(tw, "_downstream_projects", lambda r: [proj])
-    monkeypatch.setattr(Path, "read_text",
-                        lambda self, **kw: (_ for _ in ()).throw(OSError("gone"))
-                        if self == bad else "")
+
+    # Patch NARROWLY. The first version replaced Path.read_text for every path, returning ""
+    # for anything that was not the target — so any other file the predicate touched silently
+    # read as empty and the test could pass for a reason it never stated (arbiter, 2026-08-09).
+    # Delegating to the real implementation keeps the blast radius to the one file.
+    real = Path.read_text
+    monkeypatch.setattr(Path, "read_text", lambda self, **kw: (
+        (_ for _ in ()).throw(OSError("gone")) if self == bad else real(self, **kw)))
+
     fired, detail = tw.p16_t2_receipts(root)
     assert "T2" in detail                      # returned a verdict rather than raising
 
@@ -908,3 +918,26 @@ def test_p16_under_bar_message_names_which_dimension_is_short(tmp_path, monkeypa
     assert fired
     assert "projects 2/3" in detail, detail
     assert "under the" not in detail, detail   # the self-contradicting phrasing is gone
+
+
+def test_render_distinguishes_a_crash_from_a_fire(tmp_path, monkeypatch):
+    """`crashed` was a first-class concept in the data model that render() could not see, so
+    "0 fired, 2 crashed" rendered in the same shape as "2 fired" — missing coverage reading
+    as findings (arbiter, 2026-08-09). Distinct from the exit-code fix, which taught the
+    SURFACER the difference while the human-facing text still conflated them (#9)."""
+    root = _root(tmp_path)
+    monkeypatch.setattr(tw, "PREDICATES", {"P-boom": _crashing,
+                                           "P-quiet": lambda r: (False, "nothing to report")})
+    out = tw.render(tw.evaluate(root))
+    assert "COULD NOT RUN" in out, out
+    assert "Observatory triggers fired" not in out, out      # nothing actually fired
+    assert "not the same as nothing to report" in out, out
+
+
+def test_render_keeps_crashes_out_of_the_fired_section(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    monkeypatch.setattr(tw, "PREDICATES", {"P-boom": _crashing,
+                                           "P-real": lambda r: (True, "genuinely fired")})
+    out = tw.render(tw.evaluate(root))
+    fired_block = out.split("Observatory triggers fired")[1]
+    assert "P-real" in fired_block and "P-boom" not in fired_block, out

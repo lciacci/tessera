@@ -475,7 +475,18 @@ def g_a_consecutive(root: Path) -> tuple[bool, str]:
 
 
 def _read_firelog(root: Path) -> list[list[str]]:
-    """Fired-label lists per prior run, chronological. The watcher reading its own history."""
+    """Fired-label lists per prior run, chronological. The watcher reading its own history.
+
+    READS `fired` AND IGNORES `crashed` ON PURPOSE. arbiter (2026-08-09) noted that a
+    predicate crashing on one run drops out of G-a's consecutive-fire intersection, so a
+    genuine fire on runs 1 and 3 with a crash on run 2 will not graduate. That is the
+    CONSERVATIVE direction and it is the one to want: graduation is a claim that a predicate
+    reliably fires, and a run where it could not produce a result is not evidence for that
+    claim. Its sibling worry — that a persistently crashing predicate looks like it never
+    fires — is real but belongs to P13/`degraded`, which reports the crash within a session.
+    Coverage here is DISTRIBUTED; auditing it per-function is the error the degraded-event
+    contract warns about (three wrong findings, 2026-07-26).
+    """
     log = root / ".tessera" / "logs" / "watch.jsonl"
     if not log.exists():
         return []
@@ -812,12 +823,15 @@ def p16_t2_receipts(root: Path, now: datetime | None = None) -> tuple[bool, str]
     # arbiter flagged it 2026-08-07 and correctly did not call it a logic bug: the AND is
     # intended, the SENTENCE was wrong. Naming the short dimension also makes the message
     # actionable — "get a third project reporting" is a different job from "wait for volume".
+    # No `or "…"` fallback: the AND-ed early return above has already fired if BOTH bars are
+    # met, so at least one branch here always appends and the join is never empty. A dead
+    # fallback reads as a documented state that cannot occur (arbiter, 2026-08-09).
     short = []
     if total < T2_RECEIPT_BAR:
         short.append(f"receipts {total}/{T2_RECEIPT_BAR}")
     if len(per_project) < T2_PROJECT_BAR:
         short.append(f"projects {len(per_project)}/{T2_PROJECT_BAR}")
-    shortfall = " and ".join(short) or "neither dimension"
+    shortfall = " and ".join(short)
 
     elapsed = (now - T2_SHIPPED).days
     if elapsed >= T2_PATIENCE_DAYS:
@@ -995,6 +1009,12 @@ def evaluate(root: Path) -> list[dict]:
             detail = (f"PREDICATE CRASHED — {type(exc).__name__}: {exc}. Every OTHER "
                       f"predicate still ran; this one reported nothing, which is not the "
                       f"same as reporting nothing to report.")
+        # A SNOOZE IS HONOURED IN THE RENDER AND DELIBERATELY NOT IN THE EXIT CODE.
+        # `snoozed` is computed independently of `crashed`, so a snoozed predicate that
+        # crashes still renders as 💤 (verified — arbiter reported the opposite and was
+        # wrong). But `main()` still returns 2, because a snooze says "I know this FIRES,
+        # quiet it" — never "I accept this predicate being BROKEN". Those are different
+        # events and only one of them is an operator decision.
         s = snoozes.get(label, {}) if label in snoozed else {}
         out.append({"predicate": label, "fired": fired, "snoozed": label in snoozed,
                     "crashed": crashed, "detail": detail, "snooze_until": s.get("until"),
@@ -1023,16 +1043,38 @@ def append_log(root: Path, results: list[dict]) -> None:
 
 
 def render(results: list[dict]) -> str:
-    fired = [r for r in results if r["fired"] and not r["snoozed"]]
-    snoozed = [r for r in results if r["fired"] and r["snoozed"]]
+    """Three sections, and CRASHED IS ITS OWN — a crash is not a fire.
+
+    `crashed` was added to the result dicts as a first-class concept and this function was
+    left unaware of it for a day, so a run of "0 fired, 2 crashed" rendered identically in
+    shape to "2 fired": same 🔴, same header claiming triggers FIRED. Missing coverage read
+    as findings (arbiter, 2026-08-09). Distinct from the exit-code fix, which taught the
+    SURFACER the difference while the human-facing text still conflated them — a mechanism
+    can reach one audience and not the other (#9).
+
+    The final line matters too: with no fires but a crash present, "no triggers fired" is
+    true and misleading, because nothing can be concluded about the predicates that died.
+    """
+    crashed = [r for r in results if r.get("crashed")]
+    fired = [r for r in results if r["fired"] and not r["snoozed"] and not r.get("crashed")]
+    snoozed = [r for r in results if r["fired"] and r["snoozed"] and not r.get("crashed")]
     lines = []
+    if crashed:
+        lines.append(f"⚠ {len(crashed)} PREDICATE(S) COULD NOT RUN — this session's "
+                     f"observatory coverage is INCOMPLETE, not clean:")
+        lines += [f"  ⚠ {r['predicate']}: {r['detail']}" for r in crashed]
     if fired:
         lines.append("Observatory triggers fired (docs/observatory.md — resolve or snooze):")
         lines += [f"  🔴 {r['predicate']}: {r['detail']}" for r in fired]
     for r in snoozed:
         lines.append(f"  💤 {r['predicate']}: snoozed until {(r['snooze_until'] or '?')[:10]}"
                      f" — {r['snooze_reason'] or ''}")
-    return "\n".join(lines) if lines else "✓ no Observatory triggers fired"
+    if not lines:
+        return "✓ no Observatory triggers fired"
+    if not fired and crashed:
+        lines.append("(No trigger fired among the predicates that RAN — which is not the "
+                     "same as nothing to report.)")
+    return "\n".join(lines)
 
 
 def manage_snooze(root: Path, args, now: datetime) -> str:
