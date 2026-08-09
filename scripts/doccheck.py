@@ -78,6 +78,11 @@ PATH_ALLOWLIST = {
     # never be tracked (a live grant would authorize spend on every clone). The positive
     # assertion lives in check_runtime_state_is_not_tracked; this only exempts it from the `ls`.
     ".mnemos", ".tessera/logs", ".tessera/escalations", ".tessera/spend-auth.json",
+    # Same class, added 2026-08-09 when `bin/tessera-verify` showed this check was RED on a
+    # clean clone — so the pre-commit hook blocked before `install.sh` had ever run. Both are
+    # gitignored runtime state: for these, "exists" is a MACHINE-LOCAL fact, and a check that
+    # passes only on the author's disk is asserting nothing shared.
+    ".claude/settings.local.json", ".tessera/.spend-backstop-fires",
     # Other repos' files. The observatory *evaluates* GSD; it doesn't claim to contain it.
     "bin/lib/state.cjs", "bin/lib/capability-registry.cjs",
     "bin/lib/capability-loader.cjs", "docs/ARCHITECTURE.md",
@@ -149,7 +154,7 @@ def check_referenced_paths_exist() -> list[str]:
             exempt = PATH_ALLOWLIST | PLANNED_PATHS
             if any(token.rstrip("/") == p or token.startswith(p + "/") for p in exempt):
                 continue
-            if not (ROOT / token).exists():
+            if not prefix_meter.canonical_path(ROOT, token).exists():
                 bad.append(f"{_rel(doc)}: names `{token}` — not on disk")
     return sorted(set(bad))
 

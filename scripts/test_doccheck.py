@@ -1906,3 +1906,42 @@ def test_wrong_shaped_settings_is_unverifiable_not_a_traceback(fake_repo):
         "**METERED 2026-08-09: 1,000 tokens tracked** — by the meter.\n")
     bad = doccheck.check_eager_prefix_figure_is_current()
     assert any("unverifiable, not confirmed" in v for v in bad), bad
+
+
+# ─── 2026-08-09, third finding of the same session: `referenced-paths-exist` was RED on a
+# clean clone, because docs name `.claude/skills/...` — a gitignored symlink `install.sh`
+# creates. So the pre-commit hook blocked on a fresh clone, before install had ever run.
+# Surfaced by `bin/tessera-verify` while verifying the prefix meter, one check over from
+# what it was asked about.
+def test_mirror_symlink_paths_resolve_on_a_clean_clone(fake_repo):
+    (fake_repo / "skills" / "base").mkdir(parents=True)
+    (fake_repo / "skills" / "base" / "SKILL.md").write_text("x")
+    assert not (fake_repo / ".claude" / "skills").exists()      # pre-install state
+    (fake_repo / "docs" / "x.md").write_text("See `.claude/skills/base/SKILL.md`.")
+    assert doccheck.check_referenced_paths_exist() == []
+
+
+def test_bare_mirror_dir_resolves(fake_repo):
+    (fake_repo / "agents").mkdir()
+    (fake_repo / "docs" / "x.md").write_text("The `.claude/agents` dir is a symlink.")
+    assert doccheck.check_referenced_paths_exist() == []
+
+
+def test_phantom_under_a_mirror_dir_still_fails(fake_repo):
+    """The rewrite must not launder a phantom. A path checker that resolves anything is
+    worse than none, because it reports absence as presence."""
+    (fake_repo / "skills").mkdir()
+    (fake_repo / "docs" / "x.md").write_text("See `.claude/skills/ghost/SKILL.md`.")
+    bad = doccheck.check_referenced_paths_exist()
+    assert any("ghost" in v for v in bad), bad
+
+
+def test_non_mirror_claude_path_does_not_resolve_via_its_namesake(fake_repo):
+    """THE REASON the rewrite names three dirs instead of stripping `.claude/`. A blanket
+    strip would resolve `.claude/scripts/doccheck.py` to the real `scripts/doccheck.py`
+    and pass a wrong path. `.claude/scripts/` is tracked and must fail when it is wrong."""
+    (fake_repo / "scripts").mkdir(exist_ok=True)
+    (fake_repo / "scripts" / "real.py").write_text("x")
+    (fake_repo / "docs" / "x.md").write_text("See `.claude/scripts/real.py`.")
+    bad = doccheck.check_referenced_paths_exist()
+    assert any(".claude/scripts/real.py" in v for v in bad), bad

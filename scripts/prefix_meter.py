@@ -53,6 +53,12 @@ CHARS_PER_TOKEN = 4
 # it was read as minor and not acted on. It was the same defect the whole time.
 EAGER_IMPORT = re.compile(r"(?:^|(?<=\s))@([^\s`]+)", re.MULTILINE)
 FENCE_BLOCK = re.compile(r"```.*?```", re.DOTALL)
+
+# The gitignored mirror symlinks install.sh creates, and the tracked dirs they point at.
+# Exactly the three named in .gitignore — see canonical_path on why this is not `.claude/`.
+MIRROR_DIRS = {".claude/skills": "skills",
+               ".claude/commands": "commands",
+               ".claude/agents": "agents"}
 PART_ARGS = re.compile(r"tessera-patterns-surface\.sh\"? --part (\d+) --of (\d+)")
 HOOK_PATH = re.compile(r'exec "\$\{CLAUDE_PROJECT_DIR:-\.\}/([^"]+)"')
 
@@ -74,28 +80,37 @@ def eager_imports(root: Path) -> list[Path]:
         return []
     body = FENCE_BLOCK.sub("", claude_md.read_text())     # fenced examples are not imports
     refs = [m.rstrip(".,;:)") for m in EAGER_IMPORT.findall(body)]
-    return [_canonical(root, r) for r in refs if "/" in r]  # a path, not an @handle
+    return [canonical_path(root, r) for r in refs if "/" in r]  # a path, not an @handle
 
 
-def _canonical(root: Path, ref: str) -> Path:
-    """Resolve an `@` import to the path whose CONTENT is tracked.
+def canonical_path(root: Path, ref: str) -> Path:
+    """Resolve a repo path to the location whose CONTENT is tracked.
 
-    `.claude/skills` is a **gitignored symlink to `../skills`** created by `install.sh`;
-    `.gitignore` states the rule — "Canonical source is the top-level skills/, commands/,
-    agents/ dirs" (ADR-0010: repo is truth, the mirror is a mirror). So on a fresh clone,
-    before install, the imported path does not exist while its content is right there.
+    `.claude/{skills,commands,agents}` are **gitignored symlinks** to the top-level dirs,
+    created by `install.sh`; `.gitignore` states the rule — "Canonical source is the
+    top-level skills/, commands/, agents/ dirs" (ADR-0010: repo is truth, the mirror is a
+    mirror). On a fresh clone, before install, those paths do not exist while their
+    content is right there.
 
     FOUND BY `bin/tessera-verify` 2026-08-09, refuting this meter's own docstring. The
     first version took the literal path and skipped it when absent, so a clean worktree
     measured 9,689 instead of 15,497 — 37% low — and doccheck went red advising that the
     *wrong* figure be recorded. "Fails differently on every clone" is exactly what the
     check claimed to have avoided by excluding machine-local state, and it was doing it.
+
+    **Only those three prefixes are rewritten, and the narrowness is load-bearing.** A
+    blanket `.claude/` strip would resolve a wrong path like `.claude/scripts/doccheck.py`
+    to its top-level namesake and report a phantom as present — turning a path checker
+    into a path launderer. `.claude/scripts/` is tracked and must fail when it is wrong.
     """
     literal = root / ref
     if literal.exists():
         return literal
-    if ref.startswith(".claude/"):
-        return root / ref[len(".claude/"):]
+    for mirror, canonical in MIRROR_DIRS.items():
+        if ref == mirror or ref == mirror + "/":
+            return root / canonical
+        if ref.startswith(mirror + "/"):
+            return root / canonical / ref[len(mirror) + 1:]
     return literal
 
 
