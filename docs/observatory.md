@@ -3229,6 +3229,78 @@ check behind it.
 
 ---
 
+### Three environments are not a machine — a measured rejection that was correctly measured and wrongly scoped *(2026-08-09)*
+
+- **Status:** Closed as a defect (fixed in `136cef7` + `33cc3b3`), **kept as a correction to the
+  record**, because commit `136cef7`'s own message states the opposite and history is not rewritten
+  here. If you read that commit, read this entry.
+
+**What `136cef7` claims:** *"Honest scope: this cannot fire here. Measured on darwin, that call
+returns UTF-8 under the default locale, under `LC_ALL=C`, and under `LC_ALL=C LANG=C`. […] a latent
+landmine on the first non-UTF-8 host, not a bug on this one."*
+
+**Both halves are false, on this host, two ways** — found by `bin/tessera-verify`, not by the author
+who wrote that sentence three commits earlier:
+
+| condition | `getpreferredencoding(False)` | pre-fix behaviour |
+|---|---|---|
+| default / `LC_ALL=C` / `LC_ALL=C LANG=C` | `UTF-8` | fine — the three I sampled |
+| `PYTHONUTF8=0 LC_ALL=C` | `US-ASCII` | **UnicodeDecodeError**, `stats` dies |
+| `LC_ALL=en_US.ISO8859-1` | `ISO8859-1` | **silently decodes as mojibake, exit 0** |
+
+The three sampled environments all returned UTF-8 for the *same* reason — PEP 540 auto-enables UTF-8
+mode under C/POSIX — so they were one observation wearing three coats. **93 ISO8859 locales are
+installed on this machine**, and latin-1 never raises, so that row is the fail-open half: no
+exception, no signal, wrong bytes. (Narrower than it first reads: `stats` prints only counts, never
+claim text, so the corruption is real at the decode layer and invisible in that command's output.)
+
+**The lesson, which is why this is an entry and not just a fixed bug.** The rejection was *measured*
+— that is what made it persuasive, including to me. Principle #3 says name the pain, not the artifact
+that correlates with it; this is the same error in the sampling frame. **Three passing samples were
+generalised to "this machine", and the generalisation was never stated as the claim it was, so it was
+never tested.** The 2026-08-09 handoff already carries the parent lesson in bold — *a mitigation
+claim is a claim: it needs the same evidence as the defect it downgrades* — and this rejection was
+written two turns after quoting it.
+
+**Also recorded:** the fix itself then shipped the same shape one layer down. `136cef7` pinned the
+three JSONL I/O sites and left the console on the locale, so `cmd_stats` crashed printing the ⚠
+banner — **the only non-ASCII output, emitted only when a run lands on the fragile verdict
+channel.** The crash appeared precisely and only in the case the banner exists to report.
+Fixed in `33cc3b3`.
+
+**Revisit when:** never as a question — it is closed. Cite it when a rejection rests on an
+enumeration of environments, inputs, or cases rather than on the boundary of the class.
+
+---
+
+### `CLAUDE_CODE_SESSION_ID` reaches a filename unsanitised in 7 modules — accepted risk, recorded so it is a decision *(2026-08-09)*
+
+- **Status:** Watching. **Not a vulnerability; a real robustness defect.** Proven, not argued:
+  `CLAUDE_CODE_SESSION_ID=/tmp/PWNED-absolute bin/tessera-verify skip --reason …` wrote a 228-byte
+  file outside the repo, and the `../../../` form escapes `.tessera/logs` too.
+
+**Why it is not a security finding, verified rather than asserted.** arbiter rated it high/security.
+`bin/tessera-verify` was given the rejection as a claim and attacked both premises: a repo-wide grep
+found **only reads** of the variable (`tessera-verify`, `tessera-escalate`, `override/emit`,
+`gate/emit`, `spend/event`, `spend/authorize`, `restore/{emit,offer}`, `override/scan`) plus exactly
+one write — a hardcoded `CLAUDE_CODE_SESSION_ID=""` self-probe in `bin/tessera-degraded`. Every other
+input surface was probed and closed: no CLI flag accepts a session id, stdin is not read, and
+`.claude/settings.json` carries no `env` block. Setting the variable requires control of the process
+environment, which every invocation path already grants as arbitrary code execution. **Verdict:
+CONFIRMED — correctly rejected.**
+
+**What is left, and why it is written down instead of fixed.** The missing sanitisation is real, and
+**the identical env-var-as-filename pattern exists in at least 6 other modules** — so it is a class,
+not a row, and standing pattern #11 says fixing the instance where it was noticed is the failure mode
+rather than the fix. A same-session sweep of 7 modules on the back of a *rejected* finding is the
+wrong trade; recording the accepted risk explicitly is the honest alternative to a silent one.
+
+**Revisit when:** any of these tools starts taking a session id from an argument, a config file, or
+a hook payload — i.e. the moment the "only ever set by the harness" premise stops holding. At that
+point it is one shared helper, applied to all 7, not a patch at the call site that changed.
+
+---
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.
