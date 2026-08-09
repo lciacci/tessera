@@ -183,12 +183,63 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
 3. **Carried from 2026-07-29:** downstream T2 work (conclave, then howler — *do real work, not T2
    work*); **howler missing the entire spend guard** (14 files); don't wire iCPG downstream yet;
    caching closed except quarry.
-4. **The `bin/` control surface has still never had a WHOLE-FILE review, and the distinction is the
-   item.** Four arbiter passes on 2026-08-09 covered `bin/tessera-watch`'s *changed lines* — roughly
-   120 of its 1,107 — so the other ~90% and all 489 lines of `bin/tessera-verify` remain unread by
-   any reviewer. *(An earlier version of this line said the day's run "covered `scripts/` only". True
-   when written, false three runs later — doc drift introduced into the handoff within hours of
-   writing it.)*
+4. **The `bin/` control surface review — `tessera-verify` and `tessera-watch` are DONE; the other
+   19 files, ~4,500 lines, are not.** *(This item's opening line has now been rewritten twice inside
+   the day it was written: it first said the day's run "covered `scripts/` only", then that
+   `tessera-watch`'s "other ~90%" was open. Both true when written. The item is kept at the top of
+   the list rather than closed, because what remains is the larger half.)*
+
+   > **`bin/tessera-watch` IS NOW DONE TOO (2026-08-09, later session) — whole-file,
+   > adjudicated, fixed, falsified, and then fixed again on the falsifier's caveats.** 1,107
+   > lines, **$1.08** — against the struck estimate of $10–18 and the revised guess of ~$1.50,
+   > so the revised guess was right and the original was 10–17× high. 7 findings (5 blocking,
+   > 2 advisory). Three commits: `73bf484` `c34451c` `18f571e`.
+   >
+   > **THE ADJUDICATION AGAIN OUTWEIGHED THE REVIEW — 3 of 7 findings were REJECTED, all on
+   > measurement.** One was a precedence misread (`sorted(p.stem[:8] for p in recent if p.stem
+   > not in known)` — the truncation is on the yielded value, not the membership test). One
+   > called G-a's documented contract a bug, against a pre-existing test asserting it. One
+   > rested on a stated fact about Python — *"Path.glob raises FileNotFoundError on a missing
+   > dir in 3.12+, having silently returned empty in earlier versions"* — which is **false on
+   > 3.9.6, 3.13.14 and 3.14.6**. `iterdir` does raise; that is a different API, and it *was*
+   > the P5 defect. **A finding can be wrong about the language and still point at a real
+   > neighbour.**
+   >
+   > **TWO OF THE SEVEN DEFECTS FIXED WERE NOT ARBITER'S, AND ONE WAS THE SHARPEST OF THE
+   > DAY.** `p12_skill_registry_drift` used `filecmp.dircmp.diff_files` — a **shallow** compare
+   > that declares same-size + same-mtime files identical without reading either — while
+   > `tessera-sync-skills` is `rsync -a`, which preserves mtime. Measured returning *"repo
+   > skills/ == global mirror"* on 4 bytes vs 4 different bytes. `p4_downstream`'s own
+   > docstring, one screen up in the same file, quotes the rule it broke: *"A drift check that
+   > doesn't compare bytes isn't a drift check"* (F-003). **The lesson was written down, in
+   > this file, adjacent — and the code beneath it did the thing anyway.**
+   >
+   > **P5 CRASHED ON EVERY FRESH CLONE.** `.claude/skills` is a gitignored symlink built by
+   > `install.sh`, so `iterdir()` raised, the run exited 2, and the surfacer reported
+   > `runner-crashed` — a false alarm about the RUNNER on the exact state `install.sh` exists
+   > to fix. Same fresh-clone class as `referenced-paths-exist` that morning. **Two in one day
+   > means the clean-clone path is a standing blind spot, not a coincidence.**
+   >
+   > **THE FALSIFIER CAME BACK 9/9 CONFIRMED — $3.33, 52 turns — AND THE CAVEATS WERE WORTH
+   > MORE THAN THE VERDICTS.** All five fixes and all three rejections survived, each with a
+   > landmine the verifier planted itself. Then: *"globbed non-log reads remain unguarded — p1,
+   > p4, p14 read_bytes() over globbed \*.sh, and p11 calls p.stat() on globbed transcripts."*
+   > **The commit whose message cites "fix the pattern, not the row" had fixed a pattern and
+   > left its neighbour** (`18f571e`). It also caught the log-read guard asserting four of five
+   > sites, and P15's message asserting a suppression that a `0` counter does not represent.
+   > **Run the falsifier for its caveats, not only its verdicts: CONFIRMED is where it stops
+   > being interesting.**
+   >
+   > **Left open deliberately, with the reason:** two P9 tests assert `.icpg/reason.db` exists,
+   > so `tessera-test` is red on a fresh clone before `./install.sh`. Environmental, and the
+   > verifier hit it as its baseline. Same clean-clone blind spot as P5 — worth one look, not
+   > worth guessing at now.
+   >
+   > **NEXT: the other 19 extensionless `bin/` files, ~4,500 lines.** No single one of them is
+   > the reporter for nine predicates, so the ordering argument that put `tessera-verify` and
+   > `tessera-watch` first is spent; pick by blast radius. And **budget the cycle, not the API
+   > call** — this session's review was $1.08 of a ~$4.41 total, and the adjudication, the
+   > guards-against-re-planted-defects, and the falsifier were the rest.
 
    > **`bin/tessera-verify` IS NOW DONE — whole-file, adjudicated, fixed, and falsified.** 489 lines,
    > $0.59, 4 blocking + 3 advisory. **Seven commits: `ddc0792` `23a38e5` `cab7683` `36cc263`
