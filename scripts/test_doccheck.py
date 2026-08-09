@@ -1992,3 +1992,63 @@ def test_duplicate_eager_import_is_counted_once(fake_repo):
 def test_absent_claude_md_raises_a_descriptive_error(fake_repo):
     with pytest.raises(OSError, match="CLAUDE.md is not on disk"):
         prefix_meter.tracked_total(fake_repo)
+
+
+# ─── 2026-08-09. `tessera-verify` and arbiter both flagged that canonical_path prefers the
+# literal path, so a REAL `.claude/skills` directory would be measured stale. Both framed it
+# as a resolver-ordering choice. It was neither — it was an unenforced precondition: when the
+# path is a symlink both resolutions are the SAME FILE. Asserting the shape dissolves the
+# question instead of picking a side, and needs no definition of "diverged".
+def _mirror_repo(root):
+    for d in ("skills", "commands", "agents"):
+        (root / d).mkdir(exist_ok=True)
+    return root
+
+
+def test_absent_mirrors_are_green(fake_repo):
+    """Every fresh clone, before ./install.sh. This check runs in the pre-commit hook, so
+    absence must not block; it is machine state and belongs to install.sh's verify()."""
+    _mirror_repo(fake_repo)
+    assert doccheck.check_mirror_links_are_symlinks() == []
+
+
+def test_symlinked_mirrors_are_green(fake_repo):
+    _mirror_repo(fake_repo)
+    for d in ("skills", "commands", "agents"):
+        (fake_repo / ".claude" / d).symlink_to(Path("..") / d)
+    assert doccheck.check_mirror_links_are_symlinks() == []
+
+
+def test_real_directory_mirror_fails(fake_repo):
+    """THE STATE THE FIX EXISTS FOR: a real dir holding a copy nothing syncs. It reads as
+    installed, shadows skills/, and is what would make a deleted skill go green."""
+    _mirror_repo(fake_repo)
+    (fake_repo / ".claude" / "skills").mkdir()
+    (fake_repo / ".claude" / "skills" / "stale").mkdir()
+    bad = doccheck.check_mirror_links_are_symlinks()
+    assert any("NOT a symlink" in v and ".claude/skills" in v for v in bad), bad
+
+
+def test_mirror_symlink_to_the_wrong_target_fails(fake_repo):
+    _mirror_repo(fake_repo)
+    (fake_repo / ".claude" / "commands").symlink_to(Path("..") / "skills")
+    bad = doccheck.check_mirror_links_are_symlinks()
+    assert any(".claude/commands" in v for v in bad), bad
+
+
+def test_broken_mirror_symlink_fails(fake_repo):
+    """A dangling symlink: `exists()` is False but `is_symlink()` is True. Testing only
+    `exists()` would silently treat this as the pre-install state and pass."""
+    _mirror_repo(fake_repo)
+    (fake_repo / ".claude" / "agents").symlink_to(Path("..") / "nowhere")
+    bad = doccheck.check_mirror_links_are_symlinks()
+    assert any(".claude/agents" in v for v in bad), bad
+
+
+def test_dangling_mirror_symlink_fails_even_when_canonical_dir_is_missing(fake_repo):
+    """The hole the explicit dangling branch closes: with `agents/` also absent, the
+    `target.exists()` guard short-circuits and a broken link would have PASSED."""
+    (fake_repo / ".claude" / "agents").symlink_to(Path("..") / "nowhere")
+    assert not (fake_repo / "agents").exists()
+    bad = doccheck.check_mirror_links_are_symlinks()
+    assert any("dangling" in v for v in bad), bad

@@ -2637,18 +2637,39 @@ its own paragraph in the highest-value context position in the repo.
 argument below is unchanged by it, and a threshold here would be principle #3's error aimed at the
 eager load.
 
-**One unresolved tension, found independently twice on the day the meter shipped** — by
-`bin/tessera-verify` and then by arbiter, which is the reason it is recorded rather than noted in
-passing. `prefix_meter.canonical_path` prefers the literal path and falls back to the tracked source
-only when the literal is absent. On a machine where `.claude/skills` is a **real directory** rather
-than the symlink `install.sh` makes, a stale local copy is what gets measured — and a doc naming a
-deleted skill file goes green. **The two consumers want opposite things**: the meter should measure
-what *actually loads* (the mirror, divergence included, because that is the real prefix), while
-`referenced-paths-exist` should assert the *tracked source*. Resolving it inside the shared resolver
-would make one of them wrong. The honest reading is that mirror-vs-source divergence is a defect in
-its own right, owned by `tessera-sync-skills` under ADR-0010 (repo is truth), and neither consumer
-should paper over it. **No divergence check exists today** — that is the gap, and it is a different
-one from the gap the meter closed.
+**RESOLVED 2026-08-09, and the resolution corrects this entry's first version — kept, because the
+error is the instructive part.** `bin/tessera-verify` and then arbiter both flagged that
+`prefix_meter.canonical_path` prefers the literal path, so a **real** `.claude/skills` directory
+would be measured stale and a doc naming a deleted skill would go green. This entry first recorded
+it as an unresolvable tension between two consumers wanting opposite things — the meter wanting what
+*actually loads*, `referenced-paths-exist` wanting the *tracked source* — and attributed the
+divergence to `tessera-sync-skills` under ADR-0010.
+
+**Three things about that were wrong.**
+
+1. **The attribution.** `tessera-sync-skills` owns `~/.claude/skills` — the **global** mirror, a real
+   copy, which is what ADR-0010 is about. The project-local `.claude/skills` is a different object:
+   a hand-made symlink from 2026-06-24, gitignored, that **nothing created, nothing recreated, and
+   nothing checked**. `install.sh` never touched it. It had no owner at all.
+2. **The tension was not a tension.** When the path is a symlink, literal and canonical resolution
+   are **the same file** and no consumer can disagree. They diverge only in a state nothing should
+   ever create. So the fix is not to pick a side in the resolver — it is to assert the SHAPE
+   (`doccheck` → `mirror-links-are-symlinks`) and make the divergent state *unrepresentable* rather
+   than detectable. That is strictly stronger, and it needs no definition of "diverged".
+3. **"Found independently twice" was weaker evidence than it was given.** Two reviewers reading the
+   same code and noting the same branch is **one finding twice, not corroboration** — correlated,
+   not independent. What actually settled it was reading `install.sh` and finding that neither
+   reviewer's implied premise held.
+
+**The finding underneath, which neither reviewer reached:** `CLAUDE.md` eagerly `@`-imports
+`.claude/skills/{base,mnemos}/SKILL.md`. On a clone without those symlinks — the state of *every*
+fresh clone — the imports resolve to nothing and ~5,800 tokens of eagerly-loaded skills silently do
+not load, with nothing to say so. Now owned: `install.sh` creates the three links idempotently and
+its `verify()` asserts them (machine state), while doccheck asserts the shape and treats absence as
+green (repo state, and it runs in pre-commit). Same split the doc-claims contract already draws —
+existence is a local fact, the shared one is what gets asserted. **Framework-only, deliberately:
+downstream projects receive skills through the global union (ADR-0009) and have no `skills/` to
+point at; none of the six has these symlinks and none should.**
 
 **Caching makes that CHEAP, not FREE, and the distinction is the point.** A large, stable, turn-to-turn-
 identical prefix is the *ideal* caching case — written once at 1.25×, read at 0.1× thereafter. So

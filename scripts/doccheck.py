@@ -2272,7 +2272,53 @@ def check_eager_prefix_figure_is_current() -> list[str]:
     return []
 
 
+def check_mirror_links_are_symlinks() -> list[str]:
+    """The `.claude` dogfood mirrors must be symlinks to their canonical dirs, or absent.
+
+    ADDED 2026-08-09. `bin/tessera-verify` and arbiter independently flagged that
+    `prefix_meter.canonical_path` prefers the literal path, so a REAL `.claude/skills`
+    directory holding a stale copy would be measured, and a doc naming a deleted skill
+    would go green. Both framed it as a resolver-ordering choice between two consumers
+    that want opposite things — the meter wants what actually loads, this file wants the
+    tracked source.
+
+    **It is neither. It is an unenforced precondition.** When the path is a symlink the
+    two resolutions are the SAME FILE and no consumer can disagree; they diverge only in
+    a state nothing should create. So this asserts the shape and the question dissolves —
+    strictly better than detecting divergence after the fact, and it needs no definition
+    of "diverged".
+
+    Note on the evidence, because it corrected a mistake in how the finding was weighed:
+    two reviewers reading the same code and noting the same branch is ONE finding twice,
+    not independent corroboration. What actually settled it was reading `install.sh` and
+    discovering neither reviewer's implied premise held — nothing created these at all.
+
+    ABSENT IS GREEN, deliberately: that is the state of every fresh clone before
+    `./install.sh`, and this check runs in the pre-commit hook. Absence is machine state
+    and belongs to install.sh's `verify()`; a wrong SHAPE is a repo-structural fact and
+    belongs here. Same split the doc-claims contract draws — existence is a local fact,
+    the shared one is what gets asserted.
+    """
+    bad = []
+    for mirror, canonical in {".claude/skills": "skills", ".claude/commands": "commands",
+                              ".claude/agents": "agents"}.items():
+        link, target = ROOT / mirror, ROOT / canonical
+        if not link.exists() and not link.is_symlink():
+            continue                                    # pre-install; verify() owns this
+        if not link.is_symlink():
+            bad.append(f"{mirror} exists but is NOT a symlink — a real directory here "
+                       f"shadows {canonical}/ with a copy nothing syncs")
+        elif not link.exists():
+            # Dangling. Caught explicitly: without this it would fall to the `target.exists()`
+            # branch and PASS whenever the canonical dir is also missing.
+            bad.append(f"{mirror} is a dangling symlink to {os.readlink(link)}")
+        elif target.exists() and link.resolve() != target.resolve():
+            bad.append(f"{mirror} is a symlink to {link.resolve()}, not {canonical}/")
+    return sorted(bad)
+
+
 CHECKS = {
+    "mirror-links-are-symlinks": check_mirror_links_are_symlinks,
     "eager-prefix-figure-is-current": check_eager_prefix_figure_is_current,
     "tier-vocabulary-is-consistent": check_tier_vocabulary_is_consistent,
     "handoff-retires-its-own-figures": check_handoff_retires_its_own_figures,

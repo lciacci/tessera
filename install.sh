@@ -28,6 +28,27 @@ install_skills() {
   say "skills      -> $CLAUDE/skills (mirror, ADR-0010)"
 }
 
+# The project-local dogfood wiring: .claude/{skills,commands,agents} -> ../{skills,...}.
+# FRAMEWORK-ONLY and deliberately not in tessera-new-project — downstream projects receive
+# skills through the GLOBAL union (~/.claude/skills, ADR-0009) and have no skills/ dir to
+# point at. Tessera needs it because Tessera *is* the skill repo.
+#
+# These were hand-made once (2026-06-24) and owned by nothing until 2026-08-09: no script
+# created them, none recreated them, none checked them. That matters more than it looks —
+# CLAUDE.md eagerly `@`-imports .claude/skills/{base,mnemos}/SKILL.md, so on a clone
+# without them those imports resolve to nothing and ~5,800 tokens of eagerly-loaded skills
+# silently do not load. Found while resolving the literal-vs-symlink question that
+# tessera-verify and arbiter both raised against scripts/prefix_meter.py.
+install_dogfood_links() {
+  local name
+  for name in skills commands agents; do
+    [ -d "$REPO/$name" ] || continue
+    # -n so an EXISTING symlink is replaced rather than resolved-and-nested inside itself.
+    ln -sfn "../$name" "$REPO/.claude/$name"
+  done
+  say "dogfood     -> .claude/{skills,commands,agents} (symlinks, framework-only)"
+}
+
 install_dir() {
   local name="$1" src="$REPO/$1" dst="$CLAUDE/$1"
   [ -d "$src" ] || return 0
@@ -169,6 +190,21 @@ verify() {
     fi
   done
 
+  # 1a. Project-local dogfood symlinks resolve to the in-repo dirs. Asserts SHAPE, not
+  # content: if each is a symlink to its canonical dir, a stale divergent copy is
+  # unrepresentable, which is stronger than detecting divergence after the fact. A REAL
+  # directory here is the failure — it reads as installed and silently shadows skills/.
+  for d in skills commands agents; do
+    [ -d "$REPO/$d" ] || continue
+    if [ -L "$REPO/.claude/$d" ] && [ "$REPO/.claude/$d/" -ef "$REPO/$d/" ]; then
+      ok ".claude/$d -> ../$d"
+    else
+      err ".claude/$d is not a symlink to ../$d — CLAUDE.md's eager @ imports will not"
+      err "    resolve, and skills/ is shadowed rather than mirrored. Re-run ./install.sh"
+      fail=1
+    fi
+  done
+
   # 1b. tessera/bin on PATH. These are single-source tools reached by name (the F-003 trap
   # is copying them into every repo). Without PATH, downstream CLAUDE.md instructions like
   # `tessera-escalate raise` silently refer to a command that does not exist — and an
@@ -297,6 +333,7 @@ main() {
   say "────────────────────"
   mkdir -p "$CLAUDE"
   install_skills
+  install_dogfood_links
   install_dir commands
   install_dir hooks
   chmod +x "$CLAUDE/hooks/"* 2>/dev/null || true
