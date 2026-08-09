@@ -70,12 +70,32 @@ FALLBACK_STREAK = 3            # consecutive regex-only ingests before surfacing
 DEGRADED_WINDOW_DAYS = 7       # a degraded event is an INCIDENT, not a standing state (P13)
 
 
+def _same_bytes(a: Path, b: Path) -> bool:
+    """Byte equality, where UNREADABLE IS DRIFT — never silently "in sync".
+
+    THE ONE COMPARISON FOR EVERY DRIFT PREDICATE (P1, P4, P12, P14). Each of them globs a
+    directory and then reads both sides, so either file can vanish or become unreadable
+    between the glob and the read; an OSError there crashed the predicate. And the direction
+    matters more than the crash: a drift check that cannot read a file must say DRIFT, not
+    "match". Reporting a file it could not compare as in-sync is exactly the fail-open this
+    watcher exists to catch, aimed at the watcher (#1).
+
+    `bin/tessera-verify` (2026-08-09) returned this as a caveat on the log-read fix: the
+    globbed *log* reads had been guarded and the globbed *byte* reads had not, so the fix
+    that was written to be the class was still one row short of it.
+    """
+    try:
+        return a.read_bytes() == b.read_bytes()
+    except OSError:
+        return False
+
+
 def p1_hook_drift(root: Path) -> tuple[bool, str]:
     """Live SessionStart/etc. hooks missing from or differing in the install payload."""
     drift = []
     for s in sorted((root / ".claude" / "scripts").glob("*.sh")):
         t = root / "templates" / s.name
-        if not t.exists() or t.read_bytes() != s.read_bytes():
+        if not t.is_file() or not _same_bytes(t, s):
             drift.append(s.name)
     if not drift:
         return False, "hooks in sync with templates/"
@@ -248,7 +268,7 @@ def p4_downstream(root: Path) -> tuple[bool, str]:
             global_copy = templates / local.name
             if not global_copy.is_file():
                 orphaned.append(f"{project.name}/{local.name}")
-            elif global_copy.read_bytes() != local.read_bytes():
+            elif not _same_bytes(global_copy, local):
                 drifted.append(f"{project.name}/{local.name}")
 
     n = len(_downstream_projects(root))
@@ -631,11 +651,21 @@ def p11_ingest_pipe(root: Path, transcripts_dir: Path | None = None) -> tuple[bo
     if not tdir.is_dir() or not db.exists():
         return False, "no transcripts dir or no mnemos db"
     now = datetime.now(timezone.utc).timestamp()
-    recent = [p for p in tdir.glob("*.jsonl")
-              if p.stat().st_size >= INGEST_MIN_BYTES
-              and INGEST_STALE_MIN_AGE_H * 3600
-                  <= now - p.stat().st_mtime
-                  <= INGEST_STALE_MAX_AGE_D * 86400]
+    # ONE stat per file, inside a guard. It was three, unguarded: a transcript that vanishes
+    # or turns unreadable between the glob and any of them crashed P11, and a file rotated
+    # between the size stat and the mtime stat could be judged on two different snapshots.
+    # Skipping an unstattable file UNDERCOUNTS, which can only hold P11 quieter — it can
+    # never manufacture a "pipe is DEAD" alarm (verifier caveat, 2026-08-09).
+    recent = []
+    for p in tdir.glob("*.jsonl"):
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        if st.st_size >= INGEST_MIN_BYTES and (
+                INGEST_STALE_MIN_AGE_H * 3600 <= now - st.st_mtime
+                <= INGEST_STALE_MAX_AGE_D * 86400):
+            recent.append(p)
     try:
         conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
         try:
@@ -703,19 +733,13 @@ def p12_skill_registry_drift(root: Path, global_dir: Path | None = None) -> tupl
 
     drift: list[str] = []
 
-    def same_bytes(a: Path, b: Path) -> bool:
-        try:
-            return a.read_bytes() == b.read_bytes()
-        except OSError:
-            return False       # unreadable is drift; it is never silently "in sync"
-
     def walk(cmp: filecmp.dircmp, rel: str) -> None:
         for n in cmp.left_only:
             drift.append(f"repo-only: {rel}{n}")
         for n in cmp.right_only:
             drift.append(f"global-only: {rel}{n}")
         for n in cmp.common_files:
-            if not same_bytes(Path(cmp.left) / n, Path(cmp.right) / n):
+            if not _same_bytes(Path(cmp.left) / n, Path(cmp.right) / n):
                 drift.append(f"differs: {rel}{n}")
         for n, sub in cmp.subdirs.items():
             walk(sub, f"{rel}{n}/")
@@ -972,10 +996,17 @@ def p15_spend_backstop_suppressed(root: Path) -> tuple[bool, str]:
     # A bare `47` is VALID json, so the legacy shape arrives as an int, not a parse error.
     # Both non-dict shapes mean the same thing and get the same message.
     if not isinstance(fires, dict):
-        return True, (f".spend-backstop-fires holds a legacy global counter ({raw[:20]!r}); "
-                      f"a value over MAX_FIRES silenced the spend backstop in EVERY session, "
-                      f"permanently — it was found at 47. Delete the file to take the "
-                      f"per-session fix; it is untracked runtime state and rebuilds itself.")
+        # THE SHAPE IS THE FINDING, AND THE WORDING NOW SAYS SO. This asserted that a
+        # suppression HAD occurred — true of the 47 it was written for, false of `0` or of
+        # `not json`, which are the same pre-fix shape with nothing suppressed yet. The
+        # verifier flagged it (2026-08-09) while confirming the empty-file fix: a message
+        # that over-claims turns a correct alarm into a false report, which is what P15's
+        # own subject taught (#12).
+        return True, (f".spend-backstop-fires holds a legacy global counter ({raw[:20]!r}) "
+                      f"instead of the per-session map. In that shape a value over MAX_FIRES "
+                      f"silences the spend backstop in EVERY session, permanently — it was "
+                      f"found at 47. Delete the file to take the per-session fix; it is "
+                      f"untracked runtime state and rebuilds itself.")
 
     cap = _max_spend_fires(root)
     capped = [s for s, n in fires.items() if isinstance(n, int) and n > cap]
@@ -1031,7 +1062,7 @@ def p14_global_tier_drift(root: Path) -> tuple[bool, str]:
         counterpart = tier3 / f.name
         if not counterpart.is_file():
             missing.append(f.name)
-        elif counterpart.read_bytes() != f.read_bytes():
+        elif not _same_bytes(counterpart, f):
             stale.append(f.name)
 
     if not missing and not stale:

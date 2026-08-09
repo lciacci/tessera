@@ -1087,7 +1087,8 @@ def test_every_globbed_log_read_survives_an_unreadable_file(tmp_path, monkeypatc
     assert tw.p3_restore_integrity(root)[0] is False
     assert tw.p7_gate_labels(root)[0] is False
     assert tw.p13_degraded(root)[0] is False
-    assert tw._read_firelog(root) == []
+    assert tw.p16_t2_receipts(root)[0] is False   # the fifth site, added after the verifier
+    assert tw._read_firelog(root) == []           # noted this test asserted only four
 
 
 def test_p3_reports_an_unreadable_checkpoint_instead_of_crashing(tmp_path, monkeypatch):
@@ -1213,3 +1214,86 @@ def test_p6_still_ignores_a_resolved_packet(tmp_path):
     esc.mkdir(parents=True)
     (esc / "e.json").write_text(json.dumps({"status": "resolved:2026-08-09"}))
     assert tw.p6_escalations(root)[0] is False
+
+
+# ── Returned as CAVEATS by bin/tessera-verify while CONFIRMING the fixes above. The
+#    log-read fix was written to be the class and was still one row short of it: the globbed
+#    *byte* comparisons (P1, P4, P14) and P11's globbed stat() were untouched. That is
+#    standing pattern #11 aimed at the commit that cites #11.
+
+
+def _unreadable(monkeypatch, predicate):
+    """Make read_bytes raise for the *right-hand* side of every drift comparison."""
+    real = Path.read_bytes
+
+    def boom(self, *a, **k):
+        if predicate(self):
+            raise PermissionError(13, "Permission denied")
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(Path, "read_bytes", boom)
+
+
+def test_p1_reports_an_unreadable_template_as_drift_not_as_in_sync(tmp_path, monkeypatch):
+    """Unreadable must be DRIFT. Quiet would mean a drift check reporting 'in sync' about a
+    file it could not compare — the fail-open this watcher exists to catch, aimed at the
+    watcher — and raising would crash the predicate."""
+    root = _root(tmp_path)
+    (root / ".claude" / "scripts" / "h.sh").write_text("same\n")
+    (root / "templates" / "h.sh").write_text("same\n")
+    assert tw.p1_hook_drift(root)[0] is False           # identical, and readable
+    _unreadable(monkeypatch, lambda p: p.parent.name == "templates")
+    fired, detail = tw.p1_hook_drift(root)
+    assert fired is True and "h.sh" in detail
+
+
+def test_p14_reports_an_unreadable_global_copy_as_stale(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    home = tmp_path / "home"
+    tier3 = home / ".claude" / "templates"
+    tier3.mkdir(parents=True)
+    (root / ".claude" / "scripts" / "h.sh").write_text("same\n")
+    (tier3 / "h.sh").write_text("same\n")
+    (home / ".claude" / ".bootstrap-dir").write_text(str(root))
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
+    assert tw.p14_global_tier_drift(root)[0] is False
+    _unreadable(monkeypatch, lambda p: p.parent == tier3)
+    fired, detail = tw.p14_global_tier_drift(root)
+    assert fired is True and "STALE" in detail and "h.sh" in detail
+
+
+def test_p11_skips_a_transcript_that_cannot_be_statted(tmp_path, monkeypatch):
+    """A transcript vanishing between glob() and stat() crashed P11 — and it called stat()
+    three times per file, so a rotation between two of them could judge one file on two
+    different snapshots. Skipping UNDERCOUNTS, which can only hold P11 quieter; it can never
+    manufacture a 'pipe is DEAD' alarm."""
+    root = _root(tmp_path)
+    tdir = tmp_path / "transcripts"
+    _transcript(tdir, "ghost", age_h=24)
+    _sessions_db(root, ["other"])
+    assert tw.p11_ingest_pipe(root, tdir)[0] is True    # normally fires: never ingested
+    real_stat = Path.stat
+
+    def boom(self, *a, **k):
+        if self.name == "ghost.jsonl":
+            raise FileNotFoundError(2, "No such file or directory")
+        return real_stat(self, *a, **k)
+
+    monkeypatch.setattr(Path, "stat", boom)
+    fired, detail = tw.p11_ingest_pipe(root, tdir)
+    assert fired is False, detail                       # skipped, not crashed
+
+
+def test_p15_legacy_message_states_the_shape_not_a_suppression(tmp_path):
+    """A bare `0` is the same pre-fix SHAPE with nothing suppressed yet, and the message
+    asserted a suppression had occurred. Over-claiming turns a correct alarm into a false
+    report — which is P15's own subject (#12)."""
+    root = _root(tmp_path)
+    (root / ".tessera").mkdir()
+    for raw in ("0", "not json", "47"):
+        (root / ".tessera" / ".spend-backstop-fires").write_text(raw)
+        fired, detail = tw.p15_spend_backstop_suppressed(root)
+        assert fired is True, raw
+        assert "legacy global counter" in detail
+        assert "silences the spend backstop" in detail          # conditional...
+        assert "silenced the spend backstop in EVERY" not in detail  # ...not asserted
