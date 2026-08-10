@@ -251,6 +251,21 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
    > they do not own**. A runner is the right instrument, is not built, and the constraint that
    > blocks the naive version is measured in the entry.
    >
+   > **AND THEN RUNNING `./install.sh` TO VERIFY THE FIX SILENCED P14 — found by doing, not by
+   > reviewing.** The install passed (`✓ iCPG database present`), and its `.bootstrap-dir` write
+   > recorded `$REPO` as `pwd` spelled it — `/Users/…/claude/tessera` — while `ROOT` resolves to
+   > `/Users/…/Claude/tessera`. **macOS is case-insensitive: one directory, two spellings**, and
+   > P14's owner guard was `owner != str(root)`. It read its own repo as a foreign checkout and
+   > went quiet — and quiet is what P14 returns when the tier is IN SYNC, so **nothing in the
+   > output changed.** The predicate whose whole subject is *uniform staleness reads as agreement*
+   > was silenced by that shape one level up. Fixed at the READER with `samefile` (`resolve()`
+   > does **not** normalise case — measured), and note this is `install.sh`'s own lesson from
+   > that same morning, where two arbiter rounds landed on `pwd -P` physical equality: **compare
+   > the thing, never its spelling.** Two files, one day, nobody connected them — #11 across a
+   > file boundary. *(The first guard written for it aliased the repo with a SYMLINK and passed a
+   > `resolve()`-based fix; only re-planting caught that. A guard for a spelling bug must use the
+   > spelling that broke it.)*
+   >
    > **NEXT: the other 19 extensionless `bin/` files, ~4,500 lines.** No single one of them is
    > the reporter for nine predicates, so the ordering argument that put `tessera-verify` and
    > `tessera-watch` first is spent; pick by blast radius. And **budget the cycle, not the API
