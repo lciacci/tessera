@@ -1050,7 +1050,23 @@ def p14_global_tier_drift(root: Path) -> tuple[bool, str]:
     if not tier3.is_dir():
         return False, "no ~/.claude/templates — global fallback tier not installed"
     owner = marker.read_text().strip() if marker.is_file() else ""
-    if owner != str(root):
+    # SAME DIRECTORY, NOT SAME STRING — and this silenced P14 on 2026-08-09 in front of me.
+    # `install.sh` writes `$REPO` as `pwd` gives it, and macOS's filesystem is CASE-INSENSITIVE:
+    # a run from `/Users/…/claude/tessera` wrote that spelling while `ROOT` resolves to
+    # `/Users/…/Claude/tessera`. Both are the same directory. The string compare said "owned by
+    # another repo", P14 returned quiet, and quiet is INDISTINGUISHABLE IN THE RENDER from "the
+    # global tier is in sync" — the predicate whose entire subject is that uniform staleness reads
+    # as agreement, silenced by exactly that shape one level up.
+    #
+    # `resolve()` is NOT enough: it resolves symlinks, not case (measured — the two spellings
+    # compare unequal after resolve, and equal under samefile, which tests st_dev/st_ino). This is
+    # install.sh's own lesson, which after two rounds of arbiter findings landed on `pwd -P`
+    # physical equality for the dogfood symlinks: compare the THING, never its spelling.
+    try:
+        owned_by_us = bool(owner) and Path(owner).samefile(root)
+    except OSError:
+        owned_by_us = False        # a recorded owner that no longer exists is not this repo
+    if not owned_by_us:
         return False, (f"global tier is owned by {owner or '<unknown>'}, not this repo — "
                        f"not asserting on it")
 

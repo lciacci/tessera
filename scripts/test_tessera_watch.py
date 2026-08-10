@@ -1339,3 +1339,68 @@ def test_p15_legacy_message_states_the_shape_not_a_suppression(tmp_path):
         assert "legacy global counter" in detail
         assert "silences the spend backstop" in detail          # conditional...
         assert "silenced the spend backstop in EVERY" not in detail  # ...not asserted
+
+
+def test_p14_owner_check_compares_the_directory_not_its_spelling(tmp_path, monkeypatch):
+    """P14 WAS SILENCED BY THIS, LIVE, on 2026-08-09, by running ./install.sh.
+
+    install.sh writes `$REPO` as `pwd` hands it over, and macOS's filesystem is
+    CASE-INSENSITIVE: a run from `/Users/…/claude/tessera` recorded that spelling while
+    ROOT resolves to `/Users/…/Claude/tessera`. Same directory. The old `owner != str(root)`
+    read it as a foreign owner and returned quiet — and quiet is INDISTINGUISHABLE IN THE
+    RENDER from "the global tier is in sync". The predicate whose whole subject is that
+    uniform staleness reads as agreement was silenced by that shape one level up.
+
+    TWO ALIASES, AND THE SECOND ONE IS THE LOAD-BEARING HALF. The first draft of this test
+    used only a symlink — and re-planting `resolve()` in place of `samefile` made it PASS,
+    because `resolve()` follows symlinks. It proved "not a raw string compare" and would
+    have gone green on a fix that does not fix the bug that was actually observed. So the
+    case-variant is tested too: it is the one `resolve()` cannot normalize, and it is the
+    one that happened. Skipped, LOUDLY, where the filesystem makes it meaningless.
+    """
+    import pytest
+    root = _root(tmp_path)
+    home = tmp_path / "home"
+    tier3 = home / ".claude" / "templates"
+    tier3.mkdir(parents=True)
+    (root / ".claude" / "scripts" / "h.sh").write_text("same\n")
+    (tier3 / "h.sh").write_text("same\n")
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
+
+    # Alias 1 — a symlink. Works on every filesystem; catches a raw string compare, and on
+    # its own catches NOTHING ELSE, since resolve() would satisfy it too.
+    alias = tmp_path / "alias-to-root"
+    alias.symlink_to(root)
+    assert str(alias) != str(root)
+    (home / ".claude" / ".bootstrap-dir").write_text(str(alias))
+    _, detail = tw.p14_global_tier_drift(root)
+    assert "not asserting on it" not in detail, detail
+    assert "matches all" in detail, detail
+
+    # Alias 2 — a CASE VARIANT, which is what install.sh actually wrote. resolve() does not
+    # normalize case, so only a same-inode test passes this. Meaningless where the
+    # filesystem is case-sensitive: there the variant is a genuinely different directory.
+    probe = tmp_path / "CaseProbe"
+    probe.mkdir()
+    if not (tmp_path / "caseprobe").is_dir():
+        pytest.skip("case-sensitive filesystem — the spelling that silenced P14 in the "
+                    "wild cannot be reproduced here; the symlink half above still ran")
+    swapped = str(root).swapcase() if str(root) != str(root).swapcase() else str(root).upper()
+    assert Path(swapped).is_dir() and swapped != str(root)
+    (home / ".claude" / ".bootstrap-dir").write_text(swapped)
+    _, cased = tw.p14_global_tier_drift(root)
+    assert "not asserting on it" not in cased, cased
+    assert "matches all" in cased, cased
+
+    # ...and a genuinely foreign owner must STILL silence it — that guard is the point of the
+    # marker, and a fix that asserted on every machine would be worse than the bug.
+    other = tmp_path / "some-other-checkout"
+    other.mkdir()
+    (home / ".claude" / ".bootstrap-dir").write_text(str(other))
+    _, foreign = tw.p14_global_tier_drift(root)
+    assert "not asserting on it" in foreign, foreign
+
+    # A recorded owner that no longer exists is not this repo either — samefile raises there.
+    (home / ".claude" / ".bootstrap-dir").write_text(str(tmp_path / "reaped-worktree"))
+    _, gone = tw.p14_global_tier_drift(root)
+    assert "not asserting on it" in gone, gone
