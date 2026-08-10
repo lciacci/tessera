@@ -126,6 +126,20 @@ def _add_column(conn, table: str, column: str, decl: str) -> None:
         conn.execute(f'ALTER TABLE {table} ADD COLUMN {column} {decl}')
 
 
+# The ConstraintNode content minted from an iCPG contract predicate. These are the
+# bridge's dedup key AND — since 2026-08-10 — the key `checkpoint._select_constraints`
+# matches on to exclude postconditions whose intent is already fulfilled. Two copies of
+# a key that must agree is this repo's recurring shape (fixer and detector drifting
+# apart), so there is exactly one definition and both sides call it. A reader that
+# rebuilt the string itself would go quiet, not loud, the day the format changed.
+def inv_constraint_content(goal: str, invariant: str) -> str:
+    return f'INV: {invariant} [from: {goal[:40]}]'
+
+
+def post_constraint_content(goal: str, postcondition: str) -> str:
+    return f'POST: {postcondition} [from: {goal[:40]}]'
+
+
 class MnemosStore:
     """SQLite-backed storage for the MnemoGraph."""
 
@@ -447,7 +461,7 @@ class MnemosStore:
                 cn = MnemoNode(
                     type='constraint',
                     task_id=task_id,
-                    content=f'INV: {inv} [from: {reason.goal[:40]}]',
+                    content=inv_constraint_content(reason.goal, inv),
                     origin='loaded',
                     scope_tags=reason.scope,
                     links=[goal_node.id]
@@ -459,7 +473,7 @@ class MnemosStore:
                 cn = MnemoNode(
                     type='constraint',
                     task_id=task_id,
-                    content=f'POST: {post} [from: {reason.goal[:40]}]',
+                    content=post_constraint_content(reason.goal, post),
                     origin='loaded',
                     scope_tags=reason.scope,
                     links=[goal_node.id]

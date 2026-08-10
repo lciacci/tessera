@@ -17,11 +17,15 @@ the omitted COUNT is asserted here, not just the shrinkage.
 from __future__ import annotations
 
 import json
+import re
+import subprocess
+import sys
 import tempfile
+from pathlib import Path
 
-from .checkpoint import _select_constraints, write_checkpoint
+from .checkpoint import _fulfilled_post_contents, _select_constraints, write_checkpoint
 from .models import MnemoNode
-from .store import MnemosStore
+from .store import MnemosStore, post_constraint_content
 
 
 def _store() -> MnemosStore:
@@ -87,12 +91,173 @@ def test_the_real_shape_gets_under_the_measured_ceiling():
         _add(store, f'real invariant {i}: the thing must hold')
 
     before = len(json.dumps([n.content for n in store.get_by_type('constraint')]))
-    shown, dropped = _select_constraints(store.get_by_type('constraint'))
+    shown, dropped, _ = _select_constraints(store.get_by_type('constraint'))
     after = len(json.dumps(shown))
 
     assert dropped == 61, dropped
     assert before > 5_000, f'premise broken — unfiltered payload only {before}b'
     assert after < 1_000, f'filter did not reclaim the payload: {after}b'
+
+
+# --- Fulfilled-intent postconditions (P3 part 3, 2026-08-10) -----------------------
+
+
+class _Reason:
+    def __init__(self, goal, status, postconditions=(), invariants=()):
+        self.goal = goal
+        self.status = status
+        self.postconditions = list(postconditions)
+        self.invariants = list(invariants)
+
+
+class _FakeICPG:
+    """Minimal stand-in: `exists()` + `list_reasons()` is all the filter touches."""
+
+    def __init__(self, reasons):
+        self._reasons = reasons
+
+    def exists(self):
+        return True
+
+    def list_reasons(self):
+        return self._reasons
+
+
+def test_fulfilled_postconditions_are_dropped_and_invariants_survive():
+    """The semantic split: POST is 'true when fulfilled', INV is 'true after'."""
+    store = _store()
+    _add(store, 'POST: the receipt is written [from: Ship the T2 instrument]')
+    _add(store, 'INV: the offer/receipt split holds [from: Ship the T2 instrument]')
+
+    icpg = _FakeICPG([_Reason(
+        'Ship the T2 instrument', 'fulfilled',
+        postconditions=['the receipt is written'],
+        invariants=['the offer/receipt split holds'])])
+
+    cp = write_checkpoint(store, icpg_store=icpg)
+    kept = [c for c in cp.active_constraints if not c.startswith('[')]
+    assert kept == ['INV: the offer/receipt split holds [from: Ship the T2 instrument]'], kept
+
+
+def test_an_open_intents_postcondition_is_NEVER_dropped():
+    """Against the broken state: filtering on 'is a POST' rather than 'is fulfilled'
+    would pass every other test here. Each of these three statuses must survive, and
+    `drifted` most of all — it means the predicate is FAILING."""
+    store = _store()
+    for status in ('executing', 'proposed', 'drifted'):
+        _add(store, post_constraint_content(f'Intent {status}', 'the thing holds'))
+
+    icpg = _FakeICPG([
+        _Reason(f'Intent {s}', s, postconditions=['the thing holds'])
+        for s in ('executing', 'proposed', 'drifted')
+    ])
+
+    cp = write_checkpoint(store, icpg_store=icpg)
+    kept = [c for c in cp.active_constraints if not c.startswith('[')]
+    assert len(kept) == 3, kept
+    assert not any('omitted' in c for c in cp.active_constraints), cp.active_constraints
+
+
+def test_a_shared_postcondition_with_one_open_owner_survives():
+    """The bridge dedups to ONE node, so a fulfilled owner must not drop a live one's.
+
+    Both reasons share a goal PREFIX (the key truncates at 40 chars) and the same
+    postcondition text, so they mint one identical content string.
+    """
+    prefix = 'Harden the checkpoint delivery channel so it'
+    fulfilled = _Reason(prefix + ' fits', 'fulfilled', postconditions=['the payload fits'])
+    live = _Reason(prefix + ' never spills', 'executing',
+                   postconditions=['the payload fits'])
+    assert (post_constraint_content(fulfilled.goal, 'the payload fits')
+            == post_constraint_content(live.goal, 'the payload fits')), 'premise broken'
+
+    assert _fulfilled_post_contents(_FakeICPG([fulfilled, live])) == set()
+    assert _fulfilled_post_contents(_FakeICPG([fulfilled])) != set()
+
+
+def test_no_icpg_store_drops_nothing():
+    """Fail-safe: unable to determine status means keep, not guess."""
+    store = _store()
+    _add(store, 'POST: the receipt is written [from: Ship the T2 instrument]')
+    cp = write_checkpoint(store)
+    assert cp.active_constraints == [
+        'POST: the receipt is written [from: Ship the T2 instrument]']
+
+
+def test_an_orphaned_postcondition_is_kept():
+    """A constraint whose intent was deleted from iCPG matches nothing — keep it."""
+    store = _store()
+    _add(store, 'POST: something from a deleted intent [from: Gone]')
+    cp = write_checkpoint(store, icpg_store=_FakeICPG([]))
+    assert cp.active_constraints == ['POST: something from a deleted intent [from: Gone]']
+
+
+def test_the_POST_omission_is_STATED_never_silent():
+    """Same load-bearing rule as the file_exists half, and for the same reason."""
+    store = _store()
+    posts = [f'postcondition number {i} holds' for i in range(39)]
+    for p in posts:
+        _add(store, post_constraint_content('Some fulfilled intent', p))
+
+    icpg = _FakeICPG([_Reason('Some fulfilled intent', 'fulfilled', postconditions=posts)])
+    cp = write_checkpoint(store, icpg_store=icpg)
+
+    assert len(cp.active_constraints) == 1, cp.active_constraints
+    note = cp.active_constraints[0]
+    assert '39 postcondition(s) omitted' in note, note
+    # It must say WHY they went and WHERE they still are, or it is a smaller silence.
+    assert 'FULFILLED' in note and 'Still stored' in note, note
+    assert 'mnemos nodes --type constraint' in note, note
+
+
+def test_the_two_omission_notices_are_distinguishable():
+    """Two different exclusions with two different justifications must not merge into
+    one count — a reader cannot re-derive which class went missing from a total."""
+    store = _store()
+    _add(store, 'INV: file_exists("scripts/mnemos/checkpoint.py")')
+    _add(store, post_constraint_content('A fulfilled intent', 'the thing shipped'))
+
+    icpg = _FakeICPG([_Reason('A fulfilled intent', 'fulfilled',
+                              postconditions=['the thing shipped'])])
+    cp = write_checkpoint(store, icpg_store=icpg)
+
+    notes = [c for c in cp.active_constraints if c.startswith('[')]
+    assert len(notes) == 2, notes
+    assert any('1 file_exists invariant(s) omitted' in n for n in notes), notes
+    assert any('1 postcondition(s) omitted' in n for n in notes), notes
+
+
+def test_every_command_the_notices_cite_actually_EXISTS():
+    """The notice tells the agent where the dropped constraints went. If the command it
+    names is not real, the note is worse than a silent drop — it is a silence with
+    directions. Caught for real on 2026-08-10: the first draft cited `icpg show <id>`,
+    which has never existed (the subcommands are init/create/record/fulfil/query/drift/
+    bootstrap/status). Parsed out of the rendered note rather than hardcoded, so the
+    check tracks whatever the note says instead of becoming a second copy of it.
+    """
+    store = _store()
+    _add(store, 'INV: file_exists("scripts/mnemos/checkpoint.py")')
+    _add(store, post_constraint_content('A fulfilled intent', 'the thing shipped'))
+    icpg = _FakeICPG([_Reason('A fulfilled intent', 'fulfilled',
+                              postconditions=['the thing shipped'])])
+    cp = write_checkpoint(store, icpg_store=icpg)
+
+    cited = set()
+    for note in (c for c in cp.active_constraints if c.startswith('[')):
+        for span in re.findall(r'`([^`]+)`', note):
+            if span.split()[0] in ('icpg', 'mnemos'):
+                cited.add(span)
+    assert len(cited) >= 2, f'premise broken — no commands parsed out: {cited}'
+
+    for command in sorted(cited):
+        argv = [t for t in command.split() if not t.startswith('<')] + ['--help']
+        proc = subprocess.run(
+            [sys.executable, '-m', argv[0], *argv[1:]],
+            cwd=Path(__file__).resolve().parents[1],
+            capture_output=True, text=True)
+        assert proc.returncode == 0, (
+            f'checkpoint notice cites `{command}`, which the CLI rejects '
+            f'(exit {proc.returncode}): {proc.stderr.strip()[-200:]}')
 
 
 def demo() -> None:
@@ -101,6 +266,14 @@ def demo() -> None:
     test_no_constraints_produces_no_omission_notice()
     test_nothing_dropped_means_no_notice()
     test_the_real_shape_gets_under_the_measured_ceiling()
+    test_fulfilled_postconditions_are_dropped_and_invariants_survive()
+    test_an_open_intents_postcondition_is_NEVER_dropped()
+    test_a_shared_postcondition_with_one_open_owner_survives()
+    test_no_icpg_store_drops_nothing()
+    test_an_orphaned_postcondition_is_kept()
+    test_the_POST_omission_is_STATED_never_silent()
+    test_the_two_omission_notices_are_distinguishable()
+    test_every_command_the_notices_cite_actually_EXISTS()
     print('ok')
 
 

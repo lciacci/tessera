@@ -11,7 +11,7 @@ from pathlib import Path
 
 from .models import CheckpointNode, _now, _uuid
 from .signals import read_recent_signals
-from .store import MnemosStore
+from .store import MnemosStore, post_constraint_content
 
 # Goals are never-evict (models.py) AND one is auto-minted per ingested session
 # (store.extract_session_goals), so the list only grows: 98 nodes / 10.9KB by
@@ -58,8 +58,56 @@ def _select_goals(goals: list, task_id: str | None) -> tuple[list, int, int]:
 STATIC_PREDICATE = re.compile(r"\bfile_exists\(")
 
 
-def _select_constraints(nodes: list) -> tuple[list[str], int]:
-    """Constraints for the render, minus the static repo facts. Returns (shown, dropped).
+def _fulfilled_post_contents(icpg_store) -> set[str]:
+    """ConstraintNode contents whose iCPG intent is FULFILLED. Empty if iCPG is absent.
+
+    An intent that is still `executing`, `proposed` or `drifted` keeps its postconditions:
+    `drifted` in particular means a predicate is FAILING, which is the one state where a
+    POST most needs to be in front of the agent. Only `fulfilled` is history.
+
+    The subtraction is not decoration. Two intents can carry the same postcondition text
+    under the same 40-char goal prefix, and the bridge dedups them to ONE node — so if
+    either owner is still open, the node is still live and must not be dropped on the
+    other's account. Fail-safe in the other direction too: a constraint whose intent was
+    deleted from iCPG matches nothing and is KEPT.
+    """
+    fulfilled: set[str] = set()
+    live: set[str] = set()
+    for reason in icpg_store.list_reasons():
+        if reason.status in ('rejected', 'abandoned'):
+            continue
+        bucket = fulfilled if reason.status == 'fulfilled' else live
+        for post in reason.postconditions:
+            bucket.add(post_constraint_content(reason.goal, post))
+    return fulfilled - live
+
+
+def _select_constraints(nodes: list, historical: set[str] = frozenset()) -> tuple:
+    """Constraints for the render, minus static repo facts and fulfilled postconditions.
+
+    Returns (shown, static_dropped, historical_dropped).
+
+    **The POST half, added 2026-08-10 (P3 part 3).** `bridge-icpg` mints a ConstraintNode
+    per postcondition and nothing removes it at fulfilment, so the checkpoint listed 39
+    postconditions — 5,238b, 39.6% of a 12,909b payload against an 8,000b budget — under a
+    heading that reads *"Active Constraints (DO NOT VIOLATE)"*, while all 30 intents in
+    this repo were `fulfilled` and ZERO were executing.
+
+    The split is semantic, not size-driven, and it is the schema's own
+    (`.claude/skills/icpg/SKILL.md`): a postcondition is *"what must be true when
+    fulfilled"* — once its intent closes it describes a change already made — whereas an
+    invariant is *"what must remain true throughout AND AFTER"*, so invariants survive
+    their intent and are untouched here. `docs/contracts/` carries no iCPG contract, so
+    this encodes a reading of the skill's schema rather than contradicting a written one.
+
+    What is NOT claimed: that a fulfilled postcondition is dead. `icpg drift check` skips
+    only `rejected`/`abandoned` (`drift.py:92`), so these predicates are still evaluated
+    by the decision-drift dimension. This is exclusion from ONE render — the session-scoped
+    "do not violate" list — not retirement. The note says so in the payload itself.
+
+    ---
+
+    `file_exists("path")` invariants are bridged in bulk from iCPG and they DOMINATE the
 
     `file_exists("path")` invariants are bridged in bulk from iCPG and they DOMINATE the
     payload: measured across 7 checkpoints on 2026-08-07 they were 53/53, 53/53, 56/56,
@@ -78,8 +126,16 @@ def _select_constraints(nodes: list) -> tuple[list[str], int]:
     "nothing to report" (F-001). A checkpoint whose constraints quietly vanished would be
     indistinguishable from a project with no invariants.
     """
-    shown = [n.content for n in nodes if not STATIC_PREDICATE.search(n.content or '')]
-    return shown, len(nodes) - len(shown)
+    shown, static_dropped, historical_dropped = [], 0, 0
+    for node in nodes:
+        content = node.content or ''
+        if STATIC_PREDICATE.search(content):
+            static_dropped += 1
+        elif content in historical:
+            historical_dropped += 1
+        else:
+            shown.append(content)
+    return shown, static_dropped, historical_dropped
 
 
 def write_checkpoint(
@@ -115,14 +171,26 @@ def write_checkpoint(
         goal_text += (f' [{"; ".join(notes)} from this checkpoint; '
                       '`mnemos nodes --type goal` lists all]')
 
-    # Gather constraints (never evicted)
+    # Gather constraints (never evicted). Fulfilled-intent postconditions need iCPG to
+    # identify; with no iCPG store every POST is kept, which is the fail-safe direction.
+    historical = set()
+    if icpg_store and icpg_store.exists():
+        historical = _fulfilled_post_contents(icpg_store)
     constraint_nodes = store.get_by_type('constraint')
-    constraints, dropped = _select_constraints(constraint_nodes)
+    constraints, dropped, historical_dropped = _select_constraints(
+        constraint_nodes, historical)
     if dropped:
         constraints.append(
             f'[{dropped} file_exists invariant(s) omitted from this checkpoint — static '
             'repo facts asserted by doccheck `referenced-paths-exist` + pre-commit; '
             '`mnemos nodes --type constraint` lists all]')
+    if historical_dropped:
+        constraints.append(
+            f'[{historical_dropped} postcondition(s) omitted from this checkpoint — '
+            'their iCPG intents are FULFILLED, so they describe changes already made, '
+            'not standing constraints. Still stored, and still evaluated by iCPG\'s '
+            'decision-drift dimension; `icpg query constraints <file>` and '
+            '`mnemos nodes --type constraint` list all]')
 
     # Gather result summaries (compressed or active)
     result_nodes = store.get_by_type('result')
