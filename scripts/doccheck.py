@@ -2588,7 +2588,65 @@ def check_checkpoint_budget_matches_p3() -> list[str]:
     return []
 
 
+def check_icpg_test_exists_paths_are_real() -> list[str]:
+    """Every `test_exists("path")` predicate in the iCPG graph names a file on disk.
+
+    THIS EXISTS TO MAKE A JUSTIFICATION TRUE, and the ordering was the whole point.
+    `scripts/mnemos/checkpoint.py`'s `STATIC_PREDICATE` filter drops static constraints
+    from the checkpoint payload on the grounds that they are "asserted by something
+    stronger" — doccheck plus the pre-commit gate. That was true for `file_exists(` and
+    NOT for `test_exists(`, so widening the filter first would have silently dropped a
+    class nothing else asserted. The observatory records the measurement: deleting the
+    one `test_exists` path today does turn doccheck red, but only INCIDENTALLY — because
+    that particular file happens to be cited in two documents. A
+    `test_exists("some/undocumented/test.py")` would have no cover at all.
+
+    This makes the coverage a property of the predicate rather than a coincidence of
+    citation, which is what the filter's justification actually claims.
+
+    Skips cleanly when `.icpg/reason.db` is absent — it is gitignored runtime state that
+    `install.sh` owns, and a fresh clone must stay green (verified 2026-08-10 by cloning:
+    doccheck was 46/46 pre-install). A check that fails on a clean clone is the exact
+    defect class this repo spent 2026-08-09 removing.
+    """
+    db = ROOT / ".icpg" / "reason.db"
+    if not db.exists():
+        return []
+    import sqlite3
+    try:
+        conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        rows = conn.execute(
+            "SELECT invariants, preconditions, postconditions FROM reasons").fetchall()
+        conn.close()
+    except (sqlite3.Error, OSError):
+        # Unreadable runtime state is not a doc claim. Report nothing rather than
+        # converting a local environment problem into a blocked commit.
+        return []
+    # PARSE THE JSON, do not regex the raw column. These are stored as JSON lists, so the
+    # column literally contains `test_exists(\"path\")` — backslash before every quote —
+    # and a regex written against the predicate's SOURCE form silently matches nothing.
+    # The first version of this check did exactly that and reported clean over a planted
+    # violation: decoration, caught only by planting. (2026-08-10.)
+    pattern = re.compile(r'test_exists\(\s*["\']([^"\']+)["\']\s*\)')
+    missing = set()
+    for row in rows:
+        for field in row:
+            try:
+                predicates = json.loads(field) if field else []
+            except (ValueError, TypeError):
+                continue
+            if not isinstance(predicates, list):
+                continue
+            for predicate in predicates:
+                for path in pattern.findall(str(predicate)):
+                    if not (ROOT / path).exists():
+                        missing.add(path)
+    return [f".icpg: an intent asserts test_exists({p!r}) — not on disk"
+            for p in sorted(missing)]
+
+
 CHECKS = {
+    "icpg-test-exists-paths-are-real": check_icpg_test_exists_paths_are_real,
     "bare-python3-hook-scripts-are-probed": check_bare_python3_hook_scripts_are_probed,
     "checkpoint-budget-matches-p3": check_checkpoint_budget_matches_p3,
     "mirror-links-are-symlinks": check_mirror_links_are_symlinks,

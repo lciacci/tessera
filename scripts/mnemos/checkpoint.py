@@ -91,7 +91,17 @@ def _warn_if_over_budget(size: int) -> None:
         file=sys.stderr)
 
 
-STATIC_PREDICATE = re.compile(r"\bfile_exists\(")
+# WIDENED 2026-08-10, and the ORDERING was the point. This named one family while the
+# class had two: `test_exists("path")` leaked through a filter written for
+# `file_exists("path")` — standing pattern #11, inside the filter itself.
+#
+# The deferral said widening had to wait because the justification for dropping these
+# ("asserted by something stronger") was true of `file_exists` and NOT of `test_exists`.
+# Widening first would have silently dropped a class nothing else asserted. doccheck's
+# `icpg-test-exists-paths-are-real` now makes that claim structural rather than a
+# coincidence of which files happen to be cited in two documents — so the justification
+# is true today, and only now.
+STATIC_PREDICATE = re.compile(r"\b(?:file_exists|test_exists)\(")
 
 
 def _fulfilled_post_contents(icpg_store) -> set[str]:
@@ -339,9 +349,14 @@ def write_checkpoint(
             # "constraint(s)", not "invariant(s)": a POST from a still-open intent can
             # carry a file_exists predicate too, and this notice covers it. Calling that
             # an invariant is the same mislabel the reordering above fixes.
-            f'[{dropped["static"]} file_exists constraint(s) omitted from this checkpoint '
-            '— static repo facts asserted by doccheck `referenced-paths-exist` + '
-            'pre-commit; `mnemos nodes --type constraint` lists all]')
+            # Names BOTH predicates, because the filter now covers both. A notice that
+            # under-states what it dropped is #12 in the one sentence whose entire job is
+            # saying what went missing — the same mislabel this notice was already fixed
+            # for once (invariant→constraint, 2026-08-10).
+            f'[{dropped["static"]} static constraint(s) omitted from this checkpoint '
+            '(file_exists / test_exists) — repo facts asserted by doccheck '
+            '`referenced-paths-exist` and `icpg-test-exists-paths-are-real` + pre-commit; '
+            '`mnemos nodes --type constraint` lists all]')
     if dropped['historical']:
         constraints.append(
             f'[{dropped["historical"]} postcondition(s) omitted from this checkpoint — '

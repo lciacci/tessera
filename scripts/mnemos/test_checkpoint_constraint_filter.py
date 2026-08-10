@@ -74,6 +74,25 @@ def test_static_predicates_are_dropped_and_real_constraints_kept():
     assert kept == ['API backward compatibility must hold'], kept
 
 
+def test_test_exists_is_filtered_too_not_just_file_exists():
+    """`STATIC_PREDICATE` named one family while the class had two — `test_exists("path")`
+    leaked through a filter written for `file_exists("path")`, standing pattern #11 inside
+    the filter itself.
+
+    Widening was DEFERRED until doccheck's `icpg-test-exists-paths-are-real` existed,
+    because the justification for dropping these ("asserted by something stronger") was
+    true of `file_exists` and not of `test_exists`. This pins the widened behaviour so the
+    two cannot drift apart again."""
+    store = _store()
+    _add(store, 'INV: test_exists("scripts/mnemos/test_checkpoint_constraint_filter.py")')
+    _add(store, 'API backward compatibility must hold')
+
+    cp = write_checkpoint(store)
+    kept = [c for c in cp.active_constraints if not c.startswith('[')]
+    assert kept == ['API backward compatibility must hold'], kept
+    assert any('static constraint(s) omitted' in c for c in cp.active_constraints)
+
+
 def test_the_omission_is_STATED_never_silent():
     """The load-bearing assertion. A vanished constraint set must not read as 'none'."""
     store = _store()
@@ -83,7 +102,11 @@ def test_the_omission_is_STATED_never_silent():
     cp = write_checkpoint(store)
     assert len(cp.active_constraints) == 1, cp.active_constraints
     note = cp.active_constraints[0]
-    assert '53 file_exists constraint(s) omitted' in note, note
+    assert '53 static constraint(s) omitted' in note, note
+    # The notice must NAME the predicates it covers. Widening the filter to `test_exists`
+    # without widening this sentence would under-state what went missing (#12) in the one
+    # line whose entire job is saying so.
+    assert 'file_exists / test_exists' in note, note
     # It must also say where they went, or the note is just a smaller silence.
     assert 'doccheck' in note and 'mnemos nodes --type constraint' in note, note
 
@@ -246,7 +269,7 @@ def test_the_two_omission_notices_are_distinguishable():
 
     notes = [c for c in cp.active_constraints if c.startswith('[')]
     assert len(notes) == 2, notes
-    assert any('1 file_exists constraint(s) omitted' in n for n in notes), notes
+    assert any('1 static constraint(s) omitted' in n for n in notes), notes
     assert any('1 postcondition(s) omitted' in n for n in notes), notes
 
 
@@ -317,7 +340,7 @@ def test_the_static_notice_never_calls_a_postcondition_an_invariant():
     notes = [c for c in cp.active_constraints if c.startswith('[')]
     assert len(notes) == 1, notes
     assert 'invariant' not in notes[0], notes[0]
-    assert '1 file_exists constraint(s) omitted' in notes[0], notes[0]
+    assert '1 static constraint(s) omitted' in notes[0], notes[0]
 
 
 def test_the_two_filters_interact_where_a_shared_POST_is_also_a_static_predicate():
@@ -352,7 +375,7 @@ def test_the_two_filters_interact_where_a_shared_POST_is_also_a_static_predicate
     assert [c for c in cp.active_constraints if not c.startswith('[')] == []
     assert len(notes) == 1, notes
     # Static notice, NOT the postcondition notice — its intent is not fulfilled-only.
-    assert '1 file_exists constraint(s) omitted' in notes[0], notes[0]
+    assert '1 static constraint(s) omitted' in notes[0], notes[0]
     # And the omission is still STATED, which is the property that must never lapse.
     assert 'mnemos nodes --type constraint' in notes[0], notes[0]
 
