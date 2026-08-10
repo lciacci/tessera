@@ -66,6 +66,32 @@ Declared current priority for Tessera framework dev. One focus at a time.
      intents, and doccheck asserts that class whoever owns it. The finding was that the two filters'
      *interaction* had never been exercised. Now a test that states the decision.
 
+8. **`doccheck.run()` NOW ISOLATES EACH CHECK (`7f46ee9`)** — it was a one-line dict
+   comprehension, so any raising check took the process down and 0 of 45 reported.
+   `run_detailed()` returns `{name: (findings, exc|None)}`; crashes get their own render section.
+   **DECIDED: a crashed check BLOCKS the commit**, reversing the pre-commit's written "a crashing
+   checker must not wedge every commit" — which was authored when a crash killed the *whole* run.
+   Catastrophic failure (doccheck unparseable, `render()` raising) still fails open.
+   **Two silent regressions this would have caused, both because the existing readers keyed on the
+   OLD channel:** P8's loud path was *built on* `run()` raising, so isolation alone would have
+   downgraded every crash to an ordinary fire; and the pre-commit grep keyed on `"claim(s) that are
+   no longer true"`, so crashes printing their own section would have sailed through the gate meant
+   to stop them. Both caught by reading the consumers during scoping, not by the suite.
+9. **`decision_surface.py` did not parse on 3.9, and its hook ate the traceback (`df0d1c9`).** A
+   backslash in an f-string expression (3.12+); `.claude/scripts/tessera-decision-surface.sh:55`
+   runs it via **bare `python3`** and ends with `2>/dev/null`. On a `/usr/bin`-first PATH the
+   `DECISION SURFACE` block **silently stopped reaching the model** — the hook built to defeat
+   silent failure, failing by it. doccheck is now green on **both** interpreters.
+   **`SAFETY_SCRIPTS`' membership rule was PROSE and nothing enforced it**, which is why that file
+   was never listed. New check `bare-python3-hook-scripts-are-probed` greps the hooks and asserts
+   each bare-`python3` target is both in `SAFETY_SCRIPTS` **and** in CLAUDE.md's stdlib-only
+   enumeration. Scanned all of `scripts/`: 0 other files fail on 3.9, so no blanket rule (#3).
+10. **THE NEW CHECK WAS DECORATION ON FIRST WRITE, and only re-planting found it.** Its CLAUDE.md
+   half read the whole line — and that line's own explanatory prose names the path in backticks, so
+   **the check passed because of its own explanation and could not fail.** Now scoped to the
+   parenthetical enumeration. *#10's corollary — a guard that reads source must not match prose
+   about the code — scored against the guard written to enforce #10's lesson.*
+
 > **P3, P13 and G-a are RED at SessionStart and all three are correct — do not chase them.**
 > **P3** reports the checkpoint at ~8,030b against 8,000b. That is item 1's open half, not a
 > regression: the POST cut took it from 12,909b to 7,780b and this session's own intent put it

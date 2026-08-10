@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import fnmatch
 import json
 import os
 import re
@@ -1005,17 +1006,47 @@ def check_bare_python3_hook_scripts_are_probed() -> list[str]:
     if not hooks.is_dir():
         return []
     bad = []
+    invoked = set()
     for sh in sorted(hooks.glob("*.sh")):
         try:
             text = sh.read_text(errors="replace")
         except OSError:
             continue
         for target in sorted(set(_BARE_PY3.findall(text))):
-            if target not in SAFETY_SCRIPTS and (ROOT / target).exists():
+            if not (ROOT / target).exists():
+                continue
+            invoked.add(target)
+            if target not in SAFETY_SCRIPTS:
                 bad.append(
                     f"{sh.relative_to(ROOT)} runs `python3 {target}` (bare interpreter) but "
                     f"{target} is not in SAFETY_SCRIPTS — nothing proves it runs on "
                     f"{OLDEST_PYTHON}, which is what a /usr/bin-first PATH hands it")
+
+    # SECOND HALF: CLAUDE.md enumerates the same set in PROSE, and prose was how this drifted
+    # in the first place. It is read by every session; a stale list there teaches the wrong
+    # rule to the next person adding a hook. Globs are honoured (`scripts/gate/*.py`).
+    claude_md = ROOT / "CLAUDE.md"
+    if claude_md.exists():
+        line = ""
+        for candidate in claude_md.read_text(errors="replace").splitlines():
+            if candidate.lstrip().startswith("- **Stdlib-only**"):
+                line = candidate
+                break
+        # ONLY the parenthetical enumeration, never the whole line. Scanning the line
+        # scooped up backticked paths from the PROSE beside it — including the sentence
+        # explaining that decision_surface.py had been missing — so the check passed
+        # because of its own explanation and could not fail. Caught by re-planting the
+        # omission and watching it stay green (#10: a guard tested against the fixed state
+        # proves nothing; and its corollary — do not match prose about the code).
+        enumeration = re.search(r"-\s*\*\*Stdlib-only\*\*\s*\(([^)]*)\)", line)
+        if enumeration:
+            patterns = re.findall(r"`([^`]+\.py)`", enumeration.group(1))
+            for target in sorted(invoked):
+                if not any(fnmatch.fnmatch(target, p) for p in patterns):
+                    bad.append(
+                        f"CLAUDE.md's stdlib-only list does not cover {target}, which a hook "
+                        f"runs via bare `python3` — the prose rule the next person reads is "
+                        f"already behind the hooks")
     return sorted(set(bad))
 
 

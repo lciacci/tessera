@@ -2380,3 +2380,27 @@ def test_a_python3_dash_c_heredoc_is_not_mistaken_for_a_script(fake_repo, monkey
 def test_the_live_repo_lists_every_bare_python3_hook_script():
     """No fixture: the real hooks against the real SAFETY_SCRIPTS."""
     assert doccheck.check_bare_python3_hook_scripts_are_probed() == []
+
+
+def test_the_CLAUDE_md_half_is_not_satisfied_by_PROSE_beside_the_list(fake_repo, monkeypatch):
+    """The variant that made this check decoration on first write.
+
+    The extractor read the WHOLE line, and the line's own explanatory prose mentions the
+    path in backticks — so the check passed because of its own explanation and could not
+    fail. Only the parenthetical enumeration counts. Caught by re-planting the omission
+    and watching it stay green.
+    """
+    _hook_and_script(fake_repo, "python3 scripts/thing.py\n")
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ("scripts/thing.py",))
+    (fake_repo / "CLAUDE.md").write_text(
+        "- **Stdlib-only** (`scripts/doccheck.py`) → bare `python3` is fine. Note that "
+        "`scripts/thing.py` was once missing from this list.\n")
+    bad = doccheck.check_bare_python3_hook_scripts_are_probed()
+    assert any("CLAUDE.md" in v and "scripts/thing.py" in v for v in bad), bad
+
+
+def test_the_CLAUDE_md_half_accepts_a_glob(fake_repo, monkeypatch):
+    _hook_and_script(fake_repo, "python3 scripts/gate/emit.py\n", "scripts/gate/emit.py")
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ("scripts/gate/emit.py",))
+    (fake_repo / "CLAUDE.md").write_text("- **Stdlib-only** (`scripts/gate/*.py`) → bare ok\n")
+    assert doccheck.check_bare_python3_hook_scripts_are_probed() == []
