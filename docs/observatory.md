@@ -2954,6 +2954,58 @@ this repo keeps paying for — twice today alone.)*
 **Revisit when:** a fixture matrix is written for a conduct instrument other than correction
 detection (the shape's first real test), or by **2026-10-05** as already scheduled.
 
+### Interactive probing writes stray state into the repo, and one guard covers one case *(2026-08-10)*
+
+- **Status:** Investigating. **n=3 in a single session by a single agent, so this may be
+  discipline rather than a missing rail** — recorded now because the sample is unusually
+  clean (all three inside a few hours, all while verifying other work) and because the
+  existing coverage is demonstrably partial.
+
+**The known half.** The fail-open entry already records the *test suite* polluting the
+production audit log — 26 of one session's 31 `spend_denied` events were manufactured by
+pytest, an 84%-polluted friction journal. That is fixed and guarded.
+
+**The new half: the agent's own ad-hoc probes do it too.** Three instances, 2026-08-10:
+
+| # | what was written | how it was caught |
+|---|---|---|
+| 1 | a real `degraded` event in `.tessera/logs/` from a hand-run anchoring probe — P13 counts these | **noticed by me**, immediately after running it |
+| 2 | *nothing* — a phantom logs directory under scripts/ that I nearly reported as evidence, because `ls … \| head && echo` tests **head's** exit status, not `ls`'s | **noticed by me**, on re-check |
+| 3 | a session log under scripts/spend/, from a re-plant run executed there while the planted defect made the path cwd-relative | **caught by `test_hook_cwd_anchoring`** |
+
+*(Those two paths are written out rather than backticked: `referenced-paths-exist` reads a
+backticked token as a claim that it exists, and correctly blocked this entry's first draft
+for naming files whose whole point is that they should not be there. **Third time today**
+— after the malformed iCPG scope strings and ADR-0017's twice-in-an-hour. The check is
+right every time; prose that is ABOUT a non-existent path is the recurring shape, and it
+has now cost four rewrites. Worth knowing before writing the fifth.)*
+
+**One of three was caught by a guard.** The other two rested on the agent re-checking its
+own work, which is exactly the channel-vs-convention line principle #17 draws — and #2 is
+worse than a stray file, because it was a *false observation* about to be written into a
+commit message as evidence.
+
+**Why this is not obviously machinery-shaped.** The three differ in kind: #1 is a real
+event in the real log (a data problem), #2 is a measurement error (no artifact at all),
+#3 is a file outside the log (a filesystem problem). A single guard cannot see all three,
+and the one that fired only did so because the *plant* happened to make paths relative.
+A `git status --porcelain` assertion at Stop would catch #3 and not #1 (the log is
+gitignored) or #2 (nothing to see).
+
+**What would make this actionable rather than a note:**
+- a **second agent or session** producing the same class — that separates "this model's
+  probing discipline" from "the repo invites it", which n=3-by-one-agent cannot;
+- or a single instance where stray probe state **reached a commit** or **moved a
+  predicate** (P13 counting a hand-run `degraded` is one turn away from that: probe #1
+  was removed within a minute, and P13's window is 7 days).
+
+**Cheap discipline, pending anything better, and it is what worked here:** probe into
+`TESSERA_ROOT`/a temp dir rather than the live repo, and treat a probe that writes to
+`.tessera/` as needing the same cleanup a test fixture would. The `TESSERA_ROOT` override
+already exists on `gate/paths`, `spend/event` and `tessera-escalate` for exactly this.
+
+**Revisit when:** either condition above fires, or a third party works in this repo.
+
 ### Python's bytecode cache can silently defeat the re-plant discipline *(2026-08-10)*
 
 - **Status:** Investigating. Small, cheap to avoid, and it attacks **standing pattern #10** — the
