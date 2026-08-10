@@ -34,6 +34,20 @@ import urllib.request
 API_KEY = os.environ.get("XAI_API_KEY", "")
 BASE_URL = "https://api.x.ai/v1"
 
+# See the note in `bin/deepseek`: an API failure returned as a string and printed to
+# stdout with exit 0 tells every caller a failure succeeded. `validate-plan` survives it
+# only by coincidence (it looks for APPROVED/CHANGES_NEEDED and finds neither, so it
+# records `broken`) — coincidence is not a contract. (arbiter 2026-08-10.)
+ERR_PREFIX = "[Grok"
+
+
+def _emit(result: str) -> None:
+    """stdout is for model text only; errors are stderr + non-zero."""
+    if result.startswith(ERR_PREFIX):
+        print(result, file=sys.stderr)
+        sys.exit(1)
+    print(result)
+
 
 def main():
     prompt = None
@@ -57,7 +71,7 @@ def main():
         sys.exit(1)
 
     result = call_grok(prompt)
-    print(result)
+    _emit(result)
 
 
 def call_grok(prompt: str) -> str:

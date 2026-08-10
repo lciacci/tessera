@@ -107,10 +107,16 @@ def status_for(project: str, live=False):
     images = list(img_dir.glob("*.png")) + list(img_dir.glob("*.jpg")) if img_dir.exists() else []
 
     # Monitored accounts (from topics.yaml)
+    # `BIP_DIR` is ~/.maggy/build-in-public, so `.parent.parent` is $HOME — the first two
+    # candidates were `~/maggy/plugins/...`, which exist on no installation. They always
+    # missed and fell through to the third, so a per-project topics file could never be
+    # picked up and every count silently read zero. The intended base is the repo that
+    # holds this script. (arbiter 2026-08-10.)
+    _repo = Path(__file__).resolve().parent.parent
     topics_path = None
     for candidate in [
-        BIP_DIR.parent.parent / "maggy" / "plugins" / "build-in-public" / f"topics-{project}.yaml",
-        BIP_DIR.parent.parent / "maggy" / "plugins" / "build-in-public" / "topics.yaml",
+        _repo / "maggy" / "plugins" / "build-in-public" / f"topics-{project}.yaml",
+        _repo / "maggy" / "plugins" / "build-in-public" / "topics.yaml",
         Path.home() / ".maggy" / "plugins" / "build-in-public" / "topics.yaml",
     ]:
         if candidate.exists(): topics_path = candidate; break

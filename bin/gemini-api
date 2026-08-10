@@ -52,6 +52,19 @@ COSTS = {
     "pro-search": "$1.25/$10 + search queries / $14 per 1K",
 }
 
+# See the note in `bin/deepseek`. Both call paths here (`call_gemini` and
+# `call_gemini_search`) returned errors as strings, so a quota exhaustion reached
+# `validate-plan`'s verdict parser as if it were a review. (arbiter 2026-08-10.)
+ERR_PREFIX = "[Gemini"
+
+
+def _emit(result: str) -> None:
+    """stdout is for model text only; errors are stderr + non-zero."""
+    if result.startswith(ERR_PREFIX):
+        print(result, file=sys.stderr)
+        sys.exit(1)
+    print(result)
+
 
 def main():
     model_key = "flash"
@@ -94,7 +107,7 @@ def main():
         result = call_gemini_search(prompt, model)
     else:
         result = call_gemini(prompt, model, model_key)
-    print(result)
+    _emit(result)
 
 
 def call_gemini_search(prompt: str, model: str) -> str:

@@ -85,14 +85,24 @@ def run_reviewer(name: str, config: dict, plan: str) -> dict:
         return _broken(name, config, (r.stderr or r.stdout).strip()[:300])
 
     out = r.stdout.strip()
-    head = out.upper()[:40]
-    if "APPROVED" not in head and "CHANGES_NEEDED" not in head:
+    # WHICHEVER KEYWORD COMES FIRST WINS — no window. The old test was `out.upper()[:40]`,
+    # a magic number that discarded a genuine vote whenever a reviewer opened with a
+    # preamble longer than 40 characters ("Here is my assessment of the plan:\n\n…").
+    # The window existed to stop a late "APPROVED" inside CHANGES_NEEDED prose from
+    # flipping the verdict; first-occurrence does that strictly better, because
+    # `CHANGES_NEEDED:` leads its own reply. (arbiter 2026-08-10 — its stated example, a
+    # LEADING NEWLINE, is wrong: `.strip()` above already removes it. The magic number
+    # was real; the scenario given for it was not.)
+    up = out.upper()
+    i_approved, i_changes = up.find("APPROVED"), up.find("CHANGES_NEEDED")
+    if i_approved < 0 and i_changes < 0:
         # Ran clean but said nothing we can read. That is not a vote either.
         return _broken(name, config, f"unparseable verdict: {out[:200]!r}")
+    approved = i_changes < 0 or (0 <= i_approved < i_changes)
 
     return {
         "reviewer": name, "label": config["label"], "voted": True,
-        "approved": "APPROVED" in head, "output": out[:500],
+        "approved": approved, "output": out[:500],
     }
 
 
