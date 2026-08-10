@@ -428,12 +428,23 @@ def p8_doc_drift(root: Path) -> tuple[bool, str]:
     except ImportError:
         return False, "no scripts/doccheck.py importable here — nothing to check"
 
-    previous_root = getattr(doccheck, "ROOT", None)
+    # A SENTINEL, because `None` meant two things. `getattr(m, "ROOT", None)` returns None
+    # both when ROOT is absent and when it is present-and-None, and `if previous_root is not
+    # None` skipped the restore for both — i.e. for the one case the restore exists to handle
+    # (arbiter, 2026-08-09). REACHABLE IMPACT WAS NIL and that is stated rather than implied:
+    # scripts/doccheck.py:37 defines `ROOT` at module level, so the real module always has it
+    # and the restore always fired. Only a doccheck WITHOUT ROOT — a test fake — took the dead
+    # branch. Fixed because a branch that reads as handling a case it silently drops is worse
+    # than no branch.
+    missing = object()
+    previous_root = getattr(doccheck, "ROOT", missing)
     doccheck.ROOT = root
     try:
         violations = [v for vs in doccheck.run().values() for v in vs]
     finally:
-        if previous_root is not None:
+        if previous_root is missing:
+            delattr(doccheck, "ROOT")          # it had none; leave it with none
+        else:
             doccheck.ROOT = previous_root
     if not violations:
         return False, f"docs honest ({len(doccheck.CHECKS)} checks, 0 false claims)"

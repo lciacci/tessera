@@ -1440,6 +1440,48 @@ def test_p8_leaves_docchecks_root_where_it_found_it(tmp_path):
     before = doccheck.ROOT
     root = _root(tmp_path)
     (root / "scripts").mkdir()
-    tw.p8_doc_drift(root)
+    fired, detail = tw.p8_doc_drift(root)
+
+    # NON-VACUITY FIRST. If P8 returned at its ImportError arm it never reached the
+    # assignment, ROOT is trivially unchanged, and the assertion below would pass while
+    # testing nothing. arbiter raised vacuity here (2026-08-09) via a route that cannot
+    # happen — p8 sets ROOT to this fixture's tmp path, never the repo root, so a missing
+    # restore always shows — but the concern is real by a different path, and this closes it.
+    assert "nothing to check" not in detail, (
+        "P8 bailed at the import; the restore was never exercised")
+    assert "checks" in detail or "doc claim" in detail, detail
+
     assert doccheck.ROOT == before, (
         f"P8 left doccheck.ROOT at {doccheck.ROOT}, not {before}")
+
+
+def test_p8_leaves_a_root_less_doccheck_root_less(tmp_path, monkeypatch):
+    """The sentinel's ONLY observable case, and the reason it needed its own test.
+
+    Re-planting `getattr(doccheck, "ROOT", None)` in place of the sentinel left
+    test_p8_leaves_docchecks_root_where_it_found_it PASSING — correctly, because
+    scripts/doccheck.py:37 defines ROOT at module level, so getattr never returns the
+    default and the restore fires either way. A guard that cannot fail against the defect it
+    names is decoration (#10), so the case is staged the only way it is reachable: a doccheck
+    that has no ROOT at all. `None` then means "absent", the old guard skipped the cleanup,
+    and the module was left carrying an attribute it never had.
+    """
+    import sys
+    import types
+    fake = types.ModuleType("doccheck")
+    fake.CHECKS = {}
+    fake.run = lambda: {}
+    saved = sys.modules.get("doccheck")
+    sys.modules["doccheck"] = fake
+    try:
+        root = _root(tmp_path)
+        (root / "scripts").mkdir()
+        fired, detail = tw.p8_doc_drift(root)
+        assert "nothing to check" not in detail, "bailed at the import; nothing exercised"
+        assert not hasattr(fake, "ROOT"), (
+            f"P8 left ROOT={fake.ROOT!r} on a module that never had one")
+    finally:
+        if saved is not None:
+            sys.modules["doccheck"] = saved
+        else:
+            sys.modules.pop("doccheck", None)
