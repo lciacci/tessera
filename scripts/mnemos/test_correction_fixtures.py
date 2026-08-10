@@ -79,8 +79,13 @@ def test_regex_earns_no_pair_credit_and_misses_every_cue_free_positive(cases):
     """Characterization of the shipped surface heuristic, pinned so an improvement or a
     regression both show up as a failing test rather than a quiet number change.
 
-    The finding this records: `regex_match` is right on most individual ROWS and earns
-    zero pair credit. A row-level score would have read ~70% and hidden that entirely."""
+    The finding this records: `regex_match` scores P=0.54 / R=0.54 / accuracy 0.50 over
+    the 24 scored rows and earns 0/7 pair credit — and **all 7 of its true positives are
+    lucky members**, so none is earned by meaning. Row metrics call it mediocre without
+    saying why; the pair rule says exactly why.
+
+    Drop the foils and the same fixtures report 12/17 ~ 70%, which is what a matrix
+    without deliberately-constructed twins looks like."""
     result = score(cases, _regex)
     assert sum(p["credited"] for p in result["pairs"]) == 0
     assert sum(r["correct"] for r in result["positive"]) == 0

@@ -2908,12 +2908,27 @@ cheapest possible test of that."* Built (`scripts/mnemos/fixtures/correction_cas
 **A judge can distinguish a lucky-correct negative. A cue-matcher cannot.** That is the cleanest
 result available and it is what the held-open question needed.
 
-**The number that makes the point, and it is about scoring not about judging:** `regex_match` is
-correct on **12 of 17 individual rows — about 70%** — while earning **zero** pair credit. A
-row-level accuracy score would have reported a competent detector. The pair rule is what makes
-"right for the wrong reason" visible, and it is one line: *credit requires both members correct*.
-**That is this entry's own thesis, demonstrated on the smallest instrument that could carry it** —
-counting rows counted the artifact; the pair counted the property.
+**The number that makes the point — CORRECTED 2026-08-10, and the error is instructive enough to
+keep.** This entry first read *"correct on 12 of 17 rows — about 70% — while earning zero pair
+credit,"* and concluded a row score would have called the detector competent. **The denominator was
+wrong: it counted the 7 lucky members and omitted the 7 foils.** Measured properly:
+
+```
+rows 24 (5 pos + 5 neg + 14 pair members)   TP=7 FP=6 FN=6 TN=5
+P=0.54  R=0.54  accuracy=0.50               pairs credited 0/7
+```
+
+So a row score does **not** flatter this detector — it reads ~0.5, which looks mediocre, and the
+original claim was an artifact of the bad denominator. **What survives is stronger and exact: all
+7 of the regex's true positives are lucky members. Zero come from meaning.** Row metrics say the
+detector is mediocre; they do not say *why*. `0/7 pairs` says precisely why, and that is the
+difference between counting an artifact and naming the property.
+
+**And 17 was not an arbitrary mistake — it is the NO-FOIL denominator.** 5 positives + 5 negatives
++ 7 lucky members is exactly the fixture set you get if you write the obvious cases and never
+construct the twins. That set reports **12/17 ≈ 70%**. The foils are the deliberate work, and they
+move the same fixtures from 70% to 50% with 0/7 credit. *The mis-stated number was accidentally a
+measurement of what this matrix is worth.*
 
 **THE CAVEAT, MEASURED RATHER THAN SUSPECTED, AND IT BLOCKS THE OBVIOUS NEXT STEP.** The same qwen
 classifier, in the same session, scores **P=0.32 / R=0.53 on the 114-turn silver set of real
