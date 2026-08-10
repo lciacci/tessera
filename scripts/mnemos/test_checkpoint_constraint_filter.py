@@ -60,7 +60,7 @@ def test_the_omission_is_STATED_never_silent():
     cp = write_checkpoint(store)
     assert len(cp.active_constraints) == 1, cp.active_constraints
     note = cp.active_constraints[0]
-    assert '53 file_exists invariant(s) omitted' in note, note
+    assert '53 file_exists constraint(s) omitted' in note, note
     # It must also say where they went, or the note is just a smaller silence.
     assert 'doccheck' in note and 'mnemos nodes --type constraint' in note, note
 
@@ -223,7 +223,7 @@ def test_the_two_omission_notices_are_distinguishable():
 
     notes = [c for c in cp.active_constraints if c.startswith('[')]
     assert len(notes) == 2, notes
-    assert any('1 file_exists invariant(s) omitted' in n for n in notes), notes
+    assert any('1 file_exists constraint(s) omitted' in n for n in notes), notes
     assert any('1 postcondition(s) omitted' in n for n in notes), notes
 
 
@@ -258,6 +258,80 @@ def test_every_command_the_notices_cite_actually_EXISTS():
         assert proc.returncode == 0, (
             f'checkpoint notice cites `{command}`, which the CLI rejects '
             f'(exit {proc.returncode}): {proc.stderr.strip()[-200:]}')
+
+
+def test_a_fulfilled_POST_is_attributed_to_the_POSTCONDITION_notice():
+    """Refuted by bin/tessera-verify 2026-08-10, and it survived the first test pass.
+
+    A postcondition whose predicate text contains `file_exists(` was counted under the
+    OTHER notice and announced as an *invariant*. The total omitted count was correct, so
+    every count-based assertion passed — the ATTRIBUTION was wrong, in the one sentence
+    whose job is telling the reader what went missing (#12: a report can be true and
+    still mislead). The ordering question was noticed while writing and waved through as
+    'preserves existing behaviour'.
+    """
+    store = _store()
+    _add(store, post_constraint_content('A fulfilled intent', 'file_exists("z")'))
+    icpg = _FakeICPG([_Reason('A fulfilled intent', 'fulfilled',
+                              postconditions=['file_exists("z")'])])
+
+    cp = write_checkpoint(store, icpg_store=icpg)
+    notes = [c for c in cp.active_constraints if c.startswith('[')]
+    assert len(notes) == 1, notes
+    assert 'postcondition(s) omitted' in notes[0], notes[0]
+    assert 'FULFILLED' in notes[0], notes[0]
+
+
+def test_the_static_notice_never_calls_a_postcondition_an_invariant():
+    """A POST from a STILL-OPEN intent can carry file_exists too — it belongs in the
+    static notice (its intent is not fulfilled), but must not be labelled an invariant."""
+    store = _store()
+    _add(store, post_constraint_content('An open intent', 'file_exists("z")'))
+    icpg = _FakeICPG([_Reason('An open intent', 'executing',
+                              postconditions=['file_exists("z")'])])
+
+    cp = write_checkpoint(store, icpg_store=icpg)
+    notes = [c for c in cp.active_constraints if c.startswith('[')]
+    assert len(notes) == 1, notes
+    assert 'invariant' not in notes[0], notes[0]
+    assert '1 file_exists constraint(s) omitted' in notes[0], notes[0]
+
+
+def test_the_two_filters_interact_where_a_shared_POST_is_also_a_static_predicate():
+    """Surfaced by bin/tessera-verify 2026-08-10 as a refuting case; kept as INTENDED.
+
+    A POST shared by a fulfilled AND an executing intent survives
+    `fulfilled - live` — but if its predicate text is `file_exists(...)` it then falls
+    through to the static filter and is dropped anyway, so the shared-owner protection
+    looks defeated. It is not a defect: the static policy has ALWAYS applied to open
+    intents' constraints, and a `file_exists` predicate is asserted by doccheck
+    `referenced-paths-exist` + pre-commit whoever owns it — strictly stronger than a
+    line in this payload.
+
+    The real finding was that the interaction of the two filters was never exercised:
+    `test_a_shared_postcondition_with_one_open_owner_survives` uses 'the payload fits',
+    so it could never reach the static branch. Pinned here so the behaviour is a
+    decision rather than an accident, and so a future change to either filter has to
+    confront it.
+    """
+    prefix = 'Harden the checkpoint delivery channel so it'
+    store = _store()
+    _add(store, post_constraint_content(prefix + ' fits', 'file_exists("b.py")'))
+
+    icpg = _FakeICPG([
+        _Reason(prefix + ' fits', 'fulfilled', postconditions=['file_exists("b.py")']),
+        _Reason(prefix + ' never spills', 'executing',
+                postconditions=['file_exists("b.py")']),
+    ])
+    cp = write_checkpoint(store, icpg_store=icpg)
+
+    notes = [c for c in cp.active_constraints if c.startswith('[')]
+    assert [c for c in cp.active_constraints if not c.startswith('[')] == []
+    assert len(notes) == 1, notes
+    # Static notice, NOT the postcondition notice — its intent is not fulfilled-only.
+    assert '1 file_exists constraint(s) omitted' in notes[0], notes[0]
+    # And the omission is still STATED, which is the property that must never lapse.
+    assert 'mnemos nodes --type constraint' in notes[0], notes[0]
 
 
 # --- Write-time budget warning (P3 part 3, 2026-08-10) ----------------------------

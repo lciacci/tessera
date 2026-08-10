@@ -2189,3 +2189,85 @@ def test_no_channel_claim_means_nothing_to_check(fake_repo):
 def test_the_live_repo_agrees_with_its_own_contract():
     """No fixture: the real bin/tessera-verify against the real contract."""
     assert doccheck.check_verdict_channel_literals_match_contract() == []
+
+
+# --- checkpoint-budget-matches-p3 (2026-08-10) ------------------------------------
+
+
+def _budget_repo(root, watch_value: str, checkpoint_value: str):
+    (root / "bin").mkdir(exist_ok=True)
+    (root / "scripts" / "mnemos").mkdir(parents=True, exist_ok=True)
+    (root / "bin" / "tessera-watch").write_text(
+        f"#!/usr/bin/env python3\nRESTORE_BUDGET_BYTES = {watch_value}\n")
+    (root / "scripts" / "mnemos" / "checkpoint.py").write_text(
+        f"CHECKPOINT_BUDGET_BYTES = {checkpoint_value}\n")
+
+
+def test_matching_budgets_pass(fake_repo):
+    _budget_repo(fake_repo, "8_000", "8_000")
+    assert doccheck.check_checkpoint_budget_matches_p3() == []
+
+
+def test_the_same_value_written_differently_is_not_a_false_positive(fake_repo):
+    _budget_repo(fake_repo, "8000", "8_000")
+    assert doccheck.check_checkpoint_budget_matches_p3() == []
+
+
+def test_diverged_budgets_fail(fake_repo):
+    _budget_repo(fake_repo, "9_500", "8_000")
+    bad = doccheck.check_checkpoint_budget_matches_p3()
+    assert any("diverged" in v for v in bad), bad
+
+
+def test_a_renamed_budget_constant_FAILS_rather_than_skipping(fake_repo):
+    """Losing the anchor must be loud, not green (#10's corollary)."""
+    _budget_repo(fake_repo, "8_000", "8_000")
+    (fake_repo / "scripts" / "mnemos" / "checkpoint.py").write_text(
+        "CHECKPOINT_BUDGET_LIMIT = 8_000\n")
+    bad = doccheck.check_checkpoint_budget_matches_p3()
+    assert any("no longer defines" in v for v in bad), bad
+
+
+def test_a_missing_file_reports_rather_than_raising(fake_repo):
+    bad = doccheck.check_checkpoint_budget_matches_p3()
+    assert any("is missing" in v for v in bad), bad
+
+
+def test_an_UNREADABLE_file_reports_rather_than_raising(fake_repo):
+    """The caveat bin/tessera-verify returned against the first version, which guarded
+    only `exists()`. A directory at the path exists and read_text() raises — and one
+    raising check takes the whole doccheck process down, so 44 others never run. Fixing
+    absent-but-not-unreadable was fixing the row, not the pattern (#11)."""
+    _budget_repo(fake_repo, "8_000", "8_000")
+    (fake_repo / "bin" / "tessera-watch").unlink()
+    (fake_repo / "bin" / "tessera-watch").mkdir()
+    bad = doccheck.check_checkpoint_budget_matches_p3()
+    assert any("unreadable" in v for v in bad), bad
+
+
+def test_an_unreadable_file_does_not_take_the_whole_run_down(fake_repo):
+    """The property that actually matters: the process survives and every check runs."""
+    _budget_repo(fake_repo, "8_000", "8_000")
+    (fake_repo / "scripts" / "mnemos" / "checkpoint.py").chmod(0o000)
+    try:
+        results = doccheck.run()
+    finally:
+        (fake_repo / "scripts" / "mnemos" / "checkpoint.py").chmod(0o644)
+    assert len(results) == len(doccheck.CHECKS)
+
+
+def test_the_live_repo_budgets_agree():
+    """No fixture: the real bin/tessera-watch against the real checkpoint.py."""
+    assert doccheck.check_checkpoint_budget_matches_p3() == []
+
+
+def test_BINARY_content_does_not_take_the_whole_run_down(fake_repo):
+    """UnicodeDecodeError subclasses ValueError, NOT OSError — so the version catching
+    only OSError let it escape run() and 0 of 45 checks completed, under a comment
+    claiming the class was fixed. Refuted by bin/tessera-verify 2026-08-10; the third
+    row-fix of this class in one session, which is itself the finding."""
+    _budget_repo(fake_repo, "8_000", "8_000")
+    (fake_repo / "bin" / "tessera-watch").write_bytes(b"\xff\xfe\x00\x01binary junk")
+    bad = doccheck.check_checkpoint_budget_matches_p3()
+    assert any("unreadable" in v and "UnicodeDecodeError" in v for v in bad), bad
+    assert len(doccheck.run()) == len(doccheck.CHECKS)

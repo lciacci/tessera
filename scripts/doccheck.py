@@ -2453,10 +2453,31 @@ def check_checkpoint_budget_matches_p3() -> list[str]:
         # class fixed across tessera-watch the day before — one check taking the process
         # down means 44 others never run, and this file's contract is that a check
         # REPORTS, never raises.
+        #
+        # The `except OSError` is NOT belt-and-braces. The first version guarded only
+        # `exists()`, and `bin/tessera-verify` refuted the "never raises" claim within the
+        # hour: a DIRECTORY at that path, or `chmod 000`, both exist and both raise. Fixing
+        # absent-but-not-unreadable is fixing the row and not the pattern (#11) — in the
+        # commit whose message claimed the class was handled.
+        # One read, not exists()-then-read: the two-step version reports "unreadable" for
+        # an absent file unless it keeps a separate exists() branch, and a separate branch
+        # is also a TOCTOU gap. FileNotFoundError IS the absence, so name it that way.
         source = ROOT / path
-        if not source.exists():
+        try:
+            text = source.read_text()
+        except FileNotFoundError:
             return [f"{path} is missing — the budget guard cannot compare"]
-        m = re.search(rf"^{name} = ([\d_]+)", source.read_text(), re.M)
+        except (OSError, UnicodeDecodeError) as exc:
+            # UnicodeDecodeError subclasses ValueError, NOT OSError. The version that
+            # caught only OSError was refuted by bin/tessera-verify with binary content at
+            # the path: it escaped, propagated out of run(), and 0 of 45 checks completed —
+            # under a comment claiming the class was fixed. THIRD row-fix of this same
+            # class in one session. The row is fixed here; the PATTERN is that doccheck's
+            # run() has no per-check isolation, which `tessera-watch.evaluate()` was given
+            # on 2026-08-09 for exactly this reason. See docs/observatory.md.
+            return [f"{path} is unreadable ({type(exc).__name__}) — "
+                    f"the budget guard cannot compare"]
+        m = re.search(rf"^{name} = ([\d_]+)", text, re.M)
         if not m:
             return [f"{path} no longer defines {name} — the budget guard cannot compare"]
         found[path] = int(m.group(1).replace("_", ""))

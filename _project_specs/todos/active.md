@@ -44,6 +44,27 @@ Declared current priority for Tessera framework dev. One focus at a time.
 6. **Every new guard was run against re-planted bugs** — status ignored, notice silenced,
    `fulfilled - live` removed, `icpg show` restored, budget diverged, constant renamed. Each failed
    as required. None is decoration.
+7. **THE FALSIFIER RAN TWICE ($1.78 then $2.02) AND ITS CAVEATS FOUND TWO DEFECTS THE VERDICTS
+   MISSED.** Run 1: 4/4 CONFIRMED — and two caveats underneath. Run 2 on the amended claims came
+   back **PARTIAL twice**, both with real refuting cases. *CONFIRMED is where it stops being
+   interesting, again.*
+   - **`UnicodeDecodeError` subclasses `ValueError`, not `OSError`.** Three consecutive row-fixes of
+     one class in one session: unguarded `read_text()` → guarded `exists()` (a directory and
+     `chmod 000` both exist and raise) → caught `OSError` (binary content escaped). Each fix sat
+     under a comment claiming the class was handled. **Now an observatory entry, because the real
+     fix is per-check isolation in `doccheck.run()` — which `tessera-watch.evaluate()` got on 08-09
+     and doccheck, the stronger gate, never did. One raising check = 0 of 45 reported, in a
+     pre-commit blocker.** Deliberately NOT fixed here: isolation must make a crash a *loud failed
+     claim*, not a skip, or it converts a crash into a silence.
+   - **Notice attribution was wrong** — a fulfilled POST containing `file_exists(` was announced as
+     an *invariant*. Total count right, label wrong, in the sentence whose only job is saying what
+     went missing (#12). Fixed by testing `historical` before the static predicate, plus dropping
+     the word "invariant" from a notice that also covers postconditions.
+   - **One refuting case judged CORRECT and pinned rather than fixed:** a POST shared by a fulfilled
+     and an executing intent, whose text is `file_exists(...)`, is dropped by the static filter
+     despite surviving `fulfilled - live`. Defensible — the static policy has always applied to open
+     intents, and doccheck asserts that class whoever owns it. The finding was that the two filters'
+     *interaction* had never been exercised. Now a test that states the decision.
 
 > **P3, P13 and G-a are RED at SessionStart and all three are correct — do not chase them.**
 > **P3** reports the checkpoint at ~8,030b against 8,000b. That is item 1's open half, not a

@@ -3138,6 +3138,28 @@ and the cheapest way to falsify it.
   created. Budget now defined twice (bin/ is stdlib-only and cannot import mnemos), guarded by
   doccheck `checkpoint-budget-matches-p3`.
 
+### `doccheck.run()` has no per-check isolation — one raising check takes all 45 down *(2026-08-10)*
+
+- **Status:** Open. Found by `bin/tessera-verify` refuting a claim I had just written, twice in a row.
+- **The observation.** `bin/tessera-watch`'s `evaluate()` was given per-predicate isolation on
+  2026-08-09 precisely because one crashing predicate silenced the rest. **`scripts/doccheck.py` never
+  got the same treatment**, and it is the stronger gate of the two — it runs in `.githooks/pre-commit`
+  and blocks commits. Any check that raises takes the whole process down and **0 of 45 checks report**.
+- **How it surfaced, and the shape is the finding.** Adding `checkpoint-budget-matches-p3` I wrote an
+  unguarded `read_text()` → crashed under a synthetic ROOT. Guarded `exists()` → the falsifier
+  returned a directory and `chmod 000`, both of which exist and raise. Caught `OSError` → the
+  falsifier wrote **binary content**, and `UnicodeDecodeError` subclasses `ValueError`, not `OSError`,
+  so it escaped again. **Three consecutive row-fixes, each under a comment claiming the class was
+  fixed** (#11, aimed at the person quoting #11). The rows are closed and regression-tested; the
+  pattern is that a check's author can always find one more exception type, which is the argument for
+  isolating at `run()` instead of at each call site.
+- **Why it is not fixed here.** It changes the behaviour of the gate every commit passes through, and
+  it needs a decision: an isolated check that raises should presumably report as a *failed claim*
+  (loud, blocking) rather than be skipped (quiet) — otherwise isolation converts a crash into a
+  silence, which is strictly worse and is this repo's signature failure. **Wants its own session.**
+- **Revisit when:** doccheck is next touched, or any check is added — an added check is a new chance
+  to take the gate down.
+
 ### Findings have a channel to the framework but none to a PEER *(conclave F-002, transferred 2026-08-07)*
 
 - **Status:** Watching. **Deliberately not built**, on the raiser's own recommendation. Trigger below.

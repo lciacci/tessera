@@ -162,13 +162,20 @@ def _select_constraints(nodes: list, historical: set[str] = frozenset()) -> tupl
     "nothing to report" (F-001). A checkpoint whose constraints quietly vanished would be
     indistinguishable from a project with no invariants.
     """
+    # `historical` is tested FIRST, and the order is a fix, not a preference. With the
+    # static test first, a fulfilled postcondition whose predicate text happens to contain
+    # `file_exists(` was counted under the OTHER notice and announced as an *invariant* —
+    # refuted by `bin/tessera-verify` 2026-08-10, which is also where the ordering question
+    # got waved through as "preserves existing behaviour" while writing this. The total
+    # omitted count was right and the attribution was wrong, in the one sentence whose
+    # entire job is telling the reader what went missing (#12).
     shown, static_dropped, historical_dropped = [], 0, 0
     for node in nodes:
         content = node.content or ''
-        if STATIC_PREDICATE.search(content):
-            static_dropped += 1
-        elif content in historical:
+        if content in historical:
             historical_dropped += 1
+        elif STATIC_PREDICATE.search(content):
+            static_dropped += 1
         else:
             shown.append(content)
     return shown, static_dropped, historical_dropped
@@ -217,7 +224,10 @@ def write_checkpoint(
         constraint_nodes, historical)
     if dropped:
         constraints.append(
-            f'[{dropped} file_exists invariant(s) omitted from this checkpoint — static '
+            # "constraint(s)", not "invariant(s)": a POST from a still-open intent can
+            # carry a file_exists predicate too, and this notice covers it. Calling that
+            # an invariant is the same mislabel the reordering above fixes.
+            f'[{dropped} file_exists constraint(s) omitted from this checkpoint — static '
             'repo facts asserted by doccheck `referenced-paths-exist` + pre-commit; '
             '`mnemos nodes --type constraint` lists all]')
     if historical_dropped:
