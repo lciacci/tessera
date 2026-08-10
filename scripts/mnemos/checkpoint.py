@@ -144,8 +144,6 @@ def _select_constraints(nodes: list, historical: set[str] = frozenset()) -> tupl
     ---
 
     `file_exists("path")` invariants are bridged in bulk from iCPG and they DOMINATE the
-
-    `file_exists("path")` invariants are bridged in bulk from iCPG and they DOMINATE the
     payload: measured across 7 checkpoints on 2026-08-07 they were 53/53, 53/53, 56/56,
     53/53, 61/77 and 62/80 — four of the seven were 100% — and the constraint field was
     5.3-8.7KB of a checkpoint whose whole delivery channel caps at 10,000 characters. So
@@ -216,9 +214,20 @@ def write_checkpoint(
 
     # Gather constraints (never evicted). Fulfilled-intent postconditions need iCPG to
     # identify; with no iCPG store every POST is kept, which is the fail-safe direction.
+    # GUARDED, and the asymmetry is why. `_get_icpg_state` below already wraps its iCPG
+    # read in `except Exception`; this one did not, so ANY iCPG failure — corrupt db,
+    # schema drift, a NULL column that makes icpg's own `json.loads` raise — aborted the
+    # whole checkpoint write. That is the exact opposite of this filter's stated fail-safe
+    # ("cannot determine status → keep everything"): it turned a degraded filter into no
+    # checkpoint at all. Losing the POST filter costs bytes; losing the checkpoint costs
+    # the session. (arbiter 2026-08-10 — its specific NULL mechanism is unreachable, since
+    # icpg raises in its own reader first, but the missing guard was real.)
     historical = set()
     if icpg_store and icpg_store.exists():
-        historical = _fulfilled_post_contents(icpg_store)
+        try:
+            historical = _fulfilled_post_contents(icpg_store)
+        except Exception:
+            historical = set()
     constraint_nodes = store.get_by_type('constraint')
     constraints, dropped, historical_dropped = _select_constraints(
         constraint_nodes, historical)

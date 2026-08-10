@@ -1499,10 +1499,10 @@ def test_p8_fires_and_NAMES_a_crashed_check_rather_than_calling_it_a_doc_claim(t
     root = _root(tmp_path)
     (root / "scripts").mkdir()
     (root / "scripts" / "doccheck.py").write_text(
-        "CHECKS = {'a': None, 'b': None}\n"
+        "CHECKS = {'crashy-check': None, 'healthy-check': None}\n"
         "def run_detailed():\n"
-        "    return {'a': (['check crashed: ValueError: x'], ValueError('x')),\n"
-        "            'b': ([], None)}\n"
+        "    return {'crashy-check': (['check crashed: ValueError: x'], ValueError('x')),\n"
+        "            'healthy-check': ([], None)}\n"
         "def run():\n"
         "    return {k: v[0] for k, v in run_detailed().items()}\n")
     import sys
@@ -1517,7 +1517,11 @@ def test_p8_fires_and_NAMES_a_crashed_check_rather_than_calling_it_a_doc_claim(t
             sys.path.remove(str(root / "scripts"))
     assert fired is True, detail
     assert "CRASHED" in detail and "not a doc claim" in detail, detail
-    assert "a" in detail, detail
+    # A DISCRIMINATING name assertion. This was `"a" in detail`, which the letter 'a' in
+    # "false doc claim(s)" satisfies — it asserted nothing (arbiter 2026-08-10). The check
+    # names here are deliberately not substrings of the surrounding prose.
+    assert "crashy-check" in detail, detail
+    assert "healthy-check" not in detail, detail
 
 
 def test_p8_still_works_against_a_doccheck_that_predates_isolation(tmp_path):

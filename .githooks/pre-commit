@@ -64,13 +64,26 @@ fi
 # The headline must match the CAUSE. Saying "the docs make claims that are not true" over a
 # crashed check is the same mislabel that shipped in the checkpoint's omission notice this
 # same day: a report can be true in aggregate and wrong about what happened (#12).
-if echo "$OUTPUT" | grep -q "check(s) CRASHED"; then
+# THREE cases, not two. With per-check isolation a run can carry crashes AND false claims
+# at once, and the first version tested the crash pattern first — so the headline said only
+# "a check CRASHED" while real doc violations sat below it, silently demoted. That is the
+# same defect this branch was added to fix, one case further along (arbiter 2026-08-10).
+CRASHED=$(echo "$OUTPUT" | grep -c "check(s) CRASHED")
+FALSE=$(echo "$OUTPUT" | grep -c "claim(s) that are no longer true")
+FIX_DOC="Fix the doc, or the code it describes. If the claim is about something
+deliberately unbuilt, park it in doccheck's PLANNED_PATHS with a reason."
+FIX_CHECK="Fix the check. It raised rather than reporting; the other checks still ran."
+
+if [ "$CRASHED" -gt 0 ] && [ "$FALSE" -gt 0 ]; then
+    HEADLINE="COMMIT BLOCKED — a doccheck check CRASHED *and* the docs make false claims:"
+    REMEDY="$FIX_CHECK
+$FIX_DOC"
+elif [ "$CRASHED" -gt 0 ]; then
     HEADLINE="COMMIT BLOCKED — a doccheck check CRASHED, so its claim went unverified:"
-    REMEDY="Fix the check. It raised rather than reporting; the other checks still ran."
+    REMEDY="$FIX_CHECK"
 else
     HEADLINE="COMMIT BLOCKED — the docs in this commit make claims that are not true:"
-    REMEDY="Fix the doc, or the code it describes. If the claim is about something
-deliberately unbuilt, park it in doccheck's PLANNED_PATHS with a reason."
+    REMEDY="$FIX_DOC"
 fi
 
 echo "" >&2

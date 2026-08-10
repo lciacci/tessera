@@ -2292,42 +2292,61 @@ def test_one_raising_check_does_not_suppress_the_others(monkeypatch):
     assert results["deliberately-raising"], "the crash must not vanish into an empty list"
 
 
+def _false_claim_check():
+    return ["a claim that is not true"]
+
+
+# A CLOSED WORLD, not the live CHECKS table. These three used to append a raising check to
+# the real 45 and run them all against the live repo — so any real violation, or any check
+# crashing for an unrelated environmental reason, failed them with a message about
+# isolation. The property under test does not involve the real checks at all, and a test
+# whose premise is "the repo happens to be green right now" reports on the repo, not on the
+# code it names (arbiter 2026-08-10, two findings, both correct). It was also 45 real checks
+# — several spawning subprocesses — per test, for nothing.
+_CLOSED_WORLD = {"ok-check": lambda: [], "deliberately-raising": _raising_check}
+
+
 def test_a_crash_is_not_reported_as_a_false_doc_claim(monkeypatch):
     """A crash and a false claim are different facts. Collapsing them makes 'docs make N
     claims that are no longer true' itself an untrue claim about what happened."""
-    checks = dict(doccheck.CHECKS)
-    checks["deliberately-raising"] = _raising_check
-    monkeypatch.setattr(doccheck, "CHECKS", checks)
+    monkeypatch.setattr(doccheck, "CHECKS", dict(_CLOSED_WORLD))
 
     detailed = doccheck.run_detailed()
-    findings, exc = detailed["deliberately-raising"]
-    assert exc is not None and isinstance(exc, ValueError), detailed["deliberately-raising"]
-    for name, (found, e) in detailed.items():
-        if name != "deliberately-raising":
-            assert e is None, f"{name} crashed unexpectedly: {e!r}"
+    _findings, exc = detailed["deliberately-raising"]
+    assert isinstance(exc, ValueError), detailed["deliberately-raising"]
+    assert detailed["ok-check"] == ([], None), detailed["ok-check"]
 
 
 def test_render_separates_crashes_from_false_claims(monkeypatch):
-    checks = dict(doccheck.CHECKS)
-    checks["deliberately-raising"] = _raising_check
-    monkeypatch.setattr(doccheck, "CHECKS", checks)
+    """Both sections at once — the case that decides whether they are really separate."""
+    monkeypatch.setattr(doccheck, "CHECKS", dict(
+        _CLOSED_WORLD, **{"deliberately-false": _false_claim_check}))
 
     out = doccheck.render(doccheck.run_detailed())
-    assert "CRASHED" in out and "deliberately-raising" in out, out
+    assert "1 check(s) CRASHED" in out and "deliberately-raising" in out, out
     assert "ValueError" in out, out
-    # The repo is green, so there must be no false-claim section at all.
-    assert "claim(s) that are no longer true" not in out, out
+    # The crash must NOT be counted among the false claims: exactly one of each.
+    assert "1 claim(s) that are no longer true" in out, out
+    assert "deliberately-false" in out, out
+    # And the crash section comes first — a broken check is why a claim went unverified.
+    assert out.index("CRASHED") < out.index("no longer true"), out
 
 
 def test_a_crashed_check_makes_the_run_nonzero(monkeypatch):
     """Decision 2026-08-10: a crashed check BLOCKS. It is a real defect, it is named, and
     the other checks still report — so the 'must not wedge every commit' rule, written
     when a crash killed the whole run, no longer applies to this case."""
-    checks = dict(doccheck.CHECKS)
-    checks["deliberately-raising"] = _raising_check
-    monkeypatch.setattr(doccheck, "CHECKS", checks)
+    monkeypatch.setattr(doccheck, "CHECKS", dict(_CLOSED_WORLD))
     monkeypatch.setattr(sys, "argv", ["doccheck"])
     assert doccheck.main() == 1
+
+
+def test_a_clean_closed_world_exits_zero(monkeypatch):
+    """Non-vacuity for the test above: the same harness with nothing raising exits 0, so
+    the 1 is caused by the crash and not by the harness."""
+    monkeypatch.setattr(doccheck, "CHECKS", {"ok-check": lambda: []})
+    monkeypatch.setattr(sys, "argv", ["doccheck"])
+    assert doccheck.main() == 0
 
 
 def test_isolation_does_not_swallow_a_clean_green(monkeypatch):

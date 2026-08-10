@@ -16,6 +16,8 @@ the omitted COUNT is asserted here, not just the shrinkage.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import re
 import subprocess
@@ -359,8 +361,6 @@ def test_an_under_budget_payload_is_SILENT():
     """A warner that always warns is a warner nobody reads."""
     store = _store()
     _add(store, 'INV: one small standing property')
-    import io
-    import contextlib
     buf = io.StringIO()
     with contextlib.redirect_stderr(buf):
         write_checkpoint(store)
