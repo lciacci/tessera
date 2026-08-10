@@ -7,7 +7,7 @@ Declared current priority for Tessera framework dev. One focus at a time.
 ---
 
 ## Handoff — pick up here (2026-08-10. ITEM 1 IS CLOSED — BOTH HALVES. Fulfilled intents' POSTs left the checkpoint (39 of them, 39.6% of the payload, all under "DO NOT VIOLATE" while zero intents were executing), then the uncapped-invariant half followed: an invariant whose iCPG scope touches no file the session has read or edited is omitted with a stated count. 12,909b → 7,780b → refilled to 8,556b by ONE new intent → 6,334b. The refill is the lesson: the first cut was a POPULATION fix and the leak was GROWTH, so 50 further intents now move the payload 4 bytes instead of 7kb. NOT a cap — scope, because 23 of 24 invariant bodies were distinct and a cap picks victims by recency. **ITEM 1 IS NOW FULLY CLOSED — the safety argument was false, and the remedy was DECIDED (c) on 2026-08-10: keep the cut as SIZE-ONLY, do not union scope-matching.** The cut had been justified by "the pre-edit hook delivers the omitted ones per-file"; measured, 2 of 18 are reachable, because that hook resolves by recorded symbol edges and the checkpoint drops by scope. The obvious repair was scoped, measured and declined: a scope union takes file linkage from 94 files to 719, but **668 of the 719 arrive via directory-prefix expansion** (bare `scripts/` is on 4 intents), so it answers "what ever touched this tree", not "what governs this file". The real question underneath — **is the SYMBOL the right unit of linkage** — was OPENED in the observatory, where it already had a named revisit trigger that this work fired. ALSO: doccheck now isolates each check (one raising check used to blank all 45, in the gate that blocks commits) and a crashed check BLOCKS; `decision_surface.py` did not parse on 3.9 while its hook ate the traceback with `2>/dev/null`. THREE adversarial passes: 24 code findings → 9 real, and the two sharpest defects were found by RE-PLANTING after a fix, not by any reviewer. **ITEM 3 IS ALSO CLOSED (2026-08-10):** ADR-0020's fixture matrix shipped — 29 cases, 7 lucky-correct pairs scored as units, `Executed:` line filled in. A judge distinguishes a lucky-correct negative (qwen 7/7, regex 0/7), and all 7 of the regex's true positives are lucky members — none earned by meaning (rows: P=0.54 R=0.54). A "12 of 17 / ~70%" figure in `d2a8bb8`'s message is WRONG — that denominator drops the 7 foils; it is 12 of 24. Caveat measured, not suspected: 100% here vs P=0.32/R=0.53 on real turns, so the matrix contrasts detectors and calibrates nothing. **ITEM 5 IS CLOSED — ALL THREE BATCHES (2026-08-10).** 21 files / 4,431 lines / ~$7. Aggregate: 3 rejected on measurement, 1 false positive, ~17 real defects fixed, and **4 found by RE-PLANTING that no reviewer reported**. Sharpest: `reddit-auth-setup` wrote an external HTTP response into `~/.zshrc` unescaped (a live shell-injection path at next login); `deepseek`/`grok`/`gemini-api` all returned API errors on stdout with exit 0, so `auto-review-hook` read a dead API as "no review needed"; `tessera-findings` could lose a finding to an en-dash. The session-id sweep then found what it was NOT looking for: **`spend/event.py`'s audit path was cwd-relative**, so a `spend_denied` after any `cd` was invisible to the repo-root reader — the same bug `tessera-degraded` records fixing for the REPORTER on 2026-07-26, with the audit writer for the control itself left behind.
-  **▶ NEXT, AND ITEM 6'S PREMISE HAS MOVED:** item 6 ordered itself after item 5 because *"~4,500 unreviewed `bin/` lines are where instance #4 most likely lives"*. Item 5 is done and found **no fourth clean-clone instance** — but it was not looking for one (arbiter reviewed for correctness and secrets; the three originals were environmental "assumes a file only install.sh creates"). **So the negative is real but under-powered, and the cheap next step is ONE MANUAL CLEAN CLONE, not the runner** — it answers the runner's own question in minutes, and the observatory entry already names the trap (redirecting `HOME` isolates `install.sh`, but ambient `PATH` still resolves the OUTER repo's `mnemos`, so two ✗ are sandbox artifacts). Green weakens the runner's case further; red gives instance #4 and the sharpened spec item 6 asks for. Then item 2's leftovers.)
+  **▶ NEXT, AND ITEM 6'S PREMISE HAS MOVED:** item 6 ordered itself after item 5 because *"~4,500 unreviewed `bin/` lines are where instance #4 most likely lives"*. Item 5 is done and found **no fourth clean-clone instance** — but it was not looking for one (arbiter reviewed for correctness and secrets; the three originals were environmental "assumes a file only install.sh creates"). **So the negative is real but under-powered, and the cheap next step is ONE MANUAL CLEAN CLONE, not the runner** — it answers the runner's own question in minutes, and the observatory entry already names the trap (redirecting `HOME` isolates `install.sh`, but ambient `PATH` still resolves the OUTER repo's `mnemos`, so two ✗ are sandbox artifacts). **RUN 2026-08-10: the repo DOES stand up from clean** — doccheck 46/46 pre-install, P9 fires correctly with no P5 crash, 526 tests green after `./install.sh`. **And instance #4 was waiting:** at a 137-char venv path the shebang exceeds the ~127-char limit, so uv emits a `#!/bin/sh` wrapper, and `verify()` read line 1, got `/bin/sh`, and declared F-001 — one branch after ALREADY passing the real liveness test. Fixed; the runner stays unbuilt and the recipe is now in the observatory entry. **ITEM 2 IS ALSO CLOSED except part 4** — `STATIC_PREDICATE` widened behind a new doccheck assertion, and the checkpoint now carries a `decisions` field sourced from the gate log. ▶ NEXT: item 4 (downstream T2 work — conclave, then howler, which is missing the entire spend guard), and item 2's part 4 when `restore/offer.py` is next touched.)
 
 *(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
 Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering. This note
@@ -281,16 +281,32 @@ had one, so the convention was visible and the live section was the exception. a
    `icpg query constraints <file>` on every Edit/Write, so an omitted invariant arrives when its
    files come into play — **verified before relying on it**, and the note says so. Unscoped
    invariants always kept; no file signals → keep everything.
-   **The BUDGET problem is what closed — these leftovers are different work, not a caveat
-   on it.** Still open, small and ORDERED: widen `STATIC_PREDICATE` to `test_exists(` — but add the
-   doccheck assertion that makes its "asserted by something stronger" justification TRUE first,
-   because today it is not. Then the rest of part 3: the
-   `write_checkpoint` defect — no `decisions` field in the schema, empty
-   `current_subgoal`/`working_memory`, corrupted `progress`. **Receipts now read `insufficient` a
-   FOURTH time** (2026-08-09 evening: `goal` and `progress`) — orientation came from this file and
-   from re-reading the code, never from the checkpoint, and the `goal` field is ~95 comma-joined
-   historical goals topped by the *previous* session's task. **Part 4** — `delivered_chars` in
-   `scripts/restore/offer.py`; still *do it when the hook is next touched for another reason*.
+   **ITEM 2 IS NOW CLOSED except part 4 (2026-08-10).**
+   - ~~widen `STATIC_PREDICATE` to `test_exists(`~~ **DONE**, in the ordered way: doccheck's
+     `icpg-test-exists-paths-are-real` shipped FIRST, because the justification for dropping these
+     ("asserted by something stronger") was true of `file_exists` and not of `test_exists`, and
+     widening first would have silently dropped a class nothing else asserted. *The check was
+     decoration on first write — the predicates are stored as JSON, so the column contains
+     `test_exists(\"path\")` with a backslash before every quote and the regex matched nothing.
+     Caught by planting a violation, not by review.* The omission notice was widened with it.
+   - ~~the `write_checkpoint` defect — no `decisions` field~~ **DONE.** The checkpoint now carries
+     `decisions`, sourced from the session's own `suggestion_gate` log — an EXISTING channel with a
+     Stop-hook backstop, not a new thing for the model to remember. Rendered above Progress, because
+     progress is what was done and decisions are what is OPEN. Live: 6 entries, checkpoint 7,739b,
+     under the 8,000 budget. Held gates are excluded (considered-and-not-surfaced is friction-journal
+     data, not something the next session must act on), the omitted count is stated, and the tail
+     kept is the newest.
+   - **`current_subgoal`/`working_memory` are STRUCTURALLY empty and that is now recorded, not
+     patched.** Both read `get_by_type('working')`, and `working` is a declared node type with **no
+     producer** — it is in the enum and the eviction-policy map and nothing has ever created one
+     (live store: constraint/goal/result only). Giving it a producer means deciding what a working
+     node IS; that is a design question, and `task_narrative` already covers the ground.
+   - **Part 4 STILL OPEN** — `delivered_chars` in `scripts/restore/offer.py`; still *do it when the
+     hook is next touched for another reason*.
+   **The prediction to test next session:** five consecutive receipts read `insufficient`, twice
+   naming `decisions` by name. That field now exists. **If the next receipt still reads
+   `insufficient`, the byte/schema work was not the binding constraint** — and that is worth more
+   than being right.
 3. **~~ADR-0020's fixture matrix~~ SHIPPED 2026-08-10.** 29 cases, 7 lucky-correct **pairs**, scored
    as units — credit requires both members, which is what "the lucky-correct negative stays
    negative" means for a classifier. **Result against ADR-0020 §147's precondition: a judge CAN

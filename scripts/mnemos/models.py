@@ -164,6 +164,20 @@ class CheckpointNode:
     id: str = field(default_factory=_uuid)
     active_constraints: list[str] = field(default_factory=list)
     active_results: list[str] = field(default_factory=list)
+    # THE FIELD FIVE RESTORE RECEIPTS ASKED FOR. T2's verdict has read `insufficient`
+    # five consecutive times, and 2026-08-07 and 08-10 both named `decisions` explicitly:
+    # a session's live state is not its goal or its file list, it is what was DECIDED and
+    # what is still open. There was no such field, so no byte budget could ever fix it.
+    # Sourced from the session's own `suggestion_gate` log — an existing producer with a
+    # channel, not a new thing for the model to remember.
+    decisions: list[str] = field(default_factory=list)
+    # STRUCTURALLY EMPTY, and the reason is recorded rather than patched. Both read
+    # `get_by_type('working')`, and `working` is a declared node type with NO PRODUCER —
+    # it appears in this file's type enum and eviction-policy map and nothing has ever
+    # created one (live store 2026-08-10: constraint/goal/result only). Giving it a
+    # producer means deciding what a working node IS, which is a design question, not a
+    # patch. Until then `task_narrative` carries this ground and these stay empty by
+    # construction rather than by accident.
     current_subgoal: str = ''
     working_memory: str = ''
     task_narrative: str = ''

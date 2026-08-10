@@ -417,6 +417,7 @@ def write_checkpoint(
         goal=goal_text,
         active_constraints=constraints,
         active_results=results,
+        decisions=_session_decisions(store.project_dir, task_id),
         current_subgoal=current_subgoal,
         working_memory=working_memory,
         task_narrative=narrative,
@@ -512,6 +513,16 @@ def _format_checkpoint(data: dict) -> str:
     if working:
         lines.append('### Working Memory')
         lines.append(working)
+        lines.append('')
+
+    # Decisions surfaced this session. Placed ABOVE Progress deliberately: progress is
+    # what was done, decisions are what is OPEN, and a reader who gets only the first
+    # screen needs the second. This is the field five restore receipts named.
+    decisions = data.get('decisions', [])
+    if decisions:
+        lines.append('### Decisions Surfaced (gates — what was proposed, and what is open)')
+        for d in decisions:
+            lines.append(f'- {d}')
         lines.append('')
 
     # Progress (result summaries)
@@ -904,6 +915,61 @@ def consume_compaction_marker(project_dir: str = '.') -> bool:
         return False
 
 
+# A gate note is prose the model wrote; the whole value is reading it, so truncating
+# hard defeats the point. Capped anyway because the payload has a measured ceiling —
+# and the cap is per-note plus a count, never a silent drop of the tail.
+DECISION_NOTE_CHARS = 220
+DECISION_CAP = 8
+
+
+def _session_decisions(project_dir, task_id: str) -> list[str]:
+    """This session's surfaced gates, newest last, as `kind — note` lines.
+
+    THE FIELD FIVE RESTORE RECEIPTS ASKED FOR. `decisions` did not exist in the schema,
+    so no amount of byte-budget work could ever deliver it — T2 read `insufficient` five
+    times and twice named this field by name.
+
+    Sourced from `.tessera/logs/<session>.jsonl`, the suggestion-gate channel, which is
+    already produced by `scripts/gate/emit.py` and already backstopped by a Stop hook.
+    That matters more than the rendering: this reads an EXISTING channel rather than
+    asking the model to remember a new one, which is principle #17 and the reason the
+    gate log itself exists.
+
+    Never raises. A checkpoint that dies because an audit log is unreadable is a worse
+    failure than one missing a field — the same rule the constraint filter above follows.
+    """
+    if not task_id or task_id == 'unknown':
+        return []
+    log = Path(project_dir) / '.tessera' / 'logs' / f'{Path(task_id).name}.jsonl'
+    try:
+        raw = log.read_text(encoding='utf-8', errors='replace')
+    except (OSError, ValueError):
+        return []
+    out: list[str] = []
+    for line in raw.splitlines():
+        if '"suggestion_gate"' not in line:
+            continue
+        try:
+            data = json.loads(line).get('data', {})
+        except ValueError:
+            continue
+        if not data.get('fired'):
+            continue  # a HELD gate was considered and not surfaced — not a decision
+        note = (data.get('note') or '').strip()
+        if not note:
+            continue
+        kind = data.get('suggestion_kind') or 'gate'
+        out.append(f'{kind}: {note[:DECISION_NOTE_CHARS]}')
+    if len(out) > DECISION_CAP:
+        # Oldest first, so the tail kept is the LIVE end of the session. The count is
+        # stated — a silently shortened list reads as "that is all there was".
+        dropped = len(out) - DECISION_CAP
+        out = out[-DECISION_CAP:]
+        out.insert(0, f'[{dropped} earlier gate(s) omitted — '
+                      f'`python3 scripts/gate/emit.py` log has all]')
+    return out
+
+
 def _checkpoint_to_dict(cp: CheckpointNode) -> dict:
     """Serialize CheckpointNode to JSON-safe dict."""
     return {
@@ -912,6 +978,7 @@ def _checkpoint_to_dict(cp: CheckpointNode) -> dict:
         'goal': cp.goal,
         'active_constraints': cp.active_constraints,
         'active_results': cp.active_results,
+        'decisions': cp.decisions,
         'current_subgoal': cp.current_subgoal,
         'working_memory': cp.working_memory,
         'task_narrative': cp.task_narrative,

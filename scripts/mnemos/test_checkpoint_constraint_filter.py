@@ -604,3 +604,78 @@ def demo() -> None:
 
 if __name__ == '__main__':
     demo()
+
+
+# --- The `decisions` field (item 2, 2026-08-10) -------------------------------------
+
+
+def _gate_log(tmp: Path, session: str, events: list[dict]) -> None:
+    d = tmp / '.tessera' / 'logs'
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f'{session}.jsonl').write_text(
+        '\n'.join(json.dumps(e) for e in events) + '\n')
+
+
+def _gate(note: str, kind: str = 'design', fired: bool = True) -> dict:
+    return {'type': 'suggestion_gate', 'session_id': 's',
+            'data': {'fired': fired, 'suggestion_kind': kind, 'note': note}}
+
+
+def test_decisions_are_read_from_the_gate_log():
+    """The field five restore receipts named. It did not exist in the schema, so no
+    byte-budget work could ever have delivered it."""
+    from .checkpoint import _session_decisions
+    tmp = Path(tempfile.mkdtemp())
+    _TEMP_STORES.append(str(tmp))
+    _gate_log(tmp, 'sess-1', [_gate('chose (c), keep it a size cut', 'design')])
+
+    out = _session_decisions(tmp, 'sess-1')
+    assert out == ['design: chose (c), keep it a size cut'], out
+
+
+def test_a_HELD_gate_is_not_a_decision():
+    """`--held` records a gate that was CONSIDERED and deliberately not surfaced. It is
+    friction-journal data, not something the next session must act on."""
+    from .checkpoint import _session_decisions
+    tmp = Path(tempfile.mkdtemp())
+    _TEMP_STORES.append(str(tmp))
+    _gate_log(tmp, 'sess-1', [_gate('surfaced this', fired=True),
+                              _gate('weighed and did not surface', fired=False)])
+
+    assert _session_decisions(tmp, 'sess-1') == ['design: surfaced this']
+
+
+def test_the_omitted_gate_count_is_STATED_and_the_LIVE_end_is_kept():
+    """Same rule as every other omission here: a shortened list must not read as 'that
+    is all there was'. And the tail kept is the newest, because the open decision is the
+    one at the live end of the session."""
+    from .checkpoint import DECISION_CAP, _session_decisions
+    tmp = Path(tempfile.mkdtemp())
+    _TEMP_STORES.append(str(tmp))
+    _gate_log(tmp, 'sess-1', [_gate(f'gate {i}') for i in range(DECISION_CAP + 3)])
+
+    out = _session_decisions(tmp, 'sess-1')
+    assert 'earlier gate(s) omitted' in out[0], out[0]
+    assert '3 earlier' in out[0], out[0]
+    assert out[-1] == f'design: gate {DECISION_CAP + 2}', out[-1]
+
+
+def test_a_missing_or_unreadable_gate_log_never_raises():
+    """A checkpoint that dies because an audit log is unreadable is a worse failure than
+    one missing a field — the rule the constraint filter above already follows."""
+    from .checkpoint import _session_decisions
+    tmp = Path(tempfile.mkdtemp())
+    _TEMP_STORES.append(str(tmp))
+    assert _session_decisions(tmp, 'sess-absent') == []
+    assert _session_decisions(tmp, 'unknown') == []
+    assert _session_decisions(tmp, '') == []
+
+
+def test_a_session_id_that_is_a_path_cannot_read_another_dir():
+    """The id is a filename component here too — same reduction the 2026-08-10 sweep
+    applied across the log writers."""
+    from .checkpoint import _session_decisions
+    tmp = Path(tempfile.mkdtemp())
+    _TEMP_STORES.append(str(tmp))
+    _gate_log(tmp, 'real', [_gate('the real one')])
+    assert _session_decisions(tmp, '../../real') == ['design: the real one']
