@@ -2615,8 +2615,15 @@ marker — is worth more than the 29%.
 standing patterns) ~2,790 — **~15,600 tokens**, plus the Mnemos checkpoint (~2,600) for ~18k in
 practice. (Estimated at chars/4; `count_tokens` if a decision ever rests on it.)
 
-**METERED 2026-08-09: 15,497 tokens tracked** — recomputed by `scripts/prefix_meter.py`, which
-doccheck's `eager-prefix-figure-is-current` asserts this figure against within 5%. **The figure
+**METERED 2026-08-10: 15,837 tokens tracked** *(was 15,497 on 08-09)* — recomputed by
+`scripts/prefix_meter.py`, which doccheck's `eager-prefix-figure-is-current` asserts this figure
+against within 5%. **Re-metered because `CLAUDE.md` changed three times that day, not because a
+check demanded it** — the 5% band absorbed the drift and stayed green, and CLAUDE.md's own rule is
+to re-run the meter on any change to it. A green tolerance does not discharge that; if it did, the
+figure would rot inside the band exactly as the frozen prose did. `CLAUDE.md` 7,307 → **7,647**
+(+340: the stdlib-only clarification, the sibling-import note, and the doccheck-isolation clause),
+every other tracked component unchanged. It is now **48%** of the prefix and still the only
+component that grows. **The figure
 above was a one-shot number frozen in prose, and that is the class of claim this repo keeps paying
 for** — ADR-0021's adopted pattern, taken from Deep Agents, which tracks its base input tokens as a
 defined per-release metric rather than a paragraph. Composition today: `CLAUDE.md` 7,307 ·

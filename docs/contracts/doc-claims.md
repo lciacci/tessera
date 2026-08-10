@@ -88,9 +88,19 @@ Two design points, both learned the hard way the same day:
   asserts it stayed pointed**, because a gate that is present but unwired is the worst state
   of all: it looks like coverage and enforces nothing. `test_git_is_actually_pointed_at_the_tracked_hooks`
   guards the same thing from the test suite.
-- **It fails open on a crash, closed on a violation.** A checker that raises must not wedge
-  every commit in the repo — but it prints loudly, because a silent checker is indistinguishable
-  from a passing one.
+- **It fails open on CATASTROPHIC failure, closed on a violation AND on a crashed check.**
+  *(Amended 2026-08-10; this clause previously read "fails open on a crash" without
+  qualification, and that stopped being true the day `run()` gained per-check isolation.)*
+  The distinction is what broke: `run()` used to be a bare dict comprehension, so one raising
+  check took the process down and **0 of 45 reported**. Each check is now isolated, so a crash
+  is *named, localised, and beside 44 working results* — which makes it an ordinary blocking
+  finding, printed in its own section so the headline never calls a broken check a false doc
+  claim. **Only whole-run failure still fails open** — this module unparseable, `render()`
+  raising, a traceback carrying no recognisable verdict. That is the case "must not wedge every
+  commit" was actually written for, and the consequence is worth stating plainly rather than
+  hiding behind "fails open": **in that state the hook prints a warning and lets every commit
+  through**, so the gate is bypassed exactly when the checker is most broken. It prints loudly
+  either way, because a silent checker is indistinguishable from a passing one.
 
 Bypass with `git commit --no-verify`. It is a gate, not a jail — but the bypass is now a
 decision you make on purpose, which is the entire point of a suggestion-gate (principle #12).
