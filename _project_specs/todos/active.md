@@ -309,8 +309,29 @@ had one, so the convention was visible and the live section was the exception. a
 4. **Carried from 2026-07-29:** downstream T2 work (conclave, then howler — *do real work, not T2
    work*); **howler missing the entire spend guard** (14 files); don't wire iCPG downstream yet;
    caching closed except quarry.
-5. **The `bin/` control surface review — `tessera-verify` and `tessera-watch` are DONE; the other
-   19 files, ~4,500 lines, are not.** *(This item's opening line has now been rewritten twice inside
+5. **The `bin/` control surface review — BATCH 1 OF 3 DONE (2026-08-10).** ~~the other 19 files,
+   ~4,500 lines~~ **that figure was wrong: 4,431 is the TOTAL across all 21 files; the remainder is
+   19 files / 2,400 lines.** Also unrecorded until now: **`tessera-watch` grew 1,107 → 1,373 lines
+   AFTER its whole-file review**, so ~266 lines of it are unreviewed.
+   **Batching is by adjudication load, not cost** — the whole job is ~$2.70, but 19 files at once
+   yields 25–40 findings and adjudicating them as one blob is where the quality goes.
+   - **Batch 1 DONE** (`sync-harness`, `new-project`, `escalate`, `degraded`, `hooks` — 974 lines,
+     $1.86, 22 findings): **3 rejected, 6 confirmed and fixed, 2 sync-harness items still open.**
+     Rejections: the `Path.glob` FileNotFoundError claim (measured false on 3.9/3.13/3.14 — arbiter
+     asserted the *same* wrong fact in the watch review with the version boundary INVERTED); the
+     `source`-duplicates-`component` claim (contradicted by `docs/contracts/degraded-event.md:17`,
+     which defines `source` AS the component); and the session-id traversal re-raised as
+     high/security, already rejected 2026-08-09.
+     **Still open from batch 1:** `sync-harness` dry-run never reports it would set
+     `core.hooksPath` (the whole block is gated on `apply`), and the settings-merge write may lack
+     the `mkdir` guard the file-copy path has.
+   - **Batch 2 TODO:** `tessera-watch`'s 266 new lines + `findings`, `changelog`, `test`, `chaos`,
+     `sync-skills`, `authorize` (691 lines).
+   - **Batch 3 TODO — read with a SECRETS lens, not a control-flow one:** the 8 non-`tessera-*`
+     files (1,001 lines). **My first triage deprioritised these as "personal tooling" and that was
+     wrong on the merits** — 6 of the 8 handle credentials (`reddit-auth-setup` 19 refs,
+     `gemini-api` 8, `grok` 7, `deepseek` 5). Ranking them last measured the label, not the
+     exposure; principle #3 aimed at the triage. *(This item's opening line has now been rewritten twice inside
    the day it was written: it first said the day's run "covered `scripts/` only", then that
    `tessera-watch`'s "other ~90%" was open. Both true when written. The item is kept at the top of
    the list rather than closed, because what remains is the larger half.)*

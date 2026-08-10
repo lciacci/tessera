@@ -152,11 +152,17 @@ cp "$TPL/sqlfluff.template" "$TARGET/.sqlfluff"
 mkdir -p "$TARGET/.githooks"
 cat > "$TARGET/.githooks/pre-commit" <<'EOF'
 #!/bin/bash
-# Downstream pre-commit. Add your project's own blocking checks here.
-# SQL lint is WARN-ONLY and silent unless this commit stages .sql (ADR-0012).
+# Downstream pre-commit. Add your project's own blocking checks here — they WILL block:
+# this hook exits with the status of the last command, so a failing check stops the commit.
+#
+# There used to be an unconditional `exit 0` at the end. It made the SQL lint warn-only,
+# which is correct (ADR-0012) — and it also silenced every check a downstream added under
+# the invitation above, which is not. The warn-only decision now lives on the one line it
+# applies to, so it cannot quietly extend to anything else. (arbiter 2026-08-10.)
 ROOT="$(git rev-parse --show-toplevel)"
-[ -x "$ROOT/scripts/sql/lint.sh" ] && "$ROOT/scripts/sql/lint.sh"
-exit 0
+if [ -x "$ROOT/scripts/sql/lint.sh" ]; then
+  "$ROOT/scripts/sql/lint.sh" || true   # WARN-ONLY by decision, ADR-0012
+fi
 EOF
 chmod +x "$TARGET/.githooks/pre-commit"
 

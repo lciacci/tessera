@@ -3663,6 +3663,36 @@ wrong trade; recording the accepted risk explicitly is the honest alternative to
 a hook payload — i.e. the moment the "only ever set by the harness" premise stops holding. At that
 point it is one shared helper, applied to all 7, not a patch at the call site that changed.
 
+#### ⚠ TRIGGER FIRED 2026-08-10 — and it was already true when this entry was written
+
+**`bin/tessera-degraded` takes a session id from two of the three named sources.** Line 71 reads
+`session_id` out of the **piped hook payload**; the CLI accepts a **`--session` argument**. The
+entry's revisit condition is *"an argument, a config file, or a hook payload"* — two of three,
+today, in the module this entry itself cites.
+
+**The premise did not stop holding; it was never checked for this module.** The 08-09 rejection
+verified that nothing *writes* `CLAUDE_CODE_SESSION_ID` — true, and it is the wrong question for a
+tool that also accepts the id by flag and by stdin. The grep found writes of the *env var* and
+concluded the *value* was harness-only. Standing pattern #12 on the verification step, the same
+shape as the `icpg query constraints` check that proved a command worked rather than proving what
+it was cited for. *(Found because arbiter re-raised the finding as high/security on 2026-08-10; the
+severity was correctly rejected again, and re-reading this entry to reject it is what surfaced the
+trigger. The wrong finding pointed at the real one.)*
+
+**Severity is UNCHANGED and the rejection still stands.** Both new sources are the harness or this
+repo's own hooks — a hook payload is written by Claude Code, `--session` by our own scripts. No
+untrusted party reaches either. This is still a robustness defect, not a vulnerability.
+
+**What is owed, per this entry's own prescription:** *one shared helper, applied to all 7* — not a
+patch at `tessera-degraded`. Deliberately **not** done in the session that found it, for the reason
+already written above: a 7-module sweep on the back of a rejected finding is the wrong trade, and
+that reasoning survives the trigger firing. **The scope is now bigger than the entry assumed**,
+because a helper has to cover three input paths per module, not one.
+
+**Revisit when (REPLACES the condition above, which has fired):** the sweep is scheduled, or a
+session id reaches any of the 7 from a source outside this repo and the harness — at which point it
+stops being robustness and becomes the security finding it has twice been rejected as.
+
 ---
 
 ### The clean-clone path has no exercise — three defects found by tripping over it in one day *(2026-08-09)*
