@@ -45,6 +45,20 @@ Declared current priority for Tessera framework dev. One focus at a time.
    `fulfilled - live` removed, `icpg show` restored, budget diverged, constant renamed. Each failed
    as required. None is decoration.
 
+> **P3, P13 and G-a are RED at SessionStart and all three are correct — do not chase them.**
+> **P3** reports the checkpoint at ~8,030b against 8,000b. That is item 1's open half, not a
+> regression: the POST cut took it from 12,909b to 7,780b and this session's own intent put it
+> back. **P13** reports 6 `standing-patterns/block-missing` events in 7d — 4 from 2026-08-09
+> (aging out 08-16) and **2 from 2026-08-10 06:50–06:52, which are mine**: moving the standing-
+> patterns block into the new handoff section orphaned it for ~90 seconds while the surfacer ran.
+> Self-inflicted, self-healed the same minute, aging out 08-17. **This is the second time the same
+> transient has been produced by the same edit, which is the actual signal: authoring a new handoff
+> section reliably orphans that block.** Worth a fix — move the block last, or have the surfacer
+> scan every `## Handoff` block rather than only the first — but note the detector caught it both
+> times, unprompted, which is spec 11 working. **G-a** then fires on P13's streak. Not snoozed,
+> for the reason recorded on 08-09: snoozing P13 suppresses the spec-11 channel, and snoozing G-a
+> blinds the streak detector for every predicate.
+
 ---
 
 ### Next — item 1 SHIPPED its POST half and refilled; the INV half is open; item 4 half-closed; item 5 is new
