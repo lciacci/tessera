@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
 import time
 from collections import Counter
 from pathlib import Path
@@ -53,6 +54,41 @@ def _select_goals(goals: list, task_id: str | None) -> tuple[list, int, int]:
         live.sort(key=lambda n: n.task_id != task_id)
     shown = live[:MAX_CHECKPOINT_GOALS]
     return shown, bridged, len(live) - len(shown)
+
+
+# SECOND DEFINITION, DELIBERATE AND GUARDED. `bin/tessera-watch` holds the other
+# (RESTORE_BUDGET_BYTES) and derives it — see its comment for the derivation, which two
+# wrong re-anchors preceded. bin/ is stdlib-only by doccheck `bin-scripts-are-stdlib-only`
+# and cannot import mnemos, so the copy is unavoidable; doccheck
+# `checkpoint-budget-matches-p3` asserts the two literals agree, because a budget that
+# drifts between the writer and the watcher is worse than either number alone.
+CHECKPOINT_BUDGET_BYTES = 8_000
+
+
+def _warn_if_over_budget(size: int) -> None:
+    """Say so AT WRITE TIME when the payload will not fit its delivery channel.
+
+    P3 can only ever report a spill that already happened: `tessera-watch` runs at
+    SessionStart, so its warning arrives in the same breath as the truncated checkpoint
+    it is warning about — and worse, the checkpoint is rewritten mid-session, so a
+    payload that goes over at 13:15 is not evaluated by anything until the next session
+    starts. This one runs at the moment the artifact is produced, which is the only
+    position from which the news can arrive early. Same meter-before-marker rule the
+    caching work landed on.
+
+    stderr, not stdout: the caller is a Stop hook whose stdout is a delivery channel of
+    its own. Warn only — a checkpoint that is too big must still be WRITTEN, because a
+    spilled checkpoint beats no checkpoint, and a size guard that can refuse to save
+    state is a worse failure than the one it guards.
+    """
+    if size <= CHECKPOINT_BUDGET_BYTES:
+        return
+    print(
+        f'mnemos: checkpoint payload is {size:,}b, over the '
+        f'{CHECKPOINT_BUDGET_BYTES:,}b delivery budget — SessionStart will hand the '
+        f'model a truncated preview. Written anyway. Largest fields shrink via '
+        f'`mnemos nodes --type constraint` / `--type goal`.',
+        file=sys.stderr)
 
 
 STATIC_PREDICATE = re.compile(r"\bfile_exists\(")
@@ -252,6 +288,7 @@ def write_checkpoint(
 
     # Write to JSON files
     cp_data = _checkpoint_to_dict(cp)
+    _warn_if_over_budget(len(json.dumps(cp_data, indent=2)))
 
     # Latest checkpoint (overwrite)
     latest_path = store.mnemos_dir / 'checkpoint-latest.json'

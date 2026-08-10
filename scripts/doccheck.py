@@ -2430,7 +2430,46 @@ def check_mirror_links_are_symlinks() -> list[str]:
     return sorted(bad)
 
 
+def check_checkpoint_budget_matches_p3() -> list[str]:
+    """The delivery budget is defined TWICE; assert the two literals agree.
+
+    `bin/tessera-watch` (P3) reports a checkpoint that is over budget; since 2026-08-10
+    `scripts/mnemos/checkpoint.py` warns about it at WRITE time, which is the only
+    position from which the news can arrive before the harm. Two mechanisms, one number,
+    and they cannot share a constant: `bin/` is stdlib-only (`bin-scripts-are-stdlib-only`)
+    so tessera-watch cannot import mnemos.
+
+    Unavoidable duplication is fine; UNGUARDED duplication is the shape this repo keeps
+    paying for (the fixer and the detector drifting apart). If these diverge the failure
+    is quiet in the worst direction: the writer says nothing while the watcher goes red,
+    or the writer cries wolf on payloads P3 considers fine.
+    """
+    found = {}
+    for path, name in (("bin/tessera-watch", "RESTORE_BUDGET_BYTES"),
+                       ("scripts/mnemos/checkpoint.py", "CHECKPOINT_BUDGET_BYTES")):
+        # Guarded, and the guard is the point: an unguarded read_text() here crashed the
+        # WHOLE doccheck process under a synthetic ROOT (caught by
+        # test_p8_leaves_docchecks_root_where_it_found_it, 2026-08-10). That is the same
+        # class fixed across tessera-watch the day before — one check taking the process
+        # down means 44 others never run, and this file's contract is that a check
+        # REPORTS, never raises.
+        source = ROOT / path
+        if not source.exists():
+            return [f"{path} is missing — the budget guard cannot compare"]
+        m = re.search(rf"^{name} = ([\d_]+)", source.read_text(), re.M)
+        if not m:
+            return [f"{path} no longer defines {name} — the budget guard cannot compare"]
+        found[path] = int(m.group(1).replace("_", ""))
+
+    values = set(found.values())
+    if len(values) > 1:
+        pretty = ", ".join(f"{p} = {v:,}" for p, v in sorted(found.items()))
+        return [f"delivery budget has diverged between its two definitions: {pretty}"]
+    return []
+
+
 CHECKS = {
+    "checkpoint-budget-matches-p3": check_checkpoint_budget_matches_p3,
     "mirror-links-are-symlinks": check_mirror_links_are_symlinks,
     "eager-prefix-figure-is-current": check_eager_prefix_figure_is_current,
     "tier-vocabulary-is-consistent": check_tier_vocabulary_is_consistent,

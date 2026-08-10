@@ -260,6 +260,51 @@ def test_every_command_the_notices_cite_actually_EXISTS():
             f'(exit {proc.returncode}): {proc.stderr.strip()[-200:]}')
 
 
+# --- Write-time budget warning (P3 part 3, 2026-08-10) ----------------------------
+
+
+def test_an_over_budget_payload_says_so_AT_WRITE_TIME(capsys):
+    """P3 reports a spill that already happened; this reports one as it is created.
+
+    The checkpoint is rewritten mid-session, and `tessera-watch` runs at SessionStart
+    only — so a payload that goes over at 13:15 is evaluated by nothing until the next
+    session, where the warning arrives in the same breath as the truncated block it
+    describes.
+    """
+    store = _store()
+    for i in range(90):
+        _add(store, f'INV: standing property {i} — ' + 'x' * 120)
+
+    write_checkpoint(store)
+    err = capsys.readouterr().err
+    assert 'over the 8,000b delivery budget' in err, err
+    assert 'Written anyway' in err, err
+
+
+def test_an_under_budget_payload_is_SILENT():
+    """A warner that always warns is a warner nobody reads."""
+    store = _store()
+    _add(store, 'INV: one small standing property')
+    import io
+    import contextlib
+    buf = io.StringIO()
+    with contextlib.redirect_stderr(buf):
+        write_checkpoint(store)
+    assert buf.getvalue() == '', buf.getvalue()
+
+
+def test_the_over_budget_checkpoint_is_STILL_WRITTEN():
+    """A size guard that can refuse to save state is worse than the spill it guards."""
+    store = _store()
+    for i in range(90):
+        _add(store, f'INV: standing property {i} — ' + 'x' * 120)
+
+    cp = write_checkpoint(store)
+    latest = store.mnemos_dir / 'checkpoint-latest.json'
+    assert latest.exists(), 'checkpoint was not written'
+    assert json.loads(latest.read_text())['id'] == cp.id
+
+
 def demo() -> None:
     test_static_predicates_are_dropped_and_real_constraints_kept()
     test_the_omission_is_STATED_never_silent()
@@ -274,6 +319,8 @@ def demo() -> None:
     test_the_POST_omission_is_STATED_never_silent()
     test_the_two_omission_notices_are_distinguishable()
     test_every_command_the_notices_cite_actually_EXISTS()
+    test_an_under_budget_payload_is_SILENT()
+    test_the_over_budget_checkpoint_is_STILL_WRITTEN()
     print('ok')
 
 
