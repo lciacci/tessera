@@ -138,6 +138,16 @@ the review win is about *roles* on one model.
 > exploits between them, **one apiece missed by the other** (`../arbiter/docs/STATE.md`, "Round 2").
 > That is a peer-strength union-recall gain — but confounded, since the two differ in *architecture*
 > (31 agents / 1.3M tokens vs ~4 calls per file), not only in model.
+>
+> **2026-08-10 — Round 3 was checked against this and does not move it.** Its three arms (arbiter,
+> a 17-agent `/code-review`, cloud `ultra`) are **one model in three arrangements**, so it varies
+> architecture, not model: the Round 2 shape above with the *scale* half controlled, not the model
+> half introduced. Peer-strength MODEL diversity stays **unmeasured**; conclave's paid experiment
+> stays unspent. One correction it does force on the table above: those recall figures are
+> **single-draw point estimates** — arbiter re-ran one arm 4× on byte-identical input and got a 1–4
+> spread — so `0.618` binds as a *direction*, not a value, and any future model-diversity run needs
+> **same-model-k-draws** as its control arm rather than best-single. Deliberately not re-measured;
+> the instrument (`../conclave/orchestrator/s2_model_axis.py`) answers it on demand.
 
 **(c) Serving tiers ≠ routing policy** — Conclave **exposes** tiers (`local`/`lab`/`frontier`);
 **Tessera decides WHEN** to use them. A tier existing is not a decision to route to it.
