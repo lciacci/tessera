@@ -2893,6 +2893,91 @@ costly, and itself unverified. The honest framing is not *counters are wrong* �
 counter was never chosen over the alternative, it was the only thing convenient, and no one has
 looked since.
 
+#### TRIGGER FIRED 2026-08-10 — the fixture work landed and the answer is YES, with a caveat that matters more than the answer
+
+**The precondition this entry named is met.** ADR-0020 §147 said *"a conduct judge is only worth
+building if a judge can distinguish a lucky-correct negative at all, and the fixture matrix is the
+cheapest possible test of that."* Built (`scripts/mnemos/fixtures/correction_cases.jsonl`, 29 cases,
+7 minimal pairs) and run against both detectors on the same matrix:
+
+| detector | positives | negatives | **lucky-correct pairs credited** |
+|---|---|---|---|
+| `regex_match` (surface cues) | 0/5 | 5/5 | **0 / 7** |
+| qwen classifier (live) | 5/5 | 5/5 | **7 / 7** |
+
+**A judge can distinguish a lucky-correct negative. A cue-matcher cannot.** That is the cleanest
+result available and it is what the held-open question needed.
+
+**The number that makes the point, and it is about scoring not about judging:** `regex_match` is
+correct on **12 of 17 individual rows — about 70%** — while earning **zero** pair credit. A
+row-level accuracy score would have reported a competent detector. The pair rule is what makes
+"right for the wrong reason" visible, and it is one line: *credit requires both members correct*.
+**That is this entry's own thesis, demonstrated on the smallest instrument that could carry it** —
+counting rows counted the artifact; the pair counted the property.
+
+**THE CAVEAT, MEASURED RATHER THAN SUSPECTED, AND IT BLOCKS THE OBVIOUS NEXT STEP.** The same qwen
+classifier, in the same session, scores **P=0.32 / R=0.53 on the 114-turn silver set of real
+transcript turns.** It scores **100% here.** So this matrix does **not** calibrate the judge — it
+is far easier than the real distribution: hand-authored, short, unambiguous, context-free, whereas
+real turns are long, messy, position-dependent and truncated to a 200-char preview. **Read
+"7/7 pairs credited" as a floor and a contrast, never as a calibration.** Standing pattern #12
+applies to this very table: entirely true, and a false green if read as readiness.
+
+*(Also drifted: the silver figure recorded in ADR-0020 and the mnemos skill is P≈0.4; measured
+today it is 0.32. Re-measured rather than cited, because restating an inherited number is the class
+this repo keeps paying for — twice today alone.)*
+
+**What this does and does not license.**
+- **Does:** the fixture-matrix *shape* is proven and cheap. Any future conduct instrument can be
+  given a lucky-correct pair, and the pair rule generalizes to `suggestion_gate`, `restore_receipt`
+  and `degraded` unchanged.
+- **Does NOT:** justify replacing artifact counters with an LLM judge. That needs a judge calibrated
+  on the *real* distribution, and the gap between 100% and P=0.32 is exactly the evidence that this
+  matrix has not supplied one. Both caveats already in this entry still bind — the
+  behaviour-conditioned problem and fail-loud on the judge — and neither was touched.
+
+**Revisit when:** a fixture matrix is written for a conduct instrument other than correction
+detection (the shape's first real test), or by **2026-10-05** as already scheduled.
+
+### Python's bytecode cache can silently defeat the re-plant discipline *(2026-08-10)*
+
+- **Status:** Investigating. Small, cheap to avoid, and it attacks **standing pattern #10** — the
+  verification method this repo relies on more than any other.
+
+**What happened.** Verifying the ADR-0020 fixture guards by re-planting defects: plant, run (RED as
+required), restore from a backup, re-run. The restored run came back **RED**. `diff` against the
+backups showed both source files **byte-identical**. The failing run was executing the *planted*
+bytecode; `touch` on the source fixed it instantly.
+
+**Mechanism.** CPython validates a `.pyc` against the source's `(mtime, size)`. The plant was
+`all(` → `any(` — a **same-length** edit — and plant-run-restore completed inside one second, so
+`cp` set an mtime that matched what the `.pyc` recorded. Same size, same recorded mtime → cache hit
+on stale bytecode. *(Byte-identical source with a different result, fixed by `touch`, is measured;
+the second-granularity account is inference from CPython's documented invalidation rule.)*
+
+**Why this is worse than an annoyance.** The direction I hit is the safe one — a *restored* tree
+looking broken is loud. The dangerous direction is the mirror: **plant a defect, run the guard, and
+have the cache serve the PRE-plant bytecode.** The guard reports GREEN, and the natural reading is
+*"my guard correctly ignores this"* or *"the guard is decoration"* — when in fact the plant never
+executed. That is a guard certified against nothing, which is exactly what re-planting exists to
+prevent. Standing pattern #1, one layer under the tool built to defeat it.
+
+**Which plants are exposed:** any **same-length** substitution completed within one mtime second —
+`all`↔`any`, `>=`↔`<=`, `and`↔`or`, `!=`↔`==`, a renamed same-length identifier. This repo's plant
+history is full of that shape.
+
+**The cheap discipline, pending anything better:** `touch` the file after restoring, or make the
+plant a different length, or verify the plant is live by asserting the *specific* new failure rather
+than "something went red". The last is strongest — it is the same rule as #10 itself, applied to the
+plant instead of the guard.
+
+**Not built, and the reason is #3:** the obvious "fix" is exporting `PYTHONDONTWRITEBYTECODE=1` in
+the test runner, which would slow every run to remove a hazard that has been observed **once**. The
+honest artifact is this entry plus the discipline above.
+
+**Revisit when:** a second instance appears, or a re-plant verification is ever found to have
+reported green against a plant that did not run. The second is the one that would justify machinery.
+
 ### 11 of the 12 standing patterns never reach the model — and the check guarding them is green *(2026-08-06)*
 
 - **Status:** Investigating. **Reproducible in two commands; validate before acting.**
@@ -3257,11 +3342,15 @@ and the cheapest way to falsify it.
   Three intents scope `bin/tessera-watch`; the channel returns the one with recorded symbols.
   **State of the cut:** left ON, with the payload note rewritten to warn instead of promise (it now
   says DO NOT ASSUME the hook will surface them, and names the symbol-edge mechanism). What it buys
-  is SIZE and nothing else. **The principled repair is to make the channel match the criterion** —
-  union scope-matching into `get_reasons_for_file`, whose only callers are
-  `icpg query context|constraints`, both read-only pre-edit surfaces. Sized: that would take a
-  typical file from 0–2 predicates to 11–23. **Not done — it changes what the pre-edit hook shows
-  on every Edit/Write and is a decision, not a cleanup.**
+  is SIZE and nothing else. ~~**The principled repair is to make the channel match the criterion**~~
+  **DECIDED 2026-08-10 — the union was measured and DECLINED; the cut stays size-only.** Linkage
+  would go 94 → 719 files, but **668 of the 719 arrive via directory-prefix expansion** (bare
+  `scripts/` is on 4 intents), so a union answers "what ever touched this tree", not "what governs
+  this file" — median predicates per file 0 → 15, max 29. The `executing`-only refinement floated to
+  control that noise is an invented threshold, unmeasurable with 0 intents open; and the pairing
+  check below would read `reason.scope` on both sides, so it is green by construction. **The real
+  question — is the SYMBOL the right unit — was routed to its own entry** ("Is the SYMBOL the right
+  unit for a shell-heavy repo?"), whose named trigger this fired.
   *And the monitoring gap that prompted this is real but secondary: even once the channel carries
   the right thing, nothing asserts the pairing — for every invariant the checkpoint omits, the
   fallback should return it, and that is mechanically checkable from the two data sources with no

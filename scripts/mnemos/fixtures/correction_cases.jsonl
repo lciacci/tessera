@@ -1,0 +1,30 @@
+{"_readme": "ADR-0020's calibration fixture matrix. TRACKED on purpose — see fixtures/README.md. Ground truth is authored from the spec-13 rubric, NEVER from what a detector happens to return. Fields: case, text, truth (null = not eligible), pair/role/cue (lucky_correct_negative only), why."}
+{"case": "positive", "text": "you changed the wrong file", "truth": true, "why": "plain correction with no front-loaded cue — the shape regex_match structurally cannot see"}
+{"case": "positive", "text": "but wouldn't that break the pre-commit hook?", "truth": true, "why": "probing question implying the approach was off; the classifier rubric names this shape explicitly"}
+{"case": "positive", "text": "there were 70, no?", "truth": true, "why": "taken verbatim from the live classifier prompt's own example list — a positive the shipped rubric claims to catch"}
+{"case": "positive", "text": "why did you touch the settings file?", "truth": true, "why": "challenge to an action already taken, phrased as a question"}
+{"case": "positive", "text": "that is the wrong file", "truth": true, "why": "same claim as the first positive with a leading demonstrative; cue-based detection is position-sensitive"}
+{"case": "negative", "text": "yes, go ahead", "truth": false, "why": "plain approval — the rubric excludes these by name"}
+{"case": "negative", "text": "add a test for the parser too", "truth": false, "why": "fresh instruction with no reference to prior work — excluded by the rubric"}
+{"case": "negative", "text": "what does tessera-watch do?", "truth": false, "why": "question about the codebase, not about what the assistant just did"}
+{"case": "negative", "text": "commit that and push", "truth": false, "why": "instruction to proceed; agreement, not pushback"}
+{"case": "negative", "text": "nothing broke, we are fine", "truth": false, "why": "opens with the letters 'no' but not on a word boundary — guards against a cue match loosened to a prefix match"}
+{"case": "lucky_correct_negative", "pair": "lead-no", "role": "lucky", "cue": "no", "text": "no, that's not what I asked", "truth": true, "why": "correct verdict, but earned by the leading token rather than by the meaning"}
+{"case": "lucky_correct_negative", "pair": "lead-no", "role": "foil", "cue": "no", "text": "no rush, take your time", "truth": false, "why": "same leading token, opposite truth — a cue-keyed detector calls this a correction"}
+{"case": "lucky_correct_negative", "pair": "lead-wait", "role": "lucky", "cue": "wait", "text": "wait, you changed the wrong file", "truth": true, "why": "correct, on the cue"}
+{"case": "lucky_correct_negative", "pair": "lead-wait", "role": "foil", "cue": "wait", "text": "wait for the CI run before merging", "truth": false, "why": "same cue, and it is an instruction rather than an objection"}
+{"case": "lucky_correct_negative", "pair": "lead-actually", "role": "lucky", "cue": "actually", "text": "actually, that breaks the pre-commit hook", "truth": true, "why": "correct, on the cue"}
+{"case": "lucky_correct_negative", "pair": "lead-actually", "role": "foil", "cue": "actually", "text": "actually I've been meaning to add tests too", "truth": false, "why": "same cue introducing a new task, not a correction"}
+{"case": "lucky_correct_negative", "pair": "lead-stop", "role": "lucky", "cue": "stop", "text": "stop, revert that", "truth": true, "why": "correct, on the cue"}
+{"case": "lucky_correct_negative", "pair": "lead-stop", "role": "foil", "cue": "stop", "text": "stop the server first, then migrate", "truth": false, "why": "same cue as an ordinary imperative in a procedure"}
+{"case": "lucky_correct_negative", "pair": "phrase-instead", "role": "lucky", "cue": "instead", "text": "instead of the loop, use a comprehension", "truth": true, "why": "correct, on the mid-turn phrase cue"}
+{"case": "lucky_correct_negative", "pair": "phrase-instead", "role": "foil", "cue": "instead", "text": "instead, I'd like a benchmark next", "truth": false, "why": "same phrase opening a fresh request"}
+{"case": "lucky_correct_negative", "pair": "lead-revert", "role": "lucky", "cue": "revert", "text": "revert that", "truth": true, "why": "correct, on the cue"}
+{"case": "lucky_correct_negative", "pair": "lead-revert", "role": "foil", "cue": "revert", "text": "revert the migration in staging please", "truth": false, "why": "same cue as a routine task instruction about an unrelated system"}
+{"case": "lucky_correct_negative", "pair": "orthographic-dont", "role": "lucky", "cue": "don't", "text": "don't merge that yet", "truth": true, "why": "THE SHARPEST CASE IN THE SET: correct, and the verdict rests on an apostrophe"}
+{"case": "lucky_correct_negative", "pair": "orthographic-dont", "role": "foil", "cue": "don't", "text": "do not merge that yet", "truth": true, "why": "IDENTICAL MEANING, spelled out. Same truth as its twin, so a meaning-based detector must agree on both; a cue-based one splits them"}
+{"case": "allowed_boundary", "text": "hmm, ok", "truth": null, "why": "either verdict is defensible — reluctant acknowledgment. Present so nobody tunes a detector on it"}
+{"case": "allowed_boundary", "text": "if it's easy, maybe use tabs", "truth": null, "why": "mild preference, no objection to what was done; the definition permits either answer"}
+{"case": "allowed_boundary", "text": "sure, though I wonder about the naming", "truth": null, "why": "approval carrying soft doubt — sits exactly on the rubric's boundary"}
+{"case": "outside_scope", "text": "[Request interrupted by user]", "truth": null, "why": "interrupt marker riding as a user turn; a carrier row, never eligible"}
+{"case": "outside_scope", "text": "+ 12 passed, 3 warnings in 4.21s", "truth": null, "why": "bash stdout riding as a user turn; a carrier row, never eligible"}
