@@ -3129,7 +3129,14 @@ and the cheapest way to falsify it.
   the session has read or edited is omitted, with a stated count. **This is only defensible because
   a better-targeted channel delivers the omitted ones** — `mnemos-pre-edit.sh` runs
   `icpg query constraints <file>` on every Edit/Write, so a scoped invariant arrives exactly when
-  its files come into play. **Verified, not assumed.** Unscoped invariants are always kept (the
+  its files come into play. **Verified, not assumed** — and the CONSTANT worth watching, because
+  this cut makes the checkpoint DEPEND on that channel: it is a PreToolUse hook, and PreToolUse
+  hooks in this repo were silently dead until 2026-07-24 (bare stdout goes to the debug log, not
+  the model — see the entry above). It is delivering now, observed directly in the 08-10 session's
+  own `CONSTRAINTS for <file>` blocks, not merely claimed. But if it breaks again the dropped
+  invariants are simply absent rather than redirected, and nothing currently monitors that.
+  **The scope filter's safety argument is exactly as strong as that hook, and there is no P-check
+  on it.** Unscoped invariants are always kept (the
   per-file channel is keyed on scope and cannot reach them), and a session with no file signals
   keeps everything — "I don't know what you're touching" is not evidence nothing matters.
   **Measured: 8,675b → 6,334b live, and 50 further intents / 100 invariants move the payload 4
@@ -3137,14 +3144,21 @@ and the cheapest way to falsify it.
   structural difference between this and a bigger cap.
 - **A smaller finding inside the measurement: `STATIC_PREDICATE` names one family and the class has
   two.** `test_exists("path")` constraints (2 today) leak through a filter written for
-  `file_exists("path")` — standing pattern #11, in the filter itself. **Deliberately NOT widened
-  yet, and the reason is the interesting part:** the note's justification is *"asserted by something
-  stronger"*, and for `test_exists` that is **not true today** — deleting
-  `scripts/icpg/test_intent_lifecycle.py` fails neither doccheck nor the suite (`scripts/icpg` would
-  simply run fewer tests). Widening the filter first would ship a true-sounding claim that is false,
-  which is the exact defect caught one layer up in the same session (`icpg show <id>`, a command
-  that never existed, cited in the omission note). **Ordering: add the doccheck assertion that makes
-  the claim true, THEN widen the filter.**
+  `file_exists("path")` — standing pattern #11, in the filter itself.
+  **~~The claim that deferred it was FALSE, and measuring it inverted the instruction.~~**
+  This entry said widening had to wait because *"asserted by something stronger"* is *"not true
+  today — deleting `scripts/icpg/test_intent_lifecycle.py` fails neither doccheck nor the suite."*
+  **Measured 2026-08-10 by actually deleting it: doccheck goes RED with TWO blocking findings** —
+  `referenced-paths-exist` (the observatory names the path) and `adr-execution-recorded` (ADR-0019's
+  `Executed:` line names it), both enforced by the pre-commit hook. The suite half was right
+  (`scripts/icpg` runs 36 instead of 46 and passes); the doccheck half was asserted without being
+  run. **So the blocker is gone: widening is justified today.**
+  **What survives is weaker and worth keeping:** that coverage is INCIDENTAL, not structural — it
+  holds because this particular path happens to be named in two documents, and a future
+  `test_exists("some/undocumented/test.py")` would have none. So the assertion still worth adding is
+  one that makes the coverage a property of `test_exists` rather than a coincidence of citation.
+  *Found by arbiter's second prose pass doubting a claim it could not verify — right for a reason it
+  did not know, and the deferral rested on the one half of the sentence nobody had measured.*
 - **And P3's structural limit is now partly addressed — but NOT by the instrument it asked for.**
   `write_checkpoint` measures itself at write time and warns on stderr (`cf25330`), so the news
   arrives when the payload is made rather than at the next SessionStart alongside the harm. **This
@@ -3155,7 +3169,7 @@ and the cheapest way to falsify it.
   (part 4). **An earlier draft of this bullet claimed `cf25330` WAS that instrument** — caught by
   arbiter 2026-08-10, and it is the day's own lesson pointed at the record of the day: a fix that
   partially answers a request is not the request answered. Budget now defined twice (bin/ is
-  stdlib-only and cannot import mnemos), guarded by doccheck `checkpoint-budget-matches-p3`.
+  stdlib-only and cannot import mnemos), guarded by doccheck `checkpoint-budget-matches-p3` — **verified firing against both broken states** (a diverged value, and a renamed constant, which fails loud rather than passing blind). Recorded because a guard whose regression test is unstated is indistinguishable from one that was never run, which is the pattern every prior anchor in this entry got wrong.
 
 ### `doccheck.run()` has no per-check isolation — one raising check takes all 45 down *(2026-08-10)*
 
@@ -3181,7 +3195,11 @@ and the cheapest way to falsify it.
   the *whole* run. An isolated, named crash beside 44 working checks is a defect to fix, and
   `--no-verify` is still the documented escape. **Catastrophic failure still fails open** (doccheck
   unparseable, `render()` raising, a traceback with no recognisable verdict) — that is the case the
-  original rule was really for.
+  original rule was really for. **Say the consequence plainly, since "fails open" understates
+  it: in that state the pre-commit hook prints a warning and LETS EVERY COMMIT THROUGH.** That is
+  the deliberate trade — a totally broken checker must not wedge the repo — but it means the
+  commit gate is bypassed exactly when doccheck is most broken, and the warning on stderr is the
+  only thing standing there.
 - **THE TWO THINGS THAT WOULD HAVE MADE THIS A SILENT REGRESSION, both caught before shipping.**
   (1) **P8's loud channel was BUILT ON `run()` raising.** It flattens `run().values()` and cannot
   tell a crash from a false claim, so naive isolation would have downgraded every crash to an

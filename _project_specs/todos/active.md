@@ -13,6 +13,16 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
 went MISSING from the 08-10 section when it was authored — every superseded section below still
 had one, so the convention was visible and the live section was the exception. arbiter 2026-08-10.)*
 
+> **UNDOCUMENTED INVARIANT, now documented: `### Next —` MUST come before the first `## ` heading
+> that follows this one.** The surfacer's awk starts at `^## Handoff — pick up here` and `exit`s on
+> the next top-level `## ` — so anything after that heading is invisible to SessionStart, including
+> the priority list. **This already bit once, on 2026-08-10:** authoring the new section above the
+> old one left the numbered list stranded in what became `## Superseded handoff`, and SessionStart
+> printed *"THE HANDOFF HAS NO PRIORITY LIST"*. Caught by
+> `test_the_real_repo_surfaces_its_current_priorities`, which is the guard — it fails loudly on the
+> live file, so this is a red suite and not a silent loss. The `## Superseded handoff` convention is
+> new as of that date and will be reused; **keep it below `### Next —`.**
+
 ### 2026-08-10 — what shipped, and the finding that outlived it
 
 1. **`2eccb2a` — POST-for-fulfilled dropped from the checkpoint render.** The split is the schema's
