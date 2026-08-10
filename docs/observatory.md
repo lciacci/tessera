@@ -3792,6 +3792,53 @@ A runner that inherits those is **red forever**, and P9's own docstring already 
 `PATH` as well as `HOME`, or scope its assertions to what is genuinely clean-clone-relevant. That is
 the actual work, and it is why this is an entry rather than a commit.
 
+#### RUN BY HAND 2026-08-10 — the repo DOES stand up from clean, and instance #4 was waiting
+
+Item 6's ordering said item 5 first, because *"~4,500 unreviewed `bin/` lines are where instance #4
+most likely lives"*. Item 5 completed and found **none** — so rather than build the runner on three
+examples, one clone was done by hand. It cost minutes and it found #4, which the review had not.
+
+**Method:** `git clone` to a temp dir, `HOME` redirected to a sandbox, `PATH` rebuilt to exclude the
+outer repo's console scripts and `bin/` (only a `uv` symlink, Homebrew and the system dirs). Then
+the property, in order: doccheck → `tessera-watch` → `./install.sh` → `tessera-test`.
+
+| stage | result |
+|---|---|
+| doccheck, **pre-install** | ✓ 46/46 — the 2026-08-09 `referenced-paths-exist` fix holds |
+| `tessera-watch`, pre-install | ✓ exit 0, fires **P9** with an actionable message. No P5 crash — that fix holds too |
+| `./install.sh` | ran; `verify()` reported 3 ✗ — **one of them real** |
+| `tessera-test`, post-install | ✓ **526 passed**, every suite green |
+
+**So the answer to "does this repo work from clean" is YES**, and the three 2026-08-09 fixes are
+confirmed from the outside rather than by the session that wrote them.
+
+**INSTANCE #4, and it is `verify()` measuring a proxy — the same shape as the other three.** The
+sandbox's venv python path is **137 characters**, past the ~127-char shebang limit, so pip/uv emits
+the documented `#!/bin/sh` wrapper whose *second* line execs the real interpreter. `install.sh` read
+**line 1 only**, got `/bin/sh`, and declared *"a package manager owns your toolchain (F-001)"* —
+while the symlink pointed into the venv, `mnemos --version` succeeded and `import mnemos` worked.
+
+**The detail that makes it this entry's own lesson:** the branch immediately above already ran the
+real liveness test (`mnemos --version`) and PASSED it; the proxy two lines later overrode it. *The
+property was checked and then discarded in favour of a stand-in, inside the function whose entire
+job is to know whether the machine is good.* Fixed by reading the wrapper's exec line when line 1 is
+a shell; verified against BOTH forms — the real repo's short path (direct shebang) and the clone's
+long path (wrapper) — and the clone now reports `✓ mnemos healthy on the venv`.
+
+**Not clone-specific, which widens it:** this fires for any checkout whose venv path exceeds the
+limit — a deep directory, a long username, a nested worktree. The clean clone only *exposed* it.
+
+**The other two ✗ were sandbox artifacts as predicted** (pristine-shell `PATH`, and `tessera/bin`
+not on `PATH` — whose remediation text is written for a canonical `$HOME/Claude/tessera` and so is
+wrong for a clone elsewhere; minor, unfixed, noted).
+
+**What this does to the runner's case — genuinely both ways.** *For:* a hand-run clone found a real
+defect that a $7 three-batch review did not, which is the strongest evidence yet that the property
+needs exercising rather than reviewing. *Against:* it took one command and a sandbox, the two ✗ that
+must be scoped away are now enumerated concretely, and the repo was otherwise green — so the runner
+is a convenience over a documented recipe, not a discovery mechanism. **Still not built. The recipe
+above is now the cheap version, and it works.**
+
 **Two shapes ruled out, with reasons:**
 - **Not a `tessera-watch` predicate.** Predicates *read* state in milliseconds at SessionStart; this
   one has to *build* something over minutes, with network.

@@ -267,8 +267,19 @@ verify() {
     err "mnemos not on PATH — run ./install.sh (it builds the venv and links ~/.local/bin)"
     fail=1
   else
-    local interp
-    interp=$(head -1 "$(command -v mnemos)"); interp=${interp#\#!}; interp=${interp%% *}
+    local interp script
+    script="$(command -v mnemos)"
+    interp=$(head -1 "$script"); interp=${interp#\#!}; interp=${interp%% *}
+    # A console script whose interpreter path exceeds the ~127-char shebang limit is
+    # emitted by pip/uv as a `#!/bin/sh` WRAPPER whose second line execs the real
+    # interpreter. Reading line 1 alone then yields `/bin/sh` and fires a false F-001 —
+    # measured 2026-08-10 on a clean clone at a 137-char venv path, where the symlink,
+    # `mnemos --version` and `import mnemos` were all correct. The check below had
+    # ALREADY passed the real liveness test one branch up and was then overridden by the
+    # weaker proxy two lines later. Read the wrapper's exec line when line 1 is a shell.
+    case "$interp" in
+      */sh) interp=$(sed -n "2s/^'''exec' *'\{0,1\}\([^' ]*\)'\{0,1\}.*/\1/p" "$script") ;;
+    esac
     if [ -n "$interp" ] && [ ! -x "$interp" ]; then
       err "mnemos shebang dead ($interp missing, F-001) — re-run ./install.sh"
       fail=1
