@@ -6,7 +6,7 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-08-09: deep-agents evaluated and REJECTED on layer — ADR-0021 — and its one adopted pattern, a reproducible eager-prefix meter, was then taken apart by FIVE review passes across ~350 lines, several finding defects in the code written to fix the previous pass. The `.claude` dogfood symlinks turned out to have no owner at all. Claude Code's import loader was measured rather than reasoned about. Both arbiter-reported `tessera-watch` defects fixed — and the mitigation that had lowered their priority was itself false.)
+## Handoff — pick up here (2026-08-09, TWO sessions. Morning: deep-agents REJECTED on layer (ADR-0021), a reproducible eager-prefix meter taken apart by five review passes, the `.claude` dogfood symlinks found to have no owner, and a mitigation that had lowered two defects' priority found false. Evening: `bin/tessera-watch` got its first WHOLE-FILE review — 7 findings, 3 rejected on measurement including one resting on a false claim about Python, 5 more defects found by reading, 9/9 confirmed by the falsifier whose CAVEATS then found a sixth. `.icpg/reason.db` turned out to have no owner either. THE PATTERN BEHIND THREE OF THE DAY'S DEFECTS IS NOW AN OBSERVATORY ENTRY: this repo's green-makers assert machine state they do not own, and nothing has ever exercised the clean-clone path.)
 
 *(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
 Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering.)*
@@ -125,7 +125,7 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
   same branch is one finding twice** — correlated, not independent. What settled it was reading
   `install.sh` and finding neither reviewer's premise held.
 
-### Next — unchanged in priority; item 7 of 2026-08-07 is now CLOSED
+### Next — item 4 half-closed (both reviewed `bin/` files done), item 5 is new
 
 > **NEW EVIDENCE ON ITEM 1, measured at the end of 2026-08-09: the constraint filter worked and the
 > checkpoint is over budget anyway.** `checkpoint-latest.json` is **11,253b against the 8,000b
@@ -321,6 +321,19 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
    the tool you reach for to check your work is in scope for the check, and `tessera-watch` is the
    single reporter for P3, P4, P9 and P11–P16 (A5b: delete it and every one of them goes quiet at
    once, silently).
+
+5. **A clean-clone runner — `bin/tessera-clean-clone`. DO ITEM 4 FIRST; that ordering is the
+   recommendation, not a formality.** Three defects on 2026-08-09 were found by tripping over the
+   clean-clone path (`referenced-paths-exist` red, P5 crashing, the two P9 tests), *none* by a check,
+   and nothing in this repo has ever cloned itself. Full reasoning, the shapes ruled out, and one
+   near-miss rejection: **docs/observatory.md → "The clean-clone path has no exercise"**. Read that
+   before writing a line — it already contains the constraint that kills the naive version, measured:
+   redirecting `HOME` isolates `install.sh` and works, but the ambient `PATH` still resolves the
+   OUTER repo's `mnemos`, so `verify()` emits two ✗ that are sandbox artifacts and a runner
+   inheriting them is red forever. **Why item 4 first:** ~4,500 unreviewed `bin/` lines are where
+   instance #4 most likely lives, and one more instance would sharpen this runner's spec
+   considerably — or show that the ownership rule alone was the whole fix and no runner is needed.
+   Building it first risks specifying an instrument against three examples when a fourth is cheap.
 
 **The durable lesson, and it cost two wrong assertions today: citing an artifact is not reading it.**
 The observatory named `tessera-sync-skills` and `install.sh` as evidence before either was opened,
