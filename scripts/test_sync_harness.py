@@ -39,6 +39,48 @@ def _project(tmp_path):
     return p
 
 
+def test_dry_run_reports_that_it_would_set_core_hooks_path(tmp_path, capsys):
+    """Dry-run-by-default is this tool's entire trust model, so a preview that omits an
+    action is worse than no preview — it is believed.
+
+    TWO bugs stacked here (arbiter 2026-08-10 found the first, re-planting found the
+    second). The `core.hooksPath` block was gated on `apply`, so dry-run never evaluated
+    it. And underneath: in dry-run `.githooks/pre-commit` has not been COPIED yet, so the
+    existence test is False for exactly the projects that need the config — ungating alone
+    would have printed nothing and looked correct."""
+    sh.sync(_project(tmp_path), apply=False)
+    assert "would set core.hooksPath" in capsys.readouterr().out
+
+
+def test_apply_actually_sets_core_hooks_path(tmp_path, capsys):
+    """The other half: the dry-run promise must be kept."""
+    project = _project(tmp_path)
+    sh.sync(project, apply=True)
+    assert "set core.hooksPath" in capsys.readouterr().out
+    current = subprocess.run(["git", "-C", str(project), "config", "core.hooksPath"],
+                             capture_output=True, text=True).stdout.strip()
+    assert current == ".githooks"
+
+
+def test_a_project_with_no_claude_dir_is_fully_set_up(tmp_path):
+    """End-to-end: a bare project gets its settings written.
+
+    **This test does NOT discriminate on the `parent.mkdir` guard at the settings write,
+    and must not be read as covering it.** arbiter (2026-08-10) reported that write as
+    crashing without `.claude/`; measured, it cannot — the copy loop adds 10 `.claude/`
+    files first, each guarded, so the directory always exists by then. Removing the guard
+    leaves this test green, which is how it was identified as a false positive.
+
+    Kept because the end-to-end outcome is worth pinning on its own. Labelled because a
+    test whose docstring claims coverage it does not have is worse than no test."""
+    project = _project(tmp_path)
+    for child in sorted((project / ".claude").rglob("*"), reverse=True):
+        child.unlink() if child.is_file() else child.rmdir()
+    (project / ".claude").rmdir()
+    sh.sync(project, apply=True)
+    assert (project / ".claude" / "settings.json").exists()
+
+
 def test_identity_files_are_never_backfilled():
     """CLAUDE.md, project.yml, config.yml, FINDINGS.md carry project identity. Copying a
     reference copy over them would replace a project's description, its test command, or its

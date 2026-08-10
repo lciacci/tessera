@@ -233,9 +233,21 @@ def sync(project: Path, apply: bool, exclude: list[str] | None = None,
 
         # Copying .githooks/pre-commit without pointing git at it ships a hook git never runs
         # — the same half-shipment this tool exists to fix, committed by the tool itself.
+        # DRY-RUN MUST SEE THIS TOO. The whole block used to be gated on `apply`, so a
+        # dry-run never reported that it would run `git config` — and dry-run-by-default
+        # is this tool's entire trust model. A preview that under-reports is worse than no
+        # preview, because it is believed. (arbiter 2026-08-10.)
+        #
+        # And the gate hid a second bug underneath it: in dry-run `.githooks/pre-commit`
+        # has NOT been copied yet, so the existence test is False for exactly the projects
+        # that need the config set. Ungating alone would have printed nothing and looked
+        # correct. The predicate is "will the hook be there when this run finishes".
         hooks_path_set = False
+        would_set_hooks_path = False
         shadowed: list[str] = []
-        if apply and (project / ".githooks" / "pre-commit").exists():
+        hook_will_exist = ((project / ".githooks" / "pre-commit").exists()
+                           or any(rel.endswith(".githooks/pre-commit") for rel in added))
+        if hook_will_exist:
             current = subprocess.run(["git", "-C", str(project), "config", "core.hooksPath"],
                                      capture_output=True, text=True).stdout.strip()
             # core.hooksPath redirects git AWAY from .git/hooks. Setting it where real hooks
@@ -248,9 +260,13 @@ def sync(project: Path, apply: bool, exclude: list[str] | None = None,
                 shadowed = sorted(f.name for f in hooks_dir.iterdir()
                                   if f.is_file() and not f.name.endswith(".sample"))
             if not current and not shadowed:
-                subprocess.run(["git", "-C", str(project), "config", "core.hooksPath", ".githooks"],
-                               capture_output=True)
-                hooks_path_set = True
+                would_set_hooks_path = True
+                # Only the WRITE is gated on apply; the decision above is computed either
+                # way, so the dry-run can report it.
+                if apply:
+                    subprocess.run(["git", "-C", str(project), "config",
+                                    "core.hooksPath", ".githooks"], capture_output=True)
+                    hooks_path_set = True
 
         ref_settings = json.loads((ref_root / ".claude" / "settings.json").read_text())
         tgt_path = project / ".claude" / "settings.json"
@@ -265,6 +281,20 @@ def sync(project: Path, apply: bool, exclude: list[str] | None = None,
             tgt_settings.setdefault("hooks", {})
             for event, hook in hooks_to_add:
                 tgt_settings["hooks"].setdefault(event, []).append({"hooks": [hook]})
+            # DEFENSIVE, NOT A BUG FIX — and the distinction is the point. arbiter
+            # (2026-08-10) reported this write as crashing on a project with no
+            # `.claude/`. Measured: it cannot. The copy loop above adds 10 `.claude/`
+            # files to a bare project and guards each with `dst.parent.mkdir`, so the
+            # directory always exists by the time control reaches here. **The write is
+            # protected by ORDERING, not by this line.**
+            #
+            # Kept anyway, because the ordering is invisible from this point in the
+            # function and a future reorder would make the finding real — but recorded as
+            # what it is, so nobody reads it as evidence the bug existed. The test below
+            # asserts the end-to-end outcome; it does NOT discriminate on this line, and
+            # its docstring says so. (Found by re-planting: removing this line changed
+            # nothing, which is how a decoration guard announces itself.)
+            tgt_path.parent.mkdir(parents=True, exist_ok=True)
             tgt_path.write_text(json.dumps(tgt_settings, indent=2) + "\n")
 
     verb = "added" if apply else "would add"
@@ -274,9 +304,12 @@ def sync(project: Path, apply: bool, exclude: list[str] | None = None,
     print(f"{verb} {len(hooks_to_add)} hook wiring(s):")
     for event, hook in hooks_to_add:
         print(f"  + {event}: {hook.get('command','')[:80]}")
-    if apply and hooks_path_set:
+    if hooks_path_set:
         print("set core.hooksPath = .githooks (git would never have run the hook otherwise)")
-    elif apply and shadowed:
+    elif would_set_hooks_path:
+        print("would set core.hooksPath = .githooks "
+              "(git would never run the copied hook otherwise)")
+    elif shadowed:
         print(f"\nDID NOT set core.hooksPath — .git/hooks holds {len(shadowed)} real hook(s): "
               f"{', '.join(shadowed)}")
         print("  Setting it would silently disable them. Merge by hand, then:")
