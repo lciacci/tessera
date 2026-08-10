@@ -15,13 +15,21 @@ DB_NAME = 'reason.db'
 
 
 def _loads_list(raw) -> list:
-    """A JSON list column, or [] if it is unreadable. One definition, three call sites.
+    """A JSON list column, or [] if it is unreadable. One definition, every call site.
 
     Three places parse `drift_dimensions`; two guarded it and one did not, which is how a
     single malformed row could raise out of `get_unresolved_drift()` — taking down
     `icpg status` and `drift list`, and in the pre-edit hook path (stderr to /dev/null)
     taking down the drift surface SILENTLY. Three copies of a guard is how the odd one out
     goes missing, so there is now one.
+
+    **THE DOCSTRING SAID "three call sites" WHILE FOUR MORE SAT UNGUARDED** — `_row_to_reason`
+    parsed `scope`, `preconditions`, `postconditions` and `invariants` with raw `json.loads`
+    (found 2026-08-10, adjacent to an arbiter finding whose stated mechanism was wrong).
+    A NULL or malformed column there raises `TypeError`/`ValueError` out of `list_reasons()`,
+    which is on the checkpoint path, the pre-edit hook path and `icpg query` — the same
+    silent-surface failure this helper was written for, in the reader next door. The count
+    in a docstring is itself a claim that drifts; it now names the property instead.
     """
     try:
         value = json.loads(raw or '[]')
@@ -727,16 +735,16 @@ class ICPGStore:
             id=row['id'],
             goal=row['goal'],
             decision_type=row['decision_type'],
-            scope=json.loads(row['scope']),
+            scope=_loads_list(row['scope']),
             owner=row['owner'],
             agent=row['agent'],
             status=row['status'],
             source=row['source'],
             task_id=row['task_id'],
             parent_id=row['parent_id'],
-            preconditions=json.loads(row['preconditions']),
-            postconditions=json.loads(row['postconditions']),
-            invariants=json.loads(row['invariants']),
+            preconditions=_loads_list(row['preconditions']),
+            postconditions=_loads_list(row['postconditions']),
+            invariants=_loads_list(row['invariants']),
             created_at=row['created_at'],
             fulfilled_at=row['fulfilled_at']
         )

@@ -259,3 +259,34 @@ def test_the_collapse_branch_keeps_the_earliest_row_per_triple(tmp_path):
 
 if __name__ == '__main__':
     raise SystemExit(pytest.main([__file__, '-q']))
+
+
+# --- _row_to_reason column guards (2026-08-10) ------------------------------------
+
+
+def test_list_reasons_survives_null_and_malformed_contract_columns(tmp_path):
+    """`_loads_list`'s docstring said "three call sites" while FOUR sat unguarded.
+
+    `_row_to_reason` parsed scope/preconditions/postconditions/invariants with raw
+    `json.loads`, so a NULL or malformed column raised out of `list_reasons()` — which is
+    on the checkpoint path, the pre-edit hook path (stderr to /dev/null) and `icpg query`.
+    That is the same silent-surface failure `_loads_list` was written for, in the reader
+    next door. Verified load-bearing by re-planting the raw call: it raises TypeError.
+    """
+    import sqlite3
+
+    from .models import ReasonNode
+    from .store import ICPGStore
+
+    store = ICPGStore(str(tmp_path))
+    store.init_db()
+    store.create_reason(ReasonNode(goal='g', owner='t', scope=['a/'],
+                                   invariants=['i'], postconditions=['p']))
+    with sqlite3.connect(tmp_path / '.icpg' / 'reason.db') as conn:
+        conn.execute("UPDATE reasons SET postconditions=NULL, scope=NULL, "
+                     "invariants='{not a list}'")
+
+    reasons = ICPGStore(str(tmp_path)).list_reasons()
+    assert len(reasons) == 1
+    assert reasons[0].scope == [] and reasons[0].postconditions == []
+    assert reasons[0].invariants == [], reasons[0].invariants

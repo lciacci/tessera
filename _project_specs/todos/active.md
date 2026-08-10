@@ -179,16 +179,17 @@ Declared current priority for Tessera framework dev. One focus at a time.
 > meter-before-marker rule the caching work landed on — the thing that produces the artifact is the
 > only thing positioned to catch it early.
 
-1. **◀ STILL THIS ONE — the POST cut SHIPPED (`2eccb2a`) and the budget refilled inside the same
-   session.** ~~drop `POST` for FULFILLED intents from the checkpoint payload~~ **DONE**: 12,909b →
-   7,780b, then → **8,556b** once this session's own intent bridged. **What remains is the half a
-   render filter cannot fix:** non-static invariants, ~139b each, ≥1 per intent, uncapped, 23
-   distinct bodies out of 24 — nothing lossless left to cut, and a recency cap would drop standing
-   constraints, which is what this item was scoped to avoid. Candidate remedies, none chosen:
-   stop the bridge writing them (a change to the iCPG↔Mnemos bridge contract — wants its own
-   decision, see the observatory entry), scope invariants to the files in play, or accept the
-   budget as advisory now that `write_checkpoint` warns at write time (`cf25330`).
-   **Also open, small and ORDERED:** widen `STATIC_PREDICATE` to `test_exists(` — but add the
+1. **◀ BOTH HALVES NOW SHIPPED — item 1's budget problem is CLOSED.** ~~drop `POST` for FULFILLED
+   intents~~ **DONE** (`2eccb2a`, 12,909b → 7,780b) and ~~the uncapped invariant half~~ **DONE**:
+   invariants whose iCPG scope touches no file the session has read or edited are omitted with a
+   stated count. **8,675b → 6,334b live, and the growth is structurally gone — 50 further intents
+   / 100 invariants move the payload 4 bytes**, because the bound is now session scope rather than
+   intent count. Not a cap: a cap would have picked victims by recency on the payload's most
+   valuable field. It is only defensible because `mnemos-pre-edit.sh` runs
+   `icpg query constraints <file>` on every Edit/Write, so an omitted invariant arrives when its
+   files come into play — **verified before relying on it**, and the note says so. Unscoped
+   invariants always kept; no file signals → keep everything.
+   **Still open, small and ORDERED:** widen `STATIC_PREDICATE` to `test_exists(` — but add the
    doccheck assertion that makes its "asserted by something stronger" justification TRUE first,
    because today it is not. Then the rest of part 3: the
    `write_checkpoint` defect — no `decisions` field in the schema, empty

@@ -16,10 +16,12 @@ the omitted COUNT is asserted here, not just the shrinkage.
 
 from __future__ import annotations
 
+import atexit
 import contextlib
 import io
 import json
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -30,8 +32,27 @@ from .models import MnemoNode
 from .store import MnemosStore, post_constraint_content
 
 
+# Every `_store()` used to leak its `tempfile.mkdtemp()` directory — one per call, and
+# `write_checkpoint` writes an archived copy into each, so repeated runs accumulate on disk
+# (arbiter 2026-08-10, advisory, pre-existing). Registered for cleanup instead of switched
+# to `TemporaryDirectory`: these are used by BOTH pytest and the `demo()` entry point, and a
+# context manager would mean restructuring every test around a `with`. `atexit` covers both
+# callers and keeps the helper a one-liner at the call site.
+_TEMP_STORES: list[str] = []
+
+
+def _cleanup_temp_stores() -> None:
+    while _TEMP_STORES:
+        shutil.rmtree(_TEMP_STORES.pop(), ignore_errors=True)
+
+
+atexit.register(_cleanup_temp_stores)
+
+
 def _store() -> MnemosStore:
-    store = MnemosStore(tempfile.mkdtemp())
+    path = tempfile.mkdtemp()
+    _TEMP_STORES.append(path)
+    store = MnemosStore(path)
     store.init_db()
     return store
 
@@ -93,10 +114,10 @@ def test_the_real_shape_gets_under_the_measured_ceiling():
         _add(store, f'real invariant {i}: the thing must hold')
 
     before = len(json.dumps([n.content for n in store.get_by_type('constraint')]))
-    shown, dropped, _ = _select_constraints(store.get_by_type('constraint'))
+    shown, dropped_counts = _select_constraints(store.get_by_type("constraint"))
     after = len(json.dumps(shown))
 
-    assert dropped == 61, dropped
+    assert dropped_counts["static"] == 61, dropped_counts
     assert before > 5_000, f'premise broken — unfiltered payload only {before}b'
     assert after < 1_000, f'filter did not reclaim the payload: {after}b'
 
@@ -336,6 +357,138 @@ def test_the_two_filters_interact_where_a_shared_POST_is_also_a_static_predicate
     assert 'mnemos nodes --type constraint' in notes[0], notes[0]
 
 
+# --- Scope-relevant invariants (item 1's INV half, 2026-08-10) --------------------
+
+
+def _scoped(store, content, scope):
+    store.create_node(MnemoNode(type='constraint', task_id='t', origin='loaded',
+                                content=content, scope_tags=scope))
+
+
+def _signal(store, rel_path):
+    """One PreToolUse edit signal, which is what build_task_narrative reads."""
+    import json as _json
+    sig = Path(store.project_dir) / '.mnemos' / 'signals.jsonl'
+    sig.parent.mkdir(parents=True, exist_ok=True)
+    with sig.open('a') as fh:
+        fh.write(_json.dumps({'event': 'pre_tool', 'tool': 'Edit',
+                              'file_path': str(Path(store.project_dir) / rel_path)}) + '\n')
+
+
+def test_an_invariant_scoped_away_from_the_session_is_omitted():
+    store = _store()
+    _scoped(store, 'INV: the far thing holds', ['far/away/'])
+    _scoped(store, 'INV: the near thing holds', ['near/'])
+    _signal(store, 'near/file.py')
+
+    cp = write_checkpoint(store)
+    kept = [c for c in cp.active_constraints if not c.startswith('[')]
+    assert kept == ['INV: the near thing holds'], kept
+    note = [c for c in cp.active_constraints if c.startswith('[')]
+    assert len(note) == 1 and '1 standing invariant(s) omitted' in note[0], note
+
+
+def test_the_offscope_notice_says_the_invariants_are_NOT_retired():
+    """The cut is only defensible because a better-targeted channel delivers them. If the
+    note does not say so, this reads as 'your invariants were dropped'."""
+    store = _store()
+    _scoped(store, 'INV: the far thing holds', ['far/away/'])
+    _signal(store, 'near/file.py')
+
+    cp = write_checkpoint(store)
+    note = next(c for c in cp.active_constraints if c.startswith('['))
+    assert 'NOT RETIRED' in note, note
+    assert 'icpg query constraints' in note, note
+    assert 'every Edit/Write' in note, note
+
+
+def test_no_file_signals_keeps_EVERY_invariant():
+    """Fail-safe. 'I do not know what you are touching' is not evidence nothing matters —
+    and a fresh session has no signals, which is exactly when a dropped invariant hurts."""
+    store = _store()
+    _scoped(store, 'INV: the far thing holds', ['far/away/'])
+    _scoped(store, 'INV: another far thing', ['elsewhere/'])
+
+    cp = write_checkpoint(store)
+    kept = [c for c in cp.active_constraints if not c.startswith('[')]
+    assert len(kept) == 2, kept
+    assert not any('omitted' in c for c in cp.active_constraints), cp.active_constraints
+
+
+def test_an_UNSCOPED_invariant_is_always_kept():
+    """The per-file channel is keyed on scope, so a constraint without one can never be
+    delivered that way. Dropping it would be a real loss, not a deduplication."""
+    store = _store()
+    _add(store, 'INV: a scopeless standing property')
+    _scoped(store, 'INV: the far thing holds', ['far/away/'])
+    _signal(store, 'near/file.py')
+
+    cp = write_checkpoint(store)
+    kept = [c for c in cp.active_constraints if not c.startswith('[')]
+    assert kept == ['INV: a scopeless standing property'], kept
+
+
+def test_scope_filtering_does_NOT_touch_postconditions():
+    """Narrowed to INV on purpose: an open intent's POST is what the session is working
+    toward, and scoping it would weaken the guarantee built one commit earlier."""
+    store = _store()
+    _scoped(store, post_constraint_content('An open intent', 'the thing holds'),
+            ['far/away/'])
+    _signal(store, 'near/file.py')
+
+    icpg = _FakeICPG([_Reason('An open intent', 'executing',
+                              postconditions=['the thing holds'])])
+    cp = write_checkpoint(store, icpg_store=icpg)
+    kept = [c for c in cp.active_constraints if not c.startswith('[')]
+    assert len(kept) == 1 and kept[0].startswith('POST:'), kept
+
+
+def test_a_directory_scope_matches_a_file_beneath_it():
+    store = _store()
+    _scoped(store, 'INV: the thing holds', ['scripts/mnemos/'])
+    _signal(store, 'scripts/mnemos/checkpoint.py')
+
+    cp = write_checkpoint(store)
+    assert cp.active_constraints == ['INV: the thing holds'], cp.active_constraints
+
+
+def test_the_payload_no_longer_GROWS_with_the_intent_count():
+    """THE PROPERTY ITEM 1 IS ACTUALLY ABOUT, and the reason scope beats a cap.
+
+    Before this, every new intent added >=1 invariant at ~139b, forever: the POST cut took
+    the real checkpoint 12,909b -> 7,780b and one new intent put it back to 8,556b inside
+    the same session. A cap would have bounded the number while choosing victims by
+    recency. Scope bounds it by RELEVANCE, so the payload tracks what the session touches
+    rather than what the project has ever intended. Measured: 50 intents / 100 invariants
+    scoped elsewhere move the payload by a few bytes of counter width.
+    """
+    store = _store()
+    _signal(store, 'area/live.py')
+
+    def add_intents(count, start):
+        for i in range(start, start + count):
+            for k in range(2):
+                _scoped(store,
+                        f'INV: standing property {i}.{k} must hold '
+                        f'[from: Intent number {i} doing a thing]',
+                        [f'area{i}/'])
+
+    add_intents(10, 0)
+    write_checkpoint(store)
+    first = (Path(store.project_dir) / '.mnemos' / 'checkpoint-latest.json').stat().st_size
+
+    add_intents(40, 10)
+    write_checkpoint(store)
+    last = (Path(store.project_dir) / '.mnemos' / 'checkpoint-latest.json').stat().st_size
+
+    # Premise: the omitted set really did grow five-fold, so this is not a no-op test.
+    cp_note = next(c for c in write_checkpoint(store).active_constraints
+                   if c.startswith('[') and 'standing invariant' in c)
+    assert '100 standing invariant(s) omitted' in cp_note, cp_note
+    # The property: 80 more invariants cost the payload almost nothing.
+    assert last - first < 100, f'payload grew {last - first}b for 80 more invariants'
+
+
 # --- Write-time budget warning (P3 part 3, 2026-08-10) ----------------------------
 
 
@@ -393,6 +546,13 @@ def demo() -> None:
     test_the_POST_omission_is_STATED_never_silent()
     test_the_two_omission_notices_are_distinguishable()
     test_every_command_the_notices_cite_actually_EXISTS()
+    test_an_invariant_scoped_away_from_the_session_is_omitted()
+    test_the_offscope_notice_says_the_invariants_are_NOT_retired()
+    test_no_file_signals_keeps_EVERY_invariant()
+    test_an_UNSCOPED_invariant_is_always_kept()
+    test_scope_filtering_does_NOT_touch_postconditions()
+    test_a_directory_scope_matches_a_file_beneath_it()
+    test_the_payload_no_longer_GROWS_with_the_intent_count()
     test_an_under_budget_payload_is_SILENT()
     test_the_over_budget_checkpoint_is_STILL_WRITTEN()
     print('ok')

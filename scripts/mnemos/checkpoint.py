@@ -118,10 +118,49 @@ def _fulfilled_post_contents(icpg_store) -> set[str]:
     return fulfilled - live
 
 
-def _select_constraints(nodes: list, historical: set[str] = frozenset()) -> tuple:
-    """Constraints for the render, minus static repo facts and fulfilled postconditions.
+def _scope_relevant(node, recent_paths: set) -> bool:
+    """Does this constraint's iCPG scope touch anything the session is working on?
 
-    Returns (shown, static_dropped, historical_dropped).
+    Unscoped constraints are ALWAYS relevant: the per-file channel below is keyed on
+    scope, so a constraint without one can never be delivered that way and must stay in
+    the payload. Same rule when `recent_paths` is empty — a session with no file signals
+    yet gets everything, because "I don't know what you're touching" is not evidence that
+    nothing matters.
+
+    Prefix matching deliberately over-matches (`scripts/restore` also hits
+    `scripts/restore_x.py`). Every ambiguity here should err toward KEEPING a constraint
+    visible; the cost of a false keep is bytes, the cost of a false drop is a missed
+    invariant.
+    """
+    tags = getattr(node, 'scope_tags', None) or []
+    if not tags or not recent_paths:
+        return True
+    return any(path == tag or path.startswith(tag)
+               for tag in tags for path in recent_paths)
+
+
+def _select_constraints(nodes: list, historical: set[str] = frozenset(),
+                        recent_paths: set = frozenset()) -> tuple:
+    """Constraints for the render, minus static repo facts, fulfilled postconditions, and
+    invariants scoped away from what this session is touching.
+
+    Returns (shown, {'static': n, 'historical': n, 'offscope': n}).
+
+    **THE INVARIANT HALF, added 2026-08-10.** Dropping fulfilled POSTs took the payload
+    12,909b → 7,780b, and bridging one new intent put it back to 8,556b inside the same
+    session: invariants are ~139b each, at least one per intent, and nothing bounds them.
+    They are also the constraints that MUST NOT be cut by recency — 23 distinct bodies out
+    of 24, every one a standing property, so a cap would pick winners by age on the
+    payload's most valuable field.
+
+    Scope is the honest discriminator, and it works because there is a BETTER-TARGETED
+    CHANNEL for the ones dropped: `mnemos-pre-edit.sh` runs `icpg query constraints <file>`
+    on every Edit/Write, so a scoped invariant is delivered exactly when its files come
+    into play. Verified, not assumed — `icpg query constraints bin/tessera-watch` returns
+    that intent's invariants. So this is not "hide 20 constraints", it is "stop duplicating
+    a per-file channel in a global list that spills". Applies to `INV:` only: an open
+    intent's POST is what the session is working toward, and narrowing that would weaken
+    the guarantee built one commit earlier.
 
     **The POST half, added 2026-08-10 (P3 part 3).** `bridge-icpg` mints a ConstraintNode
     per postcondition and nothing removes it at fulfilment, so the checkpoint listed 39
@@ -167,16 +206,19 @@ def _select_constraints(nodes: list, historical: set[str] = frozenset()) -> tupl
     # got waved through as "preserves existing behaviour" while writing this. The total
     # omitted count was right and the attribution was wrong, in the one sentence whose
     # entire job is telling the reader what went missing (#12).
-    shown, static_dropped, historical_dropped = [], 0, 0
+    shown: list[str] = []
+    dropped = {'static': 0, 'historical': 0, 'offscope': 0}
     for node in nodes:
         content = node.content or ''
         if content in historical:
-            historical_dropped += 1
+            dropped['historical'] += 1
         elif STATIC_PREDICATE.search(content):
-            static_dropped += 1
+            dropped['static'] += 1
+        elif content.startswith('INV:') and not _scope_relevant(node, recent_paths):
+            dropped['offscope'] += 1
         else:
             shown.append(content)
-    return shown, static_dropped, historical_dropped
+    return shown, dropped
 
 
 def write_checkpoint(
@@ -228,24 +270,40 @@ def write_checkpoint(
             historical = _fulfilled_post_contents(icpg_store)
         except Exception:
             historical = set()
+    # Task narrative and recent files from signals. Computed HERE, above the constraint
+    # selection, because scope-relevance needs to know what the session is touching.
+    narrative, recent_files = build_task_narrative(store.project_dir)
+    root = str(Path(store.project_dir).resolve())
+    recent_paths = {
+        f['path'][len(root):].lstrip('/') if f['path'].startswith(root) else f['path']
+        for f in recent_files if f.get('path')
+    }
+
     constraint_nodes = store.get_by_type('constraint')
-    constraints, dropped, historical_dropped = _select_constraints(
-        constraint_nodes, historical)
-    if dropped:
+    constraints, dropped = _select_constraints(
+        constraint_nodes, historical, recent_paths)
+    if dropped['static']:
         constraints.append(
             # "constraint(s)", not "invariant(s)": a POST from a still-open intent can
             # carry a file_exists predicate too, and this notice covers it. Calling that
             # an invariant is the same mislabel the reordering above fixes.
-            f'[{dropped} file_exists constraint(s) omitted from this checkpoint — static '
-            'repo facts asserted by doccheck `referenced-paths-exist` + pre-commit; '
-            '`mnemos nodes --type constraint` lists all]')
-    if historical_dropped:
+            f'[{dropped["static"]} file_exists constraint(s) omitted from this checkpoint '
+            '— static repo facts asserted by doccheck `referenced-paths-exist` + '
+            'pre-commit; `mnemos nodes --type constraint` lists all]')
+    if dropped['historical']:
         constraints.append(
-            f'[{historical_dropped} postcondition(s) omitted from this checkpoint — '
+            f'[{dropped["historical"]} postcondition(s) omitted from this checkpoint — '
             'their iCPG intents are FULFILLED, so they describe changes already made, '
             'not standing constraints. Still stored, and still evaluated by iCPG\'s '
             'decision-drift dimension; `icpg query constraints <file>` and '
             '`mnemos nodes --type constraint` list all]')
+    if dropped['offscope']:
+        constraints.append(
+            f'[{dropped["offscope"]} standing invariant(s) omitted from this checkpoint — '
+            'their iCPG scope does not touch any file this session has read or edited. '
+            'THESE ARE NOT RETIRED: the pre-edit hook runs `icpg query constraints <file>` '
+            'on every Edit/Write, so each one arrives when its files come into play. '
+            '`mnemos nodes --type constraint` lists all]')
 
     # Gather result summaries (compressed or active)
     result_nodes = store.get_by_type('result')
@@ -265,8 +323,7 @@ def write_checkpoint(
         n.content for n in working_nodes[:3]
     )
 
-    # Task narrative and recent files from signals
-    narrative, recent_files = build_task_narrative(store.project_dir)
+    # (narrative/recent_files computed above — constraint scope-relevance needs them)
 
     # Git state
     git_state = _get_git_state(store.project_dir)

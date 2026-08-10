@@ -3122,6 +3122,19 @@ and the cheapest way to falsify it.
   redundancy to reclaim, all genuinely standing ("no predicate crashes on a fresh clone"). So a cap
   here is lossy by construction and picks winners by recency, on the payload's most valuable field.
   **The two halves want different remedies, and only the first one has shipped.**
+- **RESOLVED 2026-08-10 — the growth half is closed, and NOT with a cap.** The entry's remaining
+  problem was that invariants accumulate ~139b each, ≥1 per intent, uncapped, while being exactly
+  the constraints a recency cap must not touch (23 distinct bodies out of 24, all standing). The
+  discriminator turned out to be **scope, not age**: an invariant whose iCPG scope touches no file
+  the session has read or edited is omitted, with a stated count. **This is only defensible because
+  a better-targeted channel delivers the omitted ones** — `mnemos-pre-edit.sh` runs
+  `icpg query constraints <file>` on every Edit/Write, so a scoped invariant arrives exactly when
+  its files come into play. **Verified, not assumed.** Unscoped invariants are always kept (the
+  per-file channel is keyed on scope and cannot reach them), and a session with no file signals
+  keeps everything — "I don't know what you're touching" is not evidence nothing matters.
+  **Measured: 8,675b → 6,334b live, and 50 further intents / 100 invariants move the payload 4
+  bytes.** The leak was monotonic in intent count; it is now bounded by session scope, which is the
+  structural difference between this and a bigger cap.
 - **A smaller finding inside the measurement: `STATIC_PREDICATE` names one family and the class has
   two.** `test_exists("path")` constraints (2 today) leak through a filter written for
   `file_exists("path")` — standing pattern #11, in the filter itself. **Deliberately NOT widened
