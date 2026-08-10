@@ -283,6 +283,26 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
    > `resolve()`-based fix; only re-planting caught that. A guard for a spelling bug must use the
    > spelling that broke it.)*
    >
+   > **ARBITER'S COST TRACKS FILE COUNT, NOT LINE COUNT — three runs on 2026-08-09, and this
+   > changes item 4's budget by an order of magnitude.** The obvious model from the first two
+   > whole-file passes was per-line ($0.59 for 489 lines, $1.08 for 1,107). It is not:
+   >
+   > | run | files | lines | model calls | cost | $/file | calls/file |
+   > |---|---|---|---|---|---|---|
+   > | whole-file `tessera-watch` | 1 | 1,107 | 12 | $1.08 | 1.08 | 12.0 |
+   > | session diff | 6 | 940 | 66 | $6.87 | 1.15 | 11.0 |
+   > | follow-up diff | 5 | **111** | 53 | $5.70 | 1.14 | 10.6 |
+   >
+   > **~11 model calls and ~$1.12 per FILE, near-flat against lines** — 1,107 lines and 111 lines
+   > both cost about the same per file. Each file gets its own reviewer pass plus triage and
+   > verify voices, and that fixed per-file overhead dominates. **So item 4's 19 files are ~$21 of
+   > review, not the ~$4.50 a per-line model predicts.** Still cheap against the cycle it starts
+   > (adjudication, fixing, guarding, falsification — $4.42 of the tessera-verify session's $5.02
+   > was everything except the review), but budget it per file and **slice it: 4–5 files a session,
+   > chosen by blast radius, not all 19 in one pass.** Recorded here rather than left in a commit
+   > message, because an estimate that lives only in a commit is the thing that made this item look
+   > expensive and never-done for weeks.
+   >
    > **NEXT: the other 19 extensionless `bin/` files, ~4,500 lines.** No single one of them is
    > the reporter for nine predicates, so the ordering argument that put `tessera-verify` and
    > `tessera-watch` first is spent; pick by blast radius. And **budget the cycle, not the API

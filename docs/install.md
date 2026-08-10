@@ -32,7 +32,9 @@ cd tessera
 
 That is the whole step. It is idempotent — re-run it any time.
 
-It installs `uv` (via its **standalone installer**, deliberately *not* `brew install uv` — reintroducing a package-manager coupling in the first line of the fix would be absurd), provisions the Python pinned in `.python-version`, builds `.venv/`, installs the toolchain (`mnemos`, `icpg`, `polyphony`, `skill-lint`, `pytest`) into it as editable, and symlinks the console scripts into `~/.local/bin`.
+It installs `uv` (via its **standalone installer**, deliberately *not* `brew install uv` — reintroducing a package-manager coupling in the first line of the fix would be absurd), provisions the Python pinned in `.python-version`, builds `.venv/`, installs the toolchain (`mnemos`, `icpg`, `polyphony`, `skill-lint`, `pytest`) into it as editable, initialises `.icpg/reason.db`, and symlinks the console scripts into `~/.local/bin`.
+
+> **`.icpg/reason.db` was added to this list on 2026-08-09, and it had no owner until then.** Nothing created it: the only `icpg init` in the repo is `bin/tessera-new-project`'s, which scaffolds *downstream* projects. This repo's own database was hand-made once and maintained by nobody — the same gap the `.claude` dogfood symlinks had, found the same day. It matters because iCPG is wired into this repo's **live hooks**: `mnemos-pre-edit.sh` shells out to `icpg`, the Stop recorder attributes symbols to the open intent, and a PreToolUse hook asks for one (ADR-0019). Without the database those halves fail open into *"this file has no intents"* — F-001's confound again, where empty reads as unused when it means unreachable. `verify()` now asserts it.
 
 > **Why `~/.local/bin` and not `tessera/bin`?** Because `~/.local/bin` precedes `/opt/homebrew/bin` on PATH and `tessera/bin` does not — it sits far behind it. A symlink in `tessera/bin` would be silently shadowed by any leftover Homebrew copy, and your hooks would keep resolving the old interpreter while everything *looked* fixed.
 
