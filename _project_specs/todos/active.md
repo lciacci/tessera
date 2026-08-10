@@ -6,7 +6,7 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-08-10. ITEM 1 IS CLOSED — BOTH HALVES. Fulfilled intents' POSTs left the checkpoint (39 of them, 39.6% of the payload, all under "DO NOT VIOLATE" while zero intents were executing), then the uncapped-invariant half followed: an invariant whose iCPG scope touches no file the session has read or edited is omitted with a stated count. 12,909b → 7,780b → refilled to 8,556b by ONE new intent → 6,334b. The refill is the lesson: the first cut was a POPULATION fix and the leak was GROWTH, so 50 further intents now move the payload 4 bytes instead of 7kb. NOT a cap — scope, because 23 of 24 invariant bodies were distinct and a cap picks victims by recency. It is only sound because `icpg query constraints <file>` delivers the omitted ones per-file at edit time, verified before relying on it. ALSO: doccheck now isolates each check (one raising check used to blank all 45, in the gate that blocks commits) and a crashed check BLOCKS; `decision_surface.py` did not parse on 3.9 while its hook ate the traceback with `2>/dev/null`. THREE adversarial passes: 24 code findings → 9 real, and the two sharpest defects were found by RE-PLANTING after a fix, not by any reviewer. ▶ NEXT: item 2 (ADR-0020 fixtures), item 4's remaining 19 `bin/` files, item 5's clean-clone runner.)
+## Handoff — pick up here (2026-08-10. ITEM 1 IS CLOSED — BOTH HALVES. Fulfilled intents' POSTs left the checkpoint (39 of them, 39.6% of the payload, all under "DO NOT VIOLATE" while zero intents were executing), then the uncapped-invariant half followed: an invariant whose iCPG scope touches no file the session has read or edited is omitted with a stated count. 12,909b → 7,780b → refilled to 8,556b by ONE new intent → 6,334b. The refill is the lesson: the first cut was a POPULATION fix and the leak was GROWTH, so 50 further intents now move the payload 4 bytes instead of 7kb. NOT a cap — scope, because 23 of 24 invariant bodies were distinct and a cap picks victims by recency. **ITS SAFETY ARGUMENT WAS FALSE AND IS RETRACTED — SEE ITEM 11, DECIDE IT FIRST.** The cut was justified by "the pre-edit hook delivers the omitted ones per-file"; measured, 2 of 18 are reachable, because that hook resolves by recorded symbol edges and the checkpoint drops by scope. The cut is still ON as a SIZE cut and its payload note now warns instead of promising. ALSO: doccheck now isolates each check (one raising check used to blank all 45, in the gate that blocks commits) and a crashed check BLOCKS; `decision_surface.py` did not parse on 3.9 while its hook ate the traceback with `2>/dev/null`. THREE adversarial passes: 24 code findings → 9 real, and the two sharpest defects were found by RE-PLANTING after a fix, not by any reviewer. ▶ NEXT: item 1 — decide the scope-filter remedy; then item 3 (ADR-0020 fixtures), item 5's remaining 19 `bin/` files, item 6's clean-clone runner.)
 
 *(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
 Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering. This note
@@ -125,7 +125,35 @@ had one, so the convention was visible and the live section was the exception. a
 
 ---
 
-### Next — item 1 SHIPPED its POST half and refilled; the INV half is open; item 4 half-closed; item 5 is new
+11. **▶ THE SCOPE FILTER'S SAFETY ARGUMENT IS FALSE — RETRACTED THE DAY IT SHIPPED, AND THIS IS
+   THE FIRST THING TO DECIDE NEXT SESSION.** Item 1's invariant half drops an invariant when its
+   iCPG **scope** misses the session's files, justified by "the pre-edit hook delivers it per-file
+   at edit time". **It does not.** `icpg query constraints` → `get_reasons_for_file` resolves by
+   recorded **`CREATES`/`MODIFIES` symbol edges**, not by `reason.scope`, and the sets barely
+   overlap — symbol recording needs exactly ONE executing intent at Stop time, so most intents
+   never got symbols in most of their scoped files. **Measured: 2 of 18 dropped invariants are
+   reachable. Sixteen are gone from the session's view.**
+   **The verification that let it through was accurate and irrelevant:** one CLI call returned
+   *an* intent's invariants for `bin/tessera-watch` — which shows the command works, not that it
+   returns the DROPPED ones. Three intents scope that file; the channel returns the one with
+   symbols. *#12 aimed at the verification step.*
+   **Current state:** the cut is ON and the payload note now WARNS instead of promising ("DO NOT
+   ASSUME the pre-edit hook will surface them", naming the symbol-edge mechanism). The test that
+   asserted the promise was flipped — it had been pinning the false claim, which would have failed
+   the commit that told the truth. What the cut buys is SIZE (8,675b → 6,334b) and nothing else.
+   **THE DECISION, and it is genuinely open:**
+   (a) **Repair the channel** — union scope-matching into `get_reasons_for_file`. Only two callers,
+   both read-only pre-edit surfaces, so it is low blast-radius. **Sized: a typical file goes from
+   0–2 predicates to 11–23.** Makes the original argument true and improves the hook for its own
+   sake, at the cost of a louder pre-edit block.
+   (b) **Revert the invariant cut** — back to ~8,556b, over the 8,000 budget but under the ~10,000
+   real cliff. Honest, loses the fix.
+   (c) **Keep it as a size cut** and stop claiming a fallback — where it stands right now.
+   **Then, whichever is chosen, build the pairing check:** for every invariant the checkpoint
+   omits, the fallback must return it. Pure function of two data sources, no hook execution
+   needed — mechanically checkable, which is more than most of this repo's coverage questions.
+
+### Next — item 1 is the scope-filter DECISION (its budget half is closed); item 5 half-closed; item 6 is new
 
 > ## ▶ START HERE: ITEM 1. ITS BLOCKER IS GONE AND ITS NUMBERS GOT WORSE.
 >
@@ -196,7 +224,16 @@ had one, so the convention was visible and the live section was the exception. a
 > meter-before-marker rule the caching work landed on — the thing that produces the artifact is the
 > only thing positioned to catch it early.
 
-1. **◀ BOTH HALVES NOW SHIPPED — item 1's budget problem is CLOSED.** ~~drop `POST` for FULFILLED
+1. **◀ DECIDE THIS FIRST — item 1's invariant cut rests on a FALSE premise (full detail: item 11
+   above).** The checkpoint drops invariants by iCPG **scope**; the fallback it cited resolves by
+   recorded **symbol edges**. Measured 2 of 18 reachable. The cut is still ON as a size-only cut
+   and its note now warns rather than promises. Choose: **(a)** union scope-matching into
+   `get_reasons_for_file` (2 callers, both read-only; takes a file from 0–2 to 11–23 predicates)
+   and the original argument becomes true; **(b)** revert the cut, back to ~8,556b; **(c)** keep
+   it as a size cut, which is where it stands. Then build the pairing check — every omitted
+   invariant must be returned by the fallback, mechanically checkable from two data sources.
+
+2. **item 1's BUDGET problem is CLOSED (the above is about its JUSTIFICATION, not its numbers).** ~~drop `POST` for FULFILLED
    intents~~ **DONE** (`2eccb2a`, 12,909b → 7,780b) and ~~the uncapped invariant half~~ **DONE**:
    invariants whose iCPG scope touches no file the session has read or edited are omitted with a
    stated count. **8,675b → 6,334b live, and the growth is structurally gone — 50 further intents
@@ -216,12 +253,12 @@ had one, so the convention was visible and the live section was the exception. a
    from re-reading the code, never from the checkpoint, and the `goal` field is ~95 comma-joined
    historical goals topped by the *previous* session's task. **Part 4** — `delivered_chars` in
    `scripts/restore/offer.py`; still *do it when the hook is next touched for another reason*.
-2. **ADR-0020's fixture matrix** in `scripts/mnemos/eval_correction.py` — five case types, the
+3. **ADR-0020's fixture matrix** in `scripts/mnemos/eval_correction.py` — five case types, the
    lucky-correct negative load-bearing. Untouched; ADR-0020 still `Executed: not yet`.
-3. **Carried from 2026-07-29:** downstream T2 work (conclave, then howler — *do real work, not T2
+4. **Carried from 2026-07-29:** downstream T2 work (conclave, then howler — *do real work, not T2
    work*); **howler missing the entire spend guard** (14 files); don't wire iCPG downstream yet;
    caching closed except quarry.
-4. **The `bin/` control surface review — `tessera-verify` and `tessera-watch` are DONE; the other
+5. **The `bin/` control surface review — `tessera-verify` and `tessera-watch` are DONE; the other
    19 files, ~4,500 lines, are not.** *(This item's opening line has now been rewritten twice inside
    the day it was written: it first said the day's run "covered `scripts/` only", then that
    `tessera-watch`'s "other ~90%" was open. Both true when written. The item is kept at the top of
@@ -395,7 +432,7 @@ had one, so the convention was visible and the live section was the exception. a
    single reporter for P3, P4, P9 and P11–P16 (A5b: delete it and every one of them goes quiet at
    once, silently).
 
-5. **A clean-clone runner — `bin/tessera-clean-clone`. DO ITEM 4 FIRST; that ordering is the
+6. **A clean-clone runner — `bin/tessera-clean-clone`. DO ITEM 5 FIRST; that ordering is the
    recommendation, not a formality.** Three defects on 2026-08-09 were found by tripping over the
    clean-clone path (`referenced-paths-exist` red, P5 crashing, the two P9 tests), *none* by a check,
    and nothing in this repo has ever cloned itself. Full reasoning, the shapes ruled out, and one
@@ -403,7 +440,7 @@ had one, so the convention was visible and the live section was the exception. a
    before writing a line — it already contains the constraint that kills the naive version, measured:
    redirecting `HOME` isolates `install.sh` and works, but the ambient `PATH` still resolves the
    OUTER repo's `mnemos`, so `verify()` emits two ✗ that are sandbox artifacts and a runner
-   inheriting them is red forever. **Why item 4 first:** ~4,500 unreviewed `bin/` lines are where
+   inheriting them is red forever. **Why item 5 first:** ~4,500 unreviewed `bin/` lines are where
    instance #4 most likely lives, and one more instance would sharpen this runner's spec
    considerably — or show that the ownership rule alone was the whole fix and no runner is needed.
    Building it first risks specifying an instrument against three examples when a fourth is cheap.

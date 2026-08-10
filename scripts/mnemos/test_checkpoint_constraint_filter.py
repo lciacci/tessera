@@ -387,18 +387,24 @@ def test_an_invariant_scoped_away_from_the_session_is_omitted():
     assert len(note) == 1 and '1 standing invariant(s) omitted' in note[0], note
 
 
-def test_the_offscope_notice_says_the_invariants_are_NOT_retired():
-    """The cut is only defensible because a better-targeted channel delivers them. If the
-    note does not say so, this reads as 'your invariants were dropped'."""
+def test_the_offscope_notice_does_not_PROMISE_a_fallback_that_is_not_there():
+    """This test used to assert the note PROMISED per-file delivery — pinning a claim that
+    measurement later refuted (2 of 18 reachable). A guard that enforces a false statement
+    is worse than no guard: it makes the lie load-bearing and fails the commit that tells
+    the truth. It now asserts the opposite property — the note must warn, not promise."""
     store = _store()
     _scoped(store, 'INV: the far thing holds', ['far/away/'])
     _signal(store, 'near/file.py')
 
     cp = write_checkpoint(store)
-    note = next(c for c in cp.active_constraints if c.startswith('['))
-    assert 'NOT RETIRED' in note, note
-    assert 'icpg query constraints' in note, note
-    assert 'every Edit/Write' in note, note
+    notes = [c for c in cp.active_constraints if c.startswith('[')]
+    assert len(notes) == 1, notes
+    note = notes[0]
+    assert 'DO NOT ASSUME' in note, note
+    assert 'symbol edges' in note, note
+    assert 'mnemos nodes --type constraint' in note, note
+    # The retracted promise must not creep back in.
+    assert 'arrives when' not in note and 'NOT RETIRED' not in note, note
 
 
 def test_no_file_signals_keeps_EVERY_invariant():

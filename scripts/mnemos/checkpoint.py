@@ -121,11 +121,15 @@ def _fulfilled_post_contents(icpg_store) -> set[str]:
 def _scope_relevant(node, recent_paths: set) -> bool:
     """Does this constraint's iCPG scope touch anything the session is working on?
 
-    Unscoped constraints are ALWAYS relevant: the per-file channel below is keyed on
-    scope, so a constraint without one can never be delivered that way and must stay in
-    the payload. Same rule when `recent_paths` is empty — a session with no file signals
-    yet gets everything, because "I don't know what you're touching" is not evidence that
-    nothing matters.
+    Unscoped constraints are ALWAYS relevant: with no scope there is nothing to compare
+    against, and guessing would drop a standing property on no evidence. Same rule when
+    `recent_paths` is empty — a session with no file signals yet gets everything, because
+    "I don't know what you're touching" is not evidence that nothing matters.
+
+    (An earlier version justified the unscoped rule by saying the per-file channel "is
+    keyed on scope". It is not — it is keyed on recorded symbol edges. The rule is right;
+    the reason given for it was the same wrong belief retracted in `_select_constraints`,
+    and it is corrected here rather than left as a second copy of it.)
 
     Prefix matching deliberately over-matches (`scripts/restore` also hits
     `scripts/restore_x.py`). Every ambiguity here should err toward KEEPING a constraint
@@ -153,14 +157,26 @@ def _select_constraints(nodes: list, historical: set[str] = frozenset(),
     of 24, every one a standing property, so a cap would pick winners by age on the
     payload's most valuable field.
 
-    Scope is the honest discriminator, and it works because there is a BETTER-TARGETED
-    CHANNEL for the ones dropped: `mnemos-pre-edit.sh` runs `icpg query constraints <file>`
-    on every Edit/Write, so a scoped invariant is delivered exactly when its files come
-    into play. Verified, not assumed — `icpg query constraints bin/tessera-watch` returns
-    that intent's invariants. So this is not "hide 20 constraints", it is "stop duplicating
-    a per-file channel in a global list that spills". Applies to `INV:` only: an open
-    intent's POST is what the session is working toward, and narrowing that would weaken
-    the guarantee built one commit earlier.
+    Scope is the discriminator. **THE ORIGINAL JUSTIFICATION FOR THIS CUT WAS FALSE AND IS
+    RETRACTED HERE.** It read: "there is a better-targeted channel for the ones dropped —
+    `mnemos-pre-edit.sh` runs `icpg query constraints <file>` on every Edit/Write, so a
+    scoped invariant is delivered exactly when its files come into play. Verified, not
+    assumed." The verification behind that sentence was one CLI call on one file that
+    returned *an* intent's invariants — true, and it did not establish what it was used
+    for. **Measured properly 2026-08-10: 2 of 18 dropped invariants are reachable that
+    way.** `get_reasons_for_file` resolves by recorded `CREATES`/`MODIFIES` symbol edges,
+    NOT by `reason.scope`, and in this repo the two sets barely overlap — symbol recording
+    needs exactly one executing intent at Stop time, so most intents never got symbols in
+    most of their scoped files.
+
+    So what this cut currently buys is SIZE, and the note in the payload now says exactly
+    that instead of promising a fallback that mostly is not there. The principled repair is
+    to make the channel match the criterion — union scope-matching into
+    `get_reasons_for_file`, whose only two callers are `icpg query context|constraints` —
+    and until that lands, treat the omitted set as genuinely omitted.
+
+    Applies to `INV:` only: an open intent's POST is what the session is working toward,
+    and narrowing that would weaken the guarantee built one commit earlier.
 
     **The POST half, added 2026-08-10 (P3 part 3).** `bridge-icpg` mints a ConstraintNode
     per postcondition and nothing removes it at fulfilment, so the checkpoint listed 39
@@ -301,9 +317,11 @@ def write_checkpoint(
         constraints.append(
             f'[{dropped["offscope"]} standing invariant(s) omitted from this checkpoint — '
             'their iCPG scope does not touch any file this session has read or edited. '
-            'THESE ARE NOT RETIRED: the pre-edit hook runs `icpg query constraints <file>` '
-            'on every Edit/Write, so each one arrives when its files come into play. '
-            '`mnemos nodes --type constraint` lists all]')
+            'DO NOT ASSUME THE PRE-EDIT HOOK WILL SURFACE THEM: it resolves by recorded '
+            'CREATES/MODIFIES symbol edges, NOT by iCPG scope, and only 2 of 18 were '
+            'reachable that way when measured 2026-08-10. Run '
+            '`mnemos nodes --type constraint` to see all of them if you are working '
+            'outside this session\'s files]')
 
     # Gather result summaries (compressed or active)
     result_nodes = store.get_by_type('result')

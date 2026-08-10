@@ -3129,14 +3129,32 @@ and the cheapest way to falsify it.
   the session has read or edited is omitted, with a stated count. **This is only defensible because
   a better-targeted channel delivers the omitted ones** — `mnemos-pre-edit.sh` runs
   `icpg query constraints <file>` on every Edit/Write, so a scoped invariant arrives exactly when
-  its files come into play. **Verified, not assumed** — and the CONSTANT worth watching, because
-  this cut makes the checkpoint DEPEND on that channel: it is a PreToolUse hook, and PreToolUse
-  hooks in this repo were silently dead until 2026-07-24 (bare stdout goes to the debug log, not
-  the model — see the entry above). It is delivering now, observed directly in the 08-10 session's
-  own `CONSTRAINTS for <file>` blocks, not merely claimed. But if it breaks again the dropped
-  invariants are simply absent rather than redirected, and nothing currently monitors that.
-  **The scope filter's safety argument is exactly as strong as that hook, and there is no P-check
-  on it.** Unscoped invariants are always kept (the
+  its files come into play. ~~**Verified, not assumed.**~~
+  **RETRACTED SAME DAY — THE SAFETY ARGUMENT WAS FALSE, AND ESTABLISHING ITS SCOPE IS WHAT KILLED
+  IT.** Asked to pin down "what monitors this channel", the answer turned out to be that the
+  channel does not carry the thing at all. `mnemos-pre-edit.sh` → `icpg query constraints <file>`
+  → `get_reasons_for_file`, which resolves by recorded **`CREATES`/`MODIFIES` symbol edges**, NOT
+  by `reason.scope`. The checkpoint drops by scope. The two sets barely overlap here, because
+  symbol recording requires exactly one executing intent at Stop time, so most intents never got
+  symbols in most of their scoped files. **Measured: 2 of 18 dropped invariants are reachable via
+  the per-file channel. Sixteen are simply gone from the session's view.**
+  **How the wrong verification passed:** one CLI call, `icpg query constraints bin/tessera-watch`,
+  returned *an* intent's invariants. True, and it did not establish what it was used for — it
+  showed the command works, not that it returns *the dropped ones*. Standing pattern #12 aimed at
+  the verification step: a check can be accurate and still not test the claim it is cited for.
+  Three intents scope `bin/tessera-watch`; the channel returns the one with recorded symbols.
+  **State of the cut:** left ON, with the payload note rewritten to warn instead of promise (it now
+  says DO NOT ASSUME the hook will surface them, and names the symbol-edge mechanism). What it buys
+  is SIZE and nothing else. **The principled repair is to make the channel match the criterion** —
+  union scope-matching into `get_reasons_for_file`, whose only callers are
+  `icpg query context|constraints`, both read-only pre-edit surfaces. Sized: that would take a
+  typical file from 0–2 predicates to 11–23. **Not done — it changes what the pre-edit hook shows
+  on every Edit/Write and is a decision, not a cleanup.**
+  *And the monitoring gap that prompted this is real but secondary: even once the channel carries
+  the right thing, nothing asserts the pairing — for every invariant the checkpoint omits, the
+  fallback should return it, and that is mechanically checkable from the two data sources with no
+  hook execution. That is the check to build.*
+  Unscoped invariants are always kept (the
   per-file channel is keyed on scope and cannot reach them), and a session with no file signals
   keeps everything — "I don't know what you're touching" is not evidence nothing matters.
   **Measured: 8,675b → 6,334b live, and 50 further intents / 100 invariants move the payload 4
