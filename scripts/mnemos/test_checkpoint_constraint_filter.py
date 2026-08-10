@@ -367,11 +367,10 @@ def _scoped(store, content, scope):
 
 def _signal(store, rel_path):
     """One PreToolUse edit signal, which is what build_task_narrative reads."""
-    import json as _json
     sig = Path(store.project_dir) / '.mnemos' / 'signals.jsonl'
     sig.parent.mkdir(parents=True, exist_ok=True)
     with sig.open('a') as fh:
-        fh.write(_json.dumps({'event': 'pre_tool', 'tool': 'Edit',
+        fh.write(json.dumps({'event': 'pre_tool', 'tool': 'Edit',
                               'file_path': str(Path(store.project_dir) / rel_path)}) + '\n')
 
 
@@ -482,9 +481,11 @@ def test_the_payload_no_longer_GROWS_with_the_intent_count():
     last = (Path(store.project_dir) / '.mnemos' / 'checkpoint-latest.json').stat().st_size
 
     # Premise: the omitted set really did grow five-fold, so this is not a no-op test.
-    cp_note = next(c for c in write_checkpoint(store).active_constraints
-                   if c.startswith('[') and 'standing invariant' in c)
-    assert '100 standing invariant(s) omitted' in cp_note, cp_note
+    # `next` with no default would raise StopIteration here and pytest reports that as an
+    # ERROR, not a failure — the diagnostic for a real regression would point at the test.
+    notes = [c for c in write_checkpoint(store).active_constraints
+             if c.startswith('[') and 'standing invariant' in c]
+    assert notes and '100 standing invariant(s) omitted' in notes[0], notes
     # The property: 80 more invariants cost the payload almost nothing.
     assert last - first < 100, f'payload grew {last - first}b for 80 more invariants'
 
@@ -533,29 +534,43 @@ def test_the_over_budget_checkpoint_is_STILL_WRITTEN():
 
 
 def demo() -> None:
-    test_static_predicates_are_dropped_and_real_constraints_kept()
-    test_the_omission_is_STATED_never_silent()
-    test_no_constraints_produces_no_omission_notice()
-    test_nothing_dropped_means_no_notice()
-    test_the_real_shape_gets_under_the_measured_ceiling()
-    test_fulfilled_postconditions_are_dropped_and_invariants_survive()
-    test_an_open_intents_postcondition_is_NEVER_dropped()
-    test_a_shared_postcondition_with_one_open_owner_survives()
-    test_no_icpg_store_drops_nothing()
-    test_an_orphaned_postcondition_is_kept()
-    test_the_POST_omission_is_STATED_never_silent()
-    test_the_two_omission_notices_are_distinguishable()
-    test_every_command_the_notices_cite_actually_EXISTS()
-    test_an_invariant_scoped_away_from_the_session_is_omitted()
-    test_the_offscope_notice_says_the_invariants_are_NOT_retired()
-    test_no_file_signals_keeps_EVERY_invariant()
-    test_an_UNSCOPED_invariant_is_always_kept()
-    test_scope_filtering_does_NOT_touch_postconditions()
-    test_a_directory_scope_matches_a_file_beneath_it()
-    test_the_payload_no_longer_GROWS_with_the_intent_count()
-    test_an_under_budget_payload_is_SILENT()
-    test_the_over_budget_checkpoint_is_STILL_WRITTEN()
-    print('ok')
+    """Run every test in this module that does not need a pytest fixture.
+
+    DERIVED, NOT HAND-MAINTAINED. This used to be a literal list, and it had silently
+    fallen four behind — three of them the POST-attribution tests added the same day to
+    guard a defect that had survived a full test pass (arbiter 2026-08-10). A hand-kept
+    mirror of the module's own contents is a second definition, and the copy that drifts
+    is always the one nobody runs.
+
+    Fixture-needing tests are SKIPPED BY NAME AND REPORTED, never silently dropped — an
+    unexplained gap between `pytest` and `python3 -m ...` is the thing this replaced.
+    """
+    import inspect
+
+    tests = [(name, fn) for name, fn in sorted(globals().items())
+             if name.startswith('test_') and inspect.isfunction(fn)]
+    assert tests, 'no tests discovered — the runner is broken, not the module empty'
+
+    ran, skipped = 0, []
+    for name, fn in tests:
+        if inspect.signature(fn).parameters:
+            skipped.append(name)          # needs a pytest fixture (e.g. capsys)
+            continue
+        fn()
+        ran += 1
+
+    # `ok (0 run)` is not ok. Re-planting a bug that made every test look
+    # fixture-needing produced exactly that — a green word over a runner that executed
+    # nothing, which is this repo's signature failure inside the runner written to stop a
+    # different version of it. The counts are the report; this is the floor under them.
+    assert ran, f'demo() executed NOTHING — all {len(skipped)} tests read as fixture-needing'
+    assert len(skipped) <= 1, f'demo() is skipping more than the known capsys test: {skipped}'
+
+    if skipped:
+        print(f'ok ({ran} run; {len(skipped)} need pytest fixtures: '
+              f'{", ".join(skipped)})')
+    else:
+        print(f'ok ({ran} run)')
 
 
 if __name__ == '__main__':

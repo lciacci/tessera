@@ -283,10 +283,16 @@ def test_list_reasons_survives_null_and_malformed_contract_columns(tmp_path):
     store.create_reason(ReasonNode(goal='g', owner='t', scope=['a/'],
                                    invariants=['i'], postconditions=['p']))
     with sqlite3.connect(tmp_path / '.icpg' / 'reason.db') as conn:
+        # ALL FOUR guarded columns, each in a different broken state — NULL, malformed
+        # JSON, and a JSON scalar where a list belongs. Asserting three while the
+        # docstring claimed four is how the fourth gets un-guarded later (arbiter
+        # 2026-08-10).
         conn.execute("UPDATE reasons SET postconditions=NULL, scope=NULL, "
-                     "invariants='{not a list}'")
+                     "invariants='{not a list}', preconditions='7'")
 
     reasons = ICPGStore(str(tmp_path)).list_reasons()
     assert len(reasons) == 1
-    assert reasons[0].scope == [] and reasons[0].postconditions == []
+    assert reasons[0].scope == [], reasons[0].scope
+    assert reasons[0].postconditions == [], reasons[0].postconditions
     assert reasons[0].invariants == [], reasons[0].invariants
+    assert reasons[0].preconditions == [], reasons[0].preconditions

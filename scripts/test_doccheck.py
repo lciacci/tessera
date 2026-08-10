@@ -2349,10 +2349,14 @@ def test_a_clean_closed_world_exits_zero(monkeypatch):
     assert doccheck.main() == 0
 
 
-def test_isolation_does_not_swallow_a_clean_green(monkeypatch):
-    """Non-vacuity: with no raising check the output is byte-identical to before."""
-    monkeypatch.setattr(sys, "argv", ["doccheck"])
-    assert doccheck.main() == 0
+# REMOVED 2026-08-10: `test_isolation_does_not_swallow_a_clean_green` ran `main()` against
+# the LIVE CHECKS table and asserted exit 0 — reintroducing exactly the environmental
+# coupling the `_CLOSED_WORLD` refactor had just removed two tests above. Any real doc
+# violation, in any unrelated commit, would have failed it with a message about isolation.
+# Its non-vacuity role is served by `test_a_clean_closed_world_exits_zero`, and the
+# end-to-end "the real repo is green" assertion is already made by the pre-commit hook and
+# by every `tessera-test` run, both of which run doccheck for real. (arbiter 2026-08-10 —
+# raised as a duplicate-assertion nit; the coupling underneath it was the real finding.)
 
 
 # --- bare-python3-hook-scripts-are-probed (2026-08-10) ----------------------------

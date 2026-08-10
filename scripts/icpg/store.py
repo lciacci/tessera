@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -670,7 +669,9 @@ class ICPGStore:
         sym = symbols[0]
         creating_edges = self.get_edges_to(sym.id, 'CREATES')
         modifying_edges = self.get_edges_to(sym.id, 'MODIFIES')
-        drift_edges = self.get_edges_from(sym.id, 'DRIFTS_FROM')
+        # No DRIFTS_FROM query: it was assigned and never read, and that edge type has NO
+        # WRITER anywhere in the codebase (see the icpg skill's edge table), so it was a
+        # guaranteed-empty round-trip per call. Drift comes from drift_events below.
 
         owners = set()
         for edge in creating_edges + modifying_edges:
@@ -685,15 +686,17 @@ class ICPGStore:
                 (sym.id,)
             ).fetchall()
 
+        # Deserialised ONCE. `active_drift` used to re-run `_row_to_drift` over every
+        # raw row purely to read `.resolved`, doubling the work on the objects sitting
+        # right beside it.
+        drift_events = [self._row_to_drift(r) for r in drift_rows]
         return {
             'found': True,
             'symbol': sym,
             'owners': list(owners),
             'modify_count': len(modifying_edges),
-            'drift_events': [self._row_to_drift(r) for r in drift_rows],
-            'active_drift': any(
-                not self._row_to_drift(r).resolved for r in drift_rows
-            )
+            'drift_events': drift_events,
+            'active_drift': any(not e.resolved for e in drift_events)
         }
 
     def get_stats(self) -> dict[str, int]:
