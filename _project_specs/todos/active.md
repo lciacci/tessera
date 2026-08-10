@@ -6,7 +6,12 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-08-10. ITEM 1 SHIPPED, AND IT DID NOT HOLD FOR ONE SESSION. Fulfilled intents' POSTs are out of the checkpoint (39 of them, 5,238b, 39.6% of the payload, all under "DO NOT VIOLATE" while zero intents were executing): 12,909b → 7,780b, P3 green, no standing invariant touched. Then bridging THIS session's own intent put it back to 8,556b. The leak has two halves and only one is closed: static predicates were a POPULATION problem a render filter can hold; non-static invariants are a GROWTH problem it cannot — ~139b each, ≥1 per intent, uncapped, and 23 distinct bodies out of 24 means there is nothing lossless left to cut. `write_checkpoint` now warns at write time, so the news arrives when the payload is made rather than at the next SessionStart alongside the harm. Two defects of my own en route: a dead `icpg show <id>` cited in the omission note, and an unguarded `read_text()` in the new doccheck that crashed all 45 checks under a synthetic ROOT — the class fixed across tessera-watch the day before. ▶ NEXT: item 1's remainder is the INV growth half + the `write_checkpoint` schema defects; item 2 and item 4's remaining 19 files are untouched.)
+## Handoff — pick up here (2026-08-10. ITEM 1 IS CLOSED — BOTH HALVES. Fulfilled intents' POSTs left the checkpoint (39 of them, 39.6% of the payload, all under "DO NOT VIOLATE" while zero intents were executing), then the uncapped-invariant half followed: an invariant whose iCPG scope touches no file the session has read or edited is omitted with a stated count. 12,909b → 7,780b → refilled to 8,556b by ONE new intent → 6,334b. The refill is the lesson: the first cut was a POPULATION fix and the leak was GROWTH, so 50 further intents now move the payload 4 bytes instead of 7kb. NOT a cap — scope, because 23 of 24 invariant bodies were distinct and a cap picks victims by recency. It is only sound because `icpg query constraints <file>` delivers the omitted ones per-file at edit time, verified before relying on it. ALSO: doccheck now isolates each check (one raising check used to blank all 45, in the gate that blocks commits) and a crashed check BLOCKS; `decision_surface.py` did not parse on 3.9 while its hook ate the traceback with `2>/dev/null`. THREE adversarial passes: 24 code findings → 9 real, and the two sharpest defects were found by RE-PLANTING after a fix, not by any reviewer. ▶ NEXT: item 2 (ADR-0020 fixtures), item 4's remaining 19 `bin/` files, item 5's clean-clone runner.)
+
+*(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
+Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering. This note
+went MISSING from the 08-10 section when it was authored — every superseded section below still
+had one, so the convention was visible and the live section was the exception. arbiter 2026-08-10.)*
 
 ### 2026-08-10 — what shipped, and the finding that outlived it
 
@@ -92,10 +97,12 @@ Declared current priority for Tessera framework dev. One focus at a time.
    parenthetical enumeration. *#10's corollary — a guard that reads source must not match prose
    about the code — scored against the guard written to enforce #10's lesson.*
 
-> **P3, P13 and G-a are RED at SessionStart and all three are correct — do not chase them.**
-> **P3** reports the checkpoint at ~8,030b against 8,000b. That is item 1's open half, not a
-> regression: the POST cut took it from 12,909b to 7,780b and this session's own intent put it
-> back. **P13** reports 6 `standing-patterns/block-missing` events in 7d — 4 from 2026-08-09
+> **P13 and G-a are RED at SessionStart and both are correct — do not chase them. P3 IS NOW
+> GREEN.** *(This box said P3 was red at ~8,030b and called it "item 1's open half". That was
+> true when written and stale within the session: the invariant half then shipped and the
+> checkpoint measured **6,334b**. Corrected rather than deleted — a status box that lags the work
+> it describes is how a closed item keeps getting re-opened by the next reader.)*
+> **P13** reports 6 `standing-patterns/block-missing` events in 7d — 4 from 2026-08-09
 > (aging out 08-16) and **2 from 2026-08-10 06:50–06:52, which are mine**: moving the standing-
 > patterns block into the new handoff section orphaned it for ~90 seconds while the surfacer ran.
 > Self-inflicted, self-healed the same minute, aging out 08-17. **This is the second time the same
@@ -189,7 +196,8 @@ Declared current priority for Tessera framework dev. One focus at a time.
    `icpg query constraints <file>` on every Edit/Write, so an omitted invariant arrives when its
    files come into play — **verified before relying on it**, and the note says so. Unscoped
    invariants always kept; no file signals → keep everything.
-   **Still open, small and ORDERED:** widen `STATIC_PREDICATE` to `test_exists(` — but add the
+   **The BUDGET problem is what closed — these leftovers are different work, not a caveat
+   on it.** Still open, small and ORDERED: widen `STATIC_PREDICATE` to `test_exists(` — but add the
    doccheck assertion that makes its "asserted by something stronger" justification TRUE first,
    because today it is not. Then the rest of part 3: the
    `write_checkpoint` defect — no `decisions` field in the schema, empty

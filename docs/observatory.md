@@ -3145,11 +3145,17 @@ and the cheapest way to falsify it.
   which is the exact defect caught one layer up in the same session (`icpg show <id>`, a command
   that never existed, cited in the omission note). **Ordering: add the doccheck assertion that makes
   the claim true, THEN widen the filter.**
-- **And P3's structural limit is now partly addressed.** `write_checkpoint` measures itself at write
-  time and warns on stderr (`cf25330`) — the "honest instrument" `bin/tessera-watch:56-59` already
-  named. P3 still can only report a spill that already happened; the writer can report one as it is
-  created. Budget now defined twice (bin/ is stdlib-only and cannot import mnemos), guarded by
-  doccheck `checkpoint-budget-matches-p3`.
+- **And P3's structural limit is now partly addressed — but NOT by the instrument it asked for.**
+  `write_checkpoint` measures itself at write time and warns on stderr (`cf25330`), so the news
+  arrives when the payload is made rather than at the next SessionStart alongside the harm. **This
+  is an earlier-firing PROXY, not the "honest instrument" `bin/tessera-watch:56-59` names.** That
+  comment asks for *the hook recording its own DELIVERED size* — rendered characters plus sibling
+  hook output; what shipped measures *checkpoint JSON bytes*, the same proxy P3 uses, just sooner.
+  The delivered-size instrument is `delivered_chars` in `scripts/restore/offer.py`, still unbuilt
+  (part 4). **An earlier draft of this bullet claimed `cf25330` WAS that instrument** — caught by
+  arbiter 2026-08-10, and it is the day's own lesson pointed at the record of the day: a fix that
+  partially answers a request is not the request answered. Budget now defined twice (bin/ is
+  stdlib-only and cannot import mnemos), guarded by doccheck `checkpoint-budget-matches-p3`.
 
 ### `doccheck.run()` has no per-check isolation — one raising check takes all 45 down *(2026-08-10)*
 
