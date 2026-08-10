@@ -3198,7 +3198,7 @@ and the cheapest way to falsify it.
 
 ### `doccheck.run()` has no per-check isolation — one raising check takes all 45 down *(2026-08-10)*
 
-- **Status:** RESOLVED same day. Found by `bin/tessera-verify` refuting a claim I had just written,
+- **Status:** RESOLVED same day, and the gate-policy half is **ADR-0022** — a crashed check blocks, which reverses `.githooks/pre-commit`'s written rule and so belongs in the decision record rather than only here. Found by `bin/tessera-verify` refuting a claim I had just written,
   twice in a row; fixed once the gate-policy fork was decided. Kept rather than deleted because the
   three-row-fixes trail is the reusable part.
 - **The observation.** `bin/tessera-watch`'s `evaluate()` was given per-predicate isolation on

@@ -84,7 +84,7 @@ had one, so the convention was visible and the live section was the exception. a
 8. **`doccheck.run()` NOW ISOLATES EACH CHECK (`7f46ee9`)** — it was a one-line dict
    comprehension, so any raising check took the process down and 0 of 45 reported.
    `run_detailed()` returns `{name: (findings, exc|None)}`; crashes get their own render section.
-   **DECIDED: a crashed check BLOCKS the commit**, reversing the pre-commit's written "a crashing
+   **DECIDED (ADR-0022): a crashed check BLOCKS the commit**, reversing the pre-commit's written "a crashing
    checker must not wedge every commit" — which was authored when a crash killed the *whole* run.
    Catastrophic failure (doccheck unparseable, `render()` raising) still fails open.
    **Two silent regressions this would have caused, both because the existing readers keyed on the
