@@ -909,6 +909,17 @@ SAFETY_SCRIPTS = (
     "scripts/spend/guard.py", "scripts/spend/backstop.py", "scripts/spend/authorize.py",
     "scripts/spend/event.py", "scripts/gate/scan.py", "scripts/gate/emit.py",
     "scripts/doccheck.py",
+    # ADDED 2026-08-10, and the omission is the lesson. The membership rule is "a hook
+    # invokes it via bare python3" — `.claude/scripts/tessera-decision-surface.sh:55` does
+    # exactly that, and this file was not here. It had an f-string with a backslash in the
+    # expression (3.12+), so on a /usr/bin-first PATH it did not PARSE, the `2>/dev/null`
+    # on that line swallowed the traceback, and the DECISION SURFACE block silently never
+    # reached the model — the hook built to defeat silent failure, failing silently (#1).
+    # It surfaced only because `decision-surface-is-wired` happened to be evaluated by a
+    # doccheck that was itself running on 3.9; had doccheck only ever run on the venv, that
+    # check would have stayed green over a dead hook. Listing it here makes the 3.9 probe
+    # unconditional instead of dependent on which interpreter runs the checker.
+    "scripts/decision_surface.py",
 )
 OLDEST_PYTHON = "/usr/bin/python3"  # macOS system python — the floor a PATH can drop you to
 
@@ -952,11 +963,60 @@ def check_safety_scripts_run_on_the_system_python() -> list[str]:
         )
         if probe.returncode != 0:
             err = (probe.stderr or "").strip().splitlines()
-            bad.append(f"{name} does NOT run on {OLDEST_PYTHON} ({err[-1] if err else '?'}) — "
+            # The remedy is NOT hardcoded any more. It used to always say "Add
+            # `from __future__ import annotations`" — right for PEP-604 annotations, the
+            # bug it was written for, and WRONG for the f-string backslash that hit
+            # decision_surface.py on 2026-08-10. A fix instruction that names the wrong
+            # fix is the report-is-true-but-misleading shape (#12) aimed at the remedy.
+            last = err[-1] if err else "?"
+            remedy = ("Add `from __future__ import annotations`."
+                      if "|" in last or "unsupported operand" in last
+                      else "Rewrite the 3.10+/3.12+ construct this line uses.")
+            bad.append(f"{name} does NOT run on {OLDEST_PYTHON} ({last}) — "
                        f"a hook invokes it via bare `python3`, and a /usr/bin-first PATH makes "
                        f"that 3.9. The spend guard would exit non-2, which Claude Code reads as "
-                       f"ALLOW. Add `from __future__ import annotations`.")
+                       f"ALLOW. {remedy}")
     return bad
+
+
+_BARE_PY3 = re.compile(r"(?<![/\w.-])python3\s+(?:\"?[^\"'\s]*?/)?(scripts/[A-Za-z0-9_./-]+\.py)")
+
+
+def check_bare_python3_hook_scripts_are_probed() -> list[str]:
+    """SAFETY_SCRIPTS' membership rule was PROSE. Make it mechanical.
+
+    The rule is stated plainly in the sibling check: "a hook invokes it via bare `python3`".
+    Nothing enforced it, so `scripts/decision_surface.py` — invoked exactly that way by
+    `.claude/scripts/tessera-decision-surface.sh` — was simply absent from the list, and
+    its 3.12+ f-string meant it did not PARSE on a /usr/bin-first PATH. The invoking line
+    ends in `2>/dev/null`, so the traceback went nowhere and the DECISION SURFACE block
+    silently stopped reaching the model. It surfaced only because a doccheck run that
+    happened to be on 3.9 tripped a DIFFERENT check.
+
+    That is the shape ADR-0016 named: a rule written in prose with no enforcement is a rule
+    that holds until someone adds the next file. This check is the enforcement — the list
+    can no longer fall behind the hooks silently.
+
+    Deliberately narrow: only `scripts/*.py` reached through a BARE `python3` from a hook.
+    An explicit interpreter path (`.venv/bin/python`) is the toolchain split working as
+    designed and is not in scope.
+    """
+    hooks = ROOT / ".claude" / "scripts"
+    if not hooks.is_dir():
+        return []
+    bad = []
+    for sh in sorted(hooks.glob("*.sh")):
+        try:
+            text = sh.read_text(errors="replace")
+        except OSError:
+            continue
+        for target in sorted(set(_BARE_PY3.findall(text))):
+            if target not in SAFETY_SCRIPTS and (ROOT / target).exists():
+                bad.append(
+                    f"{sh.relative_to(ROOT)} runs `python3 {target}` (bare interpreter) but "
+                    f"{target} is not in SAFETY_SCRIPTS — nothing proves it runs on "
+                    f"{OLDEST_PYTHON}, which is what a /usr/bin-first PATH hands it")
+    return sorted(set(bad))
 
 
 def check_spend_backstop_is_wired() -> list[str]:
@@ -2498,6 +2558,7 @@ def check_checkpoint_budget_matches_p3() -> list[str]:
 
 
 CHECKS = {
+    "bare-python3-hook-scripts-are-probed": check_bare_python3_hook_scripts_are_probed,
     "checkpoint-budget-matches-p3": check_checkpoint_budget_matches_p3,
     "mirror-links-are-symlinks": check_mirror_links_are_symlinks,
     "eager-prefix-figure-is-current": check_eager_prefix_figure_is_current,

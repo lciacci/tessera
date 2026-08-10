@@ -3177,10 +3177,29 @@ and the cheapest way to falsify it.
   a crash there makes the spend guard exit non-2, which Claude Code reads as ALLOW. Fixed with
   `from __future__ import annotations` so the next union does not re-learn it. *A check in this repo
   caught a defect in the code being written to improve that same checker.*
-- **Still open, pre-existing, NOT caused by this work:** on `/usr/bin/python3` doccheck reports one
-  false claim — `decision-surface-is-wired`, because `scripts/decision_surface.py:61` uses an
-  f-string with a backslash (3.12+). Verified identical before the change via `git stash`. So the
-  interpreter the safety check exists to protect is one on which doccheck is red.
+- **The pre-existing 3.9 red is FIXED, and it was worse than "doccheck is red on 3.9".**
+  `scripts/decision_surface.py:61` had a backslash inside an f-string EXPRESSION (3.12+), so it did
+  not parse on 3.9. `.claude/scripts/tessera-decision-surface.sh:55` invokes it via **bare
+  `python3`** — the documented stdlib-only split — and ends the line with `2>/dev/null`. On a
+  `/usr/bin`-first PATH that is a `SyntaxError` into a black hole: **the `DECISION SURFACE` block
+  silently stops reaching the model, and the hook built to defeat silent failure fails silently**
+  (#1). The em dash is hoisted to a named constant; behaviour verified byte-identical to the
+  original across six inputs; doccheck is now green on 3.9 **and** on the venv.
+- **AND THE MEMBERSHIP RULE THAT LET IT HAPPEN IS NOW MECHANICAL.** `SAFETY_SCRIPTS` states its own
+  rule in prose — *"a hook invokes it via bare `python3`"* — and nothing enforced it, so
+  `decision_surface.py` was simply never added. New check
+  **`bare-python3-hook-scripts-are-probed`** greps `.claude/scripts/*.sh` for bare-`python3`
+  invocations of `scripts/*.py` and asserts each target is listed. Explicit interpreter paths
+  (`.venv/bin/python`) are out of scope — that is the split working. **Note the detection asymmetry
+  this closes: the bug was found only because a doccheck run happened to be on 3.9 and tripped a
+  DIFFERENT check (`decision-surface-is-wired`). Membership in `SAFETY_SCRIPTS` makes the 3.9 probe
+  unconditional — proven by re-planting the f-string and watching it fire from the VENV run, the
+  case that was previously blind.** Scanned all of `scripts/`: 0 other files fail to parse on 3.9,
+  so no blanket "everything must be 3.9" check — that would forbid modern syntax in venv-only code
+  with no evidence behind it.
+- **A smaller mislabel fixed in passing:** the safety check's remedy string always said *"Add
+  `from __future__ import annotations`"* — correct for the PEP-604 bug it was written for, wrong for
+  an f-string backslash. It now picks the remedy from the actual error (#12, aimed at the remedy).
 - **Revisit when:** any check is added — an added check is a new chance to take the gate down, and
   the isolation makes that a named finding rather than a blackout.
 

@@ -41,6 +41,13 @@ _ADR_TITLE = re.compile(r"^#\s*(ADR-\d+):\s*(.+?)\s*$")
 _STATUS = re.compile(r"^-\s*\*\*Status:\*\*\s*(.+?)\s*$", re.M)
 _EXECUTED = re.compile(r"^-\s*\*\*Executed:\*\*\s*(.+?)\s*$", re.M)
 
+# Leading punctuation stripped off a "partially — <detail>" value. A NAMED CONSTANT so the
+# em dash never sits inside an f-string EXPRESSION — a backslash there is 3.12+ syntax, and
+# this module is imported by doccheck, which must parse on /usr/bin/python3 (3.9.6). In a
+# plain string literal the character itself is fine on every version; it is only the
+# f-string expression slot that is version-sensitive.
+_EM_DASH_STRIP = " —-"
+
 
 def _execution_warning(body: str) -> str:
     """Loud ONLY when acting on the ADR is risky — i.e. it was decided and not (fully) built.
@@ -58,7 +65,13 @@ def _execution_warning(body: str) -> str:
     if low.startswith("not yet"):
         return "\u23f3 NOT EXECUTED \u2014 decided, never built. Do not act on it as settled."
     if low.startswith("partially"):
-        return f"\u23f3 PARTIALLY EXECUTED \u2014 {value[len('partially'):].lstrip(' \u2014-')}"
+        # The strip set is hoisted out of the f-string ON PURPOSE: a backslash inside an
+        # f-string EXPRESSION is 3.12+, and this module is imported by doccheck, which
+        # `safety-scripts-run-on-system-python` requires to run on /usr/bin/python3 (3.9.6
+        # here). The old inline `\u2014` made decision_surface unparseable there, so
+        # doccheck was RED on the exact interpreter that check exists to protect.
+        detail = value[len("partially"):].lstrip(_EM_DASH_STRIP)
+        return f"\u23f3 PARTIALLY EXECUTED \u2014 {detail}"
     return ""
 
 

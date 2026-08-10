@@ -2334,3 +2334,49 @@ def test_isolation_does_not_swallow_a_clean_green(monkeypatch):
     """Non-vacuity: with no raising check the output is byte-identical to before."""
     monkeypatch.setattr(sys, "argv", ["doccheck"])
     assert doccheck.main() == 0
+
+
+# --- bare-python3-hook-scripts-are-probed (2026-08-10) ----------------------------
+
+
+def _hook_and_script(root, hook_body: str, script_rel: str = "scripts/thing.py"):
+    (root / ".claude" / "scripts").mkdir(parents=True, exist_ok=True)
+    (root / ".claude" / "scripts" / "h.sh").write_text(hook_body)
+    target = root / script_rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("x = 1\n")
+    return target
+
+
+def test_a_bare_python3_hook_script_missing_from_SAFETY_SCRIPTS_fails(fake_repo, monkeypatch):
+    """THE STATE THE CHECK EXISTS FOR — decision_surface.py sat exactly here, and its 3.12+
+    f-string meant it did not parse on 3.9 while `2>/dev/null` ate the traceback."""
+    _hook_and_script(fake_repo, "OUT=$(python3 scripts/thing.py --hook x 2>/dev/null)\n")
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ("scripts/doccheck.py",))
+    bad = doccheck.check_bare_python3_hook_scripts_are_probed()
+    assert any("scripts/thing.py" in v and "SAFETY_SCRIPTS" in v for v in bad), bad
+
+
+def test_a_listed_script_passes(fake_repo, monkeypatch):
+    _hook_and_script(fake_repo, "python3 scripts/thing.py\n")
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ("scripts/thing.py",))
+    assert doccheck.check_bare_python3_hook_scripts_are_probed() == []
+
+
+def test_an_explicit_interpreter_path_is_NOT_in_scope(fake_repo, monkeypatch):
+    """`.venv/bin/python` is the toolchain split working as designed (CLAUDE.md). Flagging
+    it would make the check fire on correct code, which is how checks get ignored."""
+    _hook_and_script(fake_repo, 'OUT=$("$ROOT/.venv/bin/python" scripts/thing.py)\n')
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    assert doccheck.check_bare_python3_hook_scripts_are_probed() == []
+
+
+def test_a_python3_dash_c_heredoc_is_not_mistaken_for_a_script(fake_repo, monkeypatch):
+    _hook_and_script(fake_repo, 'TARGET=$(printf x | python3 -c "import sys")\n')
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    assert doccheck.check_bare_python3_hook_scripts_are_probed() == []
+
+
+def test_the_live_repo_lists_every_bare_python3_hook_script():
+    """No fixture: the real hooks against the real SAFETY_SCRIPTS."""
+    assert doccheck.check_bare_python3_hook_scripts_are_probed() == []
