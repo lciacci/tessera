@@ -129,6 +129,16 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
 
 > ## ▶ START HERE: ITEM 1. ITS BLOCKER IS GONE AND ITS NUMBERS GOT WORSE.
 >
+> ### ⚠ ORIENT FROM THIS FILE, NOT FROM MNEMOS — YOUR CHECKPOINT IS SPILLING RIGHT NOW.
+> At 12,234b against a ~10,000-char delivery cap, the `MNEMOS SESSION RESUME` block you were
+> just handed is a **~2KB preview**: Constraints, Progress and Files did not arrive, and the
+> `goal` field is ~95 comma-joined historical goals topped by a *previous* session's task. Four
+> consecutive restore receipts have read `insufficient`. **Do not re-derive the session from
+> that block — read this section and run `bin/tessera-watch`.** *(This warning was dropped
+> during the 2026-08-09 rewrite that updated the figures below — harvested the numbers, cut the
+> instruction, which is ADR-0007's lesson aimed at the person applying it. Restored same
+> session.)*
+>
 > **The reason item 1 was deferred was ORDERING, and that reason is now spent.** It read:
 > *"`tessera-watch` OWNS P3's predicate, and P3 is firing right now. Fixing the checkpoint first
 > means acting on a measurement whose instrument has never been read."* The instrument has now been
