@@ -7,7 +7,7 @@ five case types — `positive`, `negative`, **`lucky_correct_negative`**, `outsi
 ## Why this is TRACKED, deviating from ADR-0020 §152
 
 The ADR says *"Add the five case types … to the silver-label set."* The silver-label set is
-`.mnemos/silver-corrections.jsonl`, which is **gitignored** (`.gitignore:18`). Following that
+`.mnemos/silver-corrections.jsonl`, and `.gitignore:18` ignores `.mnemos/` entirely. Following that
 literally would put hand-authored test cases in per-machine runtime state, where they would:
 
 - vanish on a clean clone — the blind spot that produced two bugs in one day on 2026-08-09

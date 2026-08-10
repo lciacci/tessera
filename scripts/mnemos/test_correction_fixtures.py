@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.mnemos.calibration import LAYERS, SCORED, UNSCORED, load_cases, score
+from scripts.mnemos.calibration import LAYERS, SCORED, SHAPES, UNSCORED, load_cases, score
 from scripts.mnemos.correction_detect import regex_match
 
 
@@ -34,12 +34,17 @@ def test_every_case_type_is_represented(cases):
     assert present == set(SCORED) | set(UNSCORED), present
 
 
-def test_lucky_pairs_are_well_formed(cases):
-    """Each lucky-correct case is a PAIR sharing one cue: exactly one lucky, one foil."""
-    pairs: dict[str, list] = {}
+def _pairs(cases) -> dict[str, list]:
+    out: dict[str, list] = {}
     for c in cases:
         if c["case"] == "lucky_correct_negative":
-            pairs.setdefault(c["pair"], []).append(c)
+            out.setdefault(c["pair"], []).append(c)
+    return out
+
+
+def test_lucky_pairs_are_well_formed(cases):
+    """Each lucky-correct case is a PAIR sharing one cue: exactly one lucky, one foil."""
+    pairs = _pairs(cases)
     assert pairs, "no lucky_correct_negative pairs — the load-bearing case type"
     for name, members in pairs.items():
         roles = sorted(m["role"] for m in members)
@@ -47,14 +52,51 @@ def test_lucky_pairs_are_well_formed(cases):
         assert len({m["cue"] for m in members}) == 1, f"{name}: cue differs across pair"
 
 
+def test_each_pair_declares_a_shape_that_matches_its_truths(cases):
+    """The invariant that makes a pair a pair, which role+cue alone do NOT encode.
+
+    Two shapes are legitimate — `opposite-truth` (the cue fires on a non-correction) and
+    `same-truth` (the cue is absent from an equivalent turn). Without a declaration, a
+    foil that accidentally stopped being a foil — both members true — reads as a valid
+    opposite-truth pair and the matrix quietly loses a case. Found by arbiter 2026-08-10,
+    whose premise (that every foil must be truth=false) was wrong and whose conclusion
+    (that nothing asserts the property) was right."""
+    for name, members in _pairs(cases).items():
+        shape = {m["shape"] for m in members}
+        assert len(shape) == 1, f"{name}: members disagree on shape: {shape}"
+        declared = shape.pop()
+        assert declared in SHAPES, f"{name}: unknown shape {declared!r}"
+        truths = {m["role"]: m["truth"] for m in members}
+        differ = truths["lucky"] != truths["foil"]
+        assert differ == (declared == "opposite-truth"), (
+            f"{name}: declared {declared} but truths are {truths}")
+
+
+def test_at_least_one_pair_of_each_shape_exists(cases):
+    """Both failure directions must stay represented. Losing every same-truth pair would
+    leave the matrix blind to cue-ABSENCE misses, which is how the regex loses its
+    hardest case ('do not merge that yet')."""
+    shapes = {m["shape"] for members in _pairs(cases).values() for m in members}
+    assert shapes == set(SHAPES), shapes
+
+
 def test_fixture_text_never_leaks_its_case_label(cases):
     """ADR-0020's anti-gaming clause: the verdict must not be derivable from fixture
     labels or case-specific wording. The detector only ever receives `text`, so the
-    check is that `text` cannot betray its own class."""
+    check is that `text` cannot betray its own class.
+
+    Scoped to the MULTI-WORD label forms only. An earlier version also matched bare
+    words — 'positive', 'negative', 'fixture' — which are ordinary English a real turn
+    may legitimately contain ('that's a negative result'), so the guard could fire on
+    innocent fixture text while adding nothing: no plausible leak says 'negative'
+    without saying which kind. (arbiter 2026-08-10, fragile-in-both-directions.)"""
+    leaks = {lbl.replace("_", " ") for lbl in SCORED + UNSCORED if "_" in lbl}
+    leaks |= {lbl for lbl in SCORED + UNSCORED if "_" in lbl}
+    assert leaks, "no multi-word labels to check — the guard would be vacuous"
     for c in cases:
         low = c["text"].lower()
-        for label in set(SCORED) | set(UNSCORED) | {"lucky", "foil", "fixture"}:
-            assert label.replace("_", " ") not in low and label not in low, c["text"]
+        for label in leaks:
+            assert label not in low, f"{c['text']!r} leaks {label!r}"
 
 
 def test_credit_requires_both_pair_members_not_just_the_lucky_one(cases):

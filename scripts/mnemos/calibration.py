@@ -16,8 +16,17 @@ import json
 import os
 from pathlib import Path
 
-_ROOT = Path(os.environ.get("TESSERA_ROOT") or Path(__file__).resolve().parents[2])
-CASES = _ROOT / "scripts" / "mnemos" / "fixtures" / "correction_cases.jsonl"
+def _root() -> Path:
+    """Repo root, TESSERA_ROOT overrides. **Read at CALL time, not import time**, matching
+    `scripts/gate/paths.py:root()` — a module-level constant cannot be overridden by a test
+    that imported this module first, which silently pins the fixture path. (arbiter
+    2026-08-10; the sibling `eval_correction.py` still has the import-time form.)"""
+    override = os.environ.get("TESSERA_ROOT")
+    return Path(override) if override else Path(__file__).resolve().parents[2]
+
+
+def cases_path() -> Path:
+    return _root() / "scripts" / "mnemos" / "fixtures" / "correction_cases.jsonl"
 
 # Scored against `truth`. The other two are deliberately unscored: `allowed_boundary`
 # permits either verdict by construction, and `outside_scope` rows are carrier turns
@@ -26,10 +35,18 @@ SCORED = ("positive", "negative", "lucky_correct_negative")
 UNSCORED = ("allowed_boundary", "outside_scope")
 LAYERS = ("wording", "fixture", "judge", "telemetry", "policy")
 
+# A pair's SHAPE, declared per fixture and asserted against the members' truths. Two are
+# legitimate and they expose the cue from opposite sides; the declaration exists so an
+# ACCIDENTAL same-truth pair (a foil that stopped being a foil) cannot pass as the other.
+SHAPES = {
+    "opposite-truth": "cue fires on a turn that is not a correction",
+    "same-truth": "cue is absent from an equivalent turn, so it is missed",
+}
+
 
 def load_cases(path: Path | None = None) -> list[dict]:
     """Every fixture row, minus the `_readme` banner."""
-    src = path or CASES
+    src = path or cases_path()
     rows = [json.loads(line) for line in src.read_text().splitlines() if line.strip()]
     return [r for r in rows if "_readme" not in r]
 
