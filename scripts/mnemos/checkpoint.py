@@ -170,10 +170,44 @@ def _select_constraints(nodes: list, historical: set[str] = frozenset(),
     most of their scoped files.
 
     So what this cut currently buys is SIZE, and the note in the payload now says exactly
-    that instead of promising a fallback that mostly is not there. The principled repair is
-    to make the channel match the criterion — union scope-matching into
-    `get_reasons_for_file`, whose only two callers are `icpg query context|constraints` —
-    and until that lands, treat the omitted set as genuinely omitted.
+    that instead of promising a fallback that mostly is not there.
+
+    **DECIDED 2026-08-10: keep it as a size-only cut. Treat the omitted set as genuinely
+    omitted.** The obvious repair — union scope-matching into `get_reasons_for_file` —
+    was scoped, measured, and declined, and the measurement is why:
+
+      | files reachable | today (symbol edges) | with a scope union |
+      |---|---:|---:|
+      | any linkage     |  94 | 719 |
+      | via exact-file scope entries | | 51 |
+      | via DIRECTORY expansion only | | 668 |
+
+    668 of 719 come from directory-prefix scope entries — bare `scripts/` alone is on 4
+    intents. A scope union does not deliver "the invariants for this file"; for most files
+    it delivers every invariant of every intent that touched the tree, taking a typical
+    file from 0-2 predicates to a median of 15 (max 29). That is the pre-edit channel
+    getting louder in the least useful way.
+
+    Three further reasons, none of which were visible before reading the governing records:
+    the `executing`-only refinement floated to control that noise is an INVENTED THRESHOLD
+    with no evidence and no way to measure it today (0 intents are executing); the pairing
+    check meant to justify the union reads `reason.scope` on BOTH sides, so it is a mirror,
+    not an instrument (ADR-0017's own method finding); and the real question underneath —
+    whether the SYMBOL is the right unit of linkage at all — is already open, with
+    evidence, at `docs/observatory.md` -> "Is the SYMBOL the right unit for a shell-heavy
+    repo?". Deciding it inside a checkpoint-budget item would be the fourth re-scope that
+    entry's stopping rule exists to prevent.
+
+    That entry also carries the structural half this docstring got wrong: the reason
+    `get_reasons_for_file` misses is NOT only that symbol recording needs exactly one
+    executing intent. **46 of 78 shell files have ZERO symbols** — straight-line hooks, not
+    function libraries — so for those files the symbol channel can never return anything,
+    however well the recorder runs.
+
+    (One correction to the note above, kept because the blast-radius claim was load-bearing
+    in declining the union: `get_reasons_for_file` has two *Python* callers, but THREE
+    shell call sites — `mnemos-pre-edit.sh` runs both `query context` and
+    `query constraints`, and `icpg-inject-context.sh` runs `query context` too.)
 
     Applies to `INV:` only: an open intent's POST is what the session is working toward,
     and narrowing that would weaken the guarantee built one commit earlier.

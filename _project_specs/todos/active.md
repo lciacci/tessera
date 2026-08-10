@@ -6,7 +6,7 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-08-10. ITEM 1 IS CLOSED — BOTH HALVES. Fulfilled intents' POSTs left the checkpoint (39 of them, 39.6% of the payload, all under "DO NOT VIOLATE" while zero intents were executing), then the uncapped-invariant half followed: an invariant whose iCPG scope touches no file the session has read or edited is omitted with a stated count. 12,909b → 7,780b → refilled to 8,556b by ONE new intent → 6,334b. The refill is the lesson: the first cut was a POPULATION fix and the leak was GROWTH, so 50 further intents now move the payload 4 bytes instead of 7kb. NOT a cap — scope, because 23 of 24 invariant bodies were distinct and a cap picks victims by recency. **ITS SAFETY ARGUMENT WAS FALSE AND IS RETRACTED — SEE ITEM 11, DECIDE IT FIRST.** The cut was justified by "the pre-edit hook delivers the omitted ones per-file"; measured, 2 of 18 are reachable, because that hook resolves by recorded symbol edges and the checkpoint drops by scope. The cut is still ON as a SIZE cut and its payload note now warns instead of promising. ALSO: doccheck now isolates each check (one raising check used to blank all 45, in the gate that blocks commits) and a crashed check BLOCKS; `decision_surface.py` did not parse on 3.9 while its hook ate the traceback with `2>/dev/null`. THREE adversarial passes: 24 code findings → 9 real, and the two sharpest defects were found by RE-PLANTING after a fix, not by any reviewer. ▶ NEXT: item 1 — decide the scope-filter remedy; then item 3 (ADR-0020 fixtures), item 5's remaining 19 `bin/` files, item 6's clean-clone runner.)
+## Handoff — pick up here (2026-08-10. ITEM 1 IS CLOSED — BOTH HALVES. Fulfilled intents' POSTs left the checkpoint (39 of them, 39.6% of the payload, all under "DO NOT VIOLATE" while zero intents were executing), then the uncapped-invariant half followed: an invariant whose iCPG scope touches no file the session has read or edited is omitted with a stated count. 12,909b → 7,780b → refilled to 8,556b by ONE new intent → 6,334b. The refill is the lesson: the first cut was a POPULATION fix and the leak was GROWTH, so 50 further intents now move the payload 4 bytes instead of 7kb. NOT a cap — scope, because 23 of 24 invariant bodies were distinct and a cap picks victims by recency. **ITEM 1 IS NOW FULLY CLOSED — the safety argument was false, and the remedy was DECIDED (c) on 2026-08-10: keep the cut as SIZE-ONLY, do not union scope-matching.** The cut had been justified by "the pre-edit hook delivers the omitted ones per-file"; measured, 2 of 18 are reachable, because that hook resolves by recorded symbol edges and the checkpoint drops by scope. The obvious repair was scoped, measured and declined: a scope union takes file linkage from 94 files to 719, but **668 of the 719 arrive via directory-prefix expansion** (bare `scripts/` is on 4 intents), so it answers "what ever touched this tree", not "what governs this file". The real question underneath — **is the SYMBOL the right unit of linkage** — was OPENED in the observatory, where it already had a named revisit trigger that this work fired. ALSO: doccheck now isolates each check (one raising check used to blank all 45, in the gate that blocks commits) and a crashed check BLOCKS; `decision_surface.py` did not parse on 3.9 while its hook ate the traceback with `2>/dev/null`. THREE adversarial passes: 24 code findings → 9 real, and the two sharpest defects were found by RE-PLANTING after a fix, not by any reviewer. ▶ NEXT: item 3 (ADR-0020 fixtures), item 5's remaining 19 `bin/` files, item 6's clean-clone runner.)
 
 *(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
 Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering. This note
@@ -125,8 +125,38 @@ had one, so the convention was visible and the live section was the exception. a
 
 ---
 
-11. **▶ THE SCOPE FILTER'S SAFETY ARGUMENT IS FALSE — RETRACTED THE DAY IT SHIPPED, AND THIS IS
-   THE FIRST THING TO DECIDE NEXT SESSION.** Item 1's invariant half drops an invariant when its
+11. **~~▶ THE SCOPE FILTER'S SAFETY ARGUMENT IS FALSE~~ — DECIDED 2026-08-10: (c), keep it as a
+   SIZE-ONLY cut. Do not union scope-matching.** *(The retraction below stands and is why this
+   needed deciding; what follows it is the decision. Kept whole rather than rewritten — the
+   false-premise trail is the useful part.)*
+
+   > **THE DECISION AND ITS EVIDENCE.** Option (a) — union scope-matching into
+   > `get_reasons_for_file` — was scoped and measured before being declined, not waved off.
+   > Linkage goes from **94 files to 719**; median predicates per file **0 → 15** (max 29).
+   > **But only 51 of the 719 come from exact-file scope entries — 668 arrive via
+   > directory-prefix expansion**, and bare `scripts/` is the scope of 4 intents by itself. So
+   > the union does not deliver "the invariants for this file"; it delivers every invariant of
+   > every intent that ever touched the tree. Three method reasons on top of the number:
+   > the `executing`-only refinement floated to control that noise is an **invented threshold**
+   > (unmeasurable today — 0 intents are executing); the pairing check meant to justify the
+   > union reads `reason.scope` on **both sides**, so it is green by construction (ADR-0017's
+   > own method finding); and ADR-0013 §4 already rates the file→governing-record pattern
+   > *"Skip (already have it)"* — `tessera-decision-surface.sh`, on a hook, by path.
+   >
+   > **THE REAL QUESTION WAS ROUTED, NOT DROPPED.** `docs/observatory.md` → *"Is the SYMBOL the
+   > right unit for a shell-heavy repo?"* was already Open with the trigger *"revisit when a
+   > file-level drift predicate is proposed"* — which (a) is, in everything but name. That
+   > entry now carries this measurement, the live corroboration (the pre-edit hook fired
+   > mid-edit and returned 7 invariants, **all `file_exists` statics**, zero standing ones),
+   > and a second finding: **three intents carry comma-joined `--scope` strings that were never
+   > split** (`97b501e0`, `4fdf5b25`, `7d2408a7`), harmless only because nothing reads scope.
+   > Any future scope-based predicate ships with a validator or inherits a silent gap.
+   >
+   > **Deliberately NOT done: an ADR.** The observatory is the right venue for a question with
+   > evidence and no decision — that is what the file is for. The ADR belongs to whoever decides
+   > the unit.
+
+   **The retraction, kept:** Item 1's invariant half drops an invariant when its
    iCPG **scope** misses the session's files, justified by "the pre-edit hook delivers it per-file
    at edit time". **It does not.** `icpg query constraints` → `get_reasons_for_file` resolves by
    recorded **`CREATES`/`MODIFIES` symbol edges**, not by `reason.scope`, and the sets barely
@@ -153,9 +183,15 @@ had one, so the convention was visible and the live section was the exception. a
    omits, the fallback must return it. Pure function of two data sources, no hook execution
    needed — mechanically checkable, which is more than most of this repo's coverage questions.
 
-### Next — item 1 is the scope-filter DECISION (its budget half is closed); item 5 half-closed; item 6 is new
+### Next — item 1 is CLOSED (both halves, 2026-08-10); item 5 half-closed; item 6 is new
 
-> ## ▶ START HERE: ITEM 1. ITS BLOCKER IS GONE AND ITS NUMBERS GOT WORSE.
+> ## ▶ START HERE: ITEM 3, THEN ITEM 5. ITEM 1 IS DONE.
+>
+> **Item 1 closed 2026-08-10** — budget half shipped earlier (12,909b → 6,334b), justification
+> half decided **(c)**: the cut stays size-only, the scope union was measured and declined, and
+> the unit question it was really asking is now open in `docs/observatory.md` → *"Is the SYMBOL
+> the right unit for a shell-heavy repo?"*. **The block below is kept verbatim as the trail of
+> how it was argued — its figures are superseded and its "START HERE" is spent.**
 >
 > ### ⚠ ORIENT FROM THIS FILE, NOT FROM MNEMOS — YOUR CHECKPOINT IS SPILLING RIGHT NOW.
 > At 12,234b against a ~10,000-char delivery cap, the `MNEMOS SESSION RESUME` block you were
@@ -224,14 +260,15 @@ had one, so the convention was visible and the live section was the exception. a
 > meter-before-marker rule the caching work landed on — the thing that produces the artifact is the
 > only thing positioned to catch it early.
 
-1. **◀ DECIDE THIS FIRST — item 1's invariant cut rests on a FALSE premise (full detail: item 11
-   above).** The checkpoint drops invariants by iCPG **scope**; the fallback it cited resolves by
-   recorded **symbol edges**. Measured 2 of 18 reachable. The cut is still ON as a size-only cut
-   and its note now warns rather than promises. Choose: **(a)** union scope-matching into
-   `get_reasons_for_file` (2 callers, both read-only; takes a file from 0–2 to 11–23 predicates)
-   and the original argument becomes true; **(b)** revert the cut, back to ~8,556b; **(c)** keep
-   it as a size cut, which is where it stands. Then build the pairing check — every omitted
-   invariant must be returned by the fallback, mechanically checkable from two data sources.
+1. **~~◀ DECIDE THIS FIRST~~ CLOSED 2026-08-10 — decided (c), keep the cut as SIZE-ONLY** (full
+   detail: item 11 above). The checkpoint drops invariants by iCPG **scope**; the fallback it
+   cited resolves by recorded **symbol edges**; 2 of 18 reachable. (a) was measured and declined
+   — a union takes linkage 94 → 719 files, but **668 of those 719 come from directory-prefix
+   expansion**, so it answers "what touched this tree", not "what governs this file". The pairing
+   check that was to justify it reads `reason.scope` on both sides and is green by construction.
+   **The unit question underneath is now OPEN in `docs/observatory.md`** → *"Is the SYMBOL the
+   right unit for a shell-heavy repo?"*, whose named trigger this fired; it carries the numbers
+   and the scope-validation finding. Item 1 has no remaining open half.
 
 2. **item 1's BUDGET problem is CLOSED (the above is about its JUSTIFICATION, not its numbers).** ~~drop `POST` for FULFILLED
    intents~~ **DONE** (`2eccb2a`, 12,909b → 7,780b) and ~~the uncapped invariant half~~ **DONE**:

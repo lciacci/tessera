@@ -616,8 +616,12 @@ Both were found by adversarial verification, **not** by the framework. **The rea
 
 ### Is the SYMBOL the right unit for a shell-heavy repo? — corpus coverage bought files, not symbols *(2026-07-27)*
 
-- **Status:** Open. Logged as its own entry because ADR-0017's stopping rule forbade a step 3;
-  these are the two findings step 1 surfaced that are **not** part of that decision.
+- **Status:** **OPEN — and its revisit trigger FIRED on 2026-08-10. This is now the live
+  question**, promoted from a side-finding by a second, independent route (the Mnemos
+  checkpoint's scope filter) arriving at the same place. See the 2026-08-10 block at the end
+  of this entry for the measurement. Originally logged as its own entry because ADR-0017's
+  stopping rule forbade a step 3; these are the two findings step 1 surfaced that are **not**
+  part of that decision.
 - **Finding 1 — 46 of 78 shell files have ZERO symbols.** The extractor now parses every `.sh`
   and every extensionless `bin/tessera-*`, and coverage went 84 → 261 of 261 code files. But
   Tessera's hooks are **straight-line scripts**, not function libraries: they `set -euo pipefail`
@@ -641,7 +645,74 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   bottom two, and `--infer-contracts` falls back to heuristic without an LLM key. This is why
   **Q1** (does the agent populate ReasonNodes in practice?) still rests on a single non-bootstrap
   data point. Restated here because the entry above recorded it and that entry is now closed.
-- **Revisit when:** a file-level drift predicate is proposed, or Q1's recording half is wired.
+- **Revisit when:** ~~a file-level drift predicate is proposed~~ **FIRED 2026-08-10 — see
+  below**, or Q1's recording half is wired.
+
+#### 2026-08-10 — the trigger fired from the OTHER end, and the numbers are now on the books
+
+**How it fired.** Not a drift predicate. The Mnemos checkpoint's invariant filter (item 1)
+drops a standing invariant when its iCPG **scope** misses the session's files, and was
+justified by *"the pre-edit hook delivers the dropped ones per-file."* It does not:
+`get_reasons_for_file` resolves by recorded `CREATES`/`MODIFIES` symbol edges, and **2 of 18
+dropped invariants were reachable that way.** The proposed repair was to union scope-matching
+into that lookup — which is a **file-level linkage predicate**, this entry's trigger in
+everything but name. Two independent routes, one question.
+
+**The measurement, over `.icpg/reason.db` (31 intents, 1115 symbols):**
+
+| files reachable | today (symbol edges) | with a scope union |
+|---|---:|---:|
+| any linkage | **94** | **719** |
+| — via exact-file scope entries | | 51 |
+| — via DIRECTORY expansion only | | **668** |
+| reasons per file, median · max | 0 · 2 | 4 · 8 |
+| predicates per file, median · max | 0 · 13 | **15 · 29** |
+
+625 files go from zero linkage to non-zero. `scripts/test_tessera_watch.py` — no symbol
+linkage at all — would receive 8 intents / 29 predicates on every edit.
+
+**The finding is the 668, not the 719.** Only 51 files are reached by exact-file scope
+entries; the rest arrive through directory-prefix expansion, and bare `scripts/` is the scope
+of 4 intents on its own. So a scope union does not answer *"what governs this file"* — for
+most files it answers *"what has ever touched this tree."* Whether that is signal or noise is
+precisely the unit question this entry holds open, and it is now quantified rather than
+argued.
+
+**Live corroboration, unplanned.** While editing `scripts/mnemos/checkpoint.py` to record
+this decision, the pre-edit hook fired and returned 2 intents carrying **7 invariants, every
+one a `file_exists` static, plus 3 postconditions from fulfilled intents** — and zero
+standing non-static invariants. The channel worked perfectly and delivered nothing the
+session needed. That is the 2-of-18 figure reproduced by accident, on the file under edit.
+
+**The decision this produced (item 1): keep the checkpoint cut as SIZE-ONLY; do not union.**
+Three reasons beyond the 668, all of which are method rather than measurement:
+1. The `executing`-intents-only refinement floated to control the noise is an **invented
+   threshold** — no evidence selects it, and with 0 intents executing it cannot be measured
+   today. Four predicates have been retired here for exactly that shape.
+2. The pairing check meant to justify the union (*"every omitted invariant must be returned
+   by the fallback"*) reads `reason.scope` on **both sides**. It is green by construction —
+   ADR-0017's *"the mechanism and the thing it was being tested against are the same
+   mechanism"*, one layer over.
+3. ADR-0013 §4 already rates the file→governing-record pattern **"Skip (already have it)"**
+   — `tessera-decision-surface.sh` is that mechanism, on a hook, matching by path. It carries
+   ADRs and observatory entries, *not* iCPG contracts, so a union would be a gap-fill rather
+   than a duplicate. But the pattern is not novel here, and its venue is already chosen.
+
+**Second finding, same run — scope data is unvalidated because nothing reads it.** Three
+intents carry comma-joined scope entries that were never split — intents `97b501e0`,
+`4fdf5b25` and `7d2408a7` hold single scope strings of the shape *"bin/ comma scripts/"*
+(written out rather than quoted literally, because doccheck's `referenced-paths-exist` reads
+a backticked token as a path claim and correctly fails prose that names one — it caught this
+paragraph on first write, the same way it caught ADR-0017 twice in an hour).
+`icpg create --scope` takes `nargs="+"` (space-separated), so a comma-joined string is
+accepted whole and resolves to a path that cannot exist. Harmless **today** precisely because
+`reason.scope` has no reader — and that is the point: **the day scope becomes load-bearing,
+these become silent gaps.** Standing pattern #1, caught before shipping the mechanism rather
+than after. Any adoption of a scope-based predicate must land with a validator.
+
+**What would close this entry:** a decision on the unit — file-level or symbol-level linkage
+— taken on its own evidence, in its own ADR, not folded into a payload-size item. The
+evidence is now here; the decision is not made.
 
 ### Effort changes invalidate the prompt cache — and the tier advisory's real use is session boundaries *(2026-07-27)*
 
