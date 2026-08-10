@@ -710,6 +710,40 @@ accepted whole and resolves to a path that cannot exist. Harmless **today** prec
 these become silent gaps.** Standing pattern #1, caught before shipping the mechanism rather
 than after. Any adoption of a scope-based predicate must land with a validator.
 
+**THE 2026-07-27 FIGURES ABOVE ARE STALE, AND RE-MEASURING THEM MOVED THE CAUSE.** Checked the
+same day this block was written, because restating an inherited number as current is the
+drift class this repo keeps paying for:
+
+| | 2026-07-27 | 2026-08-10 |
+|---|---|---|
+| zero-symbol shell files | 46 of 78 (59%) | **77 of 83 (93%)** |
+| shell symbols in the graph | 76 of 1968 | **6 of 1115** |
+
+**The stated cause is now the SMALLER term.** This entry attributes the gap to authorship
+style — *"straight-line scripts, not function libraries"* — which is real for 43 of the 83
+files. But measured today, **85 shell symbols are EXTRACTABLE across 40 files, and the graph
+holds 6 across 6.** So the dominant term is not what shell looks like, it is that extractable
+symbols never got **recorded**. `icpg record` attributes symbols only when exactly one intent
+is executing (`.claude/skills/icpg/SKILL.md`), and this repo runs long stretches with zero
+open — *inference from the documented mechanism, not a measured attribution.*
+
+**A regression hypothesis was tested and REFUTED before being written down.** The obvious read
+of a 92% drop is that ADR-0017's shell extractor — the step-1 work that made the `usage`
+retirement fair — had died. It has not: `install.sh` yields 14 symbols, `scripts/detect-agents.sh`
+4, `templates/codex-auto-review.sh` 6. The extractor is healthy. Recording is the thin part.
+*(Standing pattern #1 would have predicted the extractor; the measurement said otherwise. Test
+the hypothesis, do not ship the pattern-match — `rule-over-read`.)*
+
+**Unexplained and left open honestly:** total symbols fell 1968 → 1115 between the two
+measurements. Probably a re-bootstrap over a different window; not investigated, not guessed at
+here.
+
+**Why this sharpens rather than weakens the unit question.** If the shell gap were purely
+authorship, file-level linkage would be the only possible fix. Because it is dominantly
+*recording*, there are now two candidate remedies with different costs — change the unit, or
+fix the recording path so extractable symbols actually land — and the entry cannot be closed by
+assuming the first.
+
 **What would close this entry:** a decision on the unit — file-level or symbol-level linkage
 — taken on its own evidence, in its own ADR, not folded into a payload-size item. The
 evidence is now here; the decision is not made.

@@ -198,11 +198,13 @@ def _select_constraints(nodes: list, historical: set[str] = frozenset(),
     repo?". Deciding it inside a checkpoint-budget item would be the fourth re-scope that
     entry's stopping rule exists to prevent.
 
-    That entry also carries the structural half this docstring got wrong: the reason
-    `get_reasons_for_file` misses is NOT only that symbol recording needs exactly one
-    executing intent. **46 of 78 shell files have ZERO symbols** — straight-line hooks, not
-    function libraries — so for those files the symbol channel can never return anything,
-    however well the recorder runs.
+    That entry also carries the structural half: **77 of 83 shell files have ZERO symbols in
+    the graph** (measured 2026-08-10; the entry's older 46-of-78 figure is stale), so for
+    those files the symbol channel returns nothing. Do NOT read that as purely a corpus
+    property — 85 shell symbols are *extractable* across 40 files while the graph holds 6,
+    so the dominant cause is recording, not authorship. The extractor was tested and is
+    healthy. Which means there are two candidate remedies, not one, and this docstring is
+    not the place that picks between them.
 
     (One correction to the note above, kept because the blast-radius claim was load-bearing
     in declining the union: `get_reasons_for_file` has two *Python* callers, but THREE
