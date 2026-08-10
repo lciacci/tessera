@@ -14,6 +14,7 @@ Prerequisites: REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET in env.
 from __future__ import annotations
 
 import os
+import shlex
 import sys
 import urllib.parse
 import webbrowser
@@ -107,7 +108,12 @@ try:
 
     refresh_token = data.get("refresh_token", "")
     if not refresh_token:
-        print(f"\n  ERROR: No refresh token in response: {data}")
+        # KEYS ONLY. Reddit returns `access_token` in this same body, so dumping `data`
+        # printed a live bearer token to a terminal — into scrollback, and into any log
+        # capturing this setup run. The keys are what diagnoses the failure; the values
+        # are the thing you must not print. (arbiter 2026-08-10.)
+        print(f"\n  ERROR: No refresh token in response. Keys returned: "
+              f"{sorted(data)}")
         sys.exit(1)
 
     print(f"  ✓ Got refresh token: {refresh_token[:20]}...")
@@ -118,7 +124,13 @@ try:
 
     # Remove old entry if exists
     lines = [l for l in content.split("\n") if "REDDIT_REFRESH_TOKEN" not in l]
-    lines.append(f'export REDDIT_REFRESH_TOKEN="{refresh_token}"')
+    # SHELL-QUOTE IT. `refresh_token` is a field of an external HTTP response, and this
+    # line writes it into ~/.zshrc — a file every new shell SOURCES. Interpolated into a
+    # double-quoted string it was one `"` away from arbitrary command execution at next
+    # login. TLS and Reddit's good behaviour were the only things standing in the way,
+    # which is not a control. `shlex.quote` is; it emits single quotes and escapes any
+    # embedded ones. (arbiter 2026-08-10 — the sharpest finding of the batch.)
+    lines.append(f"export REDDIT_REFRESH_TOKEN={shlex.quote(refresh_token)}")
 
     with open(zshrc, "w") as f:
         f.write("\n".join(lines))

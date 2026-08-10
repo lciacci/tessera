@@ -98,9 +98,14 @@ def main():
 
 
 def call_gemini_search(prompt: str, model: str) -> str:
+    # Key goes in a HEADER, not the query string. A URL is logged by every intermediary
+    # it touches — the local shell history, any proxy, Google's own access logs — and a
+    # secret in one is a secret in all of them. `call_gemini` forty lines below already
+    # sends `Authorization: Bearer`, so the correct pattern was present in this file the
+    # whole time and this path simply did not use it. (arbiter 2026-08-10.)
     url = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{model}:generateContent?key={API_KEY}"
+        f"{model}:generateContent"
     )
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
@@ -110,7 +115,10 @@ def call_gemini_search(prompt: str, model: str) -> str:
         url,
         data=json.dumps(payload).encode(),
         method="POST",
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "x-goog-api-key": API_KEY,
+        },
     )
     try:
         with urllib.request.urlopen(req, timeout=300) as resp:
