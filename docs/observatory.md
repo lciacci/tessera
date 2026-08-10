@@ -3301,6 +3301,72 @@ point it is one shared helper, applied to all 7, not a patch at the call site th
 
 ---
 
+### The clean-clone path has no exercise — three defects found by tripping over it in one day *(2026-08-09)*
+
+- **Status:** Watching. A runner is the right instrument and is **deliberately not built yet**; the
+  design constraint that blocks a naive version is measured below so the next session does not
+  rediscover it.
+
+**Three instances, same day, none found by a check.** Every one surfaced because something else
+tripped over it:
+
+| instance | kind | what was asserted | found by |
+|---|---|---|---|
+| `referenced-paths-exist` red on a clean clone | a **check** | docs name paths under `.claude/skills`, a gitignored symlink | the pre-commit gate blocking a fresh clone |
+| P5 crashed on absent `.claude/skills` | a **predicate** | `iterdir()` on the same gitignored symlink | a whole-file arbiter review |
+| two P9 tests red before `./install.sh` | **tests** | `.icpg/reason.db`, gitignored runtime state | `bin/tessera-verify` reporting its own baseline |
+
+**NAME THE PAIN, NOT THE ARTIFACT (#3). It is not "we have no clean-clone test."** It is that
+**this repo's own green-makers assert MACHINE state they do not own.** That reading is what made each
+fix obvious and made the third one large: the remedy was never "relocate the assertion", it was
+*give the artifact an owner, or stop asserting it*. `.claude`'s dogfood symlinks got an owner in
+`install.sh` that morning; `.icpg/reason.db` got one that evening — and **that ownership gap was
+invisible until an assertion was moved toward `verify()` and would have failed there.** A check
+looking only for red tests would have found none of the three causes.
+
+**What would actually measure the property:** clone → `./install.sh` → `tessera-test` →
+`tessera-watch` → `doccheck`, all green. That is the property ("does this repo work from clean"),
+not a proxy for it.
+
+**THE CONSTRAINT THAT MAKES THE NAIVE VERSION USELESS, measured 2026-08-09 rather than predicted.**
+`install.sh` writes to `$HOME` — `CLAUDE="$HOME/.claude"`, console links into `$HOME/.local/bin`,
+and `.bootstrap-dir` → `$REPO`, which would hand ownership of the global tier to a temp directory
+and take P14 with it. Redirecting `HOME` isolates all of that **and it works** (verified: a full
+sandboxed install produced `✓ iCPG database present` and a 73,728-byte db). But the **ambient PATH
+still resolves the OUTER repo's `mnemos`**, so `verify()` emits two ✗ that are artifacts of the
+sandbox, not defects of the clone:
+
+```
+✗ mnemos resolves /Users/…/tessera/.venv/bin/python, NOT the venv
+✗ mnemos does NOT resolve in a pristine non-interactive shell
+```
+
+A runner that inherits those is **red forever**, and P9's own docstring already names that failure:
+*a detector that cannot go green teaches you to ignore the watcher.* So the runner must neutralise
+`PATH` as well as `HOME`, or scope its assertions to what is genuinely clean-clone-relevant. That is
+the actual work, and it is why this is an entry rather than a commit.
+
+**Two shapes ruled out, with reasons:**
+- **Not a `tessera-watch` predicate.** Predicates *read* state in milliseconds at SessionStart; this
+  one has to *build* something over minutes, with network.
+- **Not folded into `tessera-test`.** Clone + `uv venv` + four editable installs + network turns the
+  main suite slow and flaky, and `bin/tessera-chaos`'s own header records where that ends: *"a
+  permanently-red main suite is one people learn to ignore."* The precedent that fits is
+  `tessera-chaos` itself — expensive, opt-in, deliberate, and kept from rotting by a doccheck
+  reachability assertion rather than by being run constantly.
+
+**Rejected, and this one is a near-miss worth recording:** a cheap doccheck source-scan for *"no test
+or check asserts a path matching `.gitignore`"*. It is a **proxy** (#3) — the paths are built
+dynamically, so it would key on source shape, which #10's corollary warns against — and it could not
+have found the real defect in any of the three instances, because in two of them the assertion was
+*correct* and the missing owner was the bug.
+
+**Revisit when:** a fourth instance appears, **or** before the next `bin/` whole-file review round —
+~4,500 lines across 19 files are still unreviewed, and on today's base rate that is where instance
+four lives.
+
+---
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.

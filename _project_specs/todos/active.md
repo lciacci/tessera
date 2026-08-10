@@ -230,10 +230,26 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
    > **Run the falsifier for its caveats, not only its verdicts: CONFIRMED is where it stops
    > being interesting.**
    >
-   > **Left open deliberately, with the reason:** two P9 tests assert `.icpg/reason.db` exists,
-   > so `tessera-test` is red on a fresh clone before `./install.sh`. Environmental, and the
-   > verifier hit it as its baseline. Same clean-clone blind spot as P5 — worth one look, not
-   > worth guessing at now.
+   > ~~**Left open deliberately:** two P9 tests assert `.icpg/reason.db` exists, so `tessera-test`
+   > is red on a fresh clone. Environmental.~~ **CLOSED SAME SESSION, and "environmental" was
+   > wrong** (`9afad3b`). Moving that assertion to `install.sh`'s `verify()` — where machine
+   > claims belong — would have made **`install.sh` itself fail**, because nothing created the
+   > file: **`.icpg/reason.db` had NO OWNER.** The only `icpg init` in the repo scaffolds
+   > *downstream* projects. Three live hooks depend on that db (`mnemos-pre-edit` shells out to
+   > `icpg`, the Stop recorder, the intent prompt), and without it they fail open into "this file
+   > has no intents" — F-001's confound. `install.sh` now owns it idempotently, `verify()` asserts
+   > it (**proven load-bearing**: re-planted the init step out, ran the real installer
+   > HOME-sandboxed, watched `✗ Verify FAILED`), and the tests keep only the half a test can
+   > answer. The other test's fixture was borrowing `import mnemos` from whichever interpreter ran
+   > pytest — loud, never a false green, but it could not tell a regression from a bare venv.
+   > **Fresh clone, no `.icpg`, bare venv: 93 green, was 2 red.** *(This block said "left open" for
+   > about an hour. Fifth stale entry in this file in two days — the count is the finding.)*
+   >
+   > **The PATTERN is now recorded** — observatory → *"The clean-clone path has no exercise"*.
+   > Three defects in one day (this, P5, `referenced-paths-exist`), none found by a check. The
+   > pain is not "no clean-clone test": it is that **this repo's green-makers assert machine state
+   > they do not own**. A runner is the right instrument, is not built, and the constraint that
+   > blocks the naive version is measured in the entry.
    >
    > **NEXT: the other 19 extensionless `bin/` files, ~4,500 lines.** No single one of them is
    > the reporter for nine predicates, so the ordering argument that put `tessera-verify` and

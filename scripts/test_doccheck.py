@@ -1200,6 +1200,55 @@ def test_run_tests_sh_also_satisfies_chaos_reachability(fake_repo):
     assert doccheck.check_chaos_suite_is_reachable() == []
 
 
+# ── chaos-probe-count-is-current: the banner had already drifted silently once ─────────
+#
+# bin/tessera-chaos said "ALL 8 PROBES ARE GREEN" in two places while chaos/test_chaos.py
+# held 11 — probes 9-11 landed on 2026-07-27, CLAUDE.md was updated, the runner's own banner
+# was not. The first thing a reader sees understated the suite by three, in the file whose
+# subject is whether the framework still notices when you break it.
+
+
+def _chaos_repo(fake_repo, *, probes: int, banner: str):
+    (fake_repo / "chaos").mkdir(parents=True, exist_ok=True)
+    (fake_repo / "bin").mkdir(parents=True, exist_ok=True)
+    (fake_repo / "chaos" / "test_chaos.py").write_text(
+        "".join(f"def test_p{i}(): pass\n" for i in range(probes)))
+    (fake_repo / "bin" / "tessera-chaos").write_text(banner)
+
+
+def test_chaos_count_fires_when_the_banner_understates_the_suite(fake_repo):
+    """THE regression, at the exact numbers it shipped with."""
+    _chaos_repo(fake_repo, probes=11, banner="# ALL 8 PROBES ARE GREEN as of 2026-07-26\n")
+    out = doccheck.check_chaos_probe_count_is_current()
+    assert out and "claims 8" in out[0] and "defines 11" in out[0], out
+
+
+def test_chaos_count_is_quiet_when_the_banner_is_right(fake_repo):
+    _chaos_repo(fake_repo, probes=11, banner='# ALL 11 PROBES ARE GREEN\necho "All 11 green"\n')
+    assert doccheck.check_chaos_probe_count_is_current() == []
+
+
+def test_chaos_count_catches_a_second_stale_mention(fake_repo):
+    """Two places quoted the number and only one was updated — which is how it drifted."""
+    _chaos_repo(fake_repo, probes=11,
+                banner='# ALL 11 PROBES ARE GREEN\necho "All 8 green as of 2026-07-26"\n')
+    out = doccheck.check_chaos_probe_count_is_current()
+    assert out and "claims 8" in out[0], out
+
+
+def test_chaos_count_fires_when_the_banner_stops_stating_one(fake_repo):
+    """A banner that says nothing cannot go stale, but it also cannot be verified — so
+    silently dropping the number is reported rather than accepted."""
+    _chaos_repo(fake_repo, probes=11, banner="# the chaos probes are green\n")
+    out = doccheck.check_chaos_probe_count_is_current()
+    assert out and "no longer states a probe count" in out[0], out
+
+
+def test_chaos_count_is_silent_without_a_suite_or_runner(fake_repo):
+    """Downstream scaffolds have neither — must not fire there."""
+    assert doccheck.check_chaos_probe_count_is_current() == []
+
+
 # ── adr-execution-recorded: decided-but-never-built must not read as shipped ───────────
 #
 # An accepted ADR looked identical whether it shipped or never shipped. That gap bit twice

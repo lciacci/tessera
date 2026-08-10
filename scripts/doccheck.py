@@ -2038,6 +2038,58 @@ def check_chaos_suite_is_reachable() -> list[str]:
     return bad
 
 
+def check_chaos_probe_count_is_current() -> list[str]:
+    """`bin/tessera-chaos` quotes how many probes are green. That number must be real.
+
+    IT HAD ALREADY DRIFTED SILENTLY ONCE. The header said "ALL 8 PROBES ARE GREEN as of
+    2026-07-26" in two places while `chaos/test_chaos.py` held **11** — probes 9-11 were
+    added by the A5b audit on 07-27 and CLAUDE.md was updated; the runner's own banner was
+    not. So the first thing anyone sees when running the suite understated its coverage by
+    three probes, in the file whose entire subject is *"does the framework still notice when
+    I break it?"*.
+
+    WHY A NUMBER IS ALLOWED HERE AT ALL. CLAUDE.md refuses to quote a test count for
+    `tessera-test`, because a hardcoded number drifts on every test added. The difference is
+    ownership: this is not a number restated in a second place, it is a CONSISTENCY
+    ASSERTION between two live sources — the banner and the probe file. Same shape as
+    `tessera-watch`'s `_max_spend_fires`, which reads MAX_FIRES out of the backstop rather
+    than copying it, and for the same reason: whoever adds probe 12 gets told.
+
+    Deliberately does NOT check the date beside it. "As of <date>" is a claim about when a
+    human last ran them, which no file can verify — asserting it would be a mechanical check
+    with a non-mechanical subject (#3's corollary, and the reason two of three candidate
+    handoff checks were rejected on 2026-07-27).
+    """
+    runner = ROOT / "bin" / "tessera-chaos"
+    probe_file = ROOT / "chaos" / "test_chaos.py"
+    if not runner.is_file() or not probe_file.is_file():
+        return []                      # nothing to keep honest
+
+    try:
+        banner = runner.read_text()
+        probes = probe_file.read_text()
+    except OSError:
+        return []
+
+    actual = len(re.findall(r"^def test_", probes, re.M))
+    if not actual:
+        return []
+
+    # Match "8 PROBES", "All 8 green", "8 probes" — the shapes the banner has used. Comments
+    # are NOT stripped: in this file the banner IS a comment, and it is what the reader sees.
+    claimed = {int(n) for n in re.findall(r"\b(\d+)\s+(?:PROBES|probes|green)\b", banner)}
+    wrong = sorted(n for n in claimed if n != actual)
+    if wrong:
+        return [f"bin/tessera-chaos claims {', '.join(str(n) for n in wrong)} probe(s) but "
+                f"chaos/test_chaos.py defines {actual} — the banner is the first thing a "
+                f"reader sees and it has already drifted silently once (8 vs 11)"]
+    if not claimed:
+        return [f"bin/tessera-chaos no longer states a probe count; chaos/test_chaos.py "
+                f"defines {actual}. Restore it or drop this check — a banner that says "
+                f"nothing cannot go stale, but it also cannot be verified"]
+    return []
+
+
 def check_unrunnable_hooks_report_themselves() -> list[str]:
     """A local-only wired hook that cannot be exec'd must say so, not exit 0 in silence.
 
@@ -2381,6 +2433,7 @@ CHECKS = {
     "handoff-retires-its-own-figures": check_handoff_retires_its_own_figures,
     "drift-dimensions-have-producers": check_drift_dimensions_have_producers,
     "chaos-suite-is-reachable": check_chaos_suite_is_reachable,
+    "chaos-probe-count-is-current": check_chaos_probe_count_is_current,
     "session-logs-are-repo-anchored": check_session_logs_are_repo_anchored,
     "standing-patterns-are-surfaced": check_standing_patterns_are_surfaced,
     "standing-patterns-fit-the-cap": check_standing_patterns_fit_the_cap,
