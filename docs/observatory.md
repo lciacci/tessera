@@ -436,8 +436,20 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   bytes match some commit in tessera's history, which demonstrates it was never customized
   downstream. That check turned "a per-file decision across three sessions" into one mechanical
   update — all three stale repos held byte-identical copies of the same two old commits.
-  Fleet is current. Only howler's spend guard is outstanding, deliberately (deny-by-default
-  hook, mid-iOS-ship; belongs in a howler session).
+  ~~Fleet is current. Only howler's spend guard is outstanding, deliberately (deny-by-default
+  hook, mid-iOS-ship; belongs in a howler session).~~
+  **CLOSED 2026-08-10 — howler does not NEED the spend guard, and the fleet is fully current.**
+  Lorenzo, asked directly. howler is an Android/iOS app: no GPU, no cloud provisioning, no
+  spend-committing commands, so a deny-by-default gate on PreToolUse(Bash) has nothing to
+  guard. **The recorded reason was never "it does not need one" — it was TIMING**
+  ("mid-iOS-ship; belongs in a howler session"), which is a reason that expires and then
+  leaves the item sitting on lists forever. **This entry names that exact failure two
+  bullets down about freeze** — *"you enter it for a reason, the reason expires, and nothing
+  re-asks"* — and then did it to itself with the very next line. It took a human re-reading
+  a todo to close it, which is the same thing that closed the freeze review.
+  **The reusable half: "outstanding, deliberately" is not a disposition.** It records that
+  someone deferred, not what they decided, and it cannot expire on its own. A deferral needs
+  the reason AND the condition that ends it, or it becomes permanent by default.
 - **Status:** Adopted → ADR-0004; **re-opened** on the authoring-propagation gap
 - **When to revisit:** per ADR-0004's re-evaluate triggers — first real `thaw` of a grandfathered repo (build the settings auto-patch then), a `global` project found silently dead on a machine, or project count crossing ~4–5 with several still `frozen`. **Added trigger (now):** teach `bin/tessera-hooks status` to diff `.claude/scripts/` ↔ `templates/` ↔ `~/.claude/templates/` by content and report drift, or make `templates/` a symlink/generated artifact rather than a hand-maintained third copy. Until one of those lands, every hook edit needs a manual three-way sync — which is precisely the failure mode that produced this entry.
 
