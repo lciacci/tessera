@@ -3111,6 +3111,32 @@ and the cheapest way to falsify it.
   its own decision. **Not made here.**
 - **Revisit when:** the bridge is next touched, or a downstream project's checkpoint is measured —
   every measurement so far is from this repo, whose iCPG graph is unusually path-heavy.
+- **UPDATE 2026-08-10 — the second cut landed, and it refilled inside one session.** Postconditions
+  for `fulfilled` intents are now excluded too (`2eccb2a`): 39 of them, 5,238b, **39.6%** of a
+  12,909b payload, every one belonging to a closed intent, all listed under *"DO NOT VIOLATE"*.
+  12,909b → **7,780b**. Then bridging **this session's own intent** put it back to **8,556b**.
+  **The entry's open question is now answered in one direction and sharpened in the other.** The
+  static-predicate half is a *population* problem the render filter can hold. The remaining half is
+  a *growth* problem it cannot: non-static invariants are ~139b each, at least one per intent, and
+  they are exactly the constraints that should NOT be filtered — 23 distinct bodies out of 24, no
+  redundancy to reclaim, all genuinely standing ("no predicate crashes on a fresh clone"). So a cap
+  here is lossy by construction and picks winners by recency, on the payload's most valuable field.
+  **The two halves want different remedies, and only the first one has shipped.**
+- **A smaller finding inside the measurement: `STATIC_PREDICATE` names one family and the class has
+  two.** `test_exists("path")` constraints (2 today) leak through a filter written for
+  `file_exists("path")` — standing pattern #11, in the filter itself. **Deliberately NOT widened
+  yet, and the reason is the interesting part:** the note's justification is *"asserted by something
+  stronger"*, and for `test_exists` that is **not true today** — deleting
+  `scripts/icpg/test_intent_lifecycle.py` fails neither doccheck nor the suite (`scripts/icpg` would
+  simply run fewer tests). Widening the filter first would ship a true-sounding claim that is false,
+  which is the exact defect caught one layer up in the same session (`icpg show <id>`, a command
+  that never existed, cited in the omission note). **Ordering: add the doccheck assertion that makes
+  the claim true, THEN widen the filter.**
+- **And P3's structural limit is now partly addressed.** `write_checkpoint` measures itself at write
+  time and warns on stderr (`cf25330`) — the "honest instrument" `bin/tessera-watch:56-59` already
+  named. P3 still can only report a spill that already happened; the writer can report one as it is
+  created. Budget now defined twice (bin/ is stdlib-only and cannot import mnemos), guarded by
+  doccheck `checkpoint-budget-matches-p3`.
 
 ### Findings have a channel to the framework but none to a PEER *(conclave F-002, transferred 2026-08-07)*
 
