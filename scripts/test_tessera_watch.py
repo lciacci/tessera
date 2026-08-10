@@ -655,10 +655,16 @@ def _past_the_mnemos_checks(tmp_path, monkeypatch, root, *, icpg):
     real_run = tw.subprocess.run
 
     def stub(cmd, *a, **k):
+        # EACH ARM MATCHES WHAT ITS REAL CALL RETURNS. The `import mnemos` probe passes
+        # capture_output=True and NOT text=True, so the real return is BYTES; the
+        # base_prefix probe passes text=True, so it is STR. arbiter flagged the stub as
+        # inconsistent (correct) and prescribed str for both (backwards — measured at
+        # bin/tessera-watch:481 vs :487). Neither .stderr is read today; a stub that
+        # disagrees with reality is a trap for the first refactor that does.
         if len(cmd) >= 3 and cmd[1] == "-c" and cmd[2] == "import mnemos":
-            return SimpleNamespace(returncode=0, stdout="", stderr=b"")
+            return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
         if len(cmd) >= 3 and cmd[1] == "-c" and "base_prefix" in cmd[2]:
-            return SimpleNamespace(returncode=0, stdout="/uv/managed/base", stderr=b"")
+            return SimpleNamespace(returncode=0, stdout="/uv/managed/base", stderr="")
         return real_run(cmd, *a, **k)      # the icpg probe stays REAL
 
     monkeypatch.setattr(tw.subprocess, "run", stub)
@@ -1081,12 +1087,19 @@ def test_p8_lets_a_broken_doccheck_crash_instead_of_reporting_docs_honest(tmp_pa
         "CHECKS = {}\n"
         "def run():\n"
         "    raise RuntimeError('the doc checker itself is broken')\n")
+    # PUT THE REAL MODULE BACK. Popping and walking away left `doccheck` absent from
+    # sys.modules, and scripts/test_doccheck.py calls importlib.reload(doccheck) — which
+    # raises "module doccheck not in sys.modules". Five failures, visible ONLY when the watch
+    # tests run first; `pytest scripts/` collects alphabetically, so the suite was green by
+    # luck of the alphabet.
     import sys
-    sys.modules.pop("doccheck", None)
+    saved = sys.modules.pop("doccheck", None)
     try:
         results = tw.evaluate(root)
     finally:
-        sys.modules.pop("doccheck", None)
+        sys.modules.pop("doccheck", None)          # drop the FAKE this test planted
+        if saved is not None:
+            sys.modules["doccheck"] = saved        # restore the REAL one
         while str(root / "scripts") in sys.path:
             sys.path.remove(str(root / "scripts"))
     p8 = [r for r in results if r["predicate"].startswith("P8")][0]
@@ -1404,3 +1417,29 @@ def test_p14_owner_check_compares_the_directory_not_its_spelling(tmp_path, monke
     (home / ".claude" / ".bootstrap-dir").write_text(str(tmp_path / "reaped-worktree"))
     _, gone = tw.p14_global_tier_drift(root)
     assert "not asserting on it" in gone, gone
+
+
+def test_p8_leaves_docchecks_root_where_it_found_it(tmp_path):
+    """P8 mutated a module global it does not own and never put it back.
+
+    `doccheck.ROOT = root` pointed the REAL doccheck module at a temp directory and left it
+    there — measured going from the repo to `/var/folders/.../tmp…` and staying. In
+    production it is invisible (one predicate, one process, ROOT already the repo). In a
+    shared process it poisons everything downstream, and it surfaced as EIGHT failures in
+    scripts/test_doccheck.py that appear only when the watch tests run first. `pytest
+    scripts/` collects alphabetically — doccheck before tessera-watch — so the suite was
+    green over a live defect, by luck of the alphabet. A green that owes its colour to
+    collection order is the shape this repo keeps paying for.
+    """
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    try:
+        import doccheck
+    finally:
+        sys.path.pop(0)
+    before = doccheck.ROOT
+    root = _root(tmp_path)
+    (root / "scripts").mkdir()
+    tw.p8_doc_drift(root)
+    assert doccheck.ROOT == before, (
+        f"P8 left doccheck.ROOT at {doccheck.ROOT}, not {before}")

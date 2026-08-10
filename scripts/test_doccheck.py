@@ -1244,6 +1244,17 @@ def test_chaos_count_fires_when_the_banner_stops_stating_one(fake_repo):
     assert out and "no longer states a probe count" in out[0], out
 
 
+def test_chaos_count_ignores_a_green_tally_in_prose(fake_repo):
+    """The first regex accepted any "<n> green", so a per-run tally would manufacture a
+    second claim and fire the check on it. A FALSE alarm here is worse than a missed one:
+    doccheck blocks the commit (arbiter, 2026-08-09)."""
+    _chaos_repo(fake_repo, probes=11,
+                banner='# ALL 11 PROBES ARE GREEN\n'
+                       'echo "All 11 green"\n'
+                       'echo "ran 11 probes, 10 green, 1 red"\n')
+    assert doccheck.check_chaos_probe_count_is_current() == []
+
+
 def test_chaos_count_is_silent_without_a_suite_or_runner(fake_repo):
     """Downstream scaffolds have neither — must not fire there."""
     assert doccheck.check_chaos_probe_count_is_current() == []

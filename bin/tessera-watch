@@ -183,9 +183,15 @@ def p3_restore_integrity(root: Path) -> tuple[bool, str]:
             f"no .mnemos/checkpoint-latest.json — the restore path has NOTHING to deliver on "
             f"the next session start, and EVERY layer reads this one file. {tally}")
 
+    # TWO try BLOCKS, ONE CONCERN EACH — arbiter (2026-08-09) called the single-try version
+    # correct but fragile, and it was right on both counts. `size` was bound inside the same
+    # try as the parse and then referenced from the `except ValueError` arm; that works only
+    # because `stat()` precedes `read_text()` in the same block, which is invisible to the
+    # next reader. Reorder those two lines and the error path raises UnboundLocalError —
+    # inside a handler, i.e. in the one place nothing else would catch it.
     try:
         size = ck.stat().st_size
-        data = json.loads(ck.read_text())
+        raw = ck.read_text()
     except OSError as exc:
         # NOT the globbed-log case, and so NOT quiet: a checkpoint that exists and cannot be
         # read is precisely an UNDELIVERABLE payload, which is what T1 asks about. Reporting
@@ -194,6 +200,8 @@ def p3_restore_integrity(root: Path) -> tuple[bool, str]:
         return True, (
             f"checkpoint-latest.json exists but cannot be read ({type(exc).__name__}) — the "
             f"restore path has nothing deliverable on the next session start. {tally}")
+    try:
+        data = json.loads(raw)
     except ValueError:
         return True, (
             f"checkpoint-latest.json is not valid JSON ({size:,}b) — `mnemos resume` cannot "
@@ -388,14 +396,45 @@ def p8_doc_drift(root: Path) -> tuple[bool, str]:
     ANYTHING ELSE (a SyntaxError in doccheck, an exception inside run()) propagates, and
     evaluate() marks P8 `crashed` → ⚠ section, excluded from the fire-log, exit 2. Loud,
     and distinguishable from a clean green, which is the whole point.
+
+    ── AND IT PUTS BACK WHAT IT BORROWS (2026-08-09) ─────────────────────────────────────
+
+    This mutated two globals it does not own — `sys.path` and `doccheck.ROOT` — and restored
+    neither. In production that is invisible: one predicate, one process, and ROOT already
+    equals the repo. In any process that calls P8 twice with different roots it is not: the
+    REAL doccheck module was left pointing at a deleted temp directory, and the next thing to
+    import it inherited that. Measured — `doccheck.ROOT` went from the repo to
+    `/var/folders/.../tmp1f0ys0wa` and stayed there.
+
+    It surfaced as eight failures in `scripts/test_doccheck.py` that appear ONLY when the
+    watch tests run first, and `pytest scripts/` collects alphabetically — doccheck before
+    tessera-watch — so the suite was green over a live defect and stayed green by luck of
+    the alphabet. That is the shape this repo keeps paying for: not a red test, a green one
+    that owed its colour to something unrelated.
     """
-    sys.path.insert(0, str(root / "scripts"))
+    # THE PATH INSERT STAYS, and removing it was tried and REVERTED the same hour. `doccheck`
+    # lazily imports siblings from `scripts/` DURING run() — prefix_meter, decision_surface,
+    # report_settings — inside try/except. Pull the path out from under it and a check whose
+    # import fails reports NO VIOLATIONS, which on a clean repo is byte-identical to passing.
+    # Measured, and the measurement is the point: with and without the path, all 44 checks
+    # returned the same results — because the repo is green, so "ran and found nothing" and
+    # "could not run and said nothing" are indistinguishable from here. Tidying one sys.path
+    # entry in a one-shot process is not worth buying that ambiguity. Idempotent instead.
+    scripts = str(root / "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
     try:
         import doccheck
     except ImportError:
         return False, "no scripts/doccheck.py importable here — nothing to check"
+
+    previous_root = getattr(doccheck, "ROOT", None)
     doccheck.ROOT = root
-    violations = [v for vs in doccheck.run().values() for v in vs]
+    try:
+        violations = [v for vs in doccheck.run().values() for v in vs]
+    finally:
+        if previous_root is not None:
+            doccheck.ROOT = previous_root
     if not violations:
         return False, f"docs honest ({len(doccheck.CHECKS)} checks, 0 false claims)"
     head = violations[0] if len(violations) == 1 else f"{violations[0]} (+{len(violations)-1} more)"

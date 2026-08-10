@@ -2075,9 +2075,13 @@ def check_chaos_probe_count_is_current() -> list[str]:
     if not actual:
         return []
 
-    # Match "8 PROBES", "All 8 green", "8 probes" — the shapes the banner has used. Comments
-    # are NOT stripped: in this file the banner IS a comment, and it is what the reader sees.
-    claimed = {int(n) for n in re.findall(r"\b(\d+)\s+(?:PROBES|probes|green)\b", banner)}
+    # Match ONLY the two shapes the banner actually uses. The first version accepted any
+    # "<n> green", which `echo "ran 11 probes, 10 green, 1 red"` satisfies twice — yielding a
+    # false claim of 10 and firing this check wrongly (arbiter, 2026-08-09). A false alarm here
+    # is worse than a missed one: doccheck blocks the commit. Comments are NOT stripped — in
+    # this file the banner IS a comment, and the comment is what the reader sees.
+    claimed = {int(n) for pair in re.findall(r"\b(\d+)\s+PROBES\b|\bAll\s+(\d+)\s+green\b",
+                                             banner) for n in pair if n}
     wrong = sorted(n for n in claimed if n != actual)
     if wrong:
         return [f"bin/tessera-chaos claims {', '.join(str(n) for n in wrong)} probe(s) but "

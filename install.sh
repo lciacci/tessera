@@ -156,8 +156,12 @@ install_venv() {
   # 1,435 edges. Non-fatal here on purpose: verify() is the gate, so a failure is REPORTED
   # rather than aborting an install whose other 95% succeeded.
   if [ -x "$root/.venv/bin/icpg" ]; then
-    ( cd "$root" && "$root/.venv/bin/icpg" init >/dev/null 2>&1 ) \
-      || warn "icpg init failed — verify() will report the missing .icpg/reason.db"
+    # stdout muted, STDERR NOT. `2>&1` here swallowed the reason as well as the noise, so a
+    # failure arrived as three words with no detail (arbiter, 2026-08-09). Its sibling claim —
+    # that a failing `cd "$root"` would be misattributed to icpg — is REJECTED: $root is the
+    # directory this script is executing from and has been for 300 lines.
+    ( cd "$root" && "$root/.venv/bin/icpg" init >/dev/null ) \
+      || warn "icpg init failed (see stderr) — verify() will report the missing .icpg/reason.db"
   fi
 
   # A DISPOSABLE CHECKOUT MUST NOT REPOINT THE MACHINE'S GLOBAL LINKS. `bin/tessera-verify`
@@ -340,14 +344,14 @@ verify() {
     fail=1
   fi
 
-  # 3. Routing deps — warn only; tier-classify-hook fails open to Sonnet.
+  # 3b. Routing deps — warn only; tier-classify-hook fails open to Sonnet.
   if curl -s --connect-timeout 2 "$OLLAMA_BASE/api/tags" 2>/dev/null | grep -q "qwen2.5-coder"; then
     ok "routing: ollama up, qwen model present"
   else
     warn "ollama/qwen2.5-coder absent — routing fails open to Sonnet (ollama pull qwen2.5-coder:3b)"
   fi
 
-  # 3b. The pre-commit gate is actually WIRED. The hook being present in .githooks/ proves
+  # 3c. The pre-commit gate is actually WIRED. The hook being present in .githooks/ proves
   # nothing — core.hooksPath is per-clone config, and without it git runs .git/hooks/ instead
   # and the gate is inert. A gate that looks installed and enforces nothing is worse than no
   # gate. (This is the same shape as the 2026-07-11 trio: config.yml existed but was
