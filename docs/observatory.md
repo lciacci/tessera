@@ -3819,7 +3819,7 @@ the property, in order: doccheck → `tessera-watch` → `./install.sh` → `tes
 | doccheck, **pre-install** | ✓ 46/46 — the 2026-08-09 `referenced-paths-exist` fix holds |
 | `tessera-watch`, pre-install | ✓ exit 0, fires **P9** with an actionable message. No P5 crash — that fix holds too |
 | `./install.sh` | ran; `verify()` reported 3 ✗ — **one of them real** |
-| `tessera-test`, post-install | ✓ **526 passed**, every suite green |
+| `tessera-test`, post-install | ✓ every suite green — **526 in the top-level suite**, 795 across all eight |
 
 **So the answer to "does this repo work from clean" is YES**, and the three 2026-08-09 fixes are
 confirmed from the outside rather than by the session that wrote them.
