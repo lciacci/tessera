@@ -36,19 +36,28 @@ SUBJECT_RE = re.compile(
 
 
 def last_tag() -> str | None:
+    """None means "no tag yet", which is a normal first-release state. Any OTHER git
+    failure — not a repo, corrupt index — must not wear the same face: it would silently
+    become a full-history changelog rather than an error. (arbiter 2026-08-10.)"""
     r = subprocess.run(
         ["git", "describe", "--tags", "--abbrev=0"], capture_output=True, text=True
     )
+    if r.returncode and "No names found" not in r.stderr and "No tags" not in r.stderr:
+        raise SystemExit(f"tessera-changelog: git describe failed: {r.stderr.strip()}")
     return r.stdout.strip() or None
 
 
 def commit_subjects(since: str) -> list[str]:
     rng = f"{since}..HEAD" if since else "HEAD"
-    out = subprocess.run(
+    r = subprocess.run(
         ["git", "log", "--no-merges", "--format=%s", rng],
-        capture_output=True, text=True, check=True,
-    ).stdout
-    return [line for line in out.splitlines() if line.strip()]
+        capture_output=True, text=True,
+    )
+    # `check=True` turned a typo'd --since into a raw CalledProcessError traceback. A bad
+    # ref is user error, not a crash. (arbiter 2026-08-10.)
+    if r.returncode:
+        raise SystemExit(f"tessera-changelog: cannot read {rng!r}: {r.stderr.strip()}")
+    return [line for line in r.stdout.splitlines() if line.strip()]
 
 
 def classify(subject: str) -> tuple[str, str, bool]:
@@ -56,7 +65,11 @@ def classify(subject: str) -> tuple[str, str, bool]:
     m = SUBJECT_RE.match(subject)
     if not m:
         return "Other", subject, False
-    section = TYPE_SECTION.get(m["type"], "Changed")
+    # Unknown types (`chore`, `ci`, `build`, `style`, …) land in "Other", not "Changed".
+    # Bucketing them as Changed asserted a classification nobody made, and buried real
+    # changes among housekeeping. "Other" is the honest bucket for "not classified".
+    # (arbiter 2026-08-10.)
+    section = TYPE_SECTION.get(m["type"], "Other")
     bullet = f"**{m['scope']}:** {m['desc']}" if m["scope"] else m["desc"]
     return section, bullet, bool(m["bang"])
 
@@ -66,9 +79,13 @@ def group(subjects: list[str]) -> tuple[dict[str, list[str]], list[str]]:
     breaking = []
     for subj in subjects:
         section, bullet, is_breaking = classify(subj)
-        sections[section].append(bullet)
+        # A breaking commit goes in the BREAKING list only. It used to be appended to
+        # both, so every `feat!:` rendered twice in one changelog — and a duplicated
+        # bullet reads as two changes. (arbiter 2026-08-10.)
         if is_breaking:
             breaking.append(bullet)
+        else:
+            sections[section].append(bullet)
     return sections, breaking
 
 
@@ -100,7 +117,9 @@ def main() -> int:
 
     sections, breaking = group(subjects)
     header = f"## [{args.version}]" + (f" - {args.date}" if args.date else "")
-    print(render(sections, breaking, header))
+    # `render` already ends in "\n"; `print` added a second. Harmless on a terminal, not
+    # harmless when the output is pasted into CHANGELOG.md. (arbiter 2026-08-10.)
+    sys.stdout.write(render(sections, breaking, header))
     return 0
 
 

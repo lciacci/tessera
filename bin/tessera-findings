@@ -26,7 +26,16 @@ import re
 import sys
 from pathlib import Path
 
-FINDING_RE = re.compile(r"^##\s+(F-\d+)\s*[—-]\s*(.+?)\s*$")
+# Any dash a human might type between the id and the title: hyphen-minus, en-dash,
+# em-dash. Was `[—-]` — em-dash and hyphen only — so `## F-001 – Title` (EN-dash, the
+# one macOS substitutes as you type) parsed as nothing and the finding vanished from the
+# backlog with no signal. The pair below is the durable half: a `## F-` line that fails
+# to parse is now LOUD, so the next separator nobody anticipated announces itself instead
+# of going missing. (arbiter 2026-08-10.)
+FINDING_RE = re.compile(r"^##\s+(F-\d+)\s*[-–—]\s*(.+?)\s*$")
+# Deliberately loose: anything that *claims* to be a finding heading. The gap between
+# this and FINDING_RE is exactly the set of malformed findings.
+FINDING_HEADING_RE = re.compile(r"^##\s+F-", re.M)
 STATUS_RE = re.compile(r"^\*\*Status:\*\*\s*(.+?)\s*$")
 
 
@@ -65,18 +74,35 @@ def is_open(status: str) -> bool:
     return status.split(":", 1)[0].strip().lower() == "open"
 
 
+def is_nonconforming(text: str, findings: list) -> bool:
+    """Did something CLAIM to be a finding and fail to parse?
+
+    A free function so the predicate is testable on its own — inline in `collect` it was
+    only reachable by walking real projects on disk, which is how it stayed wrong in both
+    directions for as long as it did."""
+    return len(FINDING_HEADING_RE.findall(text)) > len(findings)
+
+
 def collect(root: Path, framework: Path) -> list[dict]:
     """One row per project: its findings, or a note that the channel is missing/empty."""
     rows = []
     for proj in discover_projects(root, framework):
         md = proj / "docs" / "FINDINGS.md"
         findings = parse_findings(md) if md.exists() else []
-        sections = md.read_text().count("\n## ") if md.exists() else 0
+        # NAME THE PAIN, NOT THE ARTIFACT. This counted `## ` headings of ANY kind and
+        # called the file nonconforming when none parsed — so a FINDINGS.md with an
+        # `## Overview` and no findings yet was flagged, while a file whose finding
+        # headings used an unrecognised dash was NOT (its other sections parsed, so the
+        # count was non-zero and the miss stayed silent). Both directions wrong.
+        #
+        # The property is "something claims to be a finding and did not parse". That
+        # ignores unrelated sections and catches every future separator variant loudly —
+        # which is the half that outlives today's en-dash fix above.
         rows.append({
             "project": proj.name,
             "has_channel": md.exists(),
             "findings": findings,
-            "nonconforming": bool(md.exists() and not findings and sections),
+            "nonconforming": md.exists() and is_nonconforming(md.read_text(), findings),
         })
     return rows
 
