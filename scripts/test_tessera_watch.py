@@ -1485,3 +1485,62 @@ def test_p8_leaves_a_root_less_doccheck_root_less(tmp_path, monkeypatch):
             sys.modules["doccheck"] = saved
         else:
             sys.modules.pop("doccheck", None)
+
+
+def test_p8_fires_and_NAMES_a_crashed_check_rather_than_calling_it_a_doc_claim(tmp_path):
+    """Per-check isolation (2026-08-10) stopped run() raising for a check-body exception,
+    which would have silently downgraded every crash to an ordinary fire — P8 flattens
+    run().values() and cannot tell the two apart. That is the 2026-08-09
+    render()-never-read-the-crashed-field defect one layer up, so it is pinned here.
+
+    A crashed CHECK fires (P8 ran fine and determined a check is broken); only a broken
+    DOCCHECK marks P8 `crashed`, which the test above still covers.
+    """
+    root = _root(tmp_path)
+    (root / "scripts").mkdir()
+    (root / "scripts" / "doccheck.py").write_text(
+        "CHECKS = {'a': None, 'b': None}\n"
+        "def run_detailed():\n"
+        "    return {'a': (['check crashed: ValueError: x'], ValueError('x')),\n"
+        "            'b': ([], None)}\n"
+        "def run():\n"
+        "    return {k: v[0] for k, v in run_detailed().items()}\n")
+    import sys
+    saved = sys.modules.pop("doccheck", None)
+    try:
+        fired, detail = tw.p8_doc_drift(root)
+    finally:
+        sys.modules.pop("doccheck", None)
+        if saved is not None:
+            sys.modules["doccheck"] = saved
+        while str(root / "scripts") in sys.path:
+            sys.path.remove(str(root / "scripts"))
+    assert fired is True, detail
+    assert "CRASHED" in detail and "not a doc claim" in detail, detail
+    assert "a" in detail, detail
+
+
+def test_p8_still_works_against_a_doccheck_that_predates_isolation(tmp_path):
+    """bin/tessera-watch runs against DOWNSTREAM copies of doccheck.py, which have run()
+    only. Assuming run_detailed() would turn 'your doccheck is older' into an
+    AttributeError reading as a crashed predicate — ship both halves or neither (#5), and
+    the other half is on six other machines."""
+    root = _root(tmp_path)
+    (root / "scripts").mkdir()
+    (root / "scripts" / "doccheck.py").write_text(
+        "CHECKS = {'a': None}\n"
+        "def run():\n"
+        "    return {'a': ['an old-style false claim']}\n")
+    import sys
+    saved = sys.modules.pop("doccheck", None)
+    try:
+        fired, detail = tw.p8_doc_drift(root)
+    finally:
+        sys.modules.pop("doccheck", None)
+        if saved is not None:
+            sys.modules["doccheck"] = saved
+        while str(root / "scripts") in sys.path:
+            sys.path.remove(str(root / "scripts"))
+    assert fired is True, detail
+    assert "false doc claim(s)" in detail, detail
+    assert "CRASHED" not in detail, detail

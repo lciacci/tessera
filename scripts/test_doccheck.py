@@ -2271,3 +2271,66 @@ def test_BINARY_content_does_not_take_the_whole_run_down(fake_repo):
     bad = doccheck.check_checkpoint_budget_matches_p3()
     assert any("unreadable" in v and "UnicodeDecodeError" in v for v in bad), bad
     assert len(doccheck.run()) == len(doccheck.CHECKS)
+
+
+# --- per-check isolation in run() (2026-08-10) ------------------------------------
+
+
+def _raising_check():
+    raise ValueError("deliberate")
+
+
+def test_one_raising_check_does_not_suppress_the_others(monkeypatch):
+    """THE PROPERTY. Before isolation, one raising check took run() down and 0 of 45
+    reported — the class this session hit three times by fixing the row each time."""
+    checks = dict(doccheck.CHECKS)
+    checks["deliberately-raising"] = _raising_check
+    monkeypatch.setattr(doccheck, "CHECKS", checks)
+
+    results = doccheck.run()
+    assert len(results) == len(checks)
+    assert results["deliberately-raising"], "the crash must not vanish into an empty list"
+
+
+def test_a_crash_is_not_reported_as_a_false_doc_claim(monkeypatch):
+    """A crash and a false claim are different facts. Collapsing them makes 'docs make N
+    claims that are no longer true' itself an untrue claim about what happened."""
+    checks = dict(doccheck.CHECKS)
+    checks["deliberately-raising"] = _raising_check
+    monkeypatch.setattr(doccheck, "CHECKS", checks)
+
+    detailed = doccheck.run_detailed()
+    findings, exc = detailed["deliberately-raising"]
+    assert exc is not None and isinstance(exc, ValueError), detailed["deliberately-raising"]
+    for name, (found, e) in detailed.items():
+        if name != "deliberately-raising":
+            assert e is None, f"{name} crashed unexpectedly: {e!r}"
+
+
+def test_render_separates_crashes_from_false_claims(monkeypatch):
+    checks = dict(doccheck.CHECKS)
+    checks["deliberately-raising"] = _raising_check
+    monkeypatch.setattr(doccheck, "CHECKS", checks)
+
+    out = doccheck.render(doccheck.run_detailed())
+    assert "CRASHED" in out and "deliberately-raising" in out, out
+    assert "ValueError" in out, out
+    # The repo is green, so there must be no false-claim section at all.
+    assert "claim(s) that are no longer true" not in out, out
+
+
+def test_a_crashed_check_makes_the_run_nonzero(monkeypatch):
+    """Decision 2026-08-10: a crashed check BLOCKS. It is a real defect, it is named, and
+    the other checks still report — so the 'must not wedge every commit' rule, written
+    when a crash killed the whole run, no longer applies to this case."""
+    checks = dict(doccheck.CHECKS)
+    checks["deliberately-raising"] = _raising_check
+    monkeypatch.setattr(doccheck, "CHECKS", checks)
+    monkeypatch.setattr(sys, "argv", ["doccheck"])
+    assert doccheck.main() == 1
+
+
+def test_isolation_does_not_swallow_a_clean_green(monkeypatch):
+    """Non-vacuity: with no raising check the output is byte-identical to before."""
+    monkeypatch.setattr(sys, "argv", ["doccheck"])
+    assert doccheck.main() == 0

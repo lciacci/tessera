@@ -48,19 +48,37 @@ fi
 # Distinguish "docs are lying" (block) from "the checker itself broke" (warn, allow).
 # A crashing checker must not wedge every commit in the repo — but it must never fail
 # QUIETLY either, because a silent checker looks exactly like a passing one.
-if ! echo "$OUTPUT" | grep -q "claim(s) that are no longer true"; then
+# TWO RECOGNISED VERDICTS, and the second was added 2026-08-10 with per-check isolation.
+# A crashed CHECK now blocks: it is a real defect, it is named, and the other 44 checks
+# still report. The fail-open below is for the CATASTROPHIC case only — doccheck itself
+# unparseable, an exception in render(), a traceback with no recognisable verdict — which
+# is what "must not wedge every commit" was written for. Without this second pattern the
+# isolation would have silently INVERTED the decision: crashes print their own section, so
+# the old grep would miss them and every crash would sail through.
+if ! echo "$OUTPUT" | grep -qE "claim\(s\) that are no longer true|check\(s\) CRASHED"; then
     echo "warning: doccheck could not run (allowing commit)" >&2
     echo "$OUTPUT" >&2
     exit 0
 fi
 
+# The headline must match the CAUSE. Saying "the docs make claims that are not true" over a
+# crashed check is the same mislabel that shipped in the checkpoint's omission notice this
+# same day: a report can be true in aggregate and wrong about what happened (#12).
+if echo "$OUTPUT" | grep -q "check(s) CRASHED"; then
+    HEADLINE="COMMIT BLOCKED — a doccheck check CRASHED, so its claim went unverified:"
+    REMEDY="Fix the check. It raised rather than reporting; the other checks still ran."
+else
+    HEADLINE="COMMIT BLOCKED — the docs in this commit make claims that are not true:"
+    REMEDY="Fix the doc, or the code it describes. If the claim is about something
+deliberately unbuilt, park it in doccheck's PLANNED_PATHS with a reason."
+fi
+
 echo "" >&2
-echo "COMMIT BLOCKED — the docs in this commit make claims that are not true:" >&2
+echo "$HEADLINE" >&2
 echo "" >&2
 echo "$OUTPUT" >&2
 echo "" >&2
-echo "Fix the doc, or the code it describes. If the claim is about something" >&2
-echo "deliberately unbuilt, park it in doccheck's PLANNED_PATHS with a reason." >&2
+echo "$REMEDY" >&2
 echo "Override with: git commit --no-verify" >&2
 echo "" >&2
 exit 1

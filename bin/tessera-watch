@@ -439,13 +439,39 @@ def p8_doc_drift(root: Path) -> tuple[bool, str]:
     missing = object()
     previous_root = getattr(doccheck, "ROOT", missing)
     doccheck.ROOT = root
+
+    # `run_detailed` is READ THROUGH getattr, not assumed. This file also runs against
+    # DOWNSTREAM copies of doccheck.py, which are older and have `run()` only — assuming
+    # the new API here would turn "your doccheck predates isolation" into an AttributeError
+    # that reads as a crashed predicate. Ship both halves or neither (#5), and the other
+    # half is on six other machines.
+    detailed_fn = getattr(doccheck, "run_detailed", None)
     try:
-        violations = [v for vs in doccheck.run().values() for v in vs]
+        if detailed_fn is not None:
+            detailed = detailed_fn()
+            crashed = sorted(n for n, (_f, e) in detailed.items() if e is not None)
+            violations = [v for n, (vs, e) in detailed.items() if e is None for v in vs]
+        else:
+            crashed = []
+            violations = [v for vs in doccheck.run().values() for v in vs]
     finally:
         if previous_root is missing:
             delattr(doccheck, "ROOT")          # it had none; leave it with none
         else:
             doccheck.ROOT = previous_root
+
+    # A CRASHED CHECK FIRES, IT DOES NOT MARK P8 `crashed`. The distinction is which thing
+    # broke: `crashed` means THIS PREDICATE could not run (doccheck missing, run() itself
+    # exploding — still reached, see the ImportError arm and the test above). A check body
+    # raising is something P8 successfully DETERMINED, and it is strictly more informative
+    # than the old behaviour, which lost all 44 other results and could not name the
+    # culprit. Before isolation this arm was unreachable: any check raising took run() down
+    # and P8 reported `crashed` with no idea which one.
+    if crashed:
+        named = ", ".join(crashed[:3]) + (f" (+{len(crashed) - 3} more)" if len(crashed) > 3 else "")
+        extra = f", plus {len(violations)} false doc claim(s)" if violations else ""
+        return True, (f"{len(crashed)} doccheck CHECK(S) CRASHED — not a doc claim, a broken "
+                      f"check: {named}{extra} → `python3 scripts/doccheck.py`")
     if not violations:
         return False, f"docs honest ({len(doccheck.CHECKS)} checks, 0 false claims)"
     head = violations[0] if len(violations) == 1 else f"{violations[0]} (+{len(violations)-1} more)"

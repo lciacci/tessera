@@ -25,6 +25,14 @@ it is how we learn the assertion set has rotted into theater.
     python3 scripts/doccheck.py           # human output; exit 1 if any claim is false
     python3 scripts/doccheck.py --json    # machine output
 """
+# MUST STAY 3.9-COMPATIBLE: `safety-scripts-run-on-system-python` asserts this file runs
+# on /usr/bin/python3 (3.9.6 here), because a hook invokes it via bare `python3` and a
+# /usr/bin-first PATH resolves there — a crash would make the spend guard exit non-2, which
+# Claude Code reads as ALLOW. PEP 585 (`dict[str, ...]`) is fine on 3.9; PEP 604 (`X | None`)
+# is NOT. This defers every annotation to a string so the next union does not re-learn it —
+# and that check caught exactly this, in this file, on 2026-08-10.
+from __future__ import annotations
+
 import argparse
 import ast
 import json
@@ -2538,16 +2546,69 @@ CHECKS = {
 }
 
 
+def run_detailed() -> dict[str, tuple[list[str], BaseException | None]]:
+    """Every check, ISOLATED. Returns {name: (findings, exception_or_None)}.
+
+    WHY THE ISOLATION IS HERE AND NOT AT EACH CALL SITE. `run()` used to be a one-line
+    dict comprehension, so any check that raised took the process down and 0 of 45
+    reported. On 2026-08-10 one new check hit that three times in a row — an unguarded
+    `read_text()`, then an `exists()`-only guard (a directory and `chmod 000` both exist
+    and raise), then an `OSError`-only guard (`UnicodeDecodeError` subclasses ValueError)
+    — each fix committed under a comment claiming the CLASS was handled. A check's author
+    can always miss one more exception type. `bin/tessera-watch.evaluate()` was given the
+    same treatment on 2026-08-09; doccheck, the gate that actually blocks commits, was
+    not. (#11: fix the pattern, not the row.)
+
+    WHY A SECOND CHANNEL RATHER THAN A MARKER STRING. A crash and a false doc claim are
+    different facts, and consumers must not re-derive which is which by substring — that
+    is the naming-convention keying #10's corollary warns about. P8 in particular built
+    its LOUD path on `run()` raising; if isolation just stopped it raising, P8 would
+    silently downgrade every crash to an ordinary fire, which is the 2026-08-09
+    `render()`-never-read-the-crashed-field defect one layer up.
+
+    WHAT THIS DOES NOT COVER, stated because blanket safety would be a false claim: check
+    BODIES only. A SyntaxError in this module, an exception in `render()`, or an import
+    failure still take the run down — and the pre-commit hook deliberately keeps failing
+    open for exactly that catastrophic case.
+    """
+    results: dict[str, tuple[list[str], BaseException | None]] = {}
+    for name, check in CHECKS.items():
+        try:
+            results[name] = (list(check()), None)
+        except Exception as exc:                      # noqa: BLE001 — that is the point
+            results[name] = ([f"check crashed: {type(exc).__name__}: {exc}"], exc)
+    return results
+
+
 def run() -> dict[str, list[str]]:
-    return {name: check() for name, check in CHECKS.items()}
+    """Findings only, crashes flattened in as findings. Kept for consumers that only ask
+    'is anything wrong' — `run_detailed()` is what distinguishes wrong from broken."""
+    return {name: found for name, (found, _) in run_detailed().items()}
 
 
-def render(results: dict[str, list[str]]) -> str:
-    violations = [(n, v) for n, vs in results.items() for v in vs]
-    if not violations:
+def render(results: dict) -> str:
+    """Accepts either shape: {name: findings} or {name: (findings, exc)}."""
+    detailed = {
+        name: value if isinstance(value, tuple) else (value, None)
+        for name, value in results.items()
+    }
+    crashed = [(n, f[0]) for n, (f, e) in detailed.items() if e is not None]
+    violations = [(n, v) for n, (vs, e) in detailed.items() if e is None for v in vs]
+
+    if not violations and not crashed:
         return f"✓ docs honest — {len(CHECKS)} checks, 0 false claims"
-    lines = [f"Docs make {len(violations)} claim(s) that are no longer true:"]
-    lines += [f"  🔴 [{name}] {v}" for name, v in violations]
+
+    lines = []
+    if crashed:
+        # Its OWN section. Folding crashes into the false-claim count would make the
+        # headline itself an untrue claim about what happened.
+        lines.append(f"{len(crashed)} check(s) CRASHED and could not report:")
+        lines += [f"  💥 [{name}] {msg}" for name, msg in crashed]
+        if violations:
+            lines.append("")
+    if violations:
+        lines.append(f"Docs make {len(violations)} claim(s) that are no longer true:")
+        lines += [f"  🔴 [{name}] {v}" for name, v in violations]
     return "\n".join(lines)
 
 
@@ -2555,9 +2616,16 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Assert docs' checkable claims are still true.")
     ap.add_argument("--json", action="store_true", help="machine output")
     args = ap.parse_args()
-    results = run()
-    print(json.dumps(results, indent=2) if args.json else render(results))
-    return 1 if any(results.values()) else 0
+    detailed = run_detailed()
+    if args.json:
+        print(json.dumps({n: f for n, (f, _) in detailed.items()}, indent=2))
+    else:
+        print(render(detailed))
+    # A crashed check BLOCKS (decision 2026-08-10). The pre-commit rule it reverses —
+    # "a crashing checker must not wedge every commit" — was written when a crash killed
+    # the WHOLE run; an isolated, named crash beside 44 working checks is a defect to fix,
+    # and `--no-verify` is still the documented escape.
+    return 1 if any(found for found, _ in detailed.values()) else 0
 
 
 if __name__ == "__main__":

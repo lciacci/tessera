@@ -3140,7 +3140,9 @@ and the cheapest way to falsify it.
 
 ### `doccheck.run()` has no per-check isolation — one raising check takes all 45 down *(2026-08-10)*
 
-- **Status:** Open. Found by `bin/tessera-verify` refuting a claim I had just written, twice in a row.
+- **Status:** RESOLVED same day. Found by `bin/tessera-verify` refuting a claim I had just written,
+  twice in a row; fixed once the gate-policy fork was decided. Kept rather than deleted because the
+  three-row-fixes trail is the reusable part.
 - **The observation.** `bin/tessera-watch`'s `evaluate()` was given per-predicate isolation on
   2026-08-09 precisely because one crashing predicate silenced the rest. **`scripts/doccheck.py` never
   got the same treatment**, and it is the stronger gate of the two — it runs in `.githooks/pre-commit`
@@ -3153,12 +3155,34 @@ and the cheapest way to falsify it.
   fixed** (#11, aimed at the person quoting #11). The rows are closed and regression-tested; the
   pattern is that a check's author can always find one more exception type, which is the argument for
   isolating at `run()` instead of at each call site.
-- **Why it is not fixed here.** It changes the behaviour of the gate every commit passes through, and
-  it needs a decision: an isolated check that raises should presumably report as a *failed claim*
-  (loud, blocking) rather than be skipped (quiet) — otherwise isolation converts a crash into a
-  silence, which is strictly worse and is this repo's signature failure. **Wants its own session.**
-- **Revisit when:** doccheck is next touched, or any check is added — an added check is a new chance
-  to take the gate down.
+- **What shipped.** `run_detailed()` isolates each check and returns `{name: (findings, exc|None)}`;
+  `run()` stays as a flattening wrapper; `render()` prints crashes in their own section; a crashed
+  check exits 1. **DECIDED: a crashed check BLOCKS the commit** — that reverses the pre-commit's
+  written "a crashing checker must not wedge every commit", which was authored when a crash killed
+  the *whole* run. An isolated, named crash beside 44 working checks is a defect to fix, and
+  `--no-verify` is still the documented escape. **Catastrophic failure still fails open** (doccheck
+  unparseable, `render()` raising, a traceback with no recognisable verdict) — that is the case the
+  original rule was really for.
+- **THE TWO THINGS THAT WOULD HAVE MADE THIS A SILENT REGRESSION, both caught before shipping.**
+  (1) **P8's loud channel was BUILT ON `run()` raising.** It flattens `run().values()` and cannot
+  tell a crash from a false claim, so naive isolation would have downgraded every crash to an
+  ordinary fire — the 2026-08-09 `render()`-never-read-the-`crashed`-field defect, one layer up. P8
+  now reads the new channel and names the crashed checks. (2) **The pre-commit grep keyed on
+  `"claim(s) that are no longer true"`**, and crashes print their own section — so isolation would
+  have *inverted* the decision, letting every crash sail through the gate it was meant to close.
+  **Both are consequences of adding a channel: the existing readers keyed on the old one.**
+- **A third, found by the repo's own check mid-fix:** the first implementation annotated
+  `BaseException | None`, and `safety-scripts-run-on-system-python` failed — PEP 604 is 3.10+ and
+  this file must run on `/usr/bin/python3` (3.9.6), because a hook invokes it via bare `python3` and
+  a crash there makes the spend guard exit non-2, which Claude Code reads as ALLOW. Fixed with
+  `from __future__ import annotations` so the next union does not re-learn it. *A check in this repo
+  caught a defect in the code being written to improve that same checker.*
+- **Still open, pre-existing, NOT caused by this work:** on `/usr/bin/python3` doccheck reports one
+  false claim — `decision-surface-is-wired`, because `scripts/decision_surface.py:61` uses an
+  f-string with a backslash (3.12+). Verified identical before the change via `git stash`. So the
+  interpreter the safety check exists to protect is one on which doccheck is red.
+- **Revisit when:** any check is added — an added check is a new chance to take the gate down, and
+  the isolation makes that a named finding rather than a blackout.
 
 ### Findings have a channel to the framework but none to a PEER *(conclave F-002, transferred 2026-08-07)*
 
