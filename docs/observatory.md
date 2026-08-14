@@ -1218,11 +1218,16 @@ evidence is now here; the decision is not made.
 >   gates it.** Both conclave and arbiter are Tessera downstreams (contract D4).
 > - **Conclave's measurements moved from gate input to DESIGN input.** With nothing gated, the
 >   union-recall work is no longer "should Tessera fan review out?" but "should arbiter ever add a
->   fleet?" — and the measured answer is no: MODEL diversity bought **+0.000 recall for +20 false
->   positives**, while ROLE diversity bought **+0.109**. Bounded by a weak second arm; see guard (b).
-> - **The escalation trigger is task SHAPE, not model tier.** Conclave's local 30B scores **0.073
->   recall, 0/8 criticals** on structured adversarial review against claude's 0.509 — while *matching*
->   a hosted 80B on edit-and-apply. Review is the shape that breaks the local tier.
+>   fleet?" — and the measured answer is no: MODEL diversity bought **+1 matched finding for +31
+>   false positives** (re-measured 2026-08-14 on a near-peer arm; the original "+0.000 / +20" used a
+>   ~7× weaker model), while ROLE diversity bought **+0.109**. No longer bounded by a weak second
+>   arm — that is what makes the null worth something. See guard (b).
+> - **The escalation trigger is task SHAPE, not model tier** — magnitude corrected 2026-08-14.
+>   ~~Conclave's local 30B scores **0.073 recall, 0/8 criticals**~~ — that was one model at a starved
+>   token budget. Corrected: **`muse-glimmer:30b` scores 0.309 recall / 5-of-8 criticals** against
+>   claude's 0.509 / 6-of-8, at *half* the false positives, while *matching* a hosted 80B on
+>   edit-and-apply. **Review is NOT the shape that breaks the local tier** — it is a shape the local
+>   tier runs at ~60% recall for $0. The direction survives; "breaks" does not.
 >
 > ### What in the body below SURVIVES, and is the reason it is kept
 >
@@ -3563,8 +3568,22 @@ arbiter pair (both carry `.tessera/project.yml`, so both are downstreams):
   reviews — *"the finder is better at locating than at concluding: take the location, re-derive the
   consequence"* and *"`--ext ""` or the review is silently narrower than it claims"* — were absent
   from conclave until 2026-08-07, and they are needed **before** the next run, not after.
-  Symmetrically, conclave's measurement that its local tier scores **0.073 recall** on review, which
-  bounds arbiter's cost work and the D3 seam, was absent from arbiter for ten days.
+  Symmetrically, conclave's measurement that its local tier scored **0.073 recall** on review (a
+  figure since retracted — see below), which bounds arbiter's cost work and the D3 seam, was absent
+  from arbiter for ten days.
+
+  > **⚠️ 2026-08-14 — the second revisit trigger FIRED, and in a worse form than this entry
+  > anticipated.** That 0.073 figure was **retracted** by conclave (one model, starved token budget;
+  > corrected to 0.309 on a current model). The fact did not go *missing* this time — it went
+  > **stale in place**, simultaneously, in six locations across both peers. A number propagates
+  > better than a usage rule because everyone quotes it, and unlike a file-anchored finding there is
+  > no local artifact whose existence contradicts it: **nothing goes red when an upstream figure is
+  > retracted.** Corrections were pushed by hand from conclave (conclave `docs/FINDINGS.md` F-003),
+  > which is the third manual write and the second organic trigger hit. Cheapest useful mechanism
+  > proposed, requiring no schema change: `tessera-findings --grep <phrase>` sweeping every
+  > `.tessera/` project, so "who else quotes this number?" is one command rather than an ad-hoc
+  > `grep -rn` across sibling repos. Counter-argument on the record: `grep` already is that tool,
+  > and the real failure was nobody running it.
 
 > **A finding that names a file finds its own way home. A usage rule, a negative result, or a bound
 > on someone else's design does not.** Those are exactly the facts a coordination map is too slow to

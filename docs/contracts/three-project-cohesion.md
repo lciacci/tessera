@@ -127,11 +127,26 @@ the review win is about *roles* on one model.
 > decorrelated catches.** The scorer reproduces pr-arbiter's committed numbers to 4dp on their matcher
 > and their expected findings.
 >
-> **BOUND — do not over-read this.** The second arm was a ~7× **weaker** model (qwen 30B alone scored
+> ~~**BOUND — do not over-read this.** The second arm was a ~7× **weaker** model (qwen 30B alone scored
 > 0.073 recall, 0/8 criticals). A weak model's findings are a near-subset, so it *cannot* add
-> union-recall; the result is close to true by construction. This is **directionally supportive, not
-> settling**. The open measurable is **peer-strength**: does a second *frontier* model decorrelate?
-> Unmeasured. Guard (b) stands as written until an ADR moves it.
+> union-recall; the result is close to true by construction.~~
+>
+> **🔴 BOUND RETRACTED 2026-08-14 (conclave). GUARD (b) IS UNCHANGED — it stands as written, on
+> better evidence than before.** Recorded here as a factual correction to a retracted measurement,
+> **not** as a lane change: no ADR is proposed and no guard verdict moves.
+>
+> Two corrections. (1) `0.073` ran at a starved `max_tokens=4096`; at a matched 16384 the same model
+> scores **0.127**. (2) The probe was re-run with a **near-peer** second model — `muse-glimmer:30b`
+> (Meta, Apache 2.0, Aug 2026) — scoring **0.309 recall / 5-of-8 criticals** alone, ~1.65× behind
+> claude rather than ~7×. **So the "near-subset, cannot add recall by construction" argument no
+> longer applies** — and the union still did not pay: matched **28 → 29**, false positives
+> **30 → 61**. One match in 55, inside the measured draw spread.
+>
+> Net effect on this contract: the model-axis null is **no longer true-by-construction**. It is a
+> near-peer arm that genuinely failed to decorrelate, which supports guard (b) more strongly than
+> the retracted version did. **Peer-strength *frontier-vs-frontier* remains the open measurable and
+> still costs money.** Source: `../conclave/docs/S2-scoping.md` § 2026-08-14,
+> `../conclave/orchestrator/s2_model_axis_result.json`.
 >
 > Note the countervailing anecdote, so the guard is not read as stronger than it is: `arbiter` and a
 > workflow-backed `/code-review` looked independently at the same security boundary and produced six
@@ -204,13 +219,22 @@ a dead open-decision left open is as costly as an unanswered one.
   Layering holds — `arbiter` is the pattern, Tessera decides when review runs.
 
   > **Bound on that "no code change" (conclave, 2026-08-07): mechanically true, and it does not
-  > follow that conclave's LOCAL tier can serve this workload.** Measured — the local 30B scores
-  > **0.073 recall, 0/8 criticals** on structured adversarial review against claude's 0.509 on the
-  > identical task, while *matching* the hosted 80B on edit-and-apply (T1–T3). **Task SHAPE, not
-  > model tier, is the escalation trigger, and review is the shape that breaks the local tier.**
-  > So "a stable conclave fleet" is not sufficient for D3 unless the tier it stands up is one that
-  > can actually review; on current evidence that is `lab`/`frontier`, not `local-mid`.
-  > (`../conclave/docs/LOCAL-CODER-FAILURES.md`.)
+  > follow that conclave's LOCAL tier can serve this workload.** ~~Measured — the local 30B scores
+  > **0.073 recall, 0/8 criticals** on structured adversarial review against claude's 0.509.~~
+  >
+  > **🔴 FIGURE RETRACTED 2026-08-14 (conclave); D3's answer MOVES.** `0.073` was one model
+  > (`qwen3-coder:30b`) at a starved 4096-token budget, quoted as a property of the tier. Corrected,
+  > same corpus and prompt: **`muse-glimmer:30b` scores 0.309 recall / 5-of-8 criticals with 15
+  > false positives**, against claude's 0.509 / 6-of-8 / **30**. `qwen` at matched budget: 0.127.
+  >
+  > **Task SHAPE, not model tier, still holds as the escalation trigger — but review is no longer
+  > "the shape that breaks the local tier."** It is a shape the local tier runs at ~60% of frontier
+  > recall, at *half* the false positives, for $0. So the D3 conclusion below is **re-opened, not
+  > settled**: whether `local-mid` suffices now depends on the recall floor Tessera's policy wants,
+  > which is a policy question and therefore Tessera's to answer — conclave only supplies the tier
+  > and the measurement. ⚠️ Counterweight: the same model faked a dropped subtask in 1 of 3 reps on
+  > conclave's *edit-and-apply* harness, so it is stronger at finding than at doing.
+  > (`../conclave/docs/LOCAL-CODER-FAILURES.md`, `../conclave/docs/S2-scoping.md` § 2026-08-14.)
 - **D4 — RESOLVED 2026-07-28.** Moot for pr-arbiter, which is frozen and will never adopt. Its
   successor `arbiter` adopted `.tessera/` at scaffold, so it is a downstream now and S5 applies to
   it. The `tessera-watch` P4 trip this decision warned about (downstream count → 5) is therefore
