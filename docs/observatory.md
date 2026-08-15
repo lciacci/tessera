@@ -3891,6 +3891,64 @@ four lives.
 
 ---
 
+### A checkpoint's Goal field carries six sessions of history under a singular heading *(2026-08-15)*
+
+- **Status:** Investigating. **The PRESENTATION half shipped the day this was written; the
+  SELECTION half is parked deliberately, and Lorenzo's position on it is recorded below so
+  the next session does not have to re-derive it.**
+- **Source:** found while fixing a mid-word truncation in `scripts/mnemos/claude_log.py`.
+
+**What was observed.** `write_checkpoint` rendered every selected GoalNode with
+`'; '.join(...)` under a heading reading **Goal**, singular. The live checkpoint held seven
+goals from seven different past sessions as one semicolon run-on, tailed by
+`[+94 older goal(s) omitted]`. None was that session's task, and the first was the string
+*"what's next"*, which carries no information at all.
+
+**Two independent defects had to line up, and that is the interesting part.** The ingest
+layer cut turn previews with a bare `cleaned[:200]`, so a truncated goal ended mid-word; the
+renderer then joined goals with `'; '`, so the cut ran straight into the next goal:
+
+```
+...drop POST for fulfilled intents from the checkpoin; Read the top section of...
+```
+
+That reads as one malformed sentence, not as two goals with the first one cut. **Removing
+either defect is enough to make the damage visible**, and both are now fixed —
+word-boundary truncation with an explicit ellipsis, and one goal per line. Note which one
+is the *root* cause: neither. Truncation alone gives a ragged edge you would notice; joining
+alone gives a long but honest list. Only the pair produces text that looks correct and is
+not.
+
+**What is NOT decided, and why it is parked.** Whether historical goals belong in a
+checkpoint at all is the SELECTION question, and selection is the payload budget adjudicated
+2026-08-10 — the work that took the checkpoint from 12,909b to 6,334b by filtering on scope
+rather than capping by count, on the stated grounds that a recency cap *"picks victims by
+recency"*. Reopening it on the back of a rendering fix would be exactly the kind of quiet
+scope creep that decision was careful to avoid.
+
+**Lorenzo's position, recorded 2026-08-15 so it is not re-derived:** historical goals seem
+**useless unless explicitly revisited or invoked during the session**. That is a sharper
+criterion than either "keep N" or "drop all" — it makes inclusion conditional on *use within
+the session*, which is a signal Mnemos does not currently record. Anyone taking this up
+should notice that the criterion is not implementable against today's data and that
+**building the signal is the first task, not changing the filter.**
+
+**Second-order note, worth keeping.** The presentation fix made the selection problem
+*more* visible rather than less: with one goal per line it is now obvious at a glance that
+the leading goal is `"what's next"`. That is the desired direction — a rendering that hides
+a selection defect is worse than one that exposes it — but it means the field currently
+reads as more obviously wrong than it did yesterday, and that is not a regression.
+
+**Budget headroom at time of writing:** payload 7,302b against `RESTORE_BUDGET_BYTES`
+8,000b. The rendering change cost **+86 bytes**. Headroom is ~700b, which is not much;
+anything that adds to this field should measure first.
+
+**Revisit when:** the "explicitly revisited or invoked" signal exists to filter on, **or**
+the payload crosses the budget again, **or** a downstream T2 receipt names `goal` as the
+insufficient field — which would be the first *evidence* on this, as opposed to inspection.
+
+---
+
 ### An ADR's `Next check:` date is inert prose — and so is the observatory line that mirrors it *(2026-08-15, surfaced by the ADR-0023 review)*
 
 - **Status:** Investigating. **This entry is itself the ADR-0023 cadence registration, and it is

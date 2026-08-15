@@ -283,6 +283,42 @@ def _select_constraints(nodes: list, historical: set[str] = frozenset(),
     return shown, dropped
 
 
+def _render_goals(shown: list) -> str:
+    """One goal per line, so distinct goals cannot read as one sentence.
+
+    PRESENTATION ONLY — selection is untouched. `_select_goals` decides WHICH goals appear
+    and in what order (the live session's first; see test_checkpoint_goal_cap); this decides
+    only how they are drawn.
+
+    Why it needed changing (2026-08-15). The field was `'; '.join(...)` under a heading that
+    reads "Goal", singular. A real checkpoint rendered seven goals from seven different past
+    sessions as one semicolon-joined run-on, and the boundaries between them were close to
+    invisible — which is what made a mid-word truncation so costly, because
+
+        ...from the checkpoin; Read the top section of...
+
+    reads as one malformed sentence rather than as two goals with the first one cut. The
+    truncation is fixed at the ingest layer; this stops the RENDERING from hiding the next
+    one. Two independent defects had to line up to produce that string, and removing either
+    is enough.
+
+    NOT decided here, deliberately: whether historical goals belong in a checkpoint at all.
+    That is the selection question, it is the same budget adjudicated 2026-08-10, and it is
+    parked with Lorenzo's stated position recorded in docs/observatory.md.
+
+    The single-goal case — the common one downstream — renders as plain text with no list
+    decoration, because a bullet on a list of one is noise.
+    """
+    if not shown:
+        return 'No active goal'
+    if len(shown) == 1:
+        return shown[0].content
+    earlier = '\n'.join(f'  - {n.content}' for n in shown[1:])
+    return (f'{shown[0].content}\n'
+            f'[earlier goals, one per prior session — NOT this session\'s task]\n'
+            f'{earlier}')
+
+
 def write_checkpoint(
     store: MnemosStore,
     fatigue_score: float = 0.0,
@@ -306,14 +342,14 @@ def write_checkpoint(
         task_id = shown[0].task_id
     task_id = task_id or 'unknown'
 
-    goal_text = '; '.join(n.content for n in shown) or 'No active goal'
+    goal_text = _render_goals(shown)
     notes = []
     if omitted:
         notes.append(f'+{omitted} older goal(s) omitted')
     if bridged:
         notes.append(f'{bridged} bridged iCPG intent(s) excluded')
     if notes:
-        goal_text += (f' [{"; ".join(notes)} from this checkpoint; '
+        goal_text += (f'\n[{"; ".join(notes)} from this checkpoint; '
                       '`mnemos nodes --type goal` lists all]')
 
     # Gather constraints (never evicted). Fulfilled-intent postconditions need iCPG to

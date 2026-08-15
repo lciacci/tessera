@@ -16,6 +16,7 @@ here, not just length.
 
 from __future__ import annotations
 
+import re
 import tempfile
 
 from .checkpoint import MAX_CHECKPOINT_GOALS, write_checkpoint
@@ -42,7 +43,12 @@ def test_cap_limits_and_states_the_omission():
         _add_goal(store, f'goal-{i:03d}', f'2026-07-{i + 1:02d}T00:00:00+00:00')
 
     cp = write_checkpoint(store)
-    shown = [p for p in cp.goal.split('; ') if p.startswith('goal-')]
+    # Counted by matching the goal tokens themselves, NOT by splitting on the renderer's
+    # separator. The old form split on '; ' and so asserted a SELECTION property through a
+    # PRESENTATION detail — it broke the moment the field became one-goal-per-line
+    # (2026-08-15) even though selection was untouched. A test should survive a rendering
+    # change it does not care about.
+    shown = re.findall(r'goal-\d{3}', cp.goal)
 
     assert len(shown) == MAX_CHECKPOINT_GOALS, f'kept {len(shown)}'
     # Silent truncation would read as a complete goal list. It must say so.
