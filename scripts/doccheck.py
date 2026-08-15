@@ -1756,6 +1756,61 @@ def check_pretooluse_hooks_reach_the_model() -> list[str]:
     return bad
 
 
+def check_decision_surface_honors_path_exemptions() -> list[str]:
+    """No path THIS FILE exempts may be indexed as a governing Tessera decision.
+
+    ADDED 2026-08-15. `PATH_ALLOWLIST` records, entry by entry with the reason beside it,
+    which backticked paths are not this repo's — *"Other repos' files. The observatory
+    evaluates GSD; it doesn't claim to contain it."* `decision_surface` could not see that
+    list, so it indexed six of them anyway: GSD's `bin/lib/*.cjs`, Open GSD's
+    `docs/ARCHITECTURE.md`, downstream `docs/FINDINGS.md`, and a `scripts/tessera-escalate`
+    that only ever existed at `bin/`. An ADR-0023 review found the same class in ADR form —
+    a Switchyard evaluation backticking Switchyard's own `docs/architecture.md`, which would
+    have fired as a governing decision the day this repo gained a file by that name.
+
+    WHAT IT GUARDS, STATED NARROWLY BECAUSE RE-PLANTING PROVED THE FIRST DRAFT WRONG.
+    This guards the FILTER, not the docs. Verified by deliberately breaking each (#10):
+      - delete the `_is_exempt` call from `build_index()` -> fires;
+      - break `_exempt_paths()`'s defensive `import doccheck` -> fires 4x via the empty-set
+        arm below. That arm is load-bearing: the import runs inside a PreToolUse hook whose
+        stderr is discarded, so it must not raise, and a degraded import silently exempts
+        NOTHING and restores the defect (#1: what tells you the check itself died).
+
+    WHAT IT DOES **NOT** CATCH, and this is the honest scope limit. Adding a NEW foreign path
+    to a doc does not fire it — the filter drops the path before it is ever indexed, so the
+    condition cannot arise. Re-planting `docs/ARCHITECTURE.md` into an ADR was silently
+    correct-by-construction, which is exactly what made the first version of this docstring
+    ("the class guard, not the row fix") an over-claim. A foreign path NOT already in
+    PATH_ALLOWLIST is caught for ordinary docs by `referenced-paths-exist` (it does not
+    exist -> red -> a human allowlists or fixes it), and is caught by NOTHING in an ADR,
+    because DOC_SKIP exempts docs/adr/ from that check entirely. That residual gap is real,
+    is not closed here, and is recorded in docs/observatory.md.
+
+    NOT asserted here either: that every index key EXISTS on disk. Deliberate — `bin/kimi`,
+    `bin/review`, `bin/research` and `docs/maggy-rfc.md` are real Tessera files that were
+    deleted, and an ADR that governed one arguably SHOULD fire if it is ever recreated.
+    Existence and foreignness are different questions; only the second is checkable here.
+    """
+    try:
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import decision_surface
+        index = decision_surface.build_index()
+    except Exception as exc:
+        return [f"scripts/decision_surface.py cannot build its index: {exc}"]
+    exempt = PATH_ALLOWLIST | PLANNED_PATHS
+    bad = []
+    for key in sorted(index):
+        if decision_surface._is_exempt(key, exempt, PLACEHOLDER):
+            srcs = ", ".join(sorted({e["doc"] for e in index[key]}))
+            bad.append(f"decision_surface indexes `{key}` as a governing path, but doccheck "
+                       f"exempts it as not-this-repo's (named in {srcs})")
+    if not bad and not decision_surface._exempt_paths()[0]:
+        bad.append("decision_surface._exempt_paths() returned an EMPTY exempt set — its "
+                   "defensive import of doccheck is degrading, so every foreign path is "
+                   "being indexed again and this check is passing vacuously")
+    return bad
+
+
 def check_decision_surface_is_wired() -> list[str]:
     """The decision surface must be wired, and every Accepted ADR must be reachable by it.
 
@@ -2661,6 +2716,7 @@ CHECKS = {
     "standing-patterns-fit-the-cap": check_standing_patterns_fit_the_cap,
     "docs-name-the-right-patterns-emitter": check_docs_name_the_right_patterns_emitter,
     "decision-surface-is-wired": check_decision_surface_is_wired,
+    "decision-surface-honors-path-exemptions": check_decision_surface_honors_path_exemptions,
     "pretooluse-hooks-reach-the-model": check_pretooluse_hooks_reach_the_model,
     "referenced-paths-exist": check_referenced_paths_exist,
     "sibling-paths-exist": check_sibling_paths_exist,

@@ -480,13 +480,48 @@ def _extract_file_path(tool_name: str | None, tool_input: dict) -> str | None:
     return None
 
 
+PREVIEW_CHARS = 200
+# Below this, backing off to a word boundary would cost more text than the ragged edge is
+# worth — a 200-char URL or base64 blob has no space in it, and chopping it to nothing to
+# find one would be a worse preview, not a tidier one. Then the hard cut stands.
+_PREVIEW_MIN_BOUNDARY = 150
+_ELLIPSIS = "…"
+
+
+def _truncate_preview(cleaned: str) -> str:
+    """Cut at PREVIEW_CHARS, on a word boundary, and SAY that it was cut.
+
+    The cap itself is a storage/privacy decision and is unchanged — full turn content is
+    never persisted. What changed (2026-08-15) is that the cut used to be a bare character
+    slice, so a truncated preview was indistinguishable from complete text. A real
+    checkpoint read `...drop POST for fulfilled intents from the checkpoin`, which does not
+    look truncated; it looks like a typo, and it reached the model that way through the
+    session-goal path in MnemosStore.
+
+    A preview is something a human or a model READS to orient. Text that has been silently
+    shortened, presented as though whole, is the same class of defect this repo keeps
+    paying for elsewhere: output that is technically accurate about what it contains while
+    saying nothing about what it dropped.
+
+    Length is capped INCLUDING the ellipsis, because the goal-node path slices to 200 again
+    downstream and would otherwise eat the very marker this adds.
+    """
+    if len(cleaned) <= PREVIEW_CHARS:
+        return cleaned
+    head = cleaned[:PREVIEW_CHARS - len(_ELLIPSIS)]
+    cut = head.rfind(" ")
+    if cut < _PREVIEW_MIN_BOUNDARY:
+        cut = len(head)
+    return head[:cut].rstrip() + _ELLIPSIS
+
+
 def _preview(
     text: str, redact_text: bool, *, is_user: bool = False,
 ) -> tuple[str | None, int]:
     if not text:
         return None, 0
     cleaned = text if not redact_text else redact(text)[0]
-    preview = cleaned[:200]
+    preview = _truncate_preview(cleaned)
     match = regex_match(cleaned) if is_user else 0
     return preview, match
 

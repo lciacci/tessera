@@ -91,9 +91,59 @@ def _first_decision_line(body: str) -> str:
     return ""
 
 
+def _exempt_paths() -> "tuple[set, object]":
+    """doccheck's OWN record of which backticked paths are not this repo's to claim.
+
+    THE POINT IS THAT THIS IS NOT A SECOND LIST. `doccheck.PATH_ALLOWLIST` already carries
+    the judgement, entry by entry, with the reason written beside it — *"Other repos' files.
+    The observatory evaluates GSD; it doesn't claim to contain it."* That knowledge existed
+    and this module could not see it, so every path a human had explicitly marked "not ours"
+    was silently promoted here into a governing-decision key. Found 2026-08-15: six of the
+    six observatory-sourced phantom keys were already exempt in doccheck.
+
+    Imported LAZILY and DEFENSIVELY, both deliberately:
+      - lazily, because doccheck imports this module (inside a function) and a module-level
+        import back would be a cycle;
+      - defensively, because this runs in a PreToolUse hook whose stderr is discarded, and
+        an import that raises there is the 2026-08-10 silent-hook bug exactly. Degrading to
+        "exempt nothing" fails LOUD in the right direction — the surface gets noisier, never
+        quieter, and a hook that over-reports is diagnosable while a dead one is not.
+
+    The degradation is NOT silent: doccheck's `decision-surface-honors-path-exemptions`
+    asserts the index carries no exempt key, so a broken import turns that check red rather
+    than quietly restoring the defect. (#1 — what would tell you the check itself died.)
+
+    ~9ms measured. Cost is not the reason to avoid it.
+    """
+    try:
+        import doccheck
+        return doccheck.PATH_ALLOWLIST | doccheck.PLANNED_PATHS, doccheck.PLACEHOLDER
+    except Exception:
+        return set(), None
+
+
+def _is_exempt(path: str, exempt: set, placeholder: object) -> bool:
+    """True when a backticked token is not a Tessera path this repo should claim to govern.
+
+    Prefix-aware to match doccheck's own comparison, so `docs/FINDINGS.md` exempts and
+    `.mnemos` exempts everything beneath it. The placeholder arm catches template literals
+    like `.claude/scripts/X` and `docs/adr/NNNN-*.md`, which are shapes, never files.
+    """
+    if placeholder is not None and placeholder.search(path):
+        return True
+    bare = path.rstrip("/")
+    return any(bare == p or path.startswith(p + "/") for p in exempt)
+
+
 def build_index() -> dict[str, list[dict]]:
-    """path-prefix -> [{doc, title, gloss, kind}]. Raises if the record is unreadable."""
+    """path-prefix -> [{doc, title, gloss, kind}]. Raises if the record is unreadable.
+
+    Paths doccheck exempts are skipped — see `_exempt_paths`. A foreign repo's
+    `docs/architecture.md` must not make an evaluation of that repo fire as a governing
+    decision the day this repo gains a file by the same name.
+    """
     index: dict[str, list[dict]] = {}
+    exempt, placeholder = _exempt_paths()
 
     for adr in sorted((ROOT / "docs" / "adr").glob("0*.md")):
         body = adr.read_text()
@@ -110,6 +160,8 @@ def build_index() -> dict[str, list[dict]]:
             "execution": _execution_warning(body),
         }
         for path in set(_PATH.findall(body)):
+            if _is_exempt(path, exempt, placeholder):
+                continue
             index.setdefault(path, []).append(entry)
 
     obs = ROOT / "docs" / "observatory.md"
@@ -120,6 +172,8 @@ def build_index() -> dict[str, list[dict]]:
             entry = {"doc": "docs/observatory.md", "title": title,
                      "gloss": "", "kind": "observatory", "sort": "z"}
             for path in set(_PATH.findall(chunk)):
+                if _is_exempt(path, exempt, placeholder):
+                    continue
                 index.setdefault(path, []).append(entry)
     return index
 

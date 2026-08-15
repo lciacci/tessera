@@ -2427,3 +2427,75 @@ def test_the_CLAUDE_md_half_accepts_a_glob(fake_repo, monkeypatch):
     monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ("scripts/gate/emit.py",))
     (fake_repo / "CLAUDE.md").write_text("- **Stdlib-only** (`scripts/gate/*.py`) → bare ok\n")
     assert doccheck.check_bare_python3_hook_scripts_are_probed() == []
+
+
+# ── decision-surface-honors-path-exemptions ──────────────────────────────────────────
+# Regression for 2026-08-15: doccheck's PATH_ALLOWLIST records, with reasons, which
+# backticked paths are NOT this repo's; decision_surface could not see that list and
+# indexed six of them as governing Tessera decisions. Tests are written against the
+# BREAKS, not against the fix (#10) — the first draft of this check was re-planted three
+# ways before one of them fired, which is how its real scope got established.
+
+def test_live_repo_indexes_no_path_doccheck_exempts():
+    """The property, on the real repo. 14 phantom index keys -> 7 when this landed."""
+    assert doccheck.check_decision_surface_honors_path_exemptions() == []
+
+
+def test_fires_when_the_filter_call_is_removed(monkeypatch):
+    """RE-PLANT D: delete the `_is_exempt` guard from build_index and it must go red.
+
+    This is the break the check actually guards. A version that only ever ran against the
+    fixed code would pass here identically, which is the whole point of running it broken.
+    """
+    sys.path.insert(0, str(Path(doccheck.__file__).parent))
+    import decision_surface
+
+    unfiltered = {k: v for k, v in decision_surface.build_index().items()}
+    unfiltered["docs/ARCHITECTURE.md"] = [{"doc": "docs/observatory.md", "title": "probe",
+                                           "gloss": "", "kind": "observatory", "sort": "z"}]
+    monkeypatch.setattr(decision_surface, "build_index", lambda: unfiltered)
+    bad = doccheck.check_decision_surface_honors_path_exemptions()
+    assert any("docs/ARCHITECTURE.md" in v for v in bad), bad
+
+
+def test_fires_when_the_defensive_import_degrades(monkeypatch):
+    """RE-PLANT B: `_exempt_paths()` returning an empty set must NOT pass vacuously.
+
+    The import is deliberately defensive — it runs in a PreToolUse hook whose stderr is
+    discarded, so it must never raise. That makes silent degradation the likely failure,
+    and a check that reads a filtered index would go green while every foreign path was
+    being indexed again. The empty-set arm is what stops that.
+    """
+    sys.path.insert(0, str(Path(doccheck.__file__).parent))
+    import decision_surface
+
+    monkeypatch.setattr(decision_surface, "_exempt_paths", lambda: (set(), None))
+    monkeypatch.setattr(decision_surface, "build_index", dict)   # nothing to flag
+    bad = doccheck.check_decision_surface_honors_path_exemptions()
+    assert any("EMPTY exempt set" in v for v in bad), bad
+
+
+def test_does_not_flag_a_deleted_tessera_path():
+    """Existence and foreignness are different questions, and only the second is checked.
+
+    `bin/kimi`, `bin/review`, `bin/research` and `docs/maggy-rfc.md` are real files this
+    repo deleted. An ADR that governed one arguably SHOULD fire if it is recreated, so
+    they must survive the filter — a blanket "every index key must exist" would be wrong.
+    """
+    sys.path.insert(0, str(Path(doccheck.__file__).parent))
+    import decision_surface
+
+    exempt = doccheck.PATH_ALLOWLIST | doccheck.PLANNED_PATHS
+    for deleted in ("bin/kimi", "bin/review", "bin/research", "docs/maggy-rfc.md"):
+        assert not decision_surface._is_exempt(deleted, exempt, doccheck.PLACEHOLDER)
+    assert "bin/review" in decision_surface.build_index()
+
+
+def test_placeholder_tokens_are_not_governing_paths():
+    """`.claude/scripts/X` is a shape, never a file. doccheck already knew; this one didn't."""
+    sys.path.insert(0, str(Path(doccheck.__file__).parent))
+    import decision_surface
+
+    exempt = doccheck.PATH_ALLOWLIST | doccheck.PLANNED_PATHS
+    assert decision_surface._is_exempt(".claude/scripts/X", exempt, doccheck.PLACEHOLDER)
+    assert ".claude/scripts/X" not in decision_surface.build_index()
