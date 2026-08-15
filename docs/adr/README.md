@@ -50,6 +50,7 @@ Auto-generated below as ADRs are created. Update when adding a new ADR.
 | 0020 | 2026-08-06 | Agent Behavior — the format is a linter, the calibration methodology is the find, and Tessera's conduct instruments all count artifacts | Watching |
 | 0021 | 2026-08-08 | Deep Agents — rejected on layer, and the mirror is that our prefix measurement is frozen prose | Accepted |
 | 0022 | 2026-08-10 | A crashed doccheck check blocks the commit — isolation changes what "fails open" should mean | Accepted |
+| 0023 | 2026-08-15 | Switchyard — rejected on layer, and the mirror is that ADR-0002's "impossible" was only impossible in-harness | Watching |
 
 ---
 
