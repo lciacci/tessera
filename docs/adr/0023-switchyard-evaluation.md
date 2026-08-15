@@ -1,16 +1,21 @@
-# ADR-0023: Switchyard — rejected on layer, and the mirror is that ADR-0002's "impossible" was only impossible *in-harness*
+# ADR-0023: Switchyard — rejected on layer, and the mirror is that ADR-0002's "impossible" was only impossible *from a hook*
 
 - **Date:** 2026-08-15
 - **Status:** Watching
 - **Decision driver:** New tool surfaced. Lorenzo, in the conclave repo: "evaluate https://github.com/NVIDIA-NeMo/Switchyard".
 - **Corrected same day (2026-08-15), pre-acceptance:** a second `/code-review` pass found the §6 chronology inverted — conclave's proxy harness postdates ADR-0002 by three weeks rather than predating it, making this a *missed reconciliation* rather than an overlooked refutation. The verdict, the layer rejection, and the adopted patterns are unchanged; only the dating and the strength of the mirror moved. Recorded here rather than silently, per the not-edited convention — the decision did not change, so this is not a superseding ADR.
+- **Corrected again same day (2026-08-15), pre-acceptance — a third `/code-review` pass, four findings, all applied.** (1) **The title asserted the merged claim this ADR's own §6 warns against.** It read *"only impossible **in-harness**"*, which asserts the out-of-harness case works — that is claim 2, the untested one. §6's conservative form is *"impossible **from a hook**; unexamined from a proxy"*, and the title now matches it. The body was already correct throughout; the title was the line that propagated, verbatim, into `docs/adr/README.md` and `docs/promo/index.html`, where it sat next to a promo blurb that stated the split correctly — a headline contradicting its own summary. (2) Foreign-repo paths in References were backticked bare, so `scripts/decision_surface.py` indexed five of them (Switchyard's `Switchyard:docs/architecture.md`, `Switchyard:docs/core_concepts.md`, `Switchyard:docs/known_issues.md`; conclave's `conclave:docs/INTEGRATION.md`, `conclave:docs/TOOL-DIRECTION.md`) as *Tessera* paths governed by this ADR; they are now repo-prefixed. **Note the shape of that sentence:** an earlier draft of this very bullet named those five paths in bare backticks and re-introduced all five index entries while describing the bug — caught only by re-running the index check after the write, which is #10's rule (run the guard against the broken state) landing on the author. (3) The adoption notes wrote bare `tier-classify-hook`, so this ADR was **invisible on the one file it prescribes changes to** — verified before and after with `python3 scripts/decision_surface.py hooks/tier-classify-hook`, which returned ADR-0002 alone and now returns both. The amendment edge did not rescue it: ADR-0002 has 8 revisiting records against a cap of 4 and this ADR sorted last, inside the `…and 4 more`. (4) The maturity row read *"~2.5 months dogfood"* against a first commit of 2026-06-19 — 57 days — and ADR-0021 had said *"~2 months"* seven days earlier; the figure had grown half a month in nine days, in the row where this ADR's own argument is that a young project's youth should not count against it. Findings 2 and 3 are the same defect class as each other and **the class is not fully closed** — 14 further phantom keys remain in the index from other records; see `docs/observatory.md`.
 
 > **Watching for:** Switchyard dropping the "not for production use" label (a v1.0 or an
 > explicit production-ready declaration), **or** any published evaluation of its routers'
 > quality/cost effect. Either one changes whether the ADR-0002 reopening in §6 is worth
 > acting on. The known issue *"a cancelled request can still incur provider cost"*
 > closing is a secondary signal.
-> **Next check:** 2026-10-14 (60 days)
+> **Next check:** 2026-10-14 (60 days). **Registered in `docs/observatory.md` → "An ADR's
+> `Next check:` date is inert prose" — which is also the entry recording that the registration
+> does NOT make it fire.** No predicate parses this field or that date; the mirror is where a
+> human re-reading the observatory will meet it, and nothing more. Do not read "registered" as
+> "watched".
 
 ---
 
@@ -26,7 +31,7 @@
 
 | Dimension | Tessera | Switchyard |
 |---|---|---|
-| Maturity | Solo, ~2.5 months dogfood, 6 downstream projects | Public 2026-06-30, v0.2.0 on 2026-08-10. **Self-labelled "Experimental software. Not for production use."** |
+| Maturity | Solo, ~2 months dogfood, 6 downstream projects | Public 2026-06-30, v0.2.0 on 2026-08-10. **Self-labelled "Experimental software. Not for production use."** |
 | Cross-runtime | Claude Code only (hooks, `settings.json`, skills) | Runtime-agnostic by construction — it is on the wire, below any runtime |
 | Original IP | Project profiles, override mechanism, gate/friction log, spend authorization, escalation packets, haziness scoring, restore receipts | The provider-neutral translation type across three wire formats; the escalation *latch*; the stage router's corroborative signal scoring |
 | Maintenance model | Solo | Corp-backed (NVIDIA), 15+ contributors, all NVIDIA-affiliated logins |
@@ -74,7 +79,7 @@ Created 2026-05-19, first public release 2026-06-30, v0.2.0 on 2026-08-10, last 
 
 **Adopt fully (replace Tessera with it):** Not coherent. Tessera is instrumentation applied to a runtime it does not own; Switchyard is a data plane. There is no configuration of one that consumes the other. Switching cost is undefined because the products are not substitutes.
 
-**Adopt patterns (steal ideas, keep Tessera):** One candidate — the stage router's transcript-derived signals as a **pre-pass in `tier-classify-hook`**, escalating to the qwen classifier only when signals are inconclusive. Effort is small (the signals are counts over recent messages, and the hook already runs at `UserPromptSubmit`). **The blocker is that the heuristic is unvalidated by its own authors**, so adopting it means adopting an unmeasured rule. See §4.
+**Adopt patterns (steal ideas, keep Tessera):** One candidate — the stage router's transcript-derived signals as a **pre-pass in `hooks/tier-classify-hook`**, escalating to the qwen classifier only when signals are inconclusive. Effort is small (the signals are counts over recent messages, and the hook already runs at `UserPromptSubmit`). **The blocker is that the heuristic is unvalidated by its own authors**, so adopting it means adopting an unmeasured rule. See §4.
 
 **Hybridize (run alongside):** Technically clean and already demonstrated — conclave's `harness/run-local-cc.sh` points Claude Code at a LiteLLM proxy today, and Switchyard's `switchyard launch claude` is the same move with a better-built proxy. But it puts a pre-alpha third party **in the data path for every token**, including a known issue where *"buffered upstream work continues after the client disconnects, so a cancelled request can still incur provider cost."* For Tessera, whose subject is reliability, that is a poor trade.
 
@@ -126,7 +131,7 @@ The first claim is what corrects ADR-0002. The second is what would have to be m
 **What the correction is worth, stated conservatively.** "Impossible" becomes **"impossible from a hook; unexamined from a proxy"** — not "we should do it." Routing the main thread through a proxy means every token of every session traverses a process in the data path, and if the destination is still Anthropic you have inserted a third party into traffic that previously had none. ADR-0002's advisory-only stance may well be *right*; what this ADR establishes is that it was right for a **reason ADR-0002 did not give**, and its trigger will therefore never fire on the thing that actually matters. Per the ADR convention, ADR-0002 is not edited; this record supersedes nothing and corrects the reasoning in place.
 
 **Concepts adopted (with implementation notes):**
-- **Transcript-derived tier signals**, as a zero-cost pre-pass in `tier-classify-hook` ahead of the qwen call. Take the signal set (recent errors, repeated attempts without progress, read/plan without output → capable; write/edit density → efficient); **do not** import the `0.46`/`0.5` thresholds. Not yet executed, and **should not ship on their say-so** — it needs its own measurement first.
+- **Transcript-derived tier signals**, as a zero-cost pre-pass in `hooks/tier-classify-hook` ahead of the qwen call. Take the signal set (recent errors, repeated attempts without progress, read/plan without output → capable; write/edit density → efficient); **do not** import the `0.46`/`0.5` thresholds. Not yet executed, and **should not ship on their say-so** — it needs its own measurement first.
 - **The escalation latch** — once a session has been classified hard, keep it hard rather than re-deciding per prompt. Applies to ADR-0002's per-prompt cache directly and costs nothing.
 
 **Concepts considered and rejected (with reasoning):**
@@ -147,9 +152,9 @@ The first claim is what corrects ADR-0002. The second is what would have to be m
 
 ## References
 
-- https://github.com/NVIDIA-NeMo/Switchyard — README, `docs/architecture.md`, `docs/core_concepts.md`, `docs/known_issues.md`, `docs/routing_algorithms/{escalation_router,stage_router}_routing.md`, releases, GitHub API metadata. All figures read 2026-08-15.
+- https://github.com/NVIDIA-NeMo/Switchyard — README, `Switchyard:docs/architecture.md`, `Switchyard:docs/core_concepts.md`, `Switchyard:docs/known_issues.md`, `Switchyard:docs/routing_algorithms/{escalation_router,stage_router}_routing.md`, releases, GitHub API metadata. All figures read 2026-08-15. *(Foreign repo paths are prefixed `Switchyard:` deliberately — a bare backticked `docs/…` is indexed by `scripts/decision_surface.py` as a Tessera path, and would make this ADR fire as a governing decision on any same-named file this repo later gains.)*
 - **ADR-0002** — model effort-tier routing via dispatch-time hooks; the record this ADR corrects.
 - **ADR-0006** — Tessera is instrumentation, not control.
 - **ADR-0014** — the review backend seam (portability at the code seam).
 - **ADR-0021** — Deep Agents; the prior "rejected on layer" precedent, and the prior instance of a fluent-but-wrong automated repo summary.
-- conclave: `harness/run-local-cc.sh:39-42`, `harness/litellm_config.yaml` — the in-house demonstration that the proxy application point works (launch-time binding, static map, **no routing policy**); `docs/INTEGRATION.md` guard 3 (conclave exposes tiers, Tessera decides when to use them), which places this evaluation in Tessera rather than conclave; `docs/TOOL-DIRECTION.md` Option 2.
+- conclave: `harness/run-local-cc.sh:39-42`, `harness/litellm_config.yaml` — the in-house demonstration that the proxy application point works (launch-time binding, static map, **no routing policy**); `conclave:docs/INTEGRATION.md` guard 3 (conclave exposes tiers, Tessera decides when to use them), which places this evaluation in Tessera rather than conclave; `conclave:docs/TOOL-DIRECTION.md` Option 2. *(Same `conclave:` prefix rationale as the Switchyard line above.)*

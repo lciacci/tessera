@@ -3891,6 +3891,59 @@ four lives.
 
 ---
 
+### An ADR's `Next check:` date is inert prose — and so is the observatory line that mirrors it *(2026-08-15, surfaced by the ADR-0023 review)*
+
+- **Status:** Investigating. **This entry is itself the ADR-0023 cadence registration, and it is
+  deliberately honest that registering it here does not make it fire.**
+- **Source:** ADR-0023 (`docs/adr/0023-switchyard-evaluation.md`), review finding 3.
+
+**The ADR-0023 cadence, registered.** Re-read ADR-0023 by **2026-10-14** (60 days from 2026-08-15),
+or earlier on either of its two watch conditions: Switchyard drops the *"Experimental software. Not
+for production use."* label (a v1.0 or an explicit production-ready declaration), **or** any
+published evaluation of its routers' quality/cost effect appears, from NVIDIA or a third party. The
+second is the one that matters — the ADR rejected pattern adoption on *absence of evidence*, not on
+a negative result, so a single published number re-opens §4. Secondary signal: the known issue
+*"a cancelled request can still incur provider cost"* closing.
+
+**The claim, which is about the registration and not about Switchyard.** ADR-0023 carries
+`Next check: 2026-10-14`. Nothing in this repo parses an ADR's `Next check:` field, so on 2026-10-14
+no session will be told anything. The review proposed mirroring the date into this file on the
+precedent that ADR-0020 did so and that this "is what lets P-predicates surface it." **That premise
+is false, and it was checked rather than assumed:** `grep -rn "2026-10-05\|2026-09-23" bin/ scripts/`
+returns nothing. ADR-0020's mirrored date and ADR-0013's are read by no predicate either.
+`bin/tessera-watch` says so in its own header — *"NO snooze/hysteresis/**prose-parsing** until a
+graduation predicate earns it"* — and every one of P1–P16 is a hand-written function over live
+repo state, never over this file's prose.
+
+**So mirroring alone moves inert prose from one file to another and reads like a fix.** That is
+pattern #12's shape: a true report ("cadence registered in the observatory") that covers a gap it
+does not close. This entry states the gap in the same breath as the registration precisely so the
+next reader is not misled by the first half — and note the mirror on this file's own subject, since
+this is the file whose entire premise is *"the Observatory's own triggers are prose"* (the entry
+that motivated `tessera-watch` in the first place).
+
+**Three dated cadences currently ride on a human happening to re-read:** ADR-0013 (2026-09-23),
+ADR-0020 (2026-10-05), ADR-0023 (2026-10-14). Two are already inside 60 days.
+
+**Candidate remedy, NOT built — it is a design decision and needs a human.** A `P17` over a small
+tracked JSON file — say `.tessera/`**watch-cadence.json** (un-backticked deliberately: doccheck's
+`referenced-paths-exist` correctly failed the first draft of this line, because a proposal written
+as a path is indistinguishable from a claim about one) — carrying `{adr, due, note}` and firing
+when `due` passes.
+**Structured data, not prose-parsing**, so it does not spend `tessera-watch`'s standing constraint;
+the cost is a second place a date is written, which is the drift risk doccheck would have to cover
+by asserting each entry matches its ADR's `Next check:`. **Deliberately not done in the same session
+that found the gap** — the alternative reading is that three dates over four months is a real
+re-read cadence and a predicate is machinery for a problem a calendar solves, and #3 says the
+honest answer to "is this worth a mechanism" is sometimes no.
+
+**Revisit when:** any of the three dates above passes without the ADR being re-read — that is the
+first *observed* miss and settles the question on evidence rather than on plausibility — **or** when
+a fourth ADR ships a `Next check:` field, at which point the pattern has recurred enough to be
+cheaper to mechanise than to remember (#11).
+
+---
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.
