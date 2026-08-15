@@ -3,6 +3,7 @@
 - **Date:** 2026-08-15
 - **Status:** Watching
 - **Decision driver:** New tool surfaced. Lorenzo, in the conclave repo: "evaluate https://github.com/NVIDIA-NeMo/Switchyard".
+- **Corrected same day (2026-08-15), pre-acceptance:** a second `/code-review` pass found the §6 chronology inverted — conclave's proxy harness postdates ADR-0002 by three weeks rather than predating it, making this a *missed reconciliation* rather than an overlooked refutation. The verdict, the layer rejection, and the adopted patterns are unchanged; only the dating and the strength of the mirror moved. Recorded here rather than silently, per the not-edited convention — the decision did not change, so this is not a superseding ADR.
 
 > **Watching for:** Switchyard dropping the "not for production use" label (a v1.0 or an
 > explicit production-ready declaration), **or** any published evaluation of its routers'
@@ -101,7 +102,7 @@ Created 2026-05-19, first public release 2026-06-30, v0.2.0 on 2026-08-10, last 
 
 **If we do not adopt:**
 - Cost of the equivalent is roughly zero, because the equivalent is not wanted. Tessera does not need a data plane.
-- The lock-in risk to our own design is the opposite one and it is the finding of this ADR: **ADR-0002 recorded a limitation as structural when it was contingent on a deployment assumption** — that Claude Code talks to Anthropic directly — and no one noticed for seven weeks while a sibling repo ran a proxy in that exact position.
+- The lock-in risk to our own design is the opposite one and it is the finding of this ADR: **ADR-0002 recorded a limitation as structural when it was contingent on a deployment assumption** — that Claude Code talks to Anthropic directly — and for the four weeks after a sibling repo built a proxy sitting in that exact position, neither repo reconciled the two.
 
 ---
 
@@ -117,7 +118,7 @@ Created 2026-05-19, first public release 2026-06-30, v0.2.0 on 2026-08-10, last 
 
 **Two claims here, and they must not be merged — merging them is how this correction goes wrong.**
 
-1. **That the application point exists and works is demonstrated, in-house.** Conclave's `harness/run-local-cc.sh` has driven Claude Code's main thread through a LiteLLM Anthropic↔Ollama proxy since well before ADR-0002 was written. Tessera recorded "impossible" while a sibling project in the same three-project system routinely did the thing at a layer ADR-0002 never examined.
+1. **That the application point exists and works is demonstrated, in-house.** Conclave's `harness/run-local-cc.sh` drives Claude Code's main thread through a LiteLLM Anthropic↔Ollama proxy — a working instance of the layer ADR-0002 never examined. **Chronology, corrected after review flagged the first draft as inverted:** it landed 2026-07-17 (`60f2ea6`), *three weeks after* ADR-0002 executed, so it was never a standing refutation Tessera overlooked. The failure is a **missed reconciliation** — conclave built the counter-case, and for the four weeks since, neither repo revisited the claim. "Built and exercised" is also the honest verb: conclave's own notes record the harness has produced almost no data.
 2. **That a *policy* can be applied at that point per-request is Switchyard's claim, and nobody here has tested it.** Conclave's proxy binds `ANTHROPIC_MODEL` once at launch against a static two-entry map (`harness/litellm_config.yaml`) — **interposition, not routing.** It contains no policy and makes no runtime decision, so it does not refute *"can't apply mid-flight"* on its own.
 
 The first claim is what corrects ADR-0002. The second is what would have to be measured before anything is built on it, and this ADR asserts only the first.
