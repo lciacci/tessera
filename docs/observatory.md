@@ -2990,6 +2990,78 @@ this repo keeps paying for — twice today alone.)*
 **Revisit when:** a fixture matrix is written for a conduct instrument other than correction
 detection (the shape's first real test), or by **2026-10-05** as already scheduled.
 
+### The spend guard blocks the command that would audit it — quoted pipes are split before quotes are stripped *(2026-08-16)*
+
+- **Status:** Investigating. **NOT fixed tonight, deliberately** — it is the highest-stakes
+  control in the repo, three guards were broken today *by being fixed*, and a false positive
+  on a read-only command is the safe direction of failure. **Do not fix it casually.**
+- **Source:** two live denials in one session, both on `grep`.
+
+**PROVEN, by reading `scripts/spend/guard.py` and by a live denial.** `_segments()` (line 208)
+is `re.split(r"&&|\|\||[;\n|]", command)` — it splits on `|` **before quotes are stripped**,
+even though `QUOTED` exists three lines above it. A quoted alternation is therefore torn into
+fragments carrying *unbalanced* quotes, `QUOTED` can no longer match them, and text that sat
+safely inside quotes is handed to `COMMITTING` as if it were a command. Demonstrated:
+
+```
+grep -ciE "terraform apply|run-instances|create-fleet" chaos/test_chaos.py     # BLOCKED
+```
+
+`terraform apply` appears **only inside the search pattern**. The split produces the fragment
+`grep -ciE "terraform apply`, and `COMMITTING`'s `terraform\s+apply` matches it.
+
+**THIRD INSTANCE, AND IT IS THE SHARPEST: the commit message documenting this entry was
+itself blocked.** `git commit -F - <<'EOF' … EOF` carrying the paragraph above — quoting the
+verb in order to explain the false positive — is a heredoc containing the trigger words, and
+the guard denied the commit. **You cannot commit the description of the defect.** The command
+writes a git object and commits no external spend whatsoever. Worked around by writing the
+message to a file and using `git commit -F <file>`, which is stated here rather than done
+quietly: it is not evasion (nothing spendable was attempted, and the guard's own instruction
+not to route around is aimed at reaching the SPEND by another path), but a reader deserves to
+know the record exists only because the record's author stepped past its own control.
+**`_strip_heredocs` exists and is not reached here** — guard.py:160 documents that it is
+"only ever called when the command is NOT wrapper-led", and the wrapper test sees `bash`/`-c`
+forms, not a `git commit -F -` heredoc.
+
+**The consequence worth naming: you cannot grep for this guard's own trigger words.** Auditing
+where `terraform apply` appears in the repo is blocked by the thing that would be audited —
+which is the same shape as `arbiter` being unable to review its own extensionless files, and
+as standing pattern #12's *"the tool you reach for to check your work is in scope for the
+check."* An earlier `grep -c terraform chaos/test_chaos.py` in the same session passed only
+because it had no alternation, so **the false positive is conditional on punctuation, not on
+intent** — which makes it feel arbitrary rather than systematic to whoever hits it next.
+
+**NOT PROVEN, and recorded as a hypothesis so nobody inherits it as fact.** The session's
+FIRST denial —
+`grep -n "REPO /\|cwd=REPO\|cwd=str(REPO)" chaos/test_chaos.py | head -30; …` — contains no
+`COMMITTING` literal at all, so the mechanism above does not explain it. The plausible route is
+that splitting on the BRE `\|` yields a fragment like `cwd=str(REPO)" chaos/test_chaos.py`,
+which `INVOKED_SCRIPT` accepts (`cwd=str(REPO)"` reads as an env assignment, then a `.py` in
+command position), causing the guard to READ the chaos suite and classify its body. **Untested.
+I asserted this mechanism confidently once already tonight and the very next denial refuted
+it** — so it is written down as a lead, not a finding.
+
+**Why this is a real defect and not just noise:** the guard's own comment at line 127 already
+records this defect class from the other direction — *"`cp a.py b.py` … blocked because the
+test file quotes a boot command. Naming is not invoking."* That was fixed by requiring command
+position. Quote-splitting reaches the same wrong answer by a different route, and the fix
+there (be careful what counts as invocation) does not cover it.
+
+**Candidate remedy, unbuilt:** strip `QUOTED` spans *before* `_segments()` splits, so a pipe
+inside quotes is not a separator. **The trap to check first:** stripping quotes earlier must
+not blind the guard to a genuinely committing command that legitimately contains quotes
+(`bash -c "terraform apply"`), which is exactly what `WRAPPER` exists to catch — so the fix
+has to keep the wrapper path reading the payload while the non-wrapper path does not.
+**Test it against the two denials in this session's log AND against every existing
+`scripts/spend/` test, before trusting it.**
+
+**Revisit when:** a third false positive lands, **or** anyone needs to grep for a `COMMITTING`
+verb, **or** the wrapper-vs-quote interaction above is designed. **Do not "fix" it by widening
+`REDUCING` or by adding an exemption for `grep`** — a deny-list with a read-tool hole is how a
+control surface rots, and the failure here is in *tokenisation*, not in the verb list.
+
+---
+
 ### A re-plant wrote 6 real `degraded` events, and P13 counts them as evidence *(2026-08-15)*
 
 - **Status:** Investigating. **Fourth instance of the entry below, and the first where the
