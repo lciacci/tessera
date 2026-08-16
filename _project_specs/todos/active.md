@@ -6,8 +6,8 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-08-10. ITEM 1 IS CLOSED — BOTH HALVES. Fulfilled intents' POSTs left the checkpoint (39 of them, 39.6% of the payload, all under "DO NOT VIOLATE" while zero intents were executing), then the uncapped-invariant half followed: an invariant whose iCPG scope touches no file the session has read or edited is omitted with a stated count. 12,909b → 7,780b → refilled to 8,556b by ONE new intent → 6,334b. The refill is the lesson: the first cut was a POPULATION fix and the leak was GROWTH, so 50 further intents now move the payload 4 bytes instead of 7kb. NOT a cap — scope, because 23 of 24 invariant bodies were distinct and a cap picks victims by recency. **ITEM 1 IS NOW FULLY CLOSED — the safety argument was false, and the remedy was DECIDED (c) on 2026-08-10: keep the cut as SIZE-ONLY, do not union scope-matching.** The cut had been justified by "the pre-edit hook delivers the omitted ones per-file"; measured, 2 of 18 are reachable, because that hook resolves by recorded symbol edges and the checkpoint drops by scope. The obvious repair was scoped, measured and declined: a scope union takes file linkage from 94 files to 719, but **668 of the 719 arrive via directory-prefix expansion** (bare `scripts/` is on 4 intents), so it answers "what ever touched this tree", not "what governs this file". The real question underneath — **is the SYMBOL the right unit of linkage** — was OPENED in the observatory, where it already had a named revisit trigger that this work fired. ALSO: doccheck now isolates each check (one raising check used to blank all 45, in the gate that blocks commits) and a crashed check BLOCKS; `decision_surface.py` did not parse on 3.9 while its hook ate the traceback with `2>/dev/null`. THREE adversarial passes: 24 code findings → 9 real, and the two sharpest defects were found by RE-PLANTING after a fix, not by any reviewer. **ITEM 3 IS ALSO CLOSED (2026-08-10):** ADR-0020's fixture matrix shipped — 29 cases, 7 lucky-correct pairs scored as units, `Executed:` line filled in. A judge distinguishes a lucky-correct negative (qwen 7/7, regex 0/7), and all 7 of the regex's true positives are lucky members — none earned by meaning (rows: P=0.54 R=0.54). A "12 of 17 / ~70%" figure in `d2a8bb8`'s message is WRONG — that denominator drops the 7 foils; it is 12 of 24. Caveat measured, not suspected: 100% here vs P=0.32/R=0.53 on real turns, so the matrix contrasts detectors and calibrates nothing. **ITEM 5 IS CLOSED — ALL THREE BATCHES (2026-08-10).** 21 files / 4,431 lines / ~$7. Aggregate: 3 rejected on measurement, 1 false positive, ~17 real defects fixed, and **4 found by RE-PLANTING that no reviewer reported**. Sharpest: `reddit-auth-setup` wrote an external HTTP response into `~/.zshrc` unescaped (a live shell-injection path at next login); `deepseek`/`grok`/`gemini-api` all returned API errors on stdout with exit 0, so `auto-review-hook` read a dead API as "no review needed"; `tessera-findings` could lose a finding to an en-dash. The session-id sweep then found what it was NOT looking for: **`spend/event.py`'s audit path was cwd-relative**, so a `spend_denied` after any `cd` was invisible to the repo-root reader — the same bug `tessera-degraded` records fixing for the REPORTER on 2026-07-26, with the audit writer for the control itself left behind.
-  **▶ NEXT, AND ITEM 6'S PREMISE HAS MOVED:** item 6 ordered itself after item 5 because *"~4,500 unreviewed `bin/` lines are where instance #4 most likely lives"*. Item 5 is done and found **no fourth clean-clone instance** — but it was not looking for one (arbiter reviewed for correctness and secrets; the three originals were environmental "assumes a file only install.sh creates"). **So the negative is real but under-powered, and the cheap next step is ONE MANUAL CLEAN CLONE, not the runner** — it answers the runner's own question in minutes, and the observatory entry already names the trap (redirecting `HOME` isolates `install.sh`, but ambient `PATH` still resolves the OUTER repo's `mnemos`, so two ✗ are sandbox artifacts). **RUN 2026-08-10: the repo DOES stand up from clean** — doccheck 46/46 pre-install, P9 fires correctly with no P5 crash, 526 tests green after `./install.sh`. **And instance #4 was waiting:** at a 137-char venv path the shebang exceeds the ~127-char limit, so uv emits a `#!/bin/sh` wrapper, and `verify()` read line 1, got `/bin/sh`, and declared F-001 — one branch after ALREADY passing the real liveness test. Fixed; the runner stays unbuilt and the recipe is now in the observatory entry. **ITEM 2 IS ALSO CLOSED except part 4** — `STATIC_PREDICATE` widened behind a new doccheck assertion, and the checkpoint now carries a `decisions` field sourced from the gate log. **ITEM 4 IS REDUCED TO ONE THING:** go do real work in conclave and let the T2 receipts fall out. howler's missing spend guard is **CLOSED — it does not need one** (mobile app, no spend-committing commands; the recorded reason had always been timing, not need, which is why it never expired on its own). ▶ NEXT: item 4's conclave work, and item 2's part 4 when `restore/offer.py` is next touched.)
+## Handoff — pick up here (2026-08-15. **FOUR GUARDS WRITTEN THIS SESSION WERE DECORATION WHEN WRITTEN, AND THREE OF THEM I CERTIFIED MYSELF.** That is the session, and it matters more than what shipped. ADR-0023's review found its TITLE asserting the merged claim its own §6 warns against in bold — the body held the split throughout, but the title is the line that propagates, verbatim, into `docs/adr/README.md` and `docs/promo/index.html`, where it sat beside a blurb stating the split correctly. Then two decision-surface defects: foreign repo paths backticked bare were indexed as *Tessera* paths, and the ADR was invisible on `hooks/tier-classify-hook`, the one file it prescribes changes to. **The fix for those shipped, was reviewed, and had THREE defects of its own — two of them mine in the same 40 lines.** (a) The guard called `decision_surface._is_exempt`, the filter's own predicate, so both broke in lockstep: stubbing it took the index 141 → 148 keys, fully restoring the defect, while the check returned `[]`. My two re-plants had both patched *around* `_is_exempt`, which is exactly why they fired and this did not. (b) `PATH_ALLOWLIST` means *"not required to exist on disk"*, not *"not ours"* — I read one comment block and generalised — so `.claude/settings.local.json`, a live 16KB agent-editable file, lost ADR-0009 and an observatory entry and produced NO decision surface at all. **A change made to stop the hook firing WRONGLY stopped it firing on something real, which is the worse failure.** (c) It never worked downstream: `doccheck.py` is not scaffolded, so the defensive import failed permanently in every project, and the arm written to detect that could only run HERE, where the import cannot fail. Separately, a mid-word truncation reaching the model (`"...from the checkpoin"`) turned out to need TWO defects lined up — a bare `[:200]` at ingest AND a `'; '.join` renderer — and **neither is the root cause; only the pair produces text that looks correct and is not.** ITEM 1 WAS CLOSED 2026-08-10 — Fulfilled intents' POSTs left the checkpoint (39 of them, 39.6% of the payload, all under "DO NOT VIOLATE" while zero intents were executing), then the uncapped-invariant half followed: an invariant whose iCPG scope touches no file the session has read or edited is omitted with a stated count. 12,909b → 7,780b → refilled to 8,556b by ONE new intent → 6,334b. The refill is the lesson: the first cut was a POPULATION fix and the leak was GROWTH, so 50 further intents now move the payload 4 bytes instead of 7kb. NOT a cap — scope, because 23 of 24 invariant bodies were distinct and a cap picks victims by recency. **ITEM 1 IS NOW FULLY CLOSED — the safety argument was false, and the remedy was DECIDED (c) on 2026-08-10: keep the cut as SIZE-ONLY, do not union scope-matching.** The cut had been justified by "the pre-edit hook delivers the omitted ones per-file"; measured, 2 of 18 are reachable, because that hook resolves by recorded symbol edges and the checkpoint drops by scope. The obvious repair was scoped, measured and declined: a scope union takes file linkage from 94 files to 719, but **668 of the 719 arrive via directory-prefix expansion** (bare `scripts/` is on 4 intents), so it answers "what ever touched this tree", not "what governs this file". The real question underneath — **is the SYMBOL the right unit of linkage** — was OPENED in the observatory, where it already had a named revisit trigger that this work fired. ALSO: doccheck now isolates each check (one raising check used to blank all 45, in the gate that blocks commits) and a crashed check BLOCKS; `decision_surface.py` did not parse on 3.9 while its hook ate the traceback with `2>/dev/null`. THREE adversarial passes: 24 code findings → 9 real, and the two sharpest defects were found by RE-PLANTING after a fix, not by any reviewer. **ITEM 3 IS ALSO CLOSED (2026-08-10):** ADR-0020's fixture matrix shipped — 29 cases, 7 lucky-correct pairs scored as units, `Executed:` line filled in. A judge distinguishes a lucky-correct negative (qwen 7/7, regex 0/7), and all 7 of the regex's true positives are lucky members — none earned by meaning (rows: P=0.54 R=0.54). A "12 of 17 / ~70%" figure in `d2a8bb8`'s message is WRONG — that denominator drops the 7 foils; it is 12 of 24. Caveat measured, not suspected: 100% here vs P=0.32/R=0.53 on real turns, so the matrix contrasts detectors and calibrates nothing. **ITEM 5 IS CLOSED — ALL THREE BATCHES (2026-08-10).** 21 files / 4,431 lines / ~$7. Aggregate: 3 rejected on measurement, 1 false positive, ~17 real defects fixed, and **4 found by RE-PLANTING that no reviewer reported**. Sharpest: `reddit-auth-setup` wrote an external HTTP response into `~/.zshrc` unescaped (a live shell-injection path at next login); `deepseek`/`grok`/`gemini-api` all returned API errors on stdout with exit 0, so `auto-review-hook` read a dead API as "no review needed"; `tessera-findings` could lose a finding to an en-dash. The session-id sweep then found what it was NOT looking for: **`spend/event.py`'s audit path was cwd-relative**, so a `spend_denied` after any `cd` was invisible to the repo-root reader — the same bug `tessera-degraded` records fixing for the REPORTER on 2026-07-26, with the audit writer for the control itself left behind.
+  **▶ SUPERSEDED BY THE 2026-08-15 SECTION BELOW — this paragraph is the 08-10 record, kept for the trail.** Its "▶ NEXT" (item 4's conclave work; item 2 part 4) was NOT what happened on 08-15, and is restated in the current `### Next —`. **▶ ORIGINAL 08-10 NEXT, AND ITEM 6'S PREMISE HAS MOVED:** item 6 ordered itself after item 5 because *"~4,500 unreviewed `bin/` lines are where instance #4 most likely lives"*. Item 5 is done and found **no fourth clean-clone instance** — but it was not looking for one (arbiter reviewed for correctness and secrets; the three originals were environmental "assumes a file only install.sh creates"). **So the negative is real but under-powered, and the cheap next step is ONE MANUAL CLEAN CLONE, not the runner** — it answers the runner's own question in minutes, and the observatory entry already names the trap (redirecting `HOME` isolates `install.sh`, but ambient `PATH` still resolves the OUTER repo's `mnemos`, so two ✗ are sandbox artifacts). **RUN 2026-08-10: the repo DOES stand up from clean** — doccheck 46/46 pre-install, P9 fires correctly with no P5 crash, 526 tests green after `./install.sh`. **And instance #4 was waiting:** at a 137-char venv path the shebang exceeds the ~127-char limit, so uv emits a `#!/bin/sh` wrapper, and `verify()` read line 1, got `/bin/sh`, and declared F-001 — one branch after ALREADY passing the real liveness test. Fixed; the runner stays unbuilt and the recipe is now in the observatory entry. **ITEM 2 IS ALSO CLOSED except part 4** — `STATIC_PREDICATE` widened behind a new doccheck assertion, and the checkpoint now carries a `decisions` field sourced from the gate log. **ITEM 4 IS REDUCED TO ONE THING:** go do real work in conclave and let the T2 receipts fall out. howler's missing spend guard is **CLOSED — it does not need one** (mobile app, no spend-committing commands; the recorded reason had always been timing, not need, which is why it never expired on its own). ▶ NEXT: item 4's conclave work, and item 2's part 4 when `restore/offer.py` is next touched.)
 
 *(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
 Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering. This note
@@ -23,6 +23,68 @@ had one, so the convention was visible and the live section was the exception. a
 > `test_the_real_repo_surfaces_its_current_priorities`, which is the guard — it fails loudly on the
 > live file, so this is a red suite and not a silent loss. The `## Superseded handoff` convention is
 > new as of that date and will be reused; **keep it below `### Next —`.**
+
+### 2026-08-15 — what shipped, and the four guards that were decoration
+
+**THE ONE THING TO KNOW.** Every guard written this session passed on first run, and four of
+them were verifying nothing. The pattern is identical each time and it is *not* carelessness
+about testing — each was tested, and tested against a break **adjacent to** the code rather
+than **in** it:
+
+| Guard | Tested against | Actually broken by | Found by |
+|---|---|---|---|
+| `decision-surface-honors-path-exemptions` v1 | a new foreign path in an ADR | deleting the filter call | re-plant |
+| the same, v2 | filter call, degraded import | **stubbing `_is_exempt` itself** | **review** |
+| two mnemos test files | nothing — pytest-style `def test_` | run-tests.sh invokes `python -m` | me, before commit |
+| the same two, v2 | — | hand-kept `__main__` list | **review** |
+
+**The rule that would have caught all four, stated once:** *a guard must not share its
+predicate — or its runner, or its invocation path — with the thing it guards.* Sharing the
+DATA is single-sourcing. Sharing the COMPARISON makes the check an echo. This is standing
+pattern #10 sharpened: not merely "run it against the broken state", but **run it against a
+break IN the code under test, not beside it.**
+
+1. **`be47c49` — ADR-0023's four review findings.** Title corrected to §6's own conservative
+   form (*"only impossible **from a hook**"*, not *"in-harness"* — the latter asserts claim 2,
+   the untested one), propagated to the index and promo page. Foreign paths repo-prefixed;
+   `hooks/` prefix added so the ADR is visible on the file it prescribes changes to (verified
+   before and after: `decision_surface.py hooks/tier-classify-hook` returned ADR-0002 alone,
+   now returns both — the amendment edge could NOT rescue it, ADR-0002 has 8 revisiting
+   records against a cap of 4 and this ADR sorted last). `~2.5 months` → `~2 months`.
+   **Recorded in the ADR rather than cleaned up quietly:** an earlier draft of that
+   correction bullet named the five foreign paths in bare backticks and re-introduced all
+   five index entries *while describing the bug*.
+
+2. **`696b86b`, reworked by `7367c3d` — decision_surface honours foreign paths.** Phantom
+   index keys 14 → 7. See the header for the three defects the first version shipped with.
+   The foreign set now lives in `scripts/repo_paths.py` answering ONE question ("another
+   repo's or a downstream's?"), unioned back into `PATH_ALLOWLIST` so the data has a single
+   definition. New check `decision-surface-deps-ship-downstream` **parses** the imports
+   rather than matching a list, so a future module-scope dependency cannot be forgotten in
+   both the scaffold and the check at once.
+
+3. **`696b86b` + `3717333` — the mid-word truncation, both halves.** `_truncate_preview` cuts
+   on a word boundary and marks the cut; `_render_goals` puts one goal per line. **The 200-char
+   cap is UNCHANGED and should stay that way** — it is a privacy decision, it is the only
+   limiter still working when the regex redactor fails open, and it feeds a checkpoint payload
+   that has already overflowed its delivery channel once. Raising it would not have fixed the
+   bug and makes the goal-field problem worse.
+
+4. **`7367c3d` — reading beat grepping, measurably.** Told to read `decision_surface.py`
+   rather than grep it, and the read caught a broken intermediate state: the signature change
+   had left two call sites passing three arguments and two names unimported. **The module
+   would not have imported.** Greps had shown each piece and none of the contradictions
+   between them — which is the failure that file's own docstring opens with.
+
+**Verified, not assumed: P13's 6 `degraded` events are a RESOLVED condition aging out.**
+`standing-patterns/block-missing`, 08-09 and 08-10, inside the 7-day window. Patterns arrive
+intact today. I re-planted the failure (a `## ` heading above `### Standing patterns`, which
+pushes it out of the first handoff block) and **both layers fired correctly** — surfacer
+warned and emitted `degraded`, doccheck went red on two checks and would have blocked the
+commit. **Do not re-investigate this; the system worked.** The real gap underneath: P13 has
+no ACKNOWLEDGMENT state, so a fixed condition can only be waited out or snoozed — and
+snoozing P13 blinds you to *new* degraded events, which is worse than the noise. That is why
+G-a's "build remedy or add snooze" has no right answer here.
 
 ### 2026-08-10 — what shipped, and the finding that outlived it
 
@@ -184,9 +246,56 @@ had one, so the convention was visible and the live section was the exception. a
    omits, the fallback must return it. Pure function of two data sources, no hook execution
    needed — mechanically checkable, which is more than most of this repo's coverage questions.
 
-### Next — item 1 is CLOSED (both halves, 2026-08-10); item 5 half-closed; item 6 is new
+### Next — the live queue is 2026-08-15's; items 1/2/3/5 of the 08-10 queue are CLOSED
 
-> ## ▶ START HERE: ITEM 3, THEN ITEM 5. ITEM 1 IS DONE.
+**These items are TOP-LEVEL and unindented on purpose.** `tessera-watch-surface.sh` extracts
+`/^[0-9]+\. /` inside the first handoff block — a blockquoted list is invisible to it, and an
+earlier draft of this very section put them behind `> ` so SessionStart surfaced the SPENT
+08-10 queue instead. Caught by running the surfacer, not by reading it.
+
+1. **Read `scripts/repo_paths.py`'s module docstring before touching the decision surface.**
+   It carries the two errors that cost the most on 2026-08-15 — reusing `PATH_ALLOWLIST` as
+   "not ours" when it means "not required to exist on disk", and letting a guard share its
+   predicate with the filter it guards. Both shipped, were reviewed, and were reworked in
+   `7367c3d`.
+2. **THE PHANTOM-PATH CLASS IS NOT CLOSED — 7 index keys remain and one is a live doc defect.**
+   `scripts/tdd-loop-check.sh` is named by **ADR-0007 and ADR-0008** and has **zero commits in
+   all of git history** — a doc claiming a file that never existed, the exact shape of the
+   phantom `mnemos-compact-recovery.sh` that `check_referenced_paths_exist` was *built to
+   catch*. It survives because `DOC_SKIP = ("docs/adr/",)` exempts ADRs from that check, so
+   **nothing** catches a new foreign or phantom path written into an ADR. Braintrust's
+   `docs/specification.mdx` and `docs/client-implementation/…mdx` are the same defect from
+   ADR-0020. The other four (`bin/kimi`, `bin/review`, `bin/research`, `docs/maggy-rfc.md`)
+   are **correct** — real files this repo deleted, and an ADR that governed one arguably
+   SHOULD fire if it is recreated. **Do not "fix" those with a blanket
+   every-key-must-exist check; that is the wrong question.**
+3. **Three ADR cadences ride on human recall, and registering one changed nothing.**
+   ADR-0013 (2026-09-23), ADR-0020 (2026-10-05), ADR-0023 (2026-10-14) — two inside 60 days.
+   Nothing parses an ADR's `Next check:` field, and — **checked, not assumed** —
+   `grep -rn "2026-10-05\|2026-09-23" bin/ scripts/` returns nothing, so ADR-0020's mirrored
+   date is read by no predicate either. `bin/tessera-watch:11` says *"NO prose-parsing until a
+   graduation predicate earns it"*. A `P17` over structured state is scoped in the observatory
+   and **deliberately unbuilt** — the counter-argument, that three dates over four months is a
+   calendar problem rather than a mechanism problem, is real and the call is Lorenzo's.
+4. **The checkpoint's goal SELECTION is parked, and the criterion is not yet implementable.**
+   Lorenzo, 2026-08-15: historical goals seem **useless unless explicitly revisited or invoked
+   during the session**. Sharper than "keep N" or "drop all" — and Mnemos records no signal for
+   *use within a session*, so **building that signal is the first task, not changing the
+   filter.** Selection is also the payload budget adjudicated 2026-08-10; do not reopen it
+   casually. The **presentation** half shipped (`3717333`) and made the problem MORE visible,
+   which is the right direction: the lead goal is now visibly `"what's next"`. **The 200-char
+   preview cap stays** — privacy decision, the only limiter still working when the regex
+   redactor fails open, and checkpoint headroom is ~700b.
+5. **conclave F-004 is the only item open across six downstream projects** — *"the review gate
+   covers the draft and never the fix"*. The 08-10 queue's item 4 (conclave work) is still
+   where T2 receipts would come from, and there are still none.
+
+### 2026-08-10 queue — SPENT, kept as the trail
+
+*(Heading deliberately avoids the words the surfacer keys on, so this spent list is not
+re-surfaced alongside the live one above.)*
+
+> ## ▶ 2026-08-10's START HERE (spent — kept as the trail): ITEM 3, THEN ITEM 5. ITEM 1 IS DONE.
 >
 > **Item 1 closed 2026-08-10** — budget half shipped earlier (12,909b → 6,334b), justification
 > half decided **(c)**: the cut stays size-only, the scope union was measured and declined, and

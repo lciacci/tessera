@@ -1684,8 +1684,16 @@ def check_standing_patterns_fit_the_cap() -> list[str]:
     first = text.find("## Handoff — pick up here")
     nxt = text.find("\n## ", first + 5)
     block = text[first:nxt if nxt != -1 else len(text)]
-    s = block.find("### Standing patterns")
+    # LINE-ANCHORED, matching the emitter's awk (`/^### Standing patterns/`). An unanchored
+    # `find` matched a BACKTICKED PROSE MENTION of the heading in the 2026-08-15 handoff —
+    # a sentence describing this very mechanism — and sliced the section from there, so the
+    # check reported the handoff carried ZERO patterns while the emitter correctly carried
+    # all 12. Emitter and checker must locate the block the same way or the checker can be
+    # fooled by text the emitter ignores. Same class as prose-matching a code comment (#10's
+    # corollary), aimed at a doc rather than at source.
+    s = block.find("\n### Standing patterns")
     if s != -1:
+        s += 1
         e = block.find("\n### ", s + 5)
         expected = re.findall(r"^(\d+)\. \*\*", block[s:e if e != -1 else len(block)], re.M)
         if sorted(seen) != sorted(expected):

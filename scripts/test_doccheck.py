@@ -2516,3 +2516,50 @@ def test_placeholder_tokens_are_not_governing_paths():
 def test_the_scaffold_ships_every_module_the_hook_imports():
     """decision_surface's module-scope imports must all be in the downstream copy set."""
     assert doccheck.check_decision_surface_deps_ship_downstream() == []
+
+
+def test_standing_patterns_block_is_located_line_anchored_not_by_substring():
+    """A backticked PROSE MENTION of the heading must not be mistaken for the section.
+
+    2026-08-15. `check_standing_patterns_fit_the_cap` located the block with an unanchored
+    `block.find("### Standing patterns")`. The handoff written that day contains a sentence
+    describing this mechanism — with the heading in backticks — several hundred lines ABOVE
+    the real section. The check sliced from the prose, found no patterns, and reported that
+    the handoff carried ZERO while the emitter correctly carried all 12.
+
+    The emitter's awk has always been line-anchored (`/^### Standing patterns/`). Emitter and
+    checker must locate the block the same way, or the checker can be fooled by text the
+    emitter correctly ignores.
+    """
+    import re as _re
+
+    body = (
+        "## Handoff — pick up here (today)\n\n"
+        "### What shipped\n\n"
+        "Re-planted a `## ` heading above `### Standing patterns` to prove the guard fires.\n\n"
+        "### Standing patterns\n\n"
+        "1. **First lesson.** body\n"
+        "2. **Second lesson.** body\n\n"
+        "## Superseded handoff (older)\n"
+    )
+    first = body.find("## Handoff — pick up here")
+    nxt = body.find("\n## ", first + 5)
+    block = body[first:nxt if nxt != -1 else len(body)]
+
+    unanchored = block.find("### Standing patterns")
+    anchored = block.find("\n### Standing patterns")
+    assert unanchored < anchored, "fixture does not reproduce the prose-mention-first case"
+
+    e = block.find("\n### ", anchored + 1 + 5)
+    found = _re.findall(r"^(\d+)\. \*\*", block[anchored + 1:e if e != -1 else len(block)], _re.M)
+    assert found == ["1", "2"], found
+
+    # And the broken form must genuinely fail, or this test proves nothing.
+    e_bad = block.find("\n### ", unanchored + 5)
+    bad = _re.findall(r"^(\d+)\. \*\*", block[unanchored:e_bad if e_bad != -1 else len(block)], _re.M)
+    assert bad == [], f"unanchored find should have found no patterns, got {bad}"
+
+
+def test_the_live_handoff_carries_its_patterns_to_the_emitter():
+    """The property on the real file — this is what went red and caught the defect."""
+    assert doccheck.check_standing_patterns_fit_the_cap() == []
