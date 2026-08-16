@@ -757,6 +757,18 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    re-introducing the real defect left it green. Each was caught only by deliberately
    re-planting the bug. **Corollary: a guard that reads SOURCE must not key on a
    naming convention or match prose about the code — strip comments, match calls.**
+   **Sharpened by four more in one session (2026-08-15), every one of which I had
+   already "verified": re-plant a break IN the code under test, not BESIDE it.** A
+   guard must not share its predicate, its runner, or its invocation path with the
+   thing it guards — sharing DATA is single-sourcing, sharing the COMPARISON makes the
+   check an echo. Stubbing `decision_surface._is_exempt` restored the whole defect
+   (index 141 → 148) while the guard that called it returned clean; two earlier
+   re-plants had both patched *around* that function, which is exactly why they fired.
+   **And READ and RUN catch different things — neither substitutes.** Reading
+   `decision_surface.py` whole caught a module that would not import (greps had shown
+   every piece and no contradiction between them); running the surfacers caught a
+   blockquoted priority list that silently surfaced a SPENT queue, and a checker
+   fooled by a backticked prose mention of the very heading it looks for.
 
 11. **Fix the pattern, not the row where you found it.** `INSERT OR IGNORE` on a
    uuid-only-unique table shipped THREE times — `drift_events` (700 rows = 154 distinct

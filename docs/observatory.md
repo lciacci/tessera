@@ -2753,6 +2753,19 @@ defined per-release metric rather than a paragraph. Composition today: `CLAUDE.m
 plus, measured but **never asserted**, the handoff surfacer 265 (varies with fired triggers) and the
 checkpoint 1,822 (machine-local) — 17,584 in practice.
 
+**RE-MEASURED 2026-08-15: 16,232 tracked (17,856 with the surfacer), up ~470 on the reading
+below.** The whole rise is this session's two edits, and both are *this entry's own subject*:
+`CLAUDE.md` gained the module-scope-sibling-is-a-distribution-fact paragraph, and standing
+pattern #10 gained the re-plant-IN-not-BESIDE sharpening. **So the instrument grew what it
+measures again, and this time knowingly** — the caution three sentences down (*"141 of
+`CLAUDE.md`'s +357 is the line documenting the meter itself"*) now describes the majority of a
+second rise. Still ~4% off the 15,600 anchor and inside doccheck's band, so
+`eager-prefix-figure-is-current` is green; recorded because CLAUDE.md's instruction is to
+re-measure **whenever `CLAUDE.md`, an eagerly-loaded skill, or the standing patterns change**,
+not merely when a check goes red. **The lesson each addition bought is worth more than 470
+tokens — but that is a judgement, not a measurement, and the moment it stops being obvious the
+answer is the unmeasured-dilution question below, not a trim on size.**
+
 **The comparable total is 15,762 against 15,600, and the flatness is the result.** Ten days, a
 standing-patterns split and repeated `CLAUDE.md` growth, and the prefix has moved ~1%: `CLAUDE.md`
 +357, the surfacer −143. So the meter's first act is to *confirm* this entry rather than overturn
@@ -2970,6 +2983,50 @@ this repo keeps paying for — twice today alone.)*
 
 **Revisit when:** a fixture matrix is written for a conduct instrument other than correction
 detection (the shape's first real test), or by **2026-10-05** as already scheduled.
+
+### A re-plant wrote 6 real `degraded` events, and P13 counts them as evidence *(2026-08-15)*
+
+- **Status:** Investigating. **Fourth instance of the entry below, and the first where the
+  stray state lands in a PREDICATE'S EVIDENCE rather than in a file.**
+- **Source:** re-planting `standing-patterns/block-missing` to verify the guard fires.
+
+**What happened.** Verifying that P13's 6 existing events were a resolved condition, I
+re-planted the failure — inserted a `## ` heading above `### Standing patterns` so it fell out
+of the first handoff block — and ran the surfacer. It behaved correctly: warned, and emitted
+`degraded`. Ran it a few times across the diagnosis. **P13 now reports 12 events in 7 days,
+and 6 of them are my test.** The predicate cannot tell a probe from a real degradation, so the
+act of confirming the detector works inflated the thing the detector reports.
+
+**This is standing pattern #7 inverted.** *"A test is never evidence about the thing it
+tests"* — P3 already enforces exactly this, splitting `manual` from `auto` compaction triggers
+so hand-run tests cannot trip a verdict. `degraded` has no such field. Every probe of every
+component is indistinguishable from that component failing, which means **spec 11's own
+verification method contaminates spec 11's own signal**, and `tessera-chaos` — eleven probes
+that break components on purpose, now folded into `tessera-test` — is the industrial version
+of the same act.
+
+**Why this was not obvious:** the events are *correct*. The component genuinely could not do
+its job at that moment. Nothing is lying. It is a provenance gap, not a truth gap, which is
+why it reads as clean data.
+
+**Candidate remedies, none built, and the cheap one may be enough.** A `probe: true` field on
+the event plus a P13 filter is the direct analogue of P3's trigger split — but the writer is
+`tessera-degraded`, which is POSIX-sh-with-builtins-only *by contract* (it reports on broken
+infrastructure and may not assume working infrastructure), so any change there is constrained.
+An env var (`TESSERA_PROBE=1`) that the chaos suite and manual re-plants set is the cheapest
+shape. **Counter-argument worth keeping:** a probe flag is a thing a real failure could also
+set by accident, and a predicate that can be told "ignore this" is a predicate that can be
+silenced. P3 gets away with it because the harness supplies the trigger, not the caller.
+
+**Revisit when:** the next re-plant of a `degraded`-emitting component happens (it will —
+`tessera-chaos` runs in `tessera-test`), **or** P13 fires on a count a human cannot attribute.
+**Do not "fix" it by snoozing P13** — that blinds the predicate to new events, which is worse
+than the noise, and is why G-a's *"build remedy or add snooze"* has no right answer here.
+
+**Immediate, non-mechanical mitigation:** these 6 age out of the 7-day window on 2026-08-23.
+Until then, P13's count is known-inflated and this entry is the attribution.
+
+---
 
 ### Interactive probing writes stray state into the repo, and one guard covers one case *(2026-08-10)*
 
