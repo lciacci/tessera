@@ -3051,6 +3051,25 @@ test file quotes a boot command. Naming is not invoking."* That was fixed by req
 position. Quote-splitting reaches the same wrong answer by a different route, and the fix
 there (be careful what counts as invocation) does not cover it.
 
+**THE SECOND FINDING, AND IT IS STRUCTURAL RATHER THAN A REGEX BUG: an agent cannot
+disposition a false positive at all.** The backstop names three exits — a human grants an
+envelope, an escalation is raised, or *"if the denial was a FALSE POSITIVE… say so plainly and
+finish."* **Two of the three are closed to the agent by design.** ADR-0016 put both `grant`
+**and** `dismiss` on `SELF_AUTHORIZING`, and `dismiss` is the verb whose entire purpose is to
+record a false positive — it writes an event and never an envelope, so it commits nothing.
+The third exit, saying so in prose, satisfies the hook's *text* but leaves **no
+machine-readable trace**, so the backstop re-fires on every subsequent Stop. Observed live:
+it fired at 1 denial, then again at 4, with a plain-prose disposition and a full written
+finding in between.
+
+**ADR-0016's argument was about SELF-AUTHORIZATION, and `dismiss` is not that.** The ADR's
+reasoning — recorded in `guard.py:63-75` — is that `grant` had no tty check and `granted_by`
+is `$USER` either way, so an agent could authorize its own spend. That argument transfers to
+`grant` exactly and to `dismiss` not at all: dismissing writes "this block was wrong" and
+authorizes nothing. Whether the coupling was deliberate or incidental is **not recoverable
+from the ADR text**, which is why this is written as a question for a human and raised as an
+escalation packet (`spend_unauthorized`, 2026-08-16) rather than acted on.
+
 **Candidate remedy, unbuilt:** strip `QUOTED` spans *before* `_segments()` splits, so a pipe
 inside quotes is not a separator. **The trap to check first:** stripping quotes earlier must
 not blind the guard to a genuinely committing command that legitimately contains quotes

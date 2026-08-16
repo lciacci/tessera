@@ -1,0 +1,20 @@
+{
+  "id": "esc-20260816-025221",
+  "ts": "2026-08-16T02:52:21Z",
+  "agent": "claude",
+  "session_id": "c6aa76ed-6e3f-402a-8526-ba72e3a345d6",
+  "severity": "blocking",
+  "category": "spend_unauthorized",
+  "summary": "4 spend denials this session, all read-only false positives, and the agent has no way to disposition them: ADR-0016 refuses both grant and dismiss to the agent, and dismiss is the verb that records a false positive. The backstop will therefore fire on every Stop for the rest of this session.",
+  "tried": [
+    "Diagnosed the root cause by reading scripts/spend/guard.py rather than executing anything: _segments() at line 208 splits on the pipe character BEFORE quotes are stripped, so a quoted alternation is torn into fragments with unbalanced quotes and text inside quotes reaches COMMITTING as if it were a command. Verified against a live denial. Wrote it up in docs/observatory.md and as queue item 5 in the handoff. Did NOT fix the guard: highest-stakes control in the repo, three other guards broke today by being fixed, and a false positive on a read-only command fails in the safe direction.",
+    "Could not record the disposition: tessera-authorize dismiss is on the guard's own SELF_AUTHORIZING deny list, so the agent-facing path for 'this was a false positive' does not exist. Saying so in prose satisfies the hook's text but leaves no machine-readable trace, so the backstop re-fires."
+  ],
+  "options": [
+    "Fix the tokenisation: strip quoted spans before _segments() splits. Must not blind the guard to a wrapper-led command that legitimately quotes a boot verb, which is what WRAPPER exists to catch.",
+    "Allow the agent 'dismiss' but not 'grant' \u2014 dismiss writes an event and never an envelope, so it commits nothing; ADR-0016's argument was about self-authorization, which dismiss is not.",
+    "Leave both as-is and accept that agent-encountered false positives are recorded only in prose \u2014 cheapest, and defensible if false positives stay rare."
+  ],
+  "refs": [],
+  "status": "open"
+}
