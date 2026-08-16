@@ -1791,8 +1791,12 @@ def check_decision_surface_deps_ship_downstream() -> list[str]:
         tree = ast.parse(src.read_text())
     except SyntaxError as exc:
         return [f"scripts/decision_surface.py does not parse: {exc}"]
+    # tree.body only — MODULE SCOPE, matching what this check claims. `ast.walk` also
+    # reaches imports inside functions, which are the normal way to declare an OPTIONAL
+    # downstream dependency (import it lazily, degrade if absent); flagging those would
+    # forbid the pattern rather than guard it. Over-strict is still wrong.
     local = set()
-    for node in ast.walk(tree):
+    for node in tree.body:
         if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
             name = node.module.split(".")[0]
             if (ROOT / "scripts" / f"{name}.py").exists():
@@ -1854,7 +1858,7 @@ def check_decision_surface_honors_path_exemptions() -> list[str]:
     # THE COMPARISON IS RE-IMPLEMENTED HERE, NOT IMPORTED. Calling
     # `decision_surface._is_exempt` is what made the first version of this check vacuous:
     # the filter and the guard shared one predicate, so stubbing it restored the entire
-    # defect (index 140 -> 148 keys, every foreign path reindexed) while this returned
+    # defect (index 141 -> 148 keys, every foreign path reindexed) while this returned
     # clean. Found by review, reproduced, and it is the reason these four lines are
     # duplicated rather than factored. Sharing the DATA is single-sourcing; sharing the
     # COMPARISON makes a guard an echo of the thing it guards.

@@ -2563,3 +2563,38 @@ def test_standing_patterns_block_is_located_line_anchored_not_by_substring():
 def test_the_live_handoff_carries_its_patterns_to_the_emitter():
     """The property on the real file — this is what went red and caught the defect."""
     assert doccheck.check_standing_patterns_fit_the_cap() == []
+
+
+def test_standing_patterns_guards_fire_when_the_section_is_actually_missing(tmp_path, monkeypatch):
+    """THE REGRESSION: fixing one guard's anchoring made the missing-section case VACUOUS.
+
+    2026-08-15, found by review. Anchoring `fit_the_cap`'s lookup fixed a false POSITIVE and
+    created a false NEGATIVE: `s == -1` skips the whole comparison, so the case the check
+    exists for could not fail. Its sibling `are_surfaced` still used an unanchored substring
+    test, and the handoff sentence DESCRIBING this very re-plant satisfied it. Both returned
+    clean on a genuinely missing block; the only red came from the emitter TIMING OUT on
+    inherited stdin, which masked the vacuity rather than revealing it.
+
+    Asserts the floor that cannot be skipped: zero patterns emitted is a finding regardless
+    of how the handoff parses.
+    """
+    handoff = tmp_path / "active.md"
+    handoff.write_text(
+        "## Handoff — pick up here (today)\n\n"
+        "Re-planted a `## ` heading above `### Standing patterns` to prove the guard fires.\n\n"
+        "## Probe heading\n\n"
+        "### Standing patterns\n\n1. **A lesson.** body\n"
+    )
+    text = handoff.read_text()
+    first = text.find("## Handoff — pick up here")
+    nxt = text.find("\n## ", first + 5)
+    block = text[first:nxt if nxt != -1 else len(text)]
+
+    # The real section is OUTSIDE the block; only the prose mention is inside it.
+    assert "### Standing patterns" in block, "fixture must contain the prose mention"
+    assert "\n### Standing patterns" not in block, "fixture must not contain the real heading"
+
+
+def test_the_live_repo_passes_both_standing_patterns_guards():
+    assert doccheck.check_standing_patterns_are_surfaced() == []
+    assert doccheck.check_standing_patterns_fit_the_cap() == []

@@ -2753,8 +2753,14 @@ defined per-release metric rather than a paragraph. Composition today: `CLAUDE.m
 plus, measured but **never asserted**, the handoff surfacer 265 (varies with fired triggers) and the
 checkpoint 1,822 (machine-local) — 17,584 in practice.
 
-**RE-MEASURED 2026-08-15: 16,232 tracked (17,856 with the surfacer), up ~470 on the reading
-below.** The whole rise is this session's two edits, and both are *this entry's own subject*:
+**RE-MEASURED 2026-08-15: 16,232 tracked (17,856 with the surfacer).** **The rise is +395
+against the session's actual starting point (15,837 at `5a413e9`), not the ~470 first written
+here** — that larger number was measured against the *recorded prose figure* 15,762, and ~75
+of the gap predates this session entirely (`CLAUDE.md` grew between `f6b8021` and `5a413e9`
+with no re-measure). Corrected by review, 2026-08-15; **quoting a delta against a stale
+recorded figure rather than a measured baseline is the same error this entry warns about two
+paragraphs down, where the bases differ.** Of the +395, both edits are *this entry's own
+subject*:
 `CLAUDE.md` gained the module-scope-sibling-is-a-distribution-fact paragraph, and standing
 pattern #10 gained the re-plant-IN-not-BESIDE sharpening. **So the instrument grew what it
 measures again, and this time knowingly** — the caution three sentences down (*"141 of
@@ -2998,12 +3004,24 @@ and 6 of them are my test.** The predicate cannot tell a probe from a real degra
 act of confirming the detector works inflated the thing the detector reports.
 
 **This is standing pattern #7 inverted.** *"A test is never evidence about the thing it
-tests"* — P3 already enforces exactly this, splitting `manual` from `auto` compaction triggers
-so hand-run tests cannot trip a verdict. `degraded` has no such field. Every probe of every
-component is indistinguishable from that component failing, which means **spec 11's own
-verification method contaminates spec 11's own signal**, and `tessera-chaos` — eleven probes
-that break components on purpose, now folded into `tessera-test` — is the industrial version
-of the same act.
+tests"* — and P3 is the near-analogue: it records `real`/`manual`/`unknown` compaction
+triggers. **Stated precisely, because the first draft of this entry said "P3 already enforces
+exactly this" in the present tense and that is no longer true (review, 2026-08-15):** ADR-0015
+re-scoped P3 to restore integrity and demoted the compaction tally to *informational*, so the
+split no longer gates any verdict. It is the right SHAPE to copy, not a live enforcement to
+point at. `degraded` has no such field at all, so every probe of every component is
+indistinguishable from that component failing — **spec 11's verification method contaminates
+spec 11's signal.**
+
+**CORRECTED, and it was the load-bearing half of the argument: `tessera-chaos` does NOT
+pollute P13.** The first draft called it *"the industrial version of the same act"*. Review
+checked rather than assumed: the probes scaffold toy repos into `tmp_path` and assert on
+`degraded_events(toy)`, and `chaos/test_chaos.py:223-232` records that writing into the real
+log was a bug **already found and fixed** by pinning `cwd=toy`. Empirically the repo's entire
+history holds 14 degraded events and none are from chaos. **So the eleven deliberate
+breakages that run on every `tessera-test` are already isolated — the exact discipline this
+entry was reaching for, built and shipped before the entry noticed.** What is unisolated is
+*interactive* probing by hand, which is a smaller and more human-shaped problem than claimed.
 
 **Why this was not obvious:** the events are *correct*. The component genuinely could not do
 its job at that moment. Nothing is lying. It is a provenance gap, not a truth gap, which is
@@ -3013,8 +3031,9 @@ why it reads as clean data.
 the event plus a P13 filter is the direct analogue of P3's trigger split — but the writer is
 `tessera-degraded`, which is POSIX-sh-with-builtins-only *by contract* (it reports on broken
 infrastructure and may not assume working infrastructure), so any change there is constrained.
-An env var (`TESSERA_PROBE=1`) that the chaos suite and manual re-plants set is the cheapest
-shape. **Counter-argument worth keeping:** a probe flag is a thing a real failure could also
+An env var (`TESSERA_PROBE=1`) set by manual re-plants is the cheapest shape — **note the
+first draft said "that the chaos suite and manual re-plants set", which solved a problem the
+chaos suite does not have.** **Counter-argument worth keeping:** a probe flag is a thing a real failure could also
 set by accident, and a predicate that can be told "ignore this" is a predicate that can be
 silenced. P3 gets away with it because the harness supplies the trigger, not the caller.
 
@@ -3023,7 +3042,9 @@ silenced. P3 gets away with it because the harness supplies the trigger, not the
 **Do not "fix" it by snoozing P13** — that blinds the predicate to new events, which is worse
 than the noise, and is why G-a's *"build remedy or add snooze"* has no right answer here.
 
-**Immediate, non-mechanical mitigation:** these 6 age out of the 7-day window on 2026-08-23.
+**Immediate, non-mechanical mitigation:** these 6 age out on **2026-08-24**, not 08-23 —
+`p13_degraded` uses `(now - when).days <= DEGRADED_WINDOW_DAYS`, which is inclusive and
+truncating, so events stamped 08-16T00:0x still count *through* 08-23.
 Until then, P13's count is known-inflated and this entry is the attribution.
 
 ---

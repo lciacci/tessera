@@ -76,15 +76,34 @@ break IN the code under test, not beside it.**
    would not have imported.** Greps had shown each piece and none of the contradictions
    between them — which is the failure that file's own docstring opens with.
 
-**Verified, not assumed: P13's 6 `degraded` events are a RESOLVED condition aging out.**
-`standing-patterns/block-missing`, 08-09 and 08-10, inside the 7-day window. Patterns arrive
-intact today. I re-planted the failure (a `## ` heading above `### Standing patterns`, which
-pushes it out of the first handoff block) and **both layers fired correctly** — surfacer
-warned and emitted `degraded`, doccheck went red on two checks and would have blocked the
-commit. **Do not re-investigate this; the system worked.** The real gap underneath: P13 has
-no ACKNOWLEDGMENT state, so a fixed condition can only be waited out or snoozed — and
-snoozing P13 blinds you to *new* degraded events, which is worse than the noise. That is why
-G-a's "build remedy or add snooze" has no right answer here.
+**P13 shows 12 `degraded` events — 6 real (08-09/08-10, resolved) and 6 written by MY OWN
+re-plant while verifying the first six.** See `docs/observatory.md` → *"A re-plant wrote 6
+real `degraded` events"*. The probe half ages out **2026-08-24** (`p13_degraded` uses
+`(now - when).days <= 7`, inclusive and truncating, so 08-16 events count *through* 08-23).
+
+**THE VERIFICATION CLAIM THAT STOOD HERE WAS FALSE, AND FIXING ONE GUARD IS WHAT BROKE IT.**
+It read *"both layers fired correctly — doccheck went red on two checks… the system worked.
+Do not re-investigate."* Review re-planted it at HEAD: `standing-patterns-are-surfaced`
+returned **clean**, and `standing-patterns-fit-the-cap` went red only by **timing out** — the
+emitter inherits stdin and blocks — which masked that its comparison had gone vacuous. Two
+compounding causes, both introduced by the anchoring fix earlier the same day:
+(a) line-anchoring made `s == -1` skip the whole comparison, so the *missing-section* case —
+the case the check exists for — could not fail; (b) `are_surfaced` still used an unanchored
+substring test, and **the sentence describing this very re-plant, added in `7af87fd`, sits
+inside the handoff block and satisfied it.** The doc about the mechanism became the reason
+the guard passed.
+
+**Fixed three ways, each verified against the re-planted break (fires in 0.1s, not a 60s
+timeout): `are_surfaced` is line-anchored like its sibling; `fit_the_cap` gained a floor that
+cannot be skipped (zero patterns emitted is a finding regardless of the handoff parse); and
+the subprocess gets `stdin=DEVNULL` so it tests the real path instead of a hang.** *A guard
+that passes for an accidental reason is the same defect as one that fails for one* — and
+fixing the row while leaving the identical defect in the sibling next door is #11, committed
+by the person who had just written the anchored version.
+
+The gap underneath is unchanged: P13 has no ACKNOWLEDGMENT state, so a fixed condition can
+only be waited out or snoozed — and snoozing blinds it to *new* events, which is why G-a's
+"build remedy or add snooze" has no right answer here.
 
 ### 2026-08-10 — what shipped, and the finding that outlived it
 
@@ -273,17 +292,29 @@ earlier draft of this very section put them behind `> ` so SessionStart surfaced
    `iterative-development`, whose mechanism that file would be, an ADR firing the day someone
    creates it is **correct governance** — the same bucket as `bin/kimi`, `bin/review`,
    `bin/research`, `docs/maggy-rfc.md`: real paths this repo deleted or has not built.
-   **The method error is the lesson, and it is this session's own recurring one:** I read one
-   signal (`git log` = 0) and generalised without reading the sentence around the path —
-   identical in shape to reading one `PATH_ALLOWLIST` comment block and treating the whole
-   set as "not ours". **Do not fix any of the five with a blanket every-key-must-exist check;
-   that is the wrong question, and it would go red on paths that are behaving correctly.**
-   **What SURVIVES the correction:** `DOC_SKIP = ("docs/adr/",)` exempts ADRs from
-   `referenced-paths-exist`, so **nothing** catches a genuinely foreign path written into an
-   ADR — which is how ADR-0023's five got in, and how ADR-0020's two are still there. That
-   gap is unclosed and is the real item here.
-3. **Three ADR cadences ride on human recall, and registering one changed nothing.**
-   ADR-0013 (2026-09-23), ADR-0020 (2026-10-05), ADR-0023 (2026-10-14) — two inside 60 days.
+   **AND THE CORRECTION ITSELF OVER-CORRECTED — third pass, found by review.** The ADR
+   citations are right, but `docs/design-principles.md:672` asserts, present-tense and under
+   a bold **DONE (2026-06-26)**, that *"`tdd-loop-check.sh` calls the scanner on its green
+   path"* — a **live-behaviour claim about a file this repo does not have**, listed beside
+   real `scripts/override/*` artifacts. **That IS the phantom shape**, just not where I first
+   put it. It escapes `referenced-paths-exist` only because the backtick carries no
+   `scripts/` prefix, so `REPO_DIRS` never matches it. **So: phantom → not-a-phantom →
+   phantom-in-a-different-file, and I reached each verdict from a different two of ~10
+   references.** The method error is the constant, and it is this session's recurring one:
+   read one signal, generalise. Identical in shape to reading one `PATH_ALLOWLIST` comment
+   block and treating the whole set as "not ours". **When a path appears in many documents,
+   the question is not answerable from any two of them.**
+   **Do not fix the five correct keys with a blanket every-key-must-exist check;** it would
+   go red on paths behaving correctly.
+   **What SURVIVES all three passes, and is the real item:** `DOC_SKIP = ("docs/adr/",)`
+   exempts ADRs from **six** checks, not one — `_docs()` feeds every one of them — so nothing
+   catches a genuinely foreign path written into an ADR. That is how ADR-0023's five got in
+   and how ADR-0020's two are still there.
+3. **FOUR ADR cadences ride on human recall, and registering one changed nothing.**
+   **`docs/adr/0011-sqlfluff-evaluation.md` is Status: Watching with `Next check: 2026-09-19`
+   — earlier than all three I first listed, and I missed it** (review, 2026-08-15; the item's
+   own evidence undercounted, which weakened its own argument). Then ADR-0013 (2026-09-23),
+   ADR-0020 (2026-10-05), ADR-0023 (2026-10-14) — **three inside 60 days, not two.**
    Nothing parses an ADR's `Next check:` field, and — **checked, not assumed** —
    `grep -rn "2026-10-05\|2026-09-23" bin/ scripts/` returns nothing, so ADR-0020's mirrored
    date is read by no predicate either. `bin/tessera-watch:11` says *"NO prose-parsing until a
