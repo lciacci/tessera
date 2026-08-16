@@ -2995,7 +2995,11 @@ detection (the shape's first real test), or by **2026-10-05** as already schedul
 - **Status:** Investigating. **NOT fixed tonight, deliberately** — it is the highest-stakes
   control in the repo, three guards were broken today *by being fixed*, and a false positive
   on a read-only command is the safe direction of failure. **Do not fix it casually.**
-- **Source:** two live denials in one session, both on `grep`.
+- **Source:** **four** live denials in one session — the backstop reported 1, and
+  investigating it produced 3 more (a `python3 -c` reading the guard, a `grep -ciE`,
+  and the `git commit` heredoc carrying this entry's own text). **Every one a false
+  positive, every one read-only, and the count grew BY DIAGNOSING IT** — the same
+  compounding shape as the `degraded` entry below.
 
 **PROVEN, by reading `scripts/spend/guard.py` and by a live denial.** `_segments()` (line 208)
 is `re.split(r"&&|\|\||[;\n|]", command)` — it splits on `|` **before quotes are stripped**,
@@ -3071,8 +3075,16 @@ control surface rots, and the failure here is in *tokenisation*, not in the verb
 **What happened.** Verifying that P13's 6 existing events were a resolved condition, I
 re-planted the failure — inserted a `## ` heading above `### Standing patterns` so it fell out
 of the first handoff block — and ran the surfacer. It behaved correctly: warned, and emitted
-`degraded`. Ran it a few times across the diagnosis. **P13 now reports 12 events in 7 days,
-and 6 of them are my test.** The predicate cannot tell a probe from a real degradation, so the
+`degraded`. Ran it a few times across the diagnosis.
+
+**FINAL COUNT 14, of which 8 are mine — and the number grew TWICE while this entry was being
+written.** It read 12/6 when first drafted; re-planting again to verify the *fixed* guards
+(the `are_surfaced` anchoring and the non-vacuous floor) added 2 more. **The entry's own
+subject compounds through the act of documenting it**: every honest verification of a
+`degraded`-emitting component is another event the predicate cannot distinguish from a real
+failure. Stated rather than quietly corrected, because "I checked twice, so the count is
+higher" is exactly the dynamic the entry exists to name — and it means **the next person to
+verify this will make it 15 or 16.** The predicate cannot tell a probe from a real degradation, so the
 act of confirming the detector works inflated the thing the detector reports.
 
 **This is standing pattern #7 inverted.** *"A test is never evidence about the thing it
@@ -3114,7 +3126,7 @@ silenced. P3 gets away with it because the harness supplies the trigger, not the
 **Do not "fix" it by snoozing P13** — that blinds the predicate to new events, which is worse
 than the noise, and is why G-a's *"build remedy or add snooze"* has no right answer here.
 
-**Immediate, non-mechanical mitigation:** these 6 age out on **2026-08-24**, not 08-23 —
+**Immediate, non-mechanical mitigation:** these 8 age out on **2026-08-24**, not 08-23 —
 `p13_degraded` uses `(now - when).days <= DEGRADED_WINDOW_DAYS`, which is inclusive and
 truncating, so events stamped 08-16T00:0x still count *through* 08-23.
 Until then, P13's count is known-inflated and this entry is the attribution.

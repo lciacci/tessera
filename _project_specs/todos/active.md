@@ -330,7 +330,22 @@ earlier draft of this very section put them behind `> ` so SessionStart surfaced
    which is the right direction: the lead goal is now visibly `"what's next"`. **The 200-char
    preview cap stays** — privacy decision, the only limiter still working when the regex
    redactor fails open, and checkpoint headroom is ~700b.
-5. **conclave F-004 is the only item open across six downstream projects** — *"the review gate
+5. **THE SPEND GUARD BLOCKS THE GREP THAT WOULD AUDIT IT — new 2026-08-16, NOT fixed.**
+   `_segments()` (`scripts/spend/guard.py:208`) splits on the pipe character **before** quotes
+   are stripped, so a quoted alternation is torn into fragments with unbalanced quotes and text
+   that sat safely inside quotes reaches `COMMITTING` as if it were a command. **A read-only
+   grep whose SEARCH PATTERN lists the guard's own verbs is denied.** Four false positives in
+   one session, all read-only, and **the count grew by diagnosing it** — including the `git
+   commit` heredoc carrying the write-up, so *the description of the defect could not be
+   committed* (worked around with `git commit -F <file>`, disclosed in the entry). Left unfixed
+   **deliberately**: highest-stakes control in the repo, three guards broke today *by being
+   fixed*, and a false positive on a read-only command fails in the safe direction. The remedy
+   and — more importantly — **the trap it must clear first** (it must not blind the guard to a
+   wrapper-led command that legitimately quotes a boot verb, which is what `WRAPPER` catches)
+   are in `docs/observatory.md`. **Do not add a `grep` exemption and do not widen `REDUCING`;
+   the defect is in TOKENISATION, not the verb list.** One mechanism there is labelled a
+   hypothesis, not a finding — the session's first denial is still unexplained.
+6. **conclave F-004 is the only item open across six downstream projects** — *"the review gate
    covers the draft and never the fix"*. The 08-10 queue's item 4 (conclave work) is still
    where T2 receipts would come from, and there are still none.
 
