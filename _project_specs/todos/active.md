@@ -258,17 +258,30 @@ earlier draft of this very section put them behind `> ` so SessionStart surfaced
    "not ours" when it means "not required to exist on disk", and letting a guard share its
    predicate with the filter it guards. Both shipped, were reviewed, and were reworked in
    `7367c3d`.
-2. **THE PHANTOM-PATH CLASS IS NOT CLOSED — 7 index keys remain and one is a live doc defect.**
-   `scripts/tdd-loop-check.sh` is named by **ADR-0007 and ADR-0008** and has **zero commits in
-   all of git history** — a doc claiming a file that never existed, the exact shape of the
-   phantom `mnemos-compact-recovery.sh` that `check_referenced_paths_exist` was *built to
-   catch*. It survives because `DOC_SKIP = ("docs/adr/",)` exempts ADRs from that check, so
-   **nothing** catches a new foreign or phantom path written into an ADR. Braintrust's
-   `docs/specification.mdx` and `docs/client-implementation/…mdx` are the same defect from
-   ADR-0020. The other four (`bin/kimi`, `bin/review`, `bin/research`, `docs/maggy-rfc.md`)
-   are **correct** — real files this repo deleted, and an ADR that governed one arguably
-   SHOULD fire if it is recreated. **Do not "fix" those with a blanket
-   every-key-must-exist check; that is the wrong question.**
+2. **THE DOC_SKIP GAP IS REAL; THE EXAMPLE I FIRST GAVE FOR IT WAS NOT.** 7 phantom index keys
+   remain, and **5 of the 7 are CORRECT, not defects.** Only Braintrust's
+   `docs/specification.mdx` and `docs/client-implementation/…mdx` (ADR-0020) are genuinely
+   foreign and unfixed.
+   **CORRECTION, 2026-08-15, same session that wrote the claim — and `7af87fd`'s commit
+   message still carries the wrong version.** I recorded `scripts/tdd-loop-check.sh` as *"a
+   doc claiming a file that never existed, the exact shape of the phantom
+   `mnemos-compact-recovery.sh`"*, on the evidence that it has zero commits in git history.
+   **It is the opposite.** ADR-0007:463 names it *"its sole mechanism
+   (`scripts/tdd-loop-check.sh`) **does not exist**"*, and ADR-0008:37 refutes the framing in
+   terms: *"The skill is a setup guide, **not a false claim of an existing script**."* Two
+   ADRs correctly recording an ABSENCE. And since ADR-0008 decided to KEEP
+   `iterative-development`, whose mechanism that file would be, an ADR firing the day someone
+   creates it is **correct governance** — the same bucket as `bin/kimi`, `bin/review`,
+   `bin/research`, `docs/maggy-rfc.md`: real paths this repo deleted or has not built.
+   **The method error is the lesson, and it is this session's own recurring one:** I read one
+   signal (`git log` = 0) and generalised without reading the sentence around the path —
+   identical in shape to reading one `PATH_ALLOWLIST` comment block and treating the whole
+   set as "not ours". **Do not fix any of the five with a blanket every-key-must-exist check;
+   that is the wrong question, and it would go red on paths that are behaving correctly.**
+   **What SURVIVES the correction:** `DOC_SKIP = ("docs/adr/",)` exempts ADRs from
+   `referenced-paths-exist`, so **nothing** catches a genuinely foreign path written into an
+   ADR — which is how ADR-0023's five got in, and how ADR-0020's two are still there. That
+   gap is unclosed and is the real item here.
 3. **Three ADR cadences ride on human recall, and registering one changed nothing.**
    ADR-0013 (2026-09-23), ADR-0020 (2026-10-05), ADR-0023 (2026-10-14) — two inside 60 days.
    Nothing parses an ADR's `Next check:` field, and — **checked, not assumed** —
