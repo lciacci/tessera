@@ -28,9 +28,19 @@ import sys
 from pathlib import Path
 
 from decision_amendments import build_amendments, render_amendments
+# Module scope, like decision_amendments above, NOT a defensive try/except. An earlier
+# version imported doccheck lazily-and-defensively so a failure degraded to "exempt
+# nothing" — but doccheck is not shipped downstream, so that degradation was permanent and
+# invisible in every scaffolded project, and the arm meant to catch it could never fire in
+# the only process that runs the check. A hard import states the dependency honestly;
+# bin/tessera-new-project copies this file with its deps, and doccheck's
+# `decision-surface-deps-ship-downstream` asserts repo_paths stays in that copy set.
+from repo_paths import FOREIGN_PATHS, PLACEHOLDER_PATTERN
 
 ROOT = Path(__file__).resolve().parent.parent
 MAX_DOCS = 3
+
+_PLACEHOLDER = re.compile(PLACEHOLDER_PATTERN)
 
 # Backtick-quoted repo paths, anywhere in the body — NOT just the References section.
 # ADR-0004 names templates/tessera/settings.base.json in its prose and in References;
@@ -91,59 +101,38 @@ def _first_decision_line(body: str) -> str:
     return ""
 
 
-def _exempt_paths() -> "tuple[set, object]":
-    """doccheck's OWN record of which backticked paths are not this repo's to claim.
+def _is_exempt(path: str) -> bool:
+    """True when a backticked token belongs to ANOTHER repo or to a downstream project.
 
-    THE POINT IS THAT THIS IS NOT A SECOND LIST. `doccheck.PATH_ALLOWLIST` already carries
-    the judgement, entry by entry, with the reason written beside it — *"Other repos' files.
-    The observatory evaluates GSD; it doesn't claim to contain it."* That knowledge existed
-    and this module could not see it, so every path a human had explicitly marked "not ours"
-    was silently promoted here into a governing-decision key. Found 2026-08-15: six of the
-    six observatory-sourced phantom keys were already exempt in doccheck.
+    Reads `repo_paths.FOREIGN_PATHS`, which answers exactly that one question. It must NOT
+    be widened back to `doccheck.PATH_ALLOWLIST`: that set means "not required to exist on
+    disk", which also covers Tessera's OWN gitignored runtime state and its own planned
+    paths. Using it here silenced this hook on `.claude/settings.local.json` — a live 16KB
+    file — dropping ADR-0009 and an observatory entry. See repo_paths' module docstring.
 
-    Imported LAZILY and DEFENSIVELY, both deliberately:
-      - lazily, because doccheck imports this module (inside a function) and a module-level
-        import back would be a cycle;
-      - defensively, because this runs in a PreToolUse hook whose stderr is discarded, and
-        an import that raises there is the 2026-08-10 silent-hook bug exactly. Degrading to
-        "exempt nothing" fails LOUD in the right direction — the surface gets noisier, never
-        quieter, and a hook that over-reports is diagnosable while a dead one is not.
-
-    The degradation is NOT silent: doccheck's `decision-surface-honors-path-exemptions`
-    asserts the index carries no exempt key, so a broken import turns that check red rather
-    than quietly restoring the defect. (#1 — what would tell you the check itself died.)
-
-    ~9ms measured. Cost is not the reason to avoid it.
+    THE COMPARISON BELOW IS DUPLICATED IN `doccheck.check_decision_surface_honors_path_
+    exemptions` ON PURPOSE. That guard must not call this function: the first version did,
+    so stubbing this predicate restored the entire defect (index 140 -> 148 keys) while the
+    check reported clean. Data is shared; the comparison is not.
     """
-    try:
-        import doccheck
-        return doccheck.PATH_ALLOWLIST | doccheck.PLANNED_PATHS, doccheck.PLACEHOLDER
-    except Exception:
-        return set(), None
-
-
-def _is_exempt(path: str, exempt: set, placeholder: object) -> bool:
-    """True when a backticked token is not a Tessera path this repo should claim to govern.
-
-    Prefix-aware to match doccheck's own comparison, so `docs/FINDINGS.md` exempts and
-    `.mnemos` exempts everything beneath it. The placeholder arm catches template literals
-    like `.claude/scripts/X` and `docs/adr/NNNN-*.md`, which are shapes, never files.
-    """
-    if placeholder is not None and placeholder.search(path):
+    if _PLACEHOLDER.search(path):
         return True
     bare = path.rstrip("/")
-    return any(bare == p or path.startswith(p + "/") for p in exempt)
+    return any(bare == p or path.startswith(p + "/") for p in FOREIGN_PATHS)
 
 
 def build_index() -> dict[str, list[dict]]:
     """path-prefix -> [{doc, title, gloss, kind}]. Raises if the record is unreadable.
 
-    Paths doccheck exempts are skipped — see `_exempt_paths`. A foreign repo's
-    `docs/architecture.md` must not make an evaluation of that repo fire as a governing
-    decision the day this repo gains a file by the same name.
+    Paths belonging to another repo or to a downstream project are skipped — see
+    `_is_exempt`. A foreign repo's `docs/architecture.md` must not make an evaluation of
+    that repo fire as a governing decision the day this repo gains a file by that name.
+
+    Tessera's OWN paths are never skipped, including ones not on disk: gitignored runtime
+    state and planned-but-unbuilt files are exactly where a governing decision should
+    surface the moment someone creates them.
     """
     index: dict[str, list[dict]] = {}
-    exempt, placeholder = _exempt_paths()
 
     for adr in sorted((ROOT / "docs" / "adr").glob("0*.md")):
         body = adr.read_text()
@@ -160,7 +149,7 @@ def build_index() -> dict[str, list[dict]]:
             "execution": _execution_warning(body),
         }
         for path in set(_PATH.findall(body)):
-            if _is_exempt(path, exempt, placeholder):
+            if _is_exempt(path):
                 continue
             index.setdefault(path, []).append(entry)
 
@@ -172,7 +161,7 @@ def build_index() -> dict[str, list[dict]]:
             entry = {"doc": "docs/observatory.md", "title": title,
                      "gloss": "", "kind": "observatory", "sort": "z"}
             for path in set(_PATH.findall(chunk)):
-                if _is_exempt(path, exempt, placeholder):
+                if _is_exempt(path):
                     continue
                 index.setdefault(path, []).append(entry)
     return index

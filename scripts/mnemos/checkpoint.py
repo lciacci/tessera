@@ -311,11 +311,24 @@ def _render_goals(shown: list) -> str:
     """
     if not shown:
         return 'No active goal'
+    # `or 'No active goal'` is NOT redundant. The old `'; '.join(...) or ...` covered a lone
+    # goal with empty content; returning shown[0].content bare reintroduced an empty string,
+    # which _format_checkpoint renders as a '### Goal' heading with nothing under it and
+    # mnemos-pre-compact.sh's `if goal:` drops entirely. An empty field reads as "nothing to
+    # report" rather than "the record is broken" — F-001's shape.
     if len(shown) == 1:
-        return shown[0].content
+        return shown[0].content or 'No active goal'
     earlier = '\n'.join(f'  - {n.content}' for n in shown[1:])
-    return (f'{shown[0].content}\n'
-            f'[earlier goals, one per prior session — NOT this session\'s task]\n'
+    # The header states ONLY what _select_goals guarantees: recency order, bridge imports
+    # excluded. An earlier draft called the lead line "this session's task", which the
+    # default call path does not provide — write_checkpoint's task_id defaults to None, and
+    # with no task_id _select_goals skips the live-session sort and shown[0] is merely the
+    # newest goal (test_without_a_task_id_selection_degrades_to_recency codifies exactly
+    # that). The incident that prompted this whole fix is the proof: shown[0] was
+    # "what's next", which was nobody's task. Nor is "one per prior session" true — nothing
+    # dedupes by task_id, and `mnemos add goal --task-id` can mint several for one session.
+    return (f'{shown[0].content or "(empty goal)"}\n'
+            f'[earlier goals, most recent first — NOT necessarily this session\'s task]\n'
             f'{earlier}')
 
 

@@ -182,6 +182,18 @@ def cmd_init(store: MnemosStore) -> int:
     return 0
 
 
+
+def _goal_oneline(goal: str) -> str:
+    """First line of the goal, for fixed-width status output.
+
+    The checkpoint's goal became MULTI-LINE on 2026-08-15 (one goal per line, so a
+    truncated goal cannot read as running into the next). These two call sites render it
+    as a single status column, where a bare `[:60]` slice now usually contains a newline
+    and splits the line. Taking the lead line is right here: the earlier goals are history,
+    and status is a one-glance field, not the checkpoint payload.
+    """
+    return (goal or '').splitlines()[0][:60] if goal else ''
+
 def cmd_status(store: MnemosStore, args) -> int:
     if not store.exists():
         print('No Mnemos database. Run `mnemos init` first.')
@@ -220,7 +232,7 @@ def cmd_status(store: MnemosStore, args) -> int:
     cp = store.get_latest_checkpoint()
     if cp:
         print(f'\n  Last checkpoint:  {cp.id[:8]} ({cp.created_at})')
-        print(f'    Goal: {cp.goal[:60]}')
+        print(f'    Goal: {_goal_oneline(cp.goal)}')
         print(f'    Fatigue then: {cp.fatigue_at_checkpoint:.2f}')
 
     return 0
@@ -317,7 +329,7 @@ def cmd_checkpoint(store: MnemosStore, args) -> int:
         store.log_fatigue(fatigue)
 
     print(f'Checkpoint written: {cp.id[:8]}')
-    print(f'  Goal: {cp.goal[:60]}')
+    print(f'  Goal: {_goal_oneline(cp.goal)}')
     print(f'  Constraints: {len(cp.active_constraints)}')
     print(f'  Results: {len(cp.active_results)}')
     print(f'  Fatigue: {cp.fatigue_at_checkpoint:.2f}')

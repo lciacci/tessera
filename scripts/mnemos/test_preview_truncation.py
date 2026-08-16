@@ -65,14 +65,40 @@ def test_the_cut_lands_on_whitespace_not_inside_a_word():
     assert text[len(out) - 1] == " "
 
 
+def demo() -> None:
+    """Run every test in this module.
+
+    DERIVED, NOT HAND-MAINTAINED — the same runner as
+    test_checkpoint_constraint_filter.demo(), for the same reason: a literal list of test
+    names is a second definition of the module's contents, and the copy that drifts is
+    always the one nobody runs. That file's list had silently fallen four behind before it
+    was replaced (2026-08-10); these two files shipped 2026-08-15 with a fresh literal list
+    each, which is the identical defect re-introduced five days later by someone who had
+    read the fix. Review caught it.
+
+    Fixture-needing tests are skipped BY NAME AND REPORTED, never silently dropped.
+    """
+    import inspect
+
+    tests = [(name, fn) for name, fn in sorted(globals().items())
+             if name.startswith('test_') and inspect.isfunction(fn)]
+    assert tests, 'no tests discovered — the runner is broken, not the module empty'
+
+    ran, skipped = 0, []
+    for name, fn in tests:
+        if inspect.signature(fn).parameters:
+            skipped.append(name)
+            continue
+        fn()
+        ran += 1
+
+    # `ok (0 run)` is not ok — a green word over a runner that executed nothing.
+    assert ran, f'demo() executed NOTHING — all {len(skipped)} tests read as fixture-needing'
+    if skipped:
+        print(f'ok ({ran} run; {len(skipped)} need pytest fixtures: {", ".join(skipped)})')
+    else:
+        print(f'ok ({ran} run)')
+
+
 if __name__ == '__main__':
-    # Run as a MODULE (`python -m scripts.mnemos.test_preview_truncation`), which is how
-    # run-tests.sh invokes every mnemos self-check. Without this block the file imports
-    # cleanly, asserts nothing, and exits 0 — a vacuous green, which is the exact trap the
-    # runner's own comment documents for pytest-collected mnemos files.
-    test_the_live_regression_no_longer_ends_mid_word()
-    test_short_text_is_returned_untouched_and_unmarked()
-    test_never_exceeds_the_storage_cap_including_the_ellipsis()
-    test_a_long_unbroken_token_keeps_the_hard_cut()
-    test_the_cut_lands_on_whitespace_not_inside_a_word()
-    print('ok')
+    demo()

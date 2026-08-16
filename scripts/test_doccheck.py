@@ -2442,15 +2442,11 @@ def test_live_repo_indexes_no_path_doccheck_exempts():
 
 
 def test_fires_when_the_filter_call_is_removed(monkeypatch):
-    """RE-PLANT D: delete the `_is_exempt` guard from build_index and it must go red.
-
-    This is the break the check actually guards. A version that only ever ran against the
-    fixed code would pass here identically, which is the whole point of running it broken.
-    """
+    """Delete the `_is_exempt` guard from build_index and the check must go red."""
     sys.path.insert(0, str(Path(doccheck.__file__).parent))
     import decision_surface
 
-    unfiltered = {k: v for k, v in decision_surface.build_index().items()}
+    unfiltered = dict(decision_surface.build_index())
     unfiltered["docs/ARCHITECTURE.md"] = [{"doc": "docs/observatory.md", "title": "probe",
                                            "gloss": "", "kind": "observatory", "sort": "z"}]
     monkeypatch.setattr(decision_surface, "build_index", lambda: unfiltered)
@@ -2458,44 +2454,65 @@ def test_fires_when_the_filter_call_is_removed(monkeypatch):
     assert any("docs/ARCHITECTURE.md" in v for v in bad), bad
 
 
-def test_fires_when_the_defensive_import_degrades(monkeypatch):
-    """RE-PLANT B: `_exempt_paths()` returning an empty set must NOT pass vacuously.
+def test_fires_when_the_filter_predicate_itself_regresses(monkeypatch):
+    """THE BREAK THAT DEFEATED THE FIRST VERSION — the reason this guard was rewritten.
 
-    The import is deliberately defensive — it runs in a PreToolUse hook whose stderr is
-    discarded, so it must never raise. That makes silent degradation the likely failure,
-    and a check that reads a filtered index would go green while every foreign path was
-    being indexed again. The empty-set arm is what stops that.
+    v1 called `decision_surface._is_exempt`, so the filter and the guard shared one
+    predicate. Stubbing it restored the entire defect (index 140 -> 148 keys, every foreign
+    path reindexed) while the check returned []. Neither re-plant written at the time
+    touched `_is_exempt`, which is exactly why both fired and this did not. Review found it;
+    the guard now re-implements the comparison instead of importing it.
+
+    A guard must not share its predicate with the thing it guards. Sharing DATA is
+    single-sourcing; sharing the COMPARISON makes the check an echo.
     """
     sys.path.insert(0, str(Path(doccheck.__file__).parent))
     import decision_surface
 
-    monkeypatch.setattr(decision_surface, "_exempt_paths", lambda: (set(), None))
-    monkeypatch.setattr(decision_surface, "build_index", dict)   # nothing to flag
+    monkeypatch.setattr(decision_surface, "_is_exempt", lambda path: False)
     bad = doccheck.check_decision_surface_honors_path_exemptions()
-    assert any("EMPTY exempt set" in v for v in bad), bad
+    assert bad, "the guard shares its predicate with the filter again — it is vacuous"
+    assert any("bin/lib/" in v for v in bad), bad
+
+
+def test_does_not_flag_tessera_s_own_paths_however_absent():
+    """Runtime state and planned paths are OURS. Exempting them silenced a live file.
+
+    Reusing `doccheck.PATH_ALLOWLIST` as "not this repo's" was the v1 design error: that
+    set means "not required to exist on disk", and it also holds Tessera's own gitignored
+    runtime state. `.claude/settings.local.json` — live, 16KB, agent-editable — lost
+    ADR-0009 and an observatory entry, so editing it produced no DECISION SURFACE at all.
+    A change meant to stop the hook firing WRONGLY stopped it firing on a real file.
+    """
+    sys.path.insert(0, str(Path(doccheck.__file__).parent))
+    import decision_surface
+
+    for ours in (".claude/settings.local.json", ".mnemos", ".tessera/logs",
+                 ".tessera/third-party-scope.yml"):
+        assert not decision_surface._is_exempt(ours), f"{ours} is Tessera's own"
+    assert decision_surface.build_index().get(".claude/settings.local.json"), \
+        "the decision surface is silent on a live, agent-editable file"
 
 
 def test_does_not_flag_a_deleted_tessera_path():
-    """Existence and foreignness are different questions, and only the second is checked.
-
-    `bin/kimi`, `bin/review`, `bin/research` and `docs/maggy-rfc.md` are real files this
-    repo deleted. An ADR that governed one arguably SHOULD fire if it is recreated, so
-    they must survive the filter — a blanket "every index key must exist" would be wrong.
-    """
+    """Existence and foreignness are different questions; only the second is checked."""
     sys.path.insert(0, str(Path(doccheck.__file__).parent))
     import decision_surface
 
-    exempt = doccheck.PATH_ALLOWLIST | doccheck.PLANNED_PATHS
     for deleted in ("bin/kimi", "bin/review", "bin/research", "docs/maggy-rfc.md"):
-        assert not decision_surface._is_exempt(deleted, exempt, doccheck.PLACEHOLDER)
+        assert not decision_surface._is_exempt(deleted)
     assert "bin/review" in decision_surface.build_index()
 
 
 def test_placeholder_tokens_are_not_governing_paths():
-    """`.claude/scripts/X` is a shape, never a file. doccheck already knew; this one didn't."""
+    """`.claude/scripts/X` is a shape, never a file."""
     sys.path.insert(0, str(Path(doccheck.__file__).parent))
     import decision_surface
 
-    exempt = doccheck.PATH_ALLOWLIST | doccheck.PLANNED_PATHS
-    assert decision_surface._is_exempt(".claude/scripts/X", exempt, doccheck.PLACEHOLDER)
+    assert decision_surface._is_exempt(".claude/scripts/X")
     assert ".claude/scripts/X" not in decision_surface.build_index()
+
+
+def test_the_scaffold_ships_every_module_the_hook_imports():
+    """decision_surface's module-scope imports must all be in the downstream copy set."""
+    assert doccheck.check_decision_surface_deps_ship_downstream() == []

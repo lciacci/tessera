@@ -61,10 +61,16 @@ chmod +x "$TARGET/.claude/scripts/tessera-gate-scan.sh"
 # dangling `if [ -x … ]` that silently no-ops (found when a fleet back-fill added the wiring
 # with no file). Same "ship both halves or neither" rule as the gate recorder and spend guard.
 cp "$TESSERA_ROOT"/.claude/scripts/tessera-decision-surface.sh "$TARGET/.claude/scripts/"
-# decision_amendments.py is NOT optional: decision_surface.py imports it at module scope, so
-# shipping one without the other makes the hook die on import in every downstream. Ship both.
+# decision_amendments.py and repo_paths.py are NOT optional: decision_surface.py imports both
+# at module scope, so shipping one without the others makes the hook die on import in every
+# downstream. Ship all three. (repo_paths joined 2026-08-15. The version before it reached for
+# doccheck.py — which is NOT shipped here — behind a defensive try/except, so the exemption
+# silently did nothing in every scaffolded project, permanently, and the arm meant to detect
+# that could only ever run in THIS repo where the import cannot fail. A hard import states the
+# dependency instead of hiding it.) Asserted by doccheck `decision-surface-deps-ship-downstream`.
 cp "$TESSERA_ROOT"/scripts/decision_surface.py \
-   "$TESSERA_ROOT"/scripts/decision_amendments.py "$TARGET/scripts/"
+   "$TESSERA_ROOT"/scripts/decision_amendments.py \
+   "$TESSERA_ROOT"/scripts/repo_paths.py "$TARGET/scripts/"
 chmod +x "$TARGET/.claude/scripts/tessera-decision-surface.sh"
 # Escalation: reached by name from PATH (tessera/bin). The copy is a BRIDGE for machines
 # where PATH is not set — delete it once install.sh's PATH check is green everywhere.

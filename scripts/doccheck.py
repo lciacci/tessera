@@ -43,6 +43,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+# One definition of the foreign-path data, shared with decision_surface. Only the DATA is
+# shared: each side applies its own comparison, deliberately — see repo_paths' docstring.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from repo_paths import FOREIGN_PATHS, PLACEHOLDER_PATTERN  # noqa: E402
+
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -109,19 +114,15 @@ PATH_ALLOWLIST = {
     # gitignored runtime state: for these, "exists" is a MACHINE-LOCAL fact, and a check that
     # passes only on the author's disk is asserting nothing shared.
     ".claude/settings.local.json", ".tessera/.spend-backstop-fires",
-    # Other repos' files. The observatory *evaluates* GSD; it doesn't claim to contain it.
-    "bin/lib/state.cjs", "bin/lib/capability-registry.cjs",
-    "bin/lib/capability-loader.cjs", "docs/ARCHITECTURE.md",
-    ".claude/rules",
-    # Claims about DOWNSTREAM projects, not about Tessera. Tessera is the framework: it
-    # consumes downstreams' FINDINGS.md (see bin/tessera-findings) and does not carry one,
-    # and _project_specs/session/ is the layout the base skill prescribes downstream.
-    "docs/FINDINGS.md", "_project_specs/session",
-    # A PATH-fallback bridge copy that lives in DOWNSTREAM repos (conclave, howler), not here.
-    # Tessera reaches its own binaries through bin/. Kept only because CLAUDE.md's escalation
-    # instructions name it as the fallback when tessera/bin is not on PATH.
-    "scripts/tessera-escalate",
-}
+    # Other repos' and downstream projects' files. MOVED to scripts/repo_paths.py on
+    # 2026-08-15 and unioned back in here, so the data has one definition and this check's
+    # behaviour is unchanged. They left because a SECOND consumer needed exactly this
+    # subset and nothing else: decision_surface must not treat an evaluated repo's
+    # `docs/architecture.md` as a Tessera path it governs. Reusing the whole of
+    # PATH_ALLOWLIST there was the bug — this set answers "is it required to exist on
+    # disk", and the entries ABOVE are Tessera's own gitignored runtime state, for which
+    # the honest answer to "should a decision surface on it" is YES.
+} | FOREIGN_PATHS
 
 # Designed in docs, never built. NOT the same as a stale reference — these are promises
 # the framework has not kept, and docs/design-principles.md describes them in the PRESENT
@@ -1756,6 +1757,50 @@ def check_pretooluse_hooks_reach_the_model() -> list[str]:
     return bad
 
 
+def check_decision_surface_deps_ship_downstream() -> list[str]:
+    """Every module `decision_surface.py` imports at module scope must be scaffolded too.
+
+    ADDED 2026-08-15. `decision_surface` is copied into every new project by
+    `bin/tessera-new-project`; a module-scope import it does NOT copy makes the hook die on
+    import in every downstream — the failure `decision_amendments`' own comment already
+    warns about. `repo_paths` joined that copy set the same day and nothing asserted it.
+
+    The version this replaced was worse than a missing copy. It reached for `doccheck.py`
+    behind a defensive try/except, so downstream the import failed, the exemption silently
+    did nothing, permanently, and the arm written to detect that degradation could only run
+    in THIS repo — where the import cannot fail. Ship-both-halves (#5) with the halves one
+    process apart.
+
+    Parses the imports rather than matching a list, so adding a new dependency cannot pass
+    by being forgotten here as well as there.
+    """
+    src = ROOT / "scripts" / "decision_surface.py"
+    scaffold = ROOT / "bin" / "tessera-new-project"
+    if not src.exists() or not scaffold.exists():
+        return ["scripts/decision_surface.py or bin/tessera-new-project missing — cannot "
+                "verify the downstream hook's dependencies ship with it"]
+    try:
+        tree = ast.parse(src.read_text())
+    except SyntaxError as exc:
+        return [f"scripts/decision_surface.py does not parse: {exc}"]
+    local = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            name = node.module.split(".")[0]
+            if (ROOT / "scripts" / f"{name}.py").exists():
+                local.add(name)
+        elif isinstance(node, ast.Import):
+            for a in node.names:
+                name = a.name.split(".")[0]
+                if (ROOT / "scripts" / f"{name}.py").exists():
+                    local.add(name)
+    copied = scaffold.read_text()
+    return [f"scripts/decision_surface.py imports `{name}` at module scope but "
+            f"bin/tessera-new-project does not copy scripts/{name}.py — the decision-surface "
+            f"hook will die on import in every scaffolded project"
+            for name in sorted(local) if f"scripts/{name}.py" not in copied]
+
+
 def check_decision_surface_honors_path_exemptions() -> list[str]:
     """No path THIS FILE exempts may be indexed as a governing Tessera decision.
 
@@ -1797,17 +1842,23 @@ def check_decision_surface_honors_path_exemptions() -> list[str]:
         index = decision_surface.build_index()
     except Exception as exc:
         return [f"scripts/decision_surface.py cannot build its index: {exc}"]
-    exempt = PATH_ALLOWLIST | PLANNED_PATHS
+
+    # THE COMPARISON IS RE-IMPLEMENTED HERE, NOT IMPORTED. Calling
+    # `decision_surface._is_exempt` is what made the first version of this check vacuous:
+    # the filter and the guard shared one predicate, so stubbing it restored the entire
+    # defect (index 140 -> 148 keys, every foreign path reindexed) while this returned
+    # clean. Found by review, reproduced, and it is the reason these four lines are
+    # duplicated rather than factored. Sharing the DATA is single-sourcing; sharing the
+    # COMPARISON makes a guard an echo of the thing it guards.
+    placeholder = re.compile(PLACEHOLDER_PATTERN)
     bad = []
     for key in sorted(index):
-        if decision_surface._is_exempt(key, exempt, PLACEHOLDER):
+        bare = key.rstrip("/")
+        foreign = any(bare == p or key.startswith(p + "/") for p in FOREIGN_PATHS)
+        if foreign or placeholder.search(key):
             srcs = ", ".join(sorted({e["doc"] for e in index[key]}))
-            bad.append(f"decision_surface indexes `{key}` as a governing path, but doccheck "
-                       f"exempts it as not-this-repo's (named in {srcs})")
-    if not bad and not decision_surface._exempt_paths()[0]:
-        bad.append("decision_surface._exempt_paths() returned an EMPTY exempt set — its "
-                   "defensive import of doccheck is degrading, so every foreign path is "
-                   "being indexed again and this check is passing vacuously")
+            bad.append(f"decision_surface indexes `{key}` as a governing path, but it "
+                       f"belongs to another repo or a downstream project (named in {srcs})")
     return bad
 
 
@@ -2717,6 +2768,7 @@ CHECKS = {
     "docs-name-the-right-patterns-emitter": check_docs_name_the_right_patterns_emitter,
     "decision-surface-is-wired": check_decision_surface_is_wired,
     "decision-surface-honors-path-exemptions": check_decision_surface_honors_path_exemptions,
+    "decision-surface-deps-ship-downstream": check_decision_surface_deps_ship_downstream,
     "pretooluse-hooks-reach-the-model": check_pretooluse_hooks_reach_the_model,
     "referenced-paths-exist": check_referenced_paths_exist,
     "sibling-paths-exist": check_sibling_paths_exist,

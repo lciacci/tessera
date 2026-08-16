@@ -73,11 +73,40 @@ def test_goals_are_on_separate_lines():
         assert any(line.strip().lstrip('- ') == g.content for line in out.splitlines()), out
 
 
+def demo() -> None:
+    """Run every test in this module.
+
+    DERIVED, NOT HAND-MAINTAINED — the same runner as
+    test_checkpoint_constraint_filter.demo(), for the same reason: a literal list of test
+    names is a second definition of the module's contents, and the copy that drifts is
+    always the one nobody runs. That file's list had silently fallen four behind before it
+    was replaced (2026-08-10); these two files shipped 2026-08-15 with a fresh literal list
+    each, which is the identical defect re-introduced five days later by someone who had
+    read the fix. Review caught it.
+
+    Fixture-needing tests are skipped BY NAME AND REPORTED, never silently dropped.
+    """
+    import inspect
+
+    tests = [(name, fn) for name, fn in sorted(globals().items())
+             if name.startswith('test_') and inspect.isfunction(fn)]
+    assert tests, 'no tests discovered — the runner is broken, not the module empty'
+
+    ran, skipped = 0, []
+    for name, fn in tests:
+        if inspect.signature(fn).parameters:
+            skipped.append(name)
+            continue
+        fn()
+        ran += 1
+
+    # `ok (0 run)` is not ok — a green word over a runner that executed nothing.
+    assert ran, f'demo() executed NOTHING — all {len(skipped)} tests read as fixture-needing'
+    if skipped:
+        print(f'ok ({ran} run; {len(skipped)} need pytest fixtures: {", ".join(skipped)})')
+    else:
+        print(f'ok ({ran} run)')
+
+
 if __name__ == '__main__':
-    test_a_single_goal_gets_no_list_decoration()
-    test_no_goals_is_unchanged()
-    test_the_current_goal_still_leads_the_field()
-    test_a_truncated_goal_cannot_run_into_the_next_one()
-    test_every_goal_survives_the_rendering()
-    test_goals_are_on_separate_lines()
-    print('ok')
+    demo()
