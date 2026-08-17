@@ -4181,6 +4181,229 @@ first *observed* miss and settles the question on evidence rather than on plausi
 a fourth ADR ships a `Next check:` field, at which point the pattern has recurred enough to be
 cheaper to mechanise than to remember (#11).
 
+> **THE COUNT WAS NEVER THREE, OR FOUR, OR FIVE. IT IS TEN, AND NINE ARE LIVE *(2026-08-17)*.**
+> This entry said three; the 2026-08-15 review found `docs/adr/0011-sqlfluff-evaluation.md` and said
+> four; ADR-0024 added its own and said five. **All three counts were produced by reading, and all
+> three were wrong.** Enumerated mechanically instead, every ADR carrying a forward-dated
+> `Next check:` or `Next cadence review:`:
+>
+> | | ADR | date | days out |
+> |---|---|---|---|
+> | 1 | 0013 scryer | 2026-09-23 | 37 |
+> | 2 | 0002 effort-tier routing | 2026-09-24 | 38 |
+> | 3 | 0020 agent-behavior | 2026-10-05 | 49 |
+> | 4 | 0005 autonomy inflection | 2026-10-09 | 53 |
+> | 5 | 0006 instrumentation-not-control | 2026-10-10 | 54 |
+> | 6 | 0023 switchyard | 2026-10-14 | 58 |
+> | 7 | 0024 deepseek-harness | 2026-10-16 | 60 |
+> | 8 | 0012 sqlfluff warn-only | 2026-10-20 | 64 |
+> | 9 | 0021 deep agents | 2026-11-06 | 81 |
+> | — | 0011 sqlfluff | 2026-09-19 | **spent — superseded by ADR-0012, status corrected 2026-08-17** |
+>
+> **Six of the nine had never been counted by anyone: 0002, 0005, 0006, 0012, 0021, and 0024's own.**
+> ADR-0005 is the autonomy-readiness assessment; ADR-0006 is the instrumentation-not-control charter.
+> Those are not minor entries to have lost track of.
+>
+> **And the enumeration itself is the argument, because the first mechanical pass ALSO undercounted
+> — it returned seven and silently dropped ADR-0023.** The field appears in at least three prose
+> shapes: `> **Next check:** DATE`, `- Next cadence review: DATE (60 days, Watching).`, and
+> `- Next cadence review: **DATE**`. A regex written specifically to find them missed one on
+> punctuation. **That kills the counter-argument this entry has been resting on.** "Nine dates over
+> five months is a calendar problem, not a mechanism problem" assumes you can write the calendar —
+> and four attempts, one of them a purpose-built parser, each produced a different number. You cannot
+> reliably enumerate what you would put in the calendar. The evidence half is settled; what remains
+> is Lorenzo's call on whether the remedy is a `P17` predicate or simply a **required field format**
+> that makes the prose parseable, which is the cheaper half and was never on the table before.
+
+---
+
+### The decision surface silently drops its newest records — `MAX_DOCS=3` sorted oldest-ADR-first *(2026-08-17, surfaced by the ADR-0024 evaluation)*
+
+- **Status:** Investigating. Remedy scoped and deliberately split: the notice is safe, the cap and
+  the sort are not.
+- **Source:** ADR-0024 (`docs/adr/0024-deepseek-harness-evaluation.md`) §6. Found while checking
+  whether an ADR would even be a viable *channel* for two patterns the evaluation wanted to queue —
+  i.e. by asking principle #17's question of the record rather than of the model.
+
+**The mechanism.** `scripts/decision_surface.py` caps its render at `MAX_DOCS = 3` and sorts
+`(kind != "adr", e["sort"])` ascending, where an ADR's `sort` is its **filename**. So ADRs come
+first and *within* them the lowest number wins. The surface therefore shows the **oldest** decisions
+governing a file and hides the newest — the inverse of what recency would want. **It hides a future
+ADR only where three or more ADRs already govern the key** (23 of the 46, below); on the other 23
+a new ADR still renders, which is exactly the mechanic ADR-0024 §6 relies on for
+`scripts/repo_paths.py`. Stated precisely because the first draft of this entry said "structurally
+guaranteed to hide every future ADR on any file already at the cap", which is false for half of them.
+
+**Measured — and note there are THREE different counts here, which is how the first draft of this
+entry got its headline wrong. `lookup()` matches by PREFIX, so a record naming `scripts/` governs
+every key beneath it, and the direct-attachment count is not what the renderer truncates:**
+
+| Question | Count (of 146 index keys) |
+|---|---|
+| **Where does the render actually cut something?** (pre-slice matches > 3) | **46** |
+| Where would a *new ADR* be hidden? (≥3 ADRs after prefix matching) | 23 |
+| Where are ≥3 ADRs attached *directly*? | 14 |
+
+The last is what the first draft published as "14 of 146 … at or over the cap". It is reproducible,
+but it answers neither question the sentence was making, and **the number that matters is 46 —
+roughly three times larger.**
+
+| Key | Matched | Shown | Cut, most specific first |
+|---|---|---|---|
+| `docs/observatory.md` | 20 | 3 | 17 records |
+| `bin/tessera-watch` | 14 | 3 | **ADR-0015 — the Mnemos trial re-scope, which CREATED the P3 predicate this file owns** |
+| `bin/tessera-verify` | 13 | 3 | 10 records, including "`tessera-verify` did the work and lost the verdict" — **an entry about this exact file** — plus "The eager prefix is ~15.6k", "`doccheck.run()` has no per-check isolation", "P3 has never measured what it claims to measure" |
+| `bin/tessera-new-project` | 13 | 3 | ADR-0009 (skill delivery is curation), ADR-0012 |
+| `scripts/doccheck.py` | 12 | 3 | **ADR-0022 — "A crashed doccheck check blocks the commit"**, plus the observatory entry it resolved (`doccheck.run()` has no per-check isolation) |
+| `.claude/settings.json` | 8 | 3 | ADR-0019 (close the iCPG loop) |
+
+`bin/tessera-verify` was **missing from the first draft of this table**, and it is the sharpest row:
+`install.sh`'s `verify()` is the machine-known-good check, the file carries 13 governing records, and
+10 are cut — including the entry recording that this very tool lost its verdict channel. It also
+carries only **one** ADR, so it is a live example of the row above: a new ADR here would render fine.
+
+> **THE FIGURES DRIFTED INSIDE THE SESSION THAT WROTE THEM, AND THEN THE CORRECTION WAS WRONG TOO.**
+> First measured at 13 of 142 keys (10 / 12 / 12 / 7 / 18 per row). Re-measured after ADR-0024 and
+> this entry landed: 146 keys, rows at 12 / 14 / 13 / 8 / 20. Nothing was mis-counted — **writing the
+> record about the overflow deepened the overflow**, because an ADR and an observatory entry that
+> name these files in backticks *become* governing records for them. `scripts/doccheck.py` went
+> 10 → 12 and `bin/tessera-watch` 12 → 14. The cut is not a fixed backlog to be worked off; it grows
+> with every decision recorded, which is why the notice is the urgent half and the sort the
+> structural one.
+>
+> **Then the correction published "14 of 146", and review caught that the headline metric was the
+> wrong one entirely** — direct attachment, ignoring the prefix matching `lookup()` performs, so it
+> undercounted the real figure (46) by ~3×. Two independent errors in one paragraph: the first was
+> staleness, the second was measuring the wrong property while asserting that a stale measurement
+> *here* would be the worst possible place for one. **The reusable part is that re-measuring is not
+> the same as re-deriving what to measure** — the correction re-ran the original script and inherited
+> its definition, so it could only ever find drift, never a wrong denominator. Both were found by an
+> independent reviewer, not by re-running.
+
+**The ADR whose entire subject is doccheck's failure semantics is invisible on `doccheck.py`.** The
+ADR that created P3 is invisible on the file that evaluates P3. In both cases what was cut is *more*
+specific to the file than what was shown — the sort has no notion of specificity, only of age.
+
+**And there is no truncation notice.** The render ends with `Read before editing:` followed by the
+**deduplicated set of source documents** for the three surviving hits — `', '.join(sorted({h['doc']
+for h in hits}))` — so when all three are observatory entries it prints a *single* path, and it never
+indicates that ten or seventeen records were dropped. **That is standing pattern #12 inside the hook
+built to defeat silent failure**: a report entirely true, silently narrowed, the narrowing absent
+from the output. It surfaced in the same session as an evaluation praising DeepSeek Harness for
+mechanising exactly this disclosure as a required `## Known Limitations and Deferred Work` section —
+the tool you reach for to check your work is in scope for the check.
+
+**Remedy, split deliberately, because two thirds of it is dangerous.**
+1. **The notice — safe, and the only half ADR-0024 adopts.** Render `…and N more (cut by MAX_DOCS)`
+   with the names. Additive output **cannot suppress a live record**, which is precisely how the
+   2026-08-15 `PATH_ALLOWLIST` change went wrong: a fix meant to stop the hook firing wrongly stopped
+   it firing on something real. A notice has no such failure mode.
+2. **Raising `MAX_DOCS` — not taken.** The cap exists because this block is injected before every
+   edit; `docs/observatory.md` would render 18 records. Raising it trades a silent drop for prefix
+   dilution, and dilution is unmeasured (ADR-0021).
+3. **Changing the sort — not taken, and this is the one to be most careful with.** "Newest first" is
+   as arbitrary as "oldest first"; the right key is *specificity*, which is not currently computed
+   (`lookup()` matches by prefix, so a record naming `scripts/` and one naming the exact file are
+   indistinguishable at sort time). Live queue item 1 exists because this file has already been
+   reworked twice in a month, and both reworks shipped defects.
+
+**The trap any fix must clear:** a guard for this must not share `lookup()` with the thing it
+guards. Stubbing `_is_exempt` on 2026-08-15 fully restored a defect while the guard that called it
+returned clean. Re-plant **in** `lookup()` — e.g. force `MAX_DOCS = 99` and assert the notice
+disappears, then force a cut and assert it names the right records.
+
+**Revisit when:** the notice ships (closes half of this and leaves the sort question standing), or
+when a decision is missed in the wild because it was cut — which would be the first *observed* cost
+rather than a demonstrated one, and is the evidence that would license changing the sort.
+
+---
+
+### Word budgets on an always-loaded doc — the one case where measuring the artifact may not be principle #3's error *(2026-08-17, surfaced by the ADR-0024 evaluation)*
+
+- **Status:** Watching. Explicitly re-opens a question ADR-0021 closed, on one new argument.
+- **Source:** DeepSeek Harness `deepseek-harness/scripts/doc-budgets.manifest.json` +
+  `deepseek-harness/docs/AGENTS.md` §"Wordcount Budgets"; ADR-0024 §4. *(Foreign paths carry the
+  repo prefix deliberately — see the note at the end of this entry.)*
+
+**What they do.** A tracked manifest sets a word ceiling per standing doc — root `AGENTS.md` 1,950,
+`deepseek-harness/docs/architecture.md` 2,400, `deepseek-harness/docs/defensive-patterns.md` 550 —
+and `verify-doc-budgets` **rejects
+excess or missing files** as part of the commit-blocking gate set. The written escalation is
+ordered: *relocate* content to the tier that owns it, *condense*, and only then *raise the ceiling,
+justified in the PR*. Their own framing: **"Ceilings are guardrails, not reduction targets"**, with a
+required 5% headroom and an explicit rule that *"a too-low ceiling is a budget bug."*
+
+**Why this is not simply adoptable.** ADR-0021 built `scripts/prefix_meter.py` and stated that it
+**has no opinion on whether the prefix should be smaller** — size is the artifact, dilution is the
+pain, and a threshold on the artifact would be principle #3 aimed at the eager load. That reasoning
+is sound and this entry does not overturn it.
+
+**The one argument that might.** Principle #3 warns against measuring a *stand-in* for the pain. For
+a file loaded into every session, the words are not a stand-in — **they are the delivered payload**,
+occupying the window whether or not they are read. That is the narrow case where artifact and pain
+may coincide. Tessera has three data points that look like the coincidence: the ~15.6k eager prefix
+with `CLAUDE.md` at 47% and the only growing component; a checkpoint that overflowed its delivery
+channel and had to be cut twice; and a standing-patterns block that had to be split across two hooks
+because 10,878 characters silently became one delivered pattern.
+
+**Why it is Watching and not decided.** The counter is that none of those three was caught by a size
+threshold, and two were caught by *delivery* failures — a cap on `CLAUDE.md` would not have found
+either. A budget also picks victims by whoever edits last, which is the same objection that killed
+the invariant cap on 2026-08-10 (23 of 24 bodies distinct; a cap chooses by recency). And the
+honest read of their manifest is that **it is a friction mechanism, not a measurement** — you may
+always raise the ceiling, you just have to say so in the diff. Whether Tessera wants that friction
+is a taste question about how `CLAUDE.md` grows, and taste questions belong to Lorenzo.
+
+**Revisit when:** `eager-prefix-figure-is-current` goes red, i.e. the tracked prefix leaves the 5%
+band around the recorded 15,600. **That is close, and the first draft of this trigger did not know
+it:** it said "revisit on a step change rather than the flat ~15.6k it has shown across ten days",
+copying a window that ended 2026-08-10. Measured today, `scripts/prefix_meter.py` reports **16,232
+tracked (19,428 in practice)** — **4.05% over the anchor, one point from the assertion failing.**
+So the trigger as first written would have read "still flat" right up to the moment doccheck went
+red, which is precisely when an early signal has stopped being early. *(The `CLAUDE.md` share quoted
+above as 47% is from the same superseded reading; the 2026-08-15 re-measure puts it at 48%.)*
+**Or** revisit when a delivery channel truncates again — at which point the question stops
+being about dilution (unmeasured) and becomes about a cap that is real and measurable, which is a
+different and much stronger case.
+
+> **THE FIRST DRAFT OF THIS ENTRY COMMITTED THE ADR-0023 BUG, AND SO DID ADR-0024 — BUT ONLY ONE OF
+> THEM WAS CAUGHT, WHICH IS LIVE QUEUE ITEM 2 DEMONSTRATED RATHER THAN ARGUED *(2026-08-17)*.** Both
+> files were written in one change and both named the same four DeepSeek paths in bare backticks —
+> their docs/AGENTS.md, docs/architecture.md, docs/defensive-patterns.md and
+> scripts/doc-budgets.manifest.json, deliberately un-backticked *here* for the reason the next
+> paragraph gives. All four entered the decision-surface index as **Tessera**
+> paths (142 → 4 phantom keys, each attributed to ADR-0024 *and* to this entry), meaning a future
+> edit to a Tessera file of any of those names would have surfaced a DeepSeek evaluation as its
+> governing decision. `referenced-paths-exist` went red on the **observatory** copy within seconds
+> and said nothing about the **ADR** copy, because `DOC_SKIP = ("docs/adr/",)` exempts ADRs from
+> that check and five others. Same four paths, same change, one file guarded and one not.
+> **This is the natural experiment queue item 2 was arguing from inference: the gap is not
+> theoretical, and the ADR is the half that gets missed.** Fixed in both by repo-prefixing; the
+> prefix defeats `decision_surface._PATH`, which anchors on a backtick immediately followed by a
+> Tessera top-level directory.
+>
+> **AND THE FIX NOTE YOU ARE READING DID IT AGAIN — fourth recurrence, inside the sentence
+> describing the third.** The paragraph above originally enumerated the four offending paths in
+> backticks *in order to name them as offenders*, re-creating all four index keys and going red on
+> the same check, one edit after clearing it. ADR-0023's correction bullet has this exact failure on
+> record, it is quoted in live queue item 2, I had read it this session, and I committed it anyway
+> within ten minutes. **The reusable conclusion is not "be careful": it is that a repo path and a
+> mention of a repo path are written in identical syntax, so every remedy that depends on the author
+> remembering which one they meant will fail again.** Backticks are gone from that enumeration for
+> that reason, which is a workaround, not a fix. The fix is one of: an escape the checkers honour, a
+> convention the gate can enforce, or DeepSeek Harness's own answer — cross-references are relative
+> **links**, never bare prose, so the distinction is structural (ADR-0024 §4, steal #1).
+>
+> **AND THE CLASS IS NOT CLEARED — two phantoms from this exact gap are live in the index right
+> now, and naming them is the point.** ADR-0020 backticks Braintrust's docs/specification.mdx and
+> docs/client-implementation/adding-behaviors-support.mdx (un-backticked here for the reason above);
+> neither is in `FOREIGN_PATHS`, so both are indexed as **Tessera** paths, and creating a Tessera file
+> at either name would surface an unrelated agent-behaviour evaluation as its governing decision.
+> `DOC_SKIP` is why nothing reports them. **This note originally read "fixed in both by
+> repo-prefixing" and stopped there** — true about ADR-0024, and a false green about the class, which
+> is #12 again. These two are the standing instances any fix has to clear, and they are the entire
+> content of live queue item 2 after the five correct keys are set aside.
+
 ---
 
 ## Closing notes

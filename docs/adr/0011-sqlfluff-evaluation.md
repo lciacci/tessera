@@ -1,7 +1,8 @@
 # ADR-0011: sqlfluff — the trigger fired, the evidence said no, and the trigger was the bug
 
 - **Date:** 2026-07-21
-- **Status:** Watching
+- **Status:** Superseded by ADR-0012
+- **Superseded because:** this ADR concluded "Watching" on 2026-07-21; ADR-0012 adopted sqlfluff warn-only one day later, on the grounds that this evaluation **answered the wrong question** — Lorenzo's instruction was to implement, not to decide whether to. Every measurement here still holds and ADR-0012 cites this document as where they live. **The `Watching for:` and `Next check:` block below is therefore spent** — the adopt/don't-adopt question it waits on was closed by ADR-0012, whose own cadence is 2026-10-20. *(Status corrected 2026-08-17: ADR-0012 has read "supersedes ADR-0011" since the day it was written, but this line was never updated to match, so this ADR still presented as an open Watching decision with a live 2026-09-19 cadence. Found by review during ADR-0024. The decision text is untouched.)*
 - **Decision driver:** Observatory trigger fired. `docs/observatory.md` → "sqlfluff — adopt when a downstream project has standalone SQL" named its adopt-when condition as "a downstream project introduces standalone `.sql` files or dbt models." settempo was adopted as the fifth downstream on 2026-07-21 carrying two standalone Postgres files (208 lines). The condition was met exactly as written.
 
 > **Watching for:** first-party SQL that is **query-shaped and frequently changed** — a dbt project, an analytics repo, a migrations directory under active iteration, or any tracked `.sql` containing `SELECT`. Not merely the existence of a `.sql` file.

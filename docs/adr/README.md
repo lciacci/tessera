@@ -51,6 +51,7 @@ Auto-generated below as ADRs are created. Update when adding a new ADR.
 | 0021 | 2026-08-08 | Deep Agents — rejected on layer, and the mirror is that our prefix measurement is frozen prose | Accepted |
 | 0022 | 2026-08-10 | A crashed doccheck check blocks the commit — isolation changes what "fails open" should mean | Accepted |
 | 0023 | 2026-08-15 | Switchyard — rejected on layer, and the mirror is that ADR-0002's "impossible" was only impossible from a hook | Watching |
+| 0024 | 2026-08-17 | DeepSeek Harness — rejected on layer for the third time, and the mirror is that our own decision surface silently drops its newest records | Watching |
 
 ---
 
