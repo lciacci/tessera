@@ -2737,7 +2737,7 @@ marker — is worth more than the 29%.
 standing patterns) ~2,790 — **~15,600 tokens**, plus the Mnemos checkpoint (~2,600) for ~18k in
 practice. (Estimated at chars/4; `count_tokens` if a decision ever rests on it.)
 
-**METERED 2026-08-17: 16,473 tokens tracked** *(was 15,837 on 08-10, 15,497 on 08-09)* — re-metered
+**METERED 2026-08-17: 16,784 tokens tracked** *(16,473 earlier the same day; 15,837 on 08-10, 15,497 on 08-09)* — re-metered
 because `CLAUDE.md` gained the second ADR-editing exception (`Status:` supersession) that day, per
 its own rule; `CLAUDE.md` is now **8,037 of the 16,473**, holding at ~49% and still the only
 component that grows. In practice 20,518, the extra being a 2,239-byte checkpoint and a
@@ -4399,6 +4399,13 @@ the invariant cap on 2026-08-10 (23 of 24 bodies distinct; a cap chooses by rece
 honest read of their manifest is that **it is a friction mechanism, not a measurement** — you may
 always raise the ceiling, you just have to say so in the diff. Whether Tessera wants that friction
 is a taste question about how `CLAUDE.md` grows, and taste questions belong to Lorenzo.
+
+> **`CLAUDE.md` CROSSED 50% OF THE PREFIX ON 2026-08-17** — 8,348 of 16,784, up from 47% when this
+> entry was written, and it is still the only component that grows. It gained two rules that day
+> (the `Status:` ADR exception, and the re-review rule conclave had written a day earlier and never
+> transferred). Neither is removable and both are load-bearing, which is exactly the case the
+> word-budget question exists for: the growth is not slop, so "condense" is not obviously available,
+> and the honest options are relocate or accept. Recorded as the datapoint, not as an argument.
 
 **Revisit when:** `eager-prefix-figure-is-current` goes red, i.e. the tracked prefix leaves the 5%
 band around the **`METERED` figure this file records** — 16,473 as of 2026-08-17. **The first draft
