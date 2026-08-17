@@ -31,7 +31,7 @@ When an Observatory entry is closed (via ADR or explicit rejection), update its 
 
 ### Fail-open everywhere — Tessera cannot tell you when it is broken
 
-- **Status:** Investigating. **This is the most consequential entry in this file.** It is a claim about the framework as a whole, not about any component, and it should be promoted to an ADR once its remedy is designed.
+- **Status:** **Adopted in part — `docs/adr/0025-fail-open-reporting-scoped-verdict.md` (2026-08-17).** The stated closure bar is met: 11/11 chaos probes green, confirmed by a session that did not build them, 21 days later. **The MECHANISM is proven; the general claim in this entry's title is NOT, and stays open.** Exactly one component has ever reported a genuine unplanned failure unprompted (`standing-patterns`, six events over two days, from one cause); the two `spend-guard` events say "Probed", and eight more were a re-plant. ADR-0025 sets the remaining bar at **three distinct components reporting in the wild — count today: 1** — and deliberately declines to re-assess ADR-0005's readiness claim, which is separately due 2026-10-09. Everything below is the evidence base and stands.
 - **Full narrative accounting: `docs/postmortem-2026-07-12.md`.**
 - **Source:** The 2026-07-12 F-001/venv session. Not one bug in it was found by the framework announcing a problem. Every one was found by a human getting suspicious, or by an adversarial verifier in a clean context. Three rounds of "it's fixed" were refuted by independent verification, each time correctly.
 
@@ -2737,7 +2737,11 @@ marker — is worth more than the 29%.
 standing patterns) ~2,790 — **~15,600 tokens**, plus the Mnemos checkpoint (~2,600) for ~18k in
 practice. (Estimated at chars/4; `count_tokens` if a decision ever rests on it.)
 
-**METERED 2026-08-10: 15,837 tokens tracked** *(was 15,497 on 08-09)* — recomputed by
+**METERED 2026-08-17: 16,473 tokens tracked** *(was 15,837 on 08-10, 15,497 on 08-09)* — re-metered
+because `CLAUDE.md` gained the second ADR-editing exception (`Status:` supersession) that day, per
+its own rule; `CLAUDE.md` is now **8,037 of the 16,473**, holding at ~49% and still the only
+component that grows. In practice 20,518, the extra being a 2,239-byte checkpoint and a
+1,806-byte handoff surfacer, neither asserted. The prior figure was recomputed by
 `scripts/prefix_meter.py`, which doccheck's `eager-prefix-figure-is-current` asserts this figure
 against within 5%. **Re-metered because `CLAUDE.md` changed three times that day, not because a
 check demanded it** — the 5% band absorbed the drift and stayed green, and CLAUDE.md's own rule is
@@ -4238,7 +4242,17 @@ guaranteed to hide every future ADR on any file already at the cap", which is fa
 entry got its headline wrong. `lookup()` matches by PREFIX, so a record naming `scripts/` governs
 every key beneath it, and the direct-attachment count is not what the renderer truncates:**
 
-| Question | Count (of 146 index keys) |
+**These are a DATED SNAPSHOT, 2026-08-17, and are stated as one deliberately.** Every count here
+rises whenever a record names a file in backticks — writing ADR-0025 alone took the keys 146 → 149,
+the truncated set 46 → 47, and `bin/tessera-watch` 14 → 15 matched. It drifted twice before review
+caught a third instance. **No doccheck assertion is proposed**, and that is the considered answer,
+not an omission: a figure that legitimately moves with every decision recorded is a chore, not a
+guard, and the standing rule wants an assertion where a *claim about now* can go silently false.
+Marking it dated removes the class instead — the number is evidence for an argument about a
+mechanism, and the argument does not turn on the third digit. The copies in ADR-0024 and on the
+promo page are frozen by the same date.
+
+| Question | Count (of 146 index keys, 2026-08-17) |
 |---|---|
 | **Where does the render actually cut something?** (pre-slice matches > 3) | **46** |
 | Where would a *new ADR* be hidden? (≥3 ADRs after prefix matching) | 23 |
@@ -4321,11 +4335,24 @@ rather than a demonstrated one, and is the evidence that would license changing 
 > the observatory remainder, so the notice cannot commit in miniature the defect it reports. Live:
 > `scripts/doccheck.py` now prints *"⚠ 9 more record(s) NOT shown (MAX_DOCS=3, oldest-ADR-first):
 > ADR-0022, ADR-0024 + 7 observatory entries"*, and `bin/tessera-watch` names ADR-0015. Guarded by
-> five tests in `scripts/test_decision_surface.py`, each **re-planted against a break in the notice
-> code** — returning `[]` from `render_truncation`, dropping `cut` at the call site, counting ADRs
-> without naming them, and an off-by-one that would let `lookup_split` drift from `lookup`. All four
-> failed as required; expected counts in the fixtures are hand-written, never derived from
-> `lookup_split`, so a test cannot fail in lockstep with the code it checks.
+> six tests in `scripts/test_decision_surface.py`, each **re-planted against a break in the notice
+> code** — returning `[]` from `render_truncation`, counting ADRs without naming them, an off-by-one
+> letting `lookup_split` drift from `lookup`, and dropping `cut` at the wired `emit_hook` call site.
+> Expected counts in the fixtures are hand-written, never derived from `lookup_split`, so a test
+> cannot fail in lockstep with the code it checks.
+>
+> **THE FOURTH RE-PLANT IN THAT LIST WAS A FALSE CLAIM WHEN FIRST WRITTEN, AND IT WAS THE ONE THAT
+> MATTERED.** This sentence originally said "dropping `cut` at the call site" had failed as required.
+> It had not been tried. The break made was `render_truncation([])` **inside `render`**, which the
+> tests cover; the *call site* is `emit_hook`, and no test drove it. Review re-planted the real
+> thing 2026-08-17: deleting `cut` from `emit_hook`'s `render()` call removes the notice from the
+> **only channel that reaches the model**, and left 23/23 tests and doccheck 50/50 green.
+> **Standing pattern #9 inside the fix for a #12 bug — the mechanism runs, the audience gets
+> nothing — and the guard I wrote against it tested the renderer instead of the wire.** Now guarded
+> by `test_the_notice_reaches_the_WIRED_hook_channel`, which asserts on the PreToolUse envelope and
+> fails on that exact break. *Two lessons, and the second is the reusable one: naming a re-plant in
+> prose is not performing it, and a verification claim is a doc claim — it goes stale, or false, the
+> same way any other does.*
 >
 > **THE SORT QUESTION IS STILL OPEN and is the larger half.** The notice makes the loss visible; it
 > does not choose better survivors. The right key is *specificity*, which `_matches()` does not
@@ -4374,13 +4401,14 @@ always raise the ceiling, you just have to say so in the diff. Whether Tessera w
 is a taste question about how `CLAUDE.md` grows, and taste questions belong to Lorenzo.
 
 **Revisit when:** `eager-prefix-figure-is-current` goes red, i.e. the tracked prefix leaves the 5%
-band around the recorded 15,600. **That is close, and the first draft of this trigger did not know
-it:** it said "revisit on a step change rather than the flat ~15.6k it has shown across ten days",
-copying a window that ended 2026-08-10. Measured today, `scripts/prefix_meter.py` reports **16,232
-tracked (19,428 in practice)** — **4.05% over the anchor, one point from the assertion failing.**
-So the trigger as first written would have read "still flat" right up to the moment doccheck went
-red, which is precisely when an early signal has stopped being early. *(The `CLAUDE.md` share quoted
-above as 47% is from the same superseded reading; the 2026-08-15 re-measure puts it at 48%.)*
+band around the **`METERED` figure this file records** — 16,473 as of 2026-08-17. **The first draft
+of this trigger did not know that**, and neither did the review that corrected it: both quoted the
+prose "~15.6k" as the anchor and computed 16,232 as "4.05% over, one point from failing." The
+asserted anchor was 15,837, so the true figure was **2.50%** — the alarm was overstated by the
+error it was reporting, in both directions at once, and the number the check compares against is
+not the number the prose says. *(Live today, after `CLAUDE.md` gained the `Status:` exception:
+16,473 tracked, 20,518 in practice, `CLAUDE.md` 8,037 of it — re-metered and re-anchored, so the
+band is measured against something real rather than against a rounded sentence.)*
 **Or** revisit when a delivery channel truncates again — at which point the question stops
 being about dilution (unmeasured) and becomes about a cap that is real and measurable, which is a
 different and much stronger case.

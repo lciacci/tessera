@@ -2609,8 +2609,11 @@ def test_the_live_repo_passes_both_standing_patterns_guards():
 
 def _index(repo, *rows):
     """Write an ADR index. Rows are (number, status) — the status is the LAST cell, as in
-    the real file, deliberately not a fixed column: the live 0006 row has its date and title
-    transposed and a positional parse would read a title as a status."""
+    the real file, deliberately not a fixed column: column ORDER in that table is enforced by
+    nothing, and the 0006 row carried its date and title transposed from 2026-07-12 until the
+    commit that added this check. Stated as history, not as a live claim — the transposition is
+    fixed, and a comment justified by a defect its own commit repairs is a false claim on
+    landing (review, 2026-08-17)."""
     body = "".join(f"| {n} | 2026-07-26 | some title | {s} |\n" for n, s in rows)
     (repo / "docs" / "adr" / "README.md").write_text(body)
 
@@ -2664,3 +2667,96 @@ def test_the_live_repo_agrees_on_every_adr_status():
     """Runs against the REAL repo, not a fixture — the fixture proves the predicate, this
     proves the corpus. Re-plant ADR-0011's Status to `Watching` and this must go red."""
     assert doccheck.check_adr_status_matches_index() == []
+
+
+def test_a_superseder_id_on_only_one_side_is_not_a_finding(fake_repo):
+    """Review, 2026-08-17: the check FIRED on records that agree — ('Superseded', None) vs
+    ('Superseded', '0012') — contradicting its own docstring, in a pre-commit blocker."""
+    _adr(fake_repo, "0099", "Superseded by ADR-0100")
+    _index(fake_repo, ("0099", "Superseded"))
+    assert doccheck.check_adr_status_matches_index() == []
+
+
+def test_a_lowercased_superseder_id_is_not_a_finding(fake_repo):
+    """_ADR_SUPERSEDER was case-sensitive while _ADR_VERDICT was re.I, so a lowercase id
+    parsed as None and produced the same false positive."""
+    _adr(fake_repo, "0099", "Superseded by ADR-0100")
+    _index(fake_repo, ("0099", "superseded by adr-0100"))
+    assert doccheck.check_adr_status_matches_index() == []
+
+
+def test_a_row_without_a_trailing_pipe_is_still_checked(fake_repo):
+    """GFM does not require a trailing `|`. Requiring it made this check VACUOUS, not noisy:
+    the row fell through the branch documented as 'adr-index-complete owns it', and that
+    check's looser regex passes on the same row, so a real disagreement was owned by nobody."""
+    (fake_repo / "docs" / "adr" / "README.md").write_text("| 0099 | 2026-07-26 | t | Accepted\n")
+    _adr(fake_repo, "0099", "Watching")
+    assert any("0099" in b for b in doccheck.check_adr_status_matches_index())
+
+
+def test_a_present_but_unparseable_row_is_reported_not_skipped(fake_repo):
+    """The residual case: if the row regex ever cannot read a row that plainly exists, say so
+    rather than fall silent — the sibling check will not cover it."""
+    (fake_repo / "docs" / "adr" / "README.md").write_text("|0099|\n")
+    _adr(fake_repo, "0099", "Watching")
+    out = doccheck.check_adr_status_matches_index()
+    assert any("cannot parse it" in b for b in out), out
+
+
+# --- superseded-status-is-accountable -------------------------------------------------
+# The bound on CLAUDE.md's second ADR-editing exception (2026-08-17). Widening "don't edit
+# accepted ADRs" to permit the supersession pointer needs an edge, or the carve-out becomes a
+# licence to flip a verdict quietly. Codifies practice: both superseded ADRs already comply.
+
+
+def _retired(repo, name, status, because=None):
+    body = f"# ADR-{name}: x\n\n- **Date:** 2026-07-26\n- **Status:** {status}\n"
+    if because:
+        body += f"- **{because} because:** it answered the wrong question\n"
+    (repo / "docs" / "adr" / f"{name}-x.md").write_text(body)
+
+
+def test_superseded_without_a_reason_is_flagged(fake_repo):
+    _retired(fake_repo, "0099", "Superseded by ADR-0001")
+    assert any("no `- **Superseded because:**`" in b
+               for b in doccheck.check_superseded_status_is_accountable())
+
+
+def test_superseded_by_an_adr_that_does_not_exist_is_flagged(fake_repo):
+    _retired(fake_repo, "0099", "Superseded by ADR-0777", because="Superseded")
+    assert any("does not exist" in b
+               for b in doccheck.check_superseded_status_is_accountable())
+
+
+def test_bare_superseded_names_no_successor_and_is_flagged(fake_repo):
+    _retired(fake_repo, "0099", "Superseded", because="Superseded")
+    assert any("names no successor" in b
+               for b in doccheck.check_superseded_status_is_accountable())
+
+
+def test_a_reason_line_naming_the_other_retirement_is_flagged(fake_repo):
+    _retired(fake_repo, "0099", "Superseded by ADR-0001", because="Deprecated")
+    assert any("must name the same retirement" in b
+               for b in doccheck.check_superseded_status_is_accountable())
+
+
+def test_deprecated_needs_a_reason_but_no_successor(fake_repo):
+    """The one retirement with nothing to point at, which is why the reason carries it."""
+    _retired(fake_repo, "0099", "Deprecated")
+    assert any("Deprecated because" in b
+               for b in doccheck.check_superseded_status_is_accountable())
+    _retired(fake_repo, "0099", "Deprecated", because="Deprecated")
+    assert doccheck.check_superseded_status_is_accountable() == []
+
+
+def test_a_live_adr_is_untouched_by_this_check(fake_repo):
+    """Accepted/Watching must not be asked for a retirement reason."""
+    _retired(fake_repo, "0099", "Accepted")
+    _retired(fake_repo, "0098", "Watching")
+    assert doccheck.check_superseded_status_is_accountable() == []
+
+
+def test_the_live_repo_accounts_for_every_retired_adr():
+    """2 of 2 comply today — a new rule whose corpus is already green is a rule the repo had,
+    unwritten. Re-plant: strip ADR-0011's because-line and this goes red."""
+    assert doccheck.check_superseded_status_is_accountable() == []

@@ -2,7 +2,7 @@
 
 - **Date:** 2026-08-17
 - **Status:** Watching
-- **Executed:** not yet
+- **Executed:** partially — 2026-08-17, the truncation notice shipped: `scripts/decision_surface.py` (`render_truncation`, `lookup_split`), `scripts/test_decision_surface.py`. **The other adopted concept — justification strings on exemption entries in `scripts/repo_paths.py` — is NOT built.** Corrected from `not yet` by review the same day: the notice landed in the commit that carried this ADR, so `_execution_warning` was rendering *"NOT EXECUTED — decided, never built. Do not act on it as settled."* onto `scripts/repo_paths.py`, telling an editing agent that a half-shipped decision was never begun. That is ADR-0008's 12-day gap inverted, injected as a directive.
 - **Decision driver:** New tool surfaced. Lorenzo: "read active and design surfaces, don't grep, then evaluate: https://github.com/deepseek-ai/deepseek-harness".
 
 > **Watching for:** **BOTH** of (a) an Anthropic/Claude adapter landing in `packages/llm/`, and (b) the Claude Code hook bridge supporting PreCompact **and** PreToolUse `additionalContext` **and** SessionStart plain stdout. Either alone does not move the verdict: (a) without (b) means Claude with no Tessera harness; (b) without (a) means Tessera's harness driving a model we do not use.

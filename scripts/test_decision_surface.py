@@ -9,6 +9,7 @@ These tests assert the mechanism is not vacuous: it must find a real ADR for a r
 must generalise by prefix (an ADR naming a directory covers files under it), and it must be
 LOUD rather than silent when it cannot answer — the lesson of that same day.
 """
+import json
 import sys
 from pathlib import Path
 
@@ -236,3 +237,21 @@ def test_the_live_repo_reports_its_own_truncation():
         assert cut, f"{target} should still be truncated"
         out = ds.render(target, shown, {}, cut)
         assert "NOT shown" in out and must_name in out, out
+
+
+def test_the_notice_reaches_the_WIRED_hook_channel(capsys):
+    """The tests above all drive render() directly, which left the only channel that reaches
+    the model unguarded. Review re-planted it 2026-08-17: dropping `cut` from emit_hook's
+    render() call — deleting the notice from the PreToolUse envelope entirely — left all 23
+    tests and doccheck green. That is standing pattern #9 inside the fix for a #12 bug: the
+    mechanism runs, the audience gets nothing. This asserts the envelope, not the renderer.
+
+    It also retires a false claim: docs/observatory.md said a re-plant 'dropping cut at the
+    call site' had failed as required. It had not been tried; the break was made inside
+    render(), which IS covered.
+    """
+    ds.emit_hook("scripts/doccheck.py")            # known-truncated in the live index
+    payload = json.loads(capsys.readouterr().out)
+    ctx = payload["hookSpecificOutput"]["additionalContext"]
+    assert "NOT shown" in ctx, f"the truncation notice never reached the model channel: {ctx}"
+    assert "ADR-0022" in ctx, "the cut ADR must be named in the envelope, not just the CLI"

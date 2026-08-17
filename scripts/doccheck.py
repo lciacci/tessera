@@ -2400,12 +2400,20 @@ def check_adr_references_resolve() -> list[str]:
 
 
 # `| 0011 | 2026-07-21 | title | Superseded by ADR-0012 |`. Status is read as the LAST cell
-# rather than by column index, because the 0006 row has its date and title transposed and a
-# positional parse would read a title as a status. Anchored on a leading 4-digit id so prose
-# tables elsewhere in the file cannot match.
-_ADR_INDEX_ROW = re.compile(r"^\|\s*(0\d{3})\s*\|(.+)\|\s*$", re.M)
+# rather than by column index: column ORDER in this table is not enforced by anything, and the
+# 0006 row carried its date and title transposed from 2026-07-12 until 2026-08-17, so a
+# positional parse would have read a title as a status for five weeks. Anchored on a leading
+# 4-digit id so prose tables elsewhere in the file cannot match.
+#
+# The trailing `|` is OPTIONAL because GFM does not require it. Requiring it made the check
+# VACUOUS rather than noisy: an unparseable row fell through the `num not in rows` branch that
+# is documented as "adr-index-complete owns it", and that check's looser regex passes too, so a
+# real disagreement was owned by nobody. Found by review 2026-08-17, one commit after landing.
+_ADR_INDEX_ROW = re.compile(r"^\|\s*(0\d{3})\s*\|(.+?)\|?\s*$", re.M)
 _ADR_VERDICT = re.compile(r"^(Accepted|Watching|Superseded|Proposed|Deprecated)\b", re.I)
-_ADR_SUPERSEDER = re.compile(r"ADR-(0\d{3})")
+# re.I to match _ADR_VERDICT. Without it `superseded by adr-0012` parsed as (Superseded, None)
+# and produced the same false positive the None-compatibility rule below exists to prevent.
+_ADR_SUPERSEDER = re.compile(r"ADR-(0\d{3})", re.I)
 
 
 def _adr_verdict(status: str) -> tuple[str, str | None]:
@@ -2431,6 +2439,57 @@ def _adr_verdict(status: str) -> tuple[str, str | None]:
     return verdict, target
 
 
+_ADR_BECAUSE = re.compile(r"^- \*\*(Superseded|Deprecated) because:\*\* *(.+)$", re.M)
+
+
+def check_superseded_status_is_accountable() -> list[str]:
+    """A retired ADR must name its successor and say why — the bound on CLAUDE.md's second
+    ADR-editing exception.
+
+    2026-08-17 widened "don't edit accepted ADRs" to permit moving `Status:` to
+    `Superseded by ADR-NNNN` / `Deprecated`, because `adr-status-matches-index` had made stale
+    statuses visible and the rule's only remedy was a forbidden edit. A widened exception with
+    nothing enforcing its edge is how a maintenance carve-out becomes a licence to flip a
+    verdict quietly, so the edge is a check rather than the paragraph that describes it.
+
+    Asserts three things: the named successor EXISTS (a pointer at nothing retires a decision
+    into a dead end); a because-line is present (the reason is the fact readers come for, and
+    it is what distinguishes recording a supersession from performing one); and `Deprecated`
+    carries one too, since it is the one retirement with no successor to explain it.
+
+    This CODIFIES practice rather than inventing it — both superseded ADRs already comply,
+    2 of 2, including the one edited the day this shipped. That is deliberate: a new rule whose
+    corpus is already green is a rule the repo had, unwritten.
+    """
+    bad = []
+    on_disk = {p.name[:4] for p in (ROOT / "docs" / "adr").glob("0*.md")}
+    for adr in sorted((ROOT / "docs" / "adr").glob("[0-9][0-9][0-9][0-9]-*.md")):
+        text = adr.read_text()
+        m = _ADR_STATUS.search(text)
+        if not m:
+            continue  # adr-status-matches-index owns the missing-Status case
+        status = m.group(1).strip()
+        verdict, target = _adr_verdict(status)
+        if verdict not in ("Superseded", "Deprecated"):
+            continue
+        because = _ADR_BECAUSE.search(text)
+        if not because:
+            bad.append(f"docs/adr/{adr.name}: Status is {verdict!r} with no "
+                       f"`- **{verdict} because:**` line — a retirement with no stated reason "
+                       f"is indistinguishable from a verdict quietly flipped in place")
+        elif because.group(1) != verdict:
+            bad.append(f"docs/adr/{adr.name}: Status says {verdict!r} but the reason line says "
+                       f"{because.group(1)!r} — they must name the same retirement")
+        if verdict == "Superseded":
+            if target is None:
+                bad.append(f"docs/adr/{adr.name}: Status is 'Superseded' but names no "
+                           f"successor — say which ADR governs now")
+            elif target not in on_disk:
+                bad.append(f"docs/adr/{adr.name}: superseded by ADR-{target}, which does not "
+                           f"exist — the decision is retired into a dead end")
+    return bad
+
+
 def check_adr_status_matches_index() -> list[str]:
     """An ADR's own `Status:` line must agree with its row in the ADR index.
 
@@ -2453,18 +2512,37 @@ def check_adr_status_matches_index() -> list[str]:
     index = ROOT / "docs" / "adr" / "README.md"
     if not index.exists():
         return ["docs/adr/README.md missing — cannot cross-check ADR statuses"]
+    index_text = index.read_text()
     rows = {num: [c.strip() for c in body.split("|")][-1]
-            for num, body in _ADR_INDEX_ROW.findall(index.read_text())}
+            for num, body in _ADR_INDEX_ROW.findall(index_text)}
     bad = []
     for adr in sorted((ROOT / "docs" / "adr").glob("[0-9][0-9][0-9][0-9]-*.md")):
         num = adr.name[:4]
         if num not in rows:
-            continue  # adr-index-complete owns the missing-row case; do not double-report
+            # ABSENT is adr-index-complete's case; do not double-report. PRESENT-BUT-UNPARSEABLE
+            # is nobody's, and skipping it silently is how this check went vacuous once already:
+            # that sibling's regex is looser, so it passes on exactly the rows this one cannot
+            # read, and a real disagreement went unowned. Detected with an independent, looser
+            # probe than the row regex — sharing it would reproduce the blind spot.
+            if re.search(rf"^\|\s*{num}\s*\|", index_text, re.M):
+                bad.append(
+                    f"docs/adr/README.md: the row for ADR {num} exists but this check cannot "
+                    f"parse it, so its status is unverified — fix the row's shape, and note "
+                    f"adr-index-complete passes on it, so nothing else is covering this")
+            continue
         m = _ADR_STATUS.search(adr.read_text())
         if not m:
             bad.append(f"docs/adr/{adr.name}: no `- **Status:**` line to cross-check")
             continue
         got, want = _adr_verdict(m.group(1)), _adr_verdict(rows[num])
+        # A superseder id on only ONE side is the same "qualifier in one place" case the
+        # verdict comparison exists to tolerate — `Superseded` and `Superseded by ADR-0012`
+        # agree on the verdict and one is merely more specific. Only two DIFFERENT ids are a
+        # real conflict, and that one matters: pointing a reader at the wrong successor is
+        # worse than pointing at none. Without this the check FIRED on records that agree, in
+        # a pre-commit blocker, contradicting its own docstring (review, 2026-08-17).
+        if got[0] == want[0] and None in (got[1], want[1]):
+            continue
         if got != want:
             bad.append(
                 f"docs/adr/{adr.name}: Status says {m.group(1).strip()!r} but the ADR index row "
@@ -2887,6 +2965,7 @@ CHECKS = {
     "unrunnable-hooks-report-themselves": check_unrunnable_hooks_report_themselves,
     "adr-references-resolve": check_adr_references_resolve,
     "adr-status-matches-index": check_adr_status_matches_index,
+    "superseded-status-is-accountable": check_superseded_status_is_accountable,
     "insert-or-ignore-needs-a-real-key": check_insert_or_ignore_needs_a_real_key,
 }
 
