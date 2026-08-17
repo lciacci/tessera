@@ -88,10 +88,9 @@ ABSENT_TESSERA_PATHS = {
     # token.startswith(p + "/")`, so a stored slash matches neither form of the token.
     "skills/tessera-code-review": "the skill ADR-0014 cut",
     "docs/maggy-rfc.md": "written, never kept; ADR-0003 cites it as the upstream proposal",
-    "scripts/tdd-loop-check.sh": (
-        "NEVER EXISTED. ADR-0007/0008 record its ABSENCE as the reason `iterative-development` "
-        "is a setup guide rather than a wired mechanism. An ADR firing the day someone creates "
-        "it is the point"),
+    # scripts/tdd-loop-check.sh is deliberately NOT here: it never existed, which makes it
+    # PLANNED_PATHS' question (unbuilt), not this set's (gone). Filing it here on day one was
+    # the same one-set-two-questions conflation this module was written to end.
 }
 
 # Template shapes, never files: `.claude/scripts/X`, `docs/adr/NNNN-*.md`. Kept here rather

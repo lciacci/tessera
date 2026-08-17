@@ -38,6 +38,7 @@ import ast
 import fnmatch
 import json
 import os
+import itertools
 import re
 import subprocess
 import sys
@@ -126,14 +127,13 @@ PATH_ALLOWLIST = {
     # PATH_ALLOWLIST there was the bug — this set answers "is it required to exist on
     # disk", and the entries ABOVE are Tessera's own gitignored runtime state, for which
     # the honest answer to "should a decision surface on it" is YES.
-} | FOREIGN_PATHS | frozenset(ABSENT_TESSERA_PATHS)
+} | FOREIGN_PATHS
 # ABSENT_TESSERA_PATHS is the MIRROR of PLANNED_PATHS below: deliberately-gone rather than
-# deliberately-unbuilt. Unioned in 2026-08-17, when writing the observatory entry that explains
-# why an ADR may name a deleted path tripped this check on `scripts/tdd-loop-check.sh` and
-# `skills/tessera-code-review/` — the entry documenting the exemption was not covered by it.
-# A path formally declared "ours, gone, and here is why" is exactly the answer this check wants,
-# and unlike an inline allowlist entry the declaration is itself checked in both directions by
-# `absent-index-paths-are-declared`, so it cannot rot.
+# deliberately-unbuilt. It is NOT unioned here. A first version was, and that exempted
+# `bin/review` and friends from the existence check in EVERY doc — so a live instruction
+# ("run `bin/review` to ...") in CLAUDE.md would pass silently where it used to go red, which
+# is this block's own "tolerated exemption with no expiry" warning. It is applied per-doc
+# below, only to the file whose job is recording history.
 
 # Designed in docs, never built. NOT the same as a stale reference — these are promises
 # the framework has not kept, and docs/design-principles.md describes them in the PRESENT
@@ -143,9 +143,18 @@ PATH_ALLOWLIST = {
 # (.tessera/config.yml graduated OUT of this set on 2026-07-11 — it was built, with one live
 # consumer in bin/tessera-test. That is what a PLANNED_PATHS entry is supposed to do: get
 # built, or get reworded. It should never just sit here.)
+HISTORY_DOCS = frozenset({"docs/observatory.md"})
+
 PLANNED_PATHS = {
     ".tessera/third-party-scope.yml",  # design-principles.md:726, 763 — build its CONSUMER first
     ".tessera/project.yml.template",   # design-principles.md:195 — deletion candidate, not a build
+    # NEVER EXISTED, and that absence is the point: ADR-0007:463 and ADR-0008:37 both record it
+    # as the reason `iterative-development` is a setup guide rather than a wired mechanism, and
+    # design-principles.md:672 wrongly describes it in the PRESENT tense. Parked here rather
+    # than in repo_paths.ABSENT_TESSERA_PATHS because unbuilt and deleted are different
+    # questions — filing it as "gone" would tell a future reader to drop the declaration if it
+    # ever appears, when the right action is graduating it and re-reading those two ADRs.
+    "scripts/tdd-loop-check.sh",
 }
 
 INLINE_CODE = re.compile(r"`([^`\n]+)`")
@@ -203,7 +212,13 @@ def check_referenced_paths_exist() -> list[str]:
                 continue
             if PLACEHOLDER.search(token):
                 continue
+            # HISTORY_DOCS may name paths this repo deliberately deleted; a live
+            # instruction elsewhere may not. Same token, different meaning by venue — and
+            # the check cannot read intent, so it reads location. ADRs get this for free
+            # via DOC_SKIP; the observatory is the other file that records what was cut.
             exempt = PATH_ALLOWLIST | PLANNED_PATHS
+            if _rel(doc) in HISTORY_DOCS:
+                exempt = exempt | frozenset(ABSENT_TESSERA_PATHS)
             if any(token.rstrip("/") == p or token.startswith(p + "/") for p in exempt):
                 continue
             if not canonical(ROOT, token).exists():
@@ -2535,28 +2550,62 @@ def check_absent_index_paths_are_declared() -> list[str]:
         index = decision_surface.build_index()
     except Exception as exc:
         return [f"cannot cross-check the decision-surface index: {exc}"]
+    try:
+        canonical = _prefix_meter().canonical_path
+    except Exception:
+        canonical = lambda root, ref: root / ref                          # noqa: E731
 
     bad = []
-    for path, reason in sorted({**_OTHER_REPOS, **_DOWNSTREAM, **ABSENT_TESSERA_PATHS}.items()):
-        if not reason.strip():
-            bad.append(f"scripts/repo_paths.py: {path!r} is declared with no reason — the "
-                       f"reason is what stops the next reader inferring the set's meaning")
+    # A key in two dicts is a CONTRADICTION, not a merge. `{**a, **b}` let the last one win
+    # silently, which is the exact conflation repo_paths' docstring exists to end: marking a
+    # path foreign ALSO drops it from the index, so a path in both would stop being governed
+    # while still being declared ours-and-gone, with nothing reporting the disagreement.
+    # itertools.combinations, NOT a name comparison. The first version guarded pairs with
+    # `if a_name >= b_name: continue`, which is True for EVERY pair here ("_" sorts above
+    # "A"), so the duplicate check never executed once — decoration that read as a guard.
+    # Caught by the test written for it, not by inspection.
+    declared = (("_OTHER_REPOS", _OTHER_REPOS), ("_DOWNSTREAM", _DOWNSTREAM),
+                ("ABSENT_TESSERA_PATHS", ABSENT_TESSERA_PATHS))
+    for (a_name, a), (b_name, b) in itertools.combinations(declared, 2):
+        for dup in sorted(set(a) & set(b)):
+            bad.append(f"scripts/repo_paths.py: {dup!r} is in BOTH {a_name} and {b_name} — "
+                       f"'another repo's' and 'ours, absent' are different answers and the "
+                       f"foreign one silently wins, un-governing the path")
+    for name, group in declared:
+        for path, reason in group.items():
+            if not reason.strip():
+                bad.append(f"scripts/repo_paths.py: {path!r} in {name} is declared with no "
+                           f"reason — the reason is what stops the next reader inferring "
+                           f"the set's meaning")
 
+    # THE SAME EXEMPTION SET AND THE SAME RESOLVER AS `referenced-paths-exist`, deliberately.
+    # The first version used a bare `(ROOT / path).exists()` and honoured only
+    # ABSENT_TESSERA_PATHS. On a CLEAN CLONE that produced 7 findings where its sibling
+    # produced 0 — `.claude/{skills,commands,agents}` are gitignored symlinks `install.sh`
+    # creates, and `.claude/settings.local.json` is gitignored runtime state — so doccheck,
+    # a pre-commit BLOCKER, refused every commit before install had ever run. That is the
+    # regression the PATH_ALLOWLIST block above records for 2026-08-09, re-committed by
+    # someone editing that very block. Worse, the old remedy text said "add it to
+    # FOREIGN_PATHS", which for settings.local.json would have rebuilt the 2026-08-15 defect.
+    # ABSENT_TESSERA_PATHS counts as a declaration HERE, unlike in referenced-paths-exist,
+    # where it is scoped to HISTORY_DOCS. This check asks 'is it declared anywhere'; that
+    # one asks 'may THIS doc say it exists'. Different questions, deliberately.
+    exempt = PATH_ALLOWLIST | PLANNED_PATHS | frozenset(ABSENT_TESSERA_PATHS)
     for path in sorted(index):
-        if (ROOT / path).exists() or path in ABSENT_TESSERA_PATHS:
+        if any(path.rstrip("/") == p or path.startswith(p + "/") for p in exempt):
             continue
-        # A declared PREFIX covers what sits under it (`skills/tessera-code-review/`).
-        if any(path.startswith(p + "/") for p in ABSENT_TESSERA_PATHS):
+        if canonical(ROOT, path).exists():
             continue
         sources = ", ".join(sorted({e["doc"] for e in index[path]}))
         bad.append(
             f"{sources}: `{path}` is indexed as a governing Tessera path but is not on disk "
-            f"and is not declared — add it to repo_paths.FOREIGN_PATHS (another repo's or a "
-            f"downstream's) or ABSENT_TESSERA_PATHS (ours, deliberately gone), with a reason")
+            f"and is not declared. Declare it: repo_paths.FOREIGN_PATHS (another repo's or a "
+            f"downstream's), repo_paths.ABSENT_TESSERA_PATHS (ours, deliberately GONE), or "
+            f"doccheck.PLANNED_PATHS (ours, deliberately NOT BUILT YET) — with a reason")
 
     for path in sorted(ABSENT_TESSERA_PATHS):
-        if (ROOT / path).exists():
-            bad.append(f"scripts/repo_paths.py: {path!r} is declared absent but EXISTS — the "
+        if canonical(ROOT, path).exists():
+            bad.append(f"scripts/repo_paths.py: {path!r} is declared GONE but EXISTS — the "
                        f"declaration is stale; drop it so the path is checked normally")
     return bad
 

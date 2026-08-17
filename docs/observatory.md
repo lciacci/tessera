@@ -4463,9 +4463,17 @@ different and much stronger case.
 > still fires if anyone recreates them, which is the behaviour worth keeping — while a genuinely
 > foreign path can no longer be added silently. Braintrust's two are now declared as Braintrust's;
 > index 149 → 147. This is also ADR-0024's second adopted concept, so item 4 and that ADR's
-> unexecuted half were the same work. **And the trap claimed a fourth victim on the way out:** the
-> placeholder pattern matched `...` but not `…`, so ADR-0023's own sentence *explaining* this bug
-> put `docs/…` in the index. Fixed in `PLACEHOLDER_PATTERN`.
+> unexecuted half were the same work. **A fourth instance was claimed here and the claim was WRONG — corrected 2026-08-17 by
+> review.** It read: *"the placeholder pattern matched `...` but not `…`, so ADR-0023's own sentence
+> explaining this bug put `docs/…` in the index."* It never did. `decision_surface._PATH` matches
+> `[A-Za-z0-9._/-]+`, which **cannot** match U+2026 — verified against three forms, all zero
+> matches — and the whole 149→147 index delta is the two Braintrust `.mdx` paths. The real symptom
+> was `referenced-paths-exist` going red, because `INLINE_CODE` *does* capture `docs/…`, and it was
+> triggered by **the sentence this very entry added**, not by ADR-0023, which is under `DOC_SKIP`
+> and never reaches that check. Adding `…` to `PLACEHOLDER_PATTERN` was still right, for the doc
+> scan. **The correction matters in this repo's own terms:** left standing, the next person
+> re-plants the guard against the *index* and finds it unfalsifiable, because the condition it
+> names cannot occur — a guard aimed at a symptom that never existed.
 
 ---
 

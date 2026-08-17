@@ -2806,7 +2806,7 @@ def test_a_declaration_whose_path_came_back_is_reported(tmp_path, monkeypatch):
     root = _surface_repo(tmp_path, monkeypatch, "It cites `bin/resurrected` here.")
     (root / "bin").mkdir(); (root / "bin" / "resurrected").write_text("x")
     monkeypatch.setitem(repo_paths.ABSENT_TESSERA_PATHS, "bin/resurrected", "was deleted")
-    assert any("declared absent but EXISTS" in b
+    assert any("declared GONE but EXISTS" in b
                for b in doccheck.check_absent_index_paths_are_declared())
 
 
@@ -2839,3 +2839,70 @@ def test_declared_absent_paths_are_matchable_by_the_allowlist():
     import repo_paths
     bad = [p for p in repo_paths.ABSENT_TESSERA_PATHS if p.endswith("/") or p.startswith("/")]
     assert bad == [], f"unmatchable declarations: {bad}"
+
+
+def test_the_new_check_survives_a_clean_clone(tmp_path, monkeypatch):
+    """THE REGRESSION THIS CHECK SHIPPED WITH. A bare `(ROOT / path).exists()` honouring only
+    ABSENT_TESSERA_PATHS produced 7 findings on a fresh clone where referenced-paths-exist
+    produced 0 — `.claude/{skills,commands}` are gitignored symlinks install.sh creates. doccheck
+    is a pre-commit BLOCKER, so that refused every commit before install had ever run: the same
+    2026-08-09 regression the PATH_ALLOWLIST block records, re-committed while editing it.
+
+    Simulated by pointing ROOT at a repo whose .claude/ has no symlinks — the pre-install state.
+    """
+    import decision_surface
+    (tmp_path / "docs" / "adr").mkdir(parents=True)
+    (tmp_path / ".claude").mkdir()
+    # The tracked SOURCE of the mirror exists; the .claude/ symlink install.sh makes does not.
+    # That is exactly the pre-install state, and canonical_path is what resolves one to the other.
+    (tmp_path / "skills" / "base").mkdir(parents=True)
+    (tmp_path / "docs" / "observatory.md").write_text("# Observatory\n")
+    (tmp_path / "docs" / "adr" / "0099-x.md").write_text(
+        "# ADR-0099: x\n\n- **Status:** Accepted\n\n## Decision\n\n"
+        "Governs `.claude/skills/base` and `.claude/settings.local.json`.\n")
+    monkeypatch.setattr(doccheck, "ROOT", tmp_path)
+    monkeypatch.setattr(decision_surface, "ROOT", tmp_path)
+    out = doccheck.check_absent_index_paths_are_declared()
+    assert out == [], f"pre-install state must not block the commit gate: {out}"
+
+
+def test_a_path_in_two_declaration_dicts_is_reported(tmp_path, monkeypatch):
+    """`{**a, **b}` let the last dict win silently. Foreign wins in decision_surface too, so the
+    path stops being governed while still declared ours-and-gone, with nothing saying so."""
+    import repo_paths, decision_surface
+    (tmp_path / "docs" / "adr").mkdir(parents=True)
+    (tmp_path / "docs" / "observatory.md").write_text("# Observatory\n")
+    monkeypatch.setattr(doccheck, "ROOT", tmp_path)
+    monkeypatch.setattr(decision_surface, "ROOT", tmp_path)
+    monkeypatch.setitem(repo_paths._OTHER_REPOS, "bin/contested", "theirs")
+    monkeypatch.setitem(repo_paths.ABSENT_TESSERA_PATHS, "bin/contested", "ours, gone")
+    assert any("in BOTH" in b for b in doccheck.check_absent_index_paths_are_declared())
+
+
+def test_planned_paths_counts_as_a_declaration(tmp_path, monkeypatch):
+    """Deliberately-unbuilt is a third answer. The first version accepted only 'gone' and told
+    the reader to declare an unbuilt path as deleted — the opposite of the truth."""
+    import decision_surface
+    (tmp_path / "docs" / "adr").mkdir(parents=True)
+    (tmp_path / "docs" / "observatory.md").write_text("# Observatory\n")
+    (tmp_path / "docs" / "adr" / "0099-x.md").write_text(
+        "# ADR-0099: x\n\n- **Status:** Accepted\n\n## Decision\n\nDesigns `scripts/not-built-yet.sh`.\n")
+    monkeypatch.setattr(doccheck, "ROOT", tmp_path)
+    monkeypatch.setattr(decision_surface, "ROOT", tmp_path)
+    assert any("not-built-yet" in b for b in doccheck.check_absent_index_paths_are_declared())
+    monkeypatch.setattr(doccheck, "PLANNED_PATHS", doccheck.PLANNED_PATHS | {"scripts/not-built-yet.sh"})
+    assert doccheck.check_absent_index_paths_are_declared() == []
+
+
+def test_a_deleted_path_is_exempt_only_in_history_docs(tmp_path, monkeypatch):
+    """Unioning ABSENT_TESSERA_PATHS into PATH_ALLOWLIST exempted `bin/review` from the existence
+    check in EVERY doc, so a live instruction naming it would pass silently. Scoped to the file
+    whose job is recording what was cut."""
+    import repo_paths
+    (tmp_path / "docs").mkdir(parents=True)
+    monkeypatch.setattr(doccheck, "ROOT", tmp_path)
+    monkeypatch.setitem(repo_paths.ABSENT_TESSERA_PATHS, "bin/deleted-thing", "cut by ADR-0099")
+    (tmp_path / "docs" / "observatory.md").write_text("History: `bin/deleted-thing` was cut.\n")
+    assert doccheck.check_referenced_paths_exist() == []
+    (tmp_path / "docs" / "guide.md").write_text("Run `bin/deleted-thing` to do the thing.\n")
+    assert any("bin/deleted-thing" in b for b in doccheck.check_referenced_paths_exist())
