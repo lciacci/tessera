@@ -49,8 +49,13 @@ handoff block only; a blockquoted list is invisible to it.
 5. **ADR-0005's readiness re-assessment is formally due**, deferred by ADR-0025 on purpose. Two of
    its preconditions were declared met on 2026-07-12 and later found broken; both are fixed now.
    Its own cadence is 2026-10-09.
-6. **Six downstream commits are UNPUSHED** — mechanical harness back-fills, imports verified on 3.9
-   in each. Push or review at leisure; nothing depends on them.
+6. **The fleet back-fill is PUSHED — all six, nothing outstanding.** Every downstream now carries
+   `repo_paths.py`, `scripts/review/stamp.py` and `.githooks/pre-push`, with five provably
+   un-customised files refreshed and imports verified on 3.9 in each. `.githooks/pre-commit` was
+   left alone everywhere — it matched no tessera version, so it is genuinely customised downstream
+   and wants a per-project read. **Left as the one open thread: nothing checks that a back-filled
+   component DOES anything** — see item 3, where the decision surface arrived in all six and
+   indexes zero keys in every one.
 7. **The checkpoint's goal SELECTION is still parked** — Mnemos records no signal for *use within a
    session*, so building that signal is the first task, not changing the filter.
 8. **The review anchor has three gaps, all found by review, none fixed.** (a) `.githooks/` is
