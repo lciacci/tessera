@@ -4316,6 +4316,25 @@ disappears, then force a cut and assert it names the right records.
 when a decision is missed in the wild because it was cut — which would be the first *observed* cost
 rather than a demonstrated one, and is the evidence that would license changing the sort.
 
+> **THE NOTICE SHIPPED 2026-08-17** — `render_truncation()` in `scripts/decision_surface.py`, with
+> `lookup_split()` supplying what `lookup()` discarded. It names every cut **ADR** in full and counts
+> the observatory remainder, so the notice cannot commit in miniature the defect it reports. Live:
+> `scripts/doccheck.py` now prints *"⚠ 9 more record(s) NOT shown (MAX_DOCS=3, oldest-ADR-first):
+> ADR-0022, ADR-0024 + 7 observatory entries"*, and `bin/tessera-watch` names ADR-0015. Guarded by
+> five tests in `scripts/test_decision_surface.py`, each **re-planted against a break in the notice
+> code** — returning `[]` from `render_truncation`, dropping `cut` at the call site, counting ADRs
+> without naming them, and an off-by-one that would let `lookup_split` drift from `lookup`. All four
+> failed as required; expected counts in the fixtures are hand-written, never derived from
+> `lookup_split`, so a test cannot fail in lockstep with the code it checks.
+>
+> **THE SORT QUESTION IS STILL OPEN and is the larger half.** The notice makes the loss visible; it
+> does not choose better survivors. The right key is *specificity*, which `_matches()` does not
+> compute — prefix matching cannot distinguish a record naming `scripts/` from one naming the exact
+> file. That is unchanged, deliberately, and still wants a human. **Also unchanged: 23 of the 46
+> truncated keys would hide a new ADR outright**, so a decision recorded today against one of those
+> files is invisible on it tomorrow — the notice tells you something was dropped, not that the thing
+> you just wrote is the thing dropped.
+
 ---
 
 ### Word budgets on an always-loaded doc — the one case where measuring the artifact may not be principle #3's error *(2026-08-17, surfaced by the ADR-0024 evaluation)*

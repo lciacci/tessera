@@ -2598,3 +2598,69 @@ def test_standing_patterns_guards_fire_when_the_section_is_actually_missing(tmp_
 def test_the_live_repo_passes_both_standing_patterns_guards():
     assert doccheck.check_standing_patterns_are_surfaced() == []
     assert doccheck.check_standing_patterns_fit_the_cap() == []
+
+
+# --- adr-status-matches-index ---------------------------------------------------------
+# Found 2026-08-17 by review: ADR-0011 read `Status: Watching` with a live `Next check:`
+# while its index row had said `Superseded by ADR-0012` since 2026-07-22. For 26 days a
+# settled decision presented as open, and decision_surface injected that Status verbatim
+# into the pre-edit block. Neither side is authoritative, so the check reports disagreement.
+
+
+def _index(repo, *rows):
+    """Write an ADR index. Rows are (number, status) — the status is the LAST cell, as in
+    the real file, deliberately not a fixed column: the live 0006 row has its date and title
+    transposed and a positional parse would read a title as a status."""
+    body = "".join(f"| {n} | 2026-07-26 | some title | {s} |\n" for n, s in rows)
+    (repo / "docs" / "adr" / "README.md").write_text(body)
+
+
+def test_status_disagreeing_with_the_index_row_is_flagged(fake_repo):
+    """The original bug, re-planted: file says Watching, index says Superseded."""
+    _adr(fake_repo, "0099", "Watching")
+    _index(fake_repo, ("0099", "Superseded by ADR-0100"))
+    bad = doccheck.check_adr_status_matches_index()
+    assert any("0099" in b and "stale" in b for b in bad), bad
+
+
+def test_a_qualifier_on_only_one_side_is_not_a_finding(fake_repo):
+    """Measured before the check was written: three live ADRs carry a qualifier in exactly
+    one of the two places and are correct both times. Byte-equality would report all three
+    and push an author to delete a true qualifier to appease the checker."""
+    _adr(fake_repo, "0099", "Accepted (supersedes ADR-0098)")
+    _index(fake_repo, ("0099", "Accepted"))
+    assert doccheck.check_adr_status_matches_index() == []
+
+    _adr(fake_repo, "0099", "Accepted")
+    _index(fake_repo, ("0099", "Accepted (delivery mechanism refined by ADR-0100)"))
+    assert doccheck.check_adr_status_matches_index() == []
+
+
+def test_a_different_superseder_is_a_finding(fake_repo):
+    """The superseder id is kept precisely so this is NOT normalised away — pointing a reader
+    at the wrong successor is a worse failure than a missing qualifier."""
+    _adr(fake_repo, "0099", "Superseded by ADR-0100")
+    _index(fake_repo, ("0099", "Superseded by ADR-0101"))
+    assert any("0099" in b for b in doccheck.check_adr_status_matches_index())
+
+
+def test_an_adr_missing_from_the_index_is_not_double_reported(fake_repo):
+    """adr-index-complete owns that case. Two checks reporting one defect trains people to
+    read the second as noise."""
+    _adr(fake_repo, "0099", "Accepted")
+    _index(fake_repo, ("0098", "Accepted"))
+    assert doccheck.check_adr_status_matches_index() == []
+    assert any("0099" in b for b in doccheck.check_adr_index_complete())
+
+
+def test_an_adr_with_no_status_line_is_flagged(fake_repo):
+    (fake_repo / "docs" / "adr" / "0099-x.md").write_text("# ADR-0099\n\nno status line\n")
+    _index(fake_repo, ("0099", "Accepted"))
+    assert any("no `- **Status:**` line" in b
+               for b in doccheck.check_adr_status_matches_index())
+
+
+def test_the_live_repo_agrees_on_every_adr_status():
+    """Runs against the REAL repo, not a fixture — the fixture proves the predicate, this
+    proves the corpus. Re-plant ADR-0011's Status to `Watching` and this must go red."""
+    assert doccheck.check_adr_status_matches_index() == []

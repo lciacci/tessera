@@ -167,9 +167,14 @@ def build_index() -> dict[str, list[dict]]:
     return index
 
 
-def lookup(target: str, index: dict[str, list[dict]]) -> list[dict]:
-    """Documents governing `target`, by prefix — an ADR naming .claude/scripts/ covers
-    every script under it, which is exactly the generalisation that was missed."""
+def _matches(target: str, index: dict[str, list[dict]]) -> list[dict]:
+    """Every record governing `target`, by prefix, sorted, UNTRUNCATED.
+
+    Prefix matching is the load-bearing part — an ADR naming .claude/scripts/ covers every
+    script under it, which is exactly the generalisation that was missed. It is also why the
+    count of affected keys is 46 and not 14: measuring direct attachment only, and ignoring
+    what prefix matching pulls in, understates the truncation ~3× (2026-08-17).
+    """
     hits, seen = [], set()
     for path, entries in index.items():
         if target == path or target.startswith(path.rstrip("/") + "/") or path.startswith(target + "/"):
@@ -179,10 +184,60 @@ def lookup(target: str, index: dict[str, list[dict]]) -> list[dict]:
                     seen.add(key)
                     hits.append(e)
     hits.sort(key=lambda e: (e["kind"] != "adr", e["sort"]), reverse=False)
-    return hits[:MAX_DOCS]
+    return hits
 
 
-def render(target: str, hits: list[dict], amendments: dict[str, list[str]] | None = None) -> str:
+def lookup(target: str, index: dict[str, list[dict]]) -> list[dict]:
+    """The records shown for `target` — at most MAX_DOCS of them."""
+    return _matches(target, index)[:MAX_DOCS]
+
+
+def lookup_split(target: str, index: dict[str, list[dict]]) -> tuple[list[dict], list[dict]]:
+    """`lookup()`'s result plus what it discarded, as (shown, cut).
+
+    A separate entry point rather than a changed `lookup()` signature: `lookup` is the
+    established read used by callers outside this module, and widening it to a tuple would be a
+    silent breaking change to a hook that must never crash. `render_truncation` documents why
+    the cut is worth reporting at all.
+    """
+    all_hits = _matches(target, index)
+    return all_hits[:MAX_DOCS], all_hits[MAX_DOCS:]
+
+
+def render_truncation(cut: list[dict]) -> list[str]:
+    """Name what MAX_DOCS dropped. Additive-only, deliberately.
+
+    Until 2026-08-17 the render ended at `Read before editing:` and said nothing about the
+    records it had discarded — on 46 of 146 index keys it cuts something, and what it cuts is
+    the NEWEST, because the sort is ADR-filename ascending. ADR-0022 ("a crashed doccheck check
+    blocks the commit") was invisible on `scripts/doccheck.py`; ADR-0015, which created the P3
+    predicate, was invisible on `bin/tessera-watch`. A true report, silently narrowed, with the
+    narrowing absent from the output — standing pattern #12, inside the hook built to defeat
+    silent failure.
+
+    WHY A NOTICE AND NOT A BIGGER CAP OR A DIFFERENT SORT. Raising MAX_DOCS trades a silent drop
+    for prefix dilution, which is unmeasured (ADR-0021). Re-sorting needs a notion of specificity
+    that `lookup()` does not compute — it matches by prefix, so a record naming `scripts/` and one
+    naming the exact file are indistinguishable at sort time. Both are real changes to what the
+    hook SHOWS, and a change made to stop this hook firing wrongly already once stopped it firing
+    on something real (the 2026-08-15 PATH_ALLOWLIST defect). Adding a line cannot suppress a live
+    record, so it is the half that carries no such risk.
+
+    ADR ids are listed in full and the rest are counted, so this line never truncates in silence
+    the way the thing it reports on did.
+    """
+    if not cut:
+        return []
+    adrs = sorted(h["title"].split()[0] for h in cut if h["kind"] == "adr")
+    others = len(cut) - len(adrs)
+    parts = ", ".join(adrs) if adrs else ""
+    if others:
+        parts += f"{' + ' if parts else ''}{others} observatory entr{'y' if others == 1 else 'ies'}"
+    return [f"  ⚠ {len(cut)} more record(s) NOT shown (MAX_DOCS={MAX_DOCS}, oldest-ADR-first): {parts}"]
+
+
+def render(target: str, hits: list[dict], amendments: dict[str, list[str]] | None = None,
+           cut: list[dict] | None = None) -> str:
     amendments = amendments or {}
     out = [f"DECISION SURFACE — {target}"]
     for h in hits:
@@ -194,6 +249,7 @@ def render(target: str, hits: list[dict], amendments: dict[str, list[str]] | Non
             out.append(f"    {h['execution']}")
         if h["kind"] == "adr":
             out += render_amendments(h["title"].split()[0], amendments)
+    out += render_truncation(cut or [])
     out.append(f"  Read before editing: {', '.join(sorted({h['doc'] for h in hits}))}")
     return "\n".join(out)
 
@@ -229,13 +285,13 @@ def emit_hook(target: str) -> None:
     """
     rel = relative(target)
     try:
-        hits = lookup(rel, build_index())
+        hits, cut = lookup_split(rel, build_index())
         amendments = build_amendments()
     except Exception as exc:
         _print_context(f"DECISION-SURFACE UNAVAILABLE: {exc}")
         return
     if hits:
-        _print_context(render(rel, hits, amendments))
+        _print_context(render(rel, hits, amendments, cut))
 
 
 def _print_context(text: str) -> None:
@@ -248,10 +304,10 @@ def main() -> int:
         idx = build_index()
         print(f"index: {len(idx)} paths from {len({e['doc'] for v in idx.values() for e in v})} docs")
         for probe in (".claude/scripts/mnemos-pre-compact.sh", "skills/base/SKILL.md"):
-            hits = lookup(probe, idx)
-            print(f"\n{probe} -> {len(hits)} hit(s)")
+            hits, cut = lookup_split(probe, idx)
+            print(f"\n{probe} -> {len(hits)} shown, {len(cut)} cut")
             if hits:
-                print(render(probe, hits, build_amendments()))
+                print(render(probe, hits, build_amendments(), cut))
         return 0
 
     args = [a for a in sys.argv[1:] if a != "--hook"]
@@ -263,13 +319,13 @@ def main() -> int:
         return 0
     # Plain-text mode: standalone/CLI use only. NOT the wired hook path.
     try:
-        hits = lookup(relative(target), build_index())
+        hits, cut = lookup_split(relative(target), build_index())
         amendments = build_amendments()
     except Exception as exc:
         print(f"DECISION-SURFACE UNAVAILABLE: {exc}", file=sys.stderr)
         return 0
     if hits:
-        print(render(relative(target), hits, amendments))
+        print(render(relative(target), hits, amendments, cut))
     return 0
 
 

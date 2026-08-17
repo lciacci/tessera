@@ -172,3 +172,67 @@ def test_an_adr_with_no_executed_line_is_silent_here():
     """doccheck's adr-execution-recorded is what demands the line; this renderer must not
     also shout about it, or one omission produces two different complaints."""
     assert ds._execution_warning("- **Status:** Accepted\n") == ""
+
+
+# --- truncation notice ----------------------------------------------------------------
+# Until 2026-08-17 the render ended at `Read before editing:` and never said that MAX_DOCS
+# had discarded anything. It cuts something on 46 of 146 index keys, and because the sort is
+# ADR-filename ascending, what it cuts is the NEWEST: ADR-0022 was invisible on
+# scripts/doccheck.py, ADR-0015 on bin/tessera-watch. Standing pattern #12, in the hook built
+# to defeat silent failure. Counts below are HARDCODED, never computed from lookup_split —
+# a test that derives its expectation from the code under test cannot fail with it.
+
+
+def _idx(n_adr, n_obs, path="scripts/thing.py"):
+    """An index with a known, hand-counted number of records on one path."""
+    entries = [{"doc": f"docs/adr/{i:04d}-x.md", "title": f"ADR-{i:04d} (Accepted) t{i}",
+                "gloss": "", "kind": "adr", "sort": f"{i:04d}-x.md", "execution": ""}
+               for i in range(1, n_adr + 1)]
+    entries += [{"doc": "docs/observatory.md", "title": f"obs {j}", "gloss": "",
+                 "kind": "observatory", "sort": "z"} for j in range(n_obs)]
+    return {path: entries}
+
+
+def test_notice_names_the_cut_adrs_and_counts_the_rest():
+    idx = _idx(n_adr=4, n_obs=5)                       # 9 records, 3 shown -> 6 cut
+    shown, cut = ds.lookup_split("scripts/thing.py", idx)
+    out = ds.render("scripts/thing.py", shown, {}, cut)
+    assert "6 more record(s) NOT shown" in out, out
+    assert "ADR-0004" in out, "the cut ADR must be named, not merely counted"
+    assert "5 observatory entries" in out, out
+
+
+def test_no_notice_when_nothing_is_cut():
+    """Noise on every hit is how a real warning gets skipped — the reasoning that stopped P3
+    firing forever on an unfixable state."""
+    shown, cut = ds.lookup_split("scripts/thing.py", _idx(n_adr=2, n_obs=1))
+    assert cut == []
+    assert "NOT shown" not in ds.render("scripts/thing.py", shown, {}, cut)
+
+
+def test_notice_itself_never_truncates_silently():
+    """The notice must not commit the defect it reports. Every cut ADR id is listed in full;
+    only the observatory remainder is a count, and the count is explicit."""
+    idx = _idx(n_adr=9, n_obs=0)                       # 9 ADRs, 3 shown -> 6 cut, all ADRs
+    shown, cut = ds.lookup_split("scripts/thing.py", idx)
+    out = ds.render("scripts/thing.py", shown, {}, cut)
+    for i in range(4, 10):
+        assert f"ADR-{i:04d}" in out, f"ADR-{i:04d} was cut and not named"
+    assert "observatory" not in out.split("NOT shown")[1].split("\n")[0]
+
+
+def test_lookup_and_lookup_split_agree_on_what_is_shown():
+    """lookup() is the established read used elsewhere; lookup_split must not drift from it."""
+    idx = _idx(n_adr=4, n_obs=5)
+    assert ds.lookup("scripts/thing.py", idx) == ds.lookup_split("scripts/thing.py", idx)[0]
+
+
+def test_the_live_repo_reports_its_own_truncation():
+    """Against the REAL index, not a fixture. These two files are why the notice exists."""
+    idx = ds.build_index()
+    for target, must_name in (("scripts/doccheck.py", "ADR-0022"),
+                              ("bin/tessera-watch", "ADR-0015")):
+        shown, cut = ds.lookup_split(target, idx)
+        assert cut, f"{target} should still be truncated"
+        out = ds.render(target, shown, {}, cut)
+        assert "NOT shown" in out and must_name in out, out

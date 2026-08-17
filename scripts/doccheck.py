@@ -2399,6 +2399,80 @@ def check_adr_references_resolve() -> list[str]:
             for num, where in sorted(cited.items()) if num not in on_disk]
 
 
+# `| 0011 | 2026-07-21 | title | Superseded by ADR-0012 |`. Status is read as the LAST cell
+# rather than by column index, because the 0006 row has its date and title transposed and a
+# positional parse would read a title as a status. Anchored on a leading 4-digit id so prose
+# tables elsewhere in the file cannot match.
+_ADR_INDEX_ROW = re.compile(r"^\|\s*(0\d{3})\s*\|(.+)\|\s*$", re.M)
+_ADR_VERDICT = re.compile(r"^(Accepted|Watching|Superseded|Proposed|Deprecated)\b", re.I)
+_ADR_SUPERSEDER = re.compile(r"ADR-(0\d{3})")
+
+
+def _adr_verdict(status: str) -> tuple[str, str | None]:
+    """Reduce a Status string to the pair that must agree: (verdict, superseded-by).
+
+    NOT byte-equality, and that is the whole design. Measured across all 24 ADRs before
+    writing this: three carry a qualifier in exactly one of the two places and are correct
+    both times — the index says `Accepted (delivery mechanism refined by ADR-0009)` where
+    0008's file says `Accepted`; 0012's file says `Accepted (supersedes ADR-0011)` where the
+    index says `Accepted`; 0014's file appends `— **Option D: review is Claude-only**`.
+    Demanding equality would report all three and push an author to DELETE a true qualifier to
+    appease the checker, which is the failure mode `_looks_like_path` above is scoped around.
+
+    The superseder id is kept because `Superseded by ADR-0008` and `Superseded by ADR-0009`
+    are a real disagreement, not a formatting difference.
+    """
+    m = _ADR_VERDICT.match(status.strip())
+    verdict = m.group(1).capitalize() if m else status.strip()
+    target = None
+    if verdict == "Superseded":
+        t = _ADR_SUPERSEDER.search(status)
+        target = t.group(1) if t else None
+    return verdict, target
+
+
+def check_adr_status_matches_index() -> list[str]:
+    """An ADR's own `Status:` line must agree with its row in the ADR index.
+
+    Found 2026-08-17 by review, during ADR-0024. `docs/adr/0011-sqlfluff-evaluation.md` read
+    `Status: Watching` with a live `Next check: 2026-09-19`, while the index row had said
+    `Superseded by ADR-0012` since 2026-07-22 — ADR-0012's own title is "supersedes ADR-0011".
+    So for 26 days ADR-0011 presented as an OPEN decision awaiting a re-check, and the count of
+    live review cadences was wrong in every artifact that quoted it.
+
+    Neither side is authoritative here, deliberately: the check reports disagreement and a human
+    decides which is stale. That is the honest contract when two hand-written records overlap —
+    picking a winner would have silently rewritten whichever one happened to be right.
+
+    Why this class matters more than a normal doc claim: `decision_surface` renders the ADR's own
+    Status into the pre-edit block, so a stale one does not merely sit in a file — it is injected
+    as current governance before an edit. A decision that reads `Watching` when it is settled
+    invites re-litigating a closed question; one that reads `Accepted` when superseded invites
+    acting on a retired decision, which is the failure ADR-0008's 12-day gap already cost once.
+    """
+    index = ROOT / "docs" / "adr" / "README.md"
+    if not index.exists():
+        return ["docs/adr/README.md missing — cannot cross-check ADR statuses"]
+    rows = {num: [c.strip() for c in body.split("|")][-1]
+            for num, body in _ADR_INDEX_ROW.findall(index.read_text())}
+    bad = []
+    for adr in sorted((ROOT / "docs" / "adr").glob("[0-9][0-9][0-9][0-9]-*.md")):
+        num = adr.name[:4]
+        if num not in rows:
+            continue  # adr-index-complete owns the missing-row case; do not double-report
+        m = _ADR_STATUS.search(adr.read_text())
+        if not m:
+            bad.append(f"docs/adr/{adr.name}: no `- **Status:**` line to cross-check")
+            continue
+        got, want = _adr_verdict(m.group(1)), _adr_verdict(rows[num])
+        if got != want:
+            bad.append(
+                f"docs/adr/{adr.name}: Status says {m.group(1).strip()!r} but the ADR index row "
+                f"says {rows[num]!r} — one of them is stale, and the ADR's own line is what "
+                f"decision_surface injects before an edit")
+    return bad
+
+
 
 _ADR_EXECUTED = re.compile(r"^- \*\*Executed:\*\* *(.+)$", re.M)
 _ADR_STATUS = re.compile(r"^- \*\*Status:\*\* *(.+)$", re.M)
@@ -2812,6 +2886,7 @@ CHECKS = {
     "test-command-is-not-a-bare-interpreter": check_test_command_is_not_a_bare_interpreter,
     "unrunnable-hooks-report-themselves": check_unrunnable_hooks_report_themselves,
     "adr-references-resolve": check_adr_references_resolve,
+    "adr-status-matches-index": check_adr_status_matches_index,
     "insert-or-ignore-needs-a-real-key": check_insert_or_ignore_needs_a_real_key,
 }
 
