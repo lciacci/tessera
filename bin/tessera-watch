@@ -446,14 +446,30 @@ def p8_doc_drift(root: Path) -> tuple[bool, str]:
     # that reads as a crashed predicate. Ship both halves or neither (#5), and the other
     # half is on six other machines.
     detailed_fn = getattr(doccheck, "run_detailed", None)
+
+    # THE WARN TIER IS READ THROUGH getattr FOR THE SAME REASON `run_detailed` IS (2026-08-18):
+    # six downstream copies of doccheck.py predate it, and assuming the attribute would turn
+    # "your doccheck is older" into a crashed predicate. A doccheck without the tier has no
+    # warn-only checks, so an empty mapping is the correct reading, not a fallback.
+    #
+    # AND P8 MUST HONOUR IT, not merely tolerate it. Left alone, every warn-tier finding
+    # would land in `violations` — session start goes red and the message calls it a false
+    # doc claim, which is the wrong label (#12) and half-undoes the decision the tier
+    # encodes. **P8 stays silent on warnings deliberately, and that is a narrowing worth
+    # stating out loud rather than burying**: this predicate reports claims the repo can
+    # VERIFY are false. The warn tier's channel is the pre-commit hook, which fires while
+    # you are editing the page — not here, a session later.
+    warn_only = set(getattr(doccheck, "WARN_ONLY", ()))
     try:
         if detailed_fn is not None:
             detailed = detailed_fn()
             crashed = sorted(n for n, (_f, e) in detailed.items() if e is not None)
-            violations = [v for n, (vs, e) in detailed.items() if e is None for v in vs]
+            violations = [v for n, (vs, e) in detailed.items()
+                          if e is None and n not in warn_only for v in vs]
         else:
             crashed = []
-            violations = [v for vs in doccheck.run().values() for v in vs]
+            violations = [v for n, vs in doccheck.run().items()
+                          if n not in warn_only for v in vs]
     finally:
         if previous_root is missing:
             delattr(doccheck, "ROOT")          # it had none; leave it with none

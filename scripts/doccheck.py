@@ -949,6 +949,15 @@ SAFETY_SCRIPTS = (
     # check would have stayed green over a dead hook. Listing it here makes the 3.9 probe
     # unconditional instead of dependent on which interpreter runs the checker.
     "scripts/decision_surface.py",
+    # ADDED 2026-08-18. `.githooks/pre-push` runs bare `python3` and imports this. It ran on
+    # 3.9 the day it shipped — measured, not assumed — so this is a GUARANTEE where there was
+    # none, not a bug fix. The detector below could not see it for two compounding reasons,
+    # and both are repeat offenders: it globbed `.claude/scripts/*.sh`, and `.githooks/` holds
+    # EXTENSIONLESS files (#12 — the arbiter default that silently skipped this framework's
+    # entire `bin/` control surface, the same blind spot one directory over); and the hook
+    # reaches the module by IMPORT inside a heredoc, not by `python3 <path>.py`, so the
+    # invocation regex would have missed it even with the glob widened.
+    "scripts/review/stamp.py",
 )
 OLDEST_PYTHON = "/usr/bin/python3"  # macOS system python — the floor a PATH can drop you to
 
@@ -1009,6 +1018,83 @@ def check_safety_scripts_run_on_the_system_python() -> list[str]:
 
 
 _BARE_PY3 = re.compile(r"(?<![/\w.-])python3\s+(?:\"?[^\"'\s]*?/)?(scripts/[A-Za-z0-9_./-]+\.py)")
+# A bare `python3` with no script path — `python3 - <<'PY'`, `python3 -c '...'`. The module it
+# runs then arrives by IMPORT, not by path, which `_BARE_PY3` cannot see.
+# BOTH ALTERNATIVES WERE WIDENED AFTER READING THEM BACK, and each miss was silent:
+# `python3 <<'PY'` (no dash — stdin is the default) did not match at all, and `import a, b`
+# captured only `a`, so `import sys, stamp` would have dropped the one that mattered. A
+# detector's own pattern is a scope claim; these are the same #12 shape as the glob it fixes.
+_BARE_PY3_INLINE = re.compile(r"(?<![/\w.-])python3\s+(?:-c\b|-(?=\s|$)|<<)")
+# HORIZONTAL whitespace only (`[\t ]`, never `\s`): `\s` matches newlines, so the capture ran
+# past the end of the import line and swallowed the heredoc terminator — every name then
+# failed `isidentifier()` and the function returned [] in silence. Caught by probing the
+# shapes the widening was FOR, not by re-reading it.
+_PY_IMPORT = re.compile(r"^[\t ]*(?:import[\t ]+([\w.,\t ]+)|from[\t ]+([A-Za-z_]\w*)[\t ]+import)", re.M)
+
+
+def _hook_files() -> list[Path]:
+    """Every hook script in the repo, from BOTH hook directories.
+
+    `.githooks/` was outside this detector until 2026-08-18 purely because the glob said
+    `*.sh`, and `.githooks/` files are EXTENSIONLESS by git's own contract (`pre-commit`,
+    `pre-push`). So the repo grew a second hook directory that the interpreter detector was
+    structurally unable to see — standing pattern #12, one directory over from where arbiter
+    had just been fixed for the identical extensionless-file default.
+
+    SHEBANG, NOT EXTENSION, for the same reason arbiter's `is_reviewable()` was fixed that
+    way: a name is not a fact about the file. `.githooks/` may also hold `*.sample` files
+    git ships, which are shebanged too — harmless here, since a hook that invokes no bare
+    `python3` contributes nothing either way.
+    """
+    files = []
+    hooks = ROOT / ".claude" / "scripts"
+    if hooks.is_dir():
+        files += sorted(hooks.glob("*.sh"))
+    githooks = ROOT / ".githooks"
+    if githooks.is_dir():
+        for candidate in sorted(githooks.iterdir()):
+            if not candidate.is_file() or candidate.suffix == ".sample":
+                continue
+            try:
+                if candidate.read_bytes()[:2] == b"#!":
+                    files.append(candidate)
+            except OSError:
+                continue
+    return files
+
+
+def _inline_imported_scripts(text: str) -> list[str]:
+    """`scripts/**/<name>.py` modules a hook reaches by IMPORT under a bare `python3`.
+
+    `.githooks/pre-push` does `python3 - <<'PY'` and then `import stamp` after a
+    `sys.path.insert`. The module is never named as a path, so the invocation regex sees
+    nothing and the file gets no 3.9 guarantee — which is the whole finding.
+
+    RESOLUTION IS BY SEARCH, NOT BY PARSING THE PATH INSERT. Reconstructing `sys.path`
+    from shell-embedded Python is a parser this repo does not need; matching the imported
+    NAME against the tracked `scripts/` tree answers the actual question — "is there a
+    first-party module here that a bare interpreter has to load?" — and drops stdlib
+    imports for free, since there is no `scripts/**/sys.py`.
+
+    AMBIGUITY IS REPORTED, NOT GUESSED. `scripts/icpg/` and `scripts/polyphony/` both carry
+    a `store.py` and a `models.py` (CLAUDE.md records this as the reason the suites run in
+    separate processes). A name matching two files cannot be resolved from the import alone,
+    and picking one would be a coin-flip that reads as a measurement.
+    """
+    if not _BARE_PY3_INLINE.search(text):
+        return []
+    found = []
+    for direct, from_ in _PY_IMPORT.findall(text):
+        # `import a, b` is one statement naming two modules; a dotted `a.b` is rooted at `a`.
+        names = [n.split(".")[0].strip() for n in (direct or from_).split(",")]
+        for name in [n for n in names if n.isidentifier()]:
+            matches = sorted(p for p in (ROOT / "scripts").rglob(f"{name}.py")
+                             if ".venv" not in p.parts)
+            if len(matches) == 1:
+                found.append(str(matches[0].relative_to(ROOT)))
+            elif len(matches) > 1:
+                found.append("!ambiguous:" + name)
+    return sorted(set(found))
 
 
 def check_bare_python3_hook_scripts_are_probed() -> list[str]:
@@ -1029,24 +1115,37 @@ def check_bare_python3_hook_scripts_are_probed() -> list[str]:
     Deliberately narrow: only `scripts/*.py` reached through a BARE `python3` from a hook.
     An explicit interpreter path (`.venv/bin/python`) is the toolchain split working as
     designed and is not in scope.
+
+    WIDENED 2026-08-18, TWICE OVER, and the two gaps compounded. It globbed
+    `.claude/scripts/*.sh`, so the whole of `.githooks/` — a second hook directory, added
+    later, holding extensionless files — was invisible to it (#12). And it matched only
+    `python3 <path>.py`, while `.githooks/pre-push` reaches `scripts/review/stamp.py` by
+    IMPORT inside a heredoc, so widening the glob alone would have left it green. **Either
+    fix alone reports success and covers nothing**, which is why both are here and why the
+    re-plant was run against a 3.10+ construct in `stamp.py` rather than against the glob.
     """
-    hooks = ROOT / ".claude" / "scripts"
-    if not hooks.is_dir():
-        return []
     bad = []
     invoked = set()
-    for sh in sorted(hooks.glob("*.sh")):
+    for sh in _hook_files():
         try:
             text = sh.read_text(errors="replace")
         except OSError:
             continue
-        for target in sorted(set(_BARE_PY3.findall(text))):
+        targets = set(_BARE_PY3.findall(text)) | set(_inline_imported_scripts(text))
+        for target in sorted(targets):
+            if target.startswith("!ambiguous:"):
+                name = target.split(":", 1)[1]
+                bad.append(
+                    f"{sh.relative_to(ROOT)} imports `{name}` under a bare `python3`, and more "
+                    f"than one scripts/**/{name}.py exists — this detector cannot tell which "
+                    f"needs the {OLDEST_PYTHON} guarantee. Disambiguate the import or the name")
+                continue
             if not (ROOT / target).exists():
                 continue
             invoked.add(target)
             if target not in SAFETY_SCRIPTS:
                 bad.append(
-                    f"{sh.relative_to(ROOT)} runs `python3 {target}` (bare interpreter) but "
+                    f"{sh.relative_to(ROOT)} reaches `{target}` under a bare interpreter but "
                     f"{target} is not in SAFETY_SCRIPTS — nothing proves it runs on "
                     f"{OLDEST_PYTHON}, which is what a /usr/bin-first PATH hands it")
 
@@ -3161,6 +3260,78 @@ CHECKS = {
 }
 
 
+# ── THE WARN TIER (2026-08-18) ───────────────────────────────────────────────────────────
+# Checks that REPORT but do not block. `{name: why it cannot honestly block}` — a dict and
+# not a set, so a reason is structurally required rather than conventionally expected, and
+# `warn-tier-membership-is-declared` asserts every key is a live check.
+#
+# WHY THIS EXISTS. `promo-deploy-marker-is-current` and `promo-adr-timeline-is-complete`
+# COMPOSE: the timeline check forces every new ADR to add a row to the promo page, editing
+# the page changes its body hash, and the deploy marker then refused the ADR commit until a
+# human uploaded to a foreign host. 11 of the 15 commits that have ever touched that page
+# are ADR commits, so the standing cost was a manual off-repo upload on the critical path of
+# ordinary in-repo work. The same commit range adopted sqlfluff **warn-only** for this exact
+# class (ADR-0012: unverifiable, human-dependent), and the two postures contradicted.
+#
+# THE ADMISSION BAR, because a warn tier is otherwise where reds go to die and #6 says green
+# is only meaningful if failing it stops something: a check belongs here only when this repo
+# **cannot verify the fact it asserts**, so blocking buys no enforcement — only friction.
+# `promo-deploy-marker-is-current` qualifies on its own docstring's terms: nothing here
+# reaches the host, the marker records a CLAIM, and the block is dischargeable by
+# `--stamp-deploy` alone. Blocking therefore coerces nothing a warning does not, while
+# making the FALSE STAMP the cheapest path under time pressure — a party marking its own
+# homework, which is the `restore_injected` shape. A check that asserts something checkable
+# in-repo does NOT qualify: `promo-adr-timeline-is-complete` stays blocking, and it is the
+# half that actually caught the page being 13 decisions behind.
+WARN_ONLY: dict[str, str] = {
+    "promo-deploy-marker-is-current":
+        "the upload is off-repo and by hand — nothing here can verify it, so blocking adds "
+        "friction without enforcement (ADR-0012's posture for the same class)",
+}
+
+
+def _split(detailed: dict) -> tuple[list, list, list]:
+    """(crashed, violations, warnings) from either result shape.
+
+    ONE splitter, because three consumers need the same partition — `render()`, `main()`'s
+    exit status, and `tessera-watch` P8 — and three copies of `n in WARN_ONLY` is how a
+    tier ends up applied in the report and not in the exit code (or the reverse).
+    """
+    norm = {
+        name: value if isinstance(value, tuple) else (value, None)
+        for name, value in detailed.items()
+    }
+    crashed = [(n, f[0]) for n, (f, e) in norm.items() if e is not None]
+    violations = [(n, v) for n, (vs, e) in norm.items()
+                  if e is None and n not in WARN_ONLY for v in vs]
+    warnings = [(n, v) for n, (vs, e) in norm.items()
+                if e is None and n in WARN_ONLY for v in vs]
+    return crashed, violations, warnings
+
+
+def check_warn_tier_membership_is_declared() -> list[str]:
+    """Every warn-tier name is a live check, with a stated reason.
+
+    A tier keyed on names is a rename away from silently covering nothing. The direction
+    that matters is the QUIET one: a name that falls out of `CHECKS` leaves a dead entry
+    here reading as "this check is handled" while the check itself is gone or renamed —
+    the naming-convention keying #10's corollary warns about. (The other direction is safe:
+    a check that drops out of `WARN_ONLY` starts BLOCKING, which is louder, not quieter.)
+
+    The empty reason is checked too, because the reason is the admission bar. A tier whose
+    entries need no justification is just a list of checks somebody wanted to stop seeing.
+    """
+    bad = [f"WARN_ONLY names {name!r}, which is not a check in CHECKS — a renamed or deleted "
+           f"check leaves a warn-tier entry that silently covers nothing"
+           for name in sorted(WARN_ONLY) if name not in CHECKS]
+    bad += [f"WARN_ONLY[{name!r}] has no stated reason — the reason IS the admission bar"
+            for name, why in sorted(WARN_ONLY.items()) if not why.strip()]
+    return bad
+
+
+CHECKS["warn-tier-membership-is-declared"] = check_warn_tier_membership_is_declared
+
+
 def run_detailed() -> dict[str, tuple[list[str], BaseException | None]]:
     """Every check, ISOLATED. Returns {name: (findings, exception_or_None)}.
 
@@ -3203,15 +3374,18 @@ def run() -> dict[str, list[str]]:
 
 def render(results: dict) -> str:
     """Accepts either shape: {name: findings} or {name: (findings, exc)}."""
-    detailed = {
-        name: value if isinstance(value, tuple) else (value, None)
-        for name, value in results.items()
-    }
-    crashed = [(n, f[0]) for n, (f, e) in detailed.items() if e is not None]
-    violations = [(n, v) for n, (vs, e) in detailed.items() if e is None for v in vs]
+    crashed, violations, warnings = _split(results)
 
+    # WARNINGS PRINT ON THE GREEN PATH TOO, and that is the whole delivery channel — see
+    # WARN_ONLY. A tier that only shows up in a report nobody reads on a passing run is
+    # standing pattern #9: it ran, and reached nobody. The headline stays exactly as true
+    # as it was — "0 false claims" is a statement about the blocking tier, which is what
+    # the exit status is about.
     if not violations and not crashed:
-        return f"✓ docs honest — {len(CHECKS)} checks, 0 false claims"
+        head = f"✓ docs honest — {len(CHECKS)} checks, 0 false claims"
+        if warnings:
+            head += "\n\n" + _render_warnings(warnings)
+        return head
 
     lines = []
     if crashed:
@@ -3224,7 +3398,21 @@ def render(results: dict) -> str:
     if violations:
         lines.append(f"Docs make {len(violations)} claim(s) that are no longer true:")
         lines += [f"  🔴 [{name}] {v}" for name, v in violations]
+    if warnings:
+        lines.append("")
+        lines.append(_render_warnings(warnings))
     return "\n".join(lines)
+
+
+def _render_warnings(warnings: list) -> str:
+    """Its OWN section with its OWN verb, for the reason crashes got one: a report can be
+    true in aggregate and wrong about what happened (#12). Filing these under "claims that
+    are no longer true" would say the docs are lying when the fact is that nothing here can
+    tell — and the remedy is a human action, not an edit."""
+    return "\n".join(
+        [f"{len(warnings)} warning(s) — reported, not blocking:"]
+        + [f"  🟡 [{name}] {v}" for name, v in warnings]
+    )
 
 
 def main() -> int:
@@ -3244,7 +3432,13 @@ def main() -> int:
     # "a crashing checker must not wedge every commit" — was written when a crash killed
     # the WHOLE run; an isolated, named crash beside 44 working checks is a defect to fix,
     # and `--no-verify` is still the documented escape.
-    return 1 if any(found for found, _ in detailed.values()) else 0
+    #
+    # A WARN-TIER FINDING DOES NOT. Read through `_split` rather than re-testing membership
+    # here, so the report and the exit status cannot disagree about which tier a check is in.
+    # Note a warn-tier check that CRASHES still blocks: the tier is about a claim this repo
+    # cannot verify, not about a check being allowed to break.
+    crashed, violations, _warnings = _split(detailed)
+    return 1 if (crashed or violations) else 0
 
 
 if __name__ == "__main__":

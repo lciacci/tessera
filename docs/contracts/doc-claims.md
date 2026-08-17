@@ -105,6 +105,34 @@ Two design points, both learned the hard way the same day:
 Bypass with `git commit --no-verify`. It is a gate, not a jail — but the bypass is now a
 decision you make on purpose, which is the entire point of a suggestion-gate (principle #12).
 
+### The warn tier — checks that report and do not block (ADR-0026, 2026-08-18)
+
+`doccheck.WARN_ONLY` is `{check name: why it cannot honestly block}`. Its findings render in
+their own section (`N warning(s) — reported, not blocking:`), do not affect the exit status,
+and **print on the green path too** — the pre-commit hook used to print nothing at all on
+exit 0, which would have made the tier a mechanism that ran and reached nobody.
+
+**The admission bar is narrow and it is the whole safeguard:** a check belongs here only when
+*this repo cannot verify the fact it asserts*, so blocking buys no enforcement — only friction.
+A check whose subject is checkable in-repo does **not** qualify, however annoying its red is.
+`warn-tier-membership-is-declared` asserts every entry names a live check and states a reason;
+the reason is required structurally (a dict, not a set) because a tier whose entries need no
+justification is just a list of checks somebody wanted to stop seeing.
+
+Two boundaries worth stating, because both were decided rather than inherited:
+
+- **A warn-tier check that CRASHES still blocks.** The tier is about a claim this repo cannot
+  verify, not about a check being allowed to break. ADR-0022 is untouched.
+- **`tessera-watch` P8 stays silent on warnings.** P8 reports claims the repo can *verify* are
+  false; left alone it would have filed a warning under "false doc claim", which is the wrong
+  label. That is a real narrowing of P8's coverage and it is stated here rather than implied:
+  **the warn tier's only channel is the pre-commit hook**, which fires while you are editing
+  the file — not a session later.
+
+| Member | Why it cannot block |
+|---|---|
+| `promo-deploy-marker-is-current` | the upload is off-repo and by hand; nothing here reaches the host |
+
 **Known limit:** doccheck reads the **working tree**, not the index. On a partial commit
 (staged subset + dirty tree) it judges content that is not exactly what you are committing.
 Accepted deliberately — nearly every commit here is `git add -A`, and fixing it properly needs

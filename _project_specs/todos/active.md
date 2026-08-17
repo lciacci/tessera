@@ -58,25 +58,35 @@ handoff block only; a blockquoted list is invisible to it.
    indexes zero keys in every one.
 7. **The checkpoint's goal SELECTION is still parked** — Mnemos records no signal for *use within a
    session*, so building that signal is the first task, not changing the filter.
-8. **The review anchor has three gaps, all found by review, none fixed.** (a) `.githooks/` is
-   outside `check_bare_python3_hook_scripts_are_probed`, which globs only `.claude/scripts/*.sh` —
-   so `.githooks/pre-push` runs bare `python3` on `scripts/review/stamp.py` with **no 3.9
-   guarantee**. It works today (verified), but this is the exact class that silently killed
-   `decision_surface.py`, and the repo now has a second hook directory the detector cannot see.
-   `.githooks/pre-commit` shares the blind spot and stays safe only because `doccheck.py` was
-   listed by hand. (b) **The re-review rule names `stamp.py` and gives no command**, unlike every
+8. **The review anchor's three gaps — (a) is CLOSED 2026-08-18, (b) and (c) are open.**
+   ~~(a) `.githooks/` is outside `check_bare_python3_hook_scripts_are_probed`.~~ **Fixed, and the
+   gap was TWO gaps that each hid the other.** Widening the glob was not enough: `.githooks/`
+   files are extensionless (so `*.sh` never saw them — #12, one directory over from arbiter's
+   identical default), *and* `pre-push` reaches `stamp.py` by IMPORT inside a heredoc, which the
+   `python3 <path>.py` regex cannot match. **Measured: glob-only green, inline-only green, both
+   RED.** `scripts/review/stamp.py` is now in `SAFETY_SCRIPTS` and executed on 3.9. **The first
+   re-plant was INVALID and doccheck was right to stay green** — a PEP-604 annotation, in a file
+   carrying `from __future__ import annotations`, i.e. planted beside the failure mode rather
+   than in it (#10's 2026-08-15 sharpening, scored live). A 3.10 `match` went red as required.
+   (b) **The re-review rule names `stamp.py` and gives no command**, unlike every
    sibling bullet in that section; there is no `docs/contracts/review-stamp.md` where all nine
    sibling mechanisms have one, and no caller. Since pre-push is deliberately silent with no
    stamp, **the failure mode is total silence** — principle #17 against the tool built to serve
    it. (c) `changed_since_review`'s `base` parameter is still unused.
-9. **THE PROMO DEPLOY CHECK BLOCKS ON A MANUAL OFF-REPO UPLOAD — decide, do not inherit.**
-   `promo-deploy-marker-is-current` makes `.githooks/pre-commit` refuse *any* edit to
-   `docs/promo/index.html` until a human uploads to a foreign host and runs `--stamp-deploy`, and
-   the only escape is `--no-verify`, which drops all 53 checks. **The same commit range argues
-   warn-only for exactly this class** (unverifiable, human-dependent — ADR-0012's sqlfluff
-   posture), so the two postures contradict. doccheck has no warn tier, so the real options are:
-   move it to a surfacer, add a tier, or accept blocking deliberately. **An inconsistency
-   introduced by accident should not be resolved by accident.**
+9. ~~**THE PROMO DEPLOY CHECK BLOCKS ON A MANUAL OFF-REPO UPLOAD.**~~ **CLOSED 2026-08-18 —
+   ADR-0026, warn tier (Lorenzo: "I just wanted a way to know if I needed to update the html
+   page").** The framing understated it: the two promo checks COMPOSE — a new ADR must add a
+   timeline row, which changes the body hash, which blocked the ADR commit — and **11 of the 15
+   commits that page has ever seen are ADR commits**, so the gate sat on the critical path of the
+   repo's own decision record. And blocking coerced nothing: nothing reaches the host, so
+   `--stamp-deploy` alone discharges it, which made the false stamp the cheapest path.
+   `doccheck.WARN_ONLY` reports without blocking, prints on the green path (the hook printed
+   *nothing* on exit 0 — the tier would have reached nobody), and `promo-adr-timeline-is-complete`
+   stays blocking. **The live proof is this queue entry's own commit**: writing ADR-0026 forced a
+   promo row, the marker went stale, and it warned. **The one thing to watch is the admission bar**
+   — a check qualifies only when the repo *cannot verify* the fact; a tier is otherwise where reds
+   go to die (#6). `tessera-watch` P8 is deliberately silent on warnings, so pre-commit is the
+   tier's only channel — a real narrowing, stated in ADR-0026 rather than left implicit.
 
 ### Standing patterns
 

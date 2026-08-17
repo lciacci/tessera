@@ -37,10 +37,6 @@ def fake_repo(tmp_path, monkeypatch):
     return tmp_path
 
 
-def _violations(results: dict) -> list[str]:
-    return [v for vs in results.values() for v in vs]
-
-
 # ─── BUG 1 (2026-07-09): docs named `mnemos-compact-recovery.sh` — a script that did not
 # exist, for ~6 weeks, across three docs. design-principles.md:560 recorded the lesson in
 # prose ("when a doc claims N layers, `ls` all N") and the `ls` was never built. This is it.
@@ -131,10 +127,20 @@ def test_ignores_placeholders(fake_repo):
 
 
 def test_real_repo_is_green():
-    """The live repo must pass. Seeding to green once is what makes future red mean something."""
+    """The live repo must pass. Seeding to green once is what makes future red mean something.
+
+    AMENDED 2026-08-18 (ADR-0026): green now means **no BLOCKING findings**. A warn-tier
+    finding is a legitimate state by design — the promo page is routinely ahead of the host
+    between an edit and an upload — so asserting on the flat finding list would re-impose the
+    block this suite has no business imposing, and would leave `tessera-test` red for a
+    condition nobody can clear from the repo. The partition is read through `doccheck._split`
+    rather than re-tested here, so this cannot disagree with the gate about what blocks.
+    """
     importlib.reload(doccheck)
     assert doccheck.ROOT == Path(__file__).resolve().parent.parent
-    assert _violations(doccheck.run()) == [], "tessera's own docs make a false claim"
+    crashed, violations, _warnings = doccheck._split(doccheck.run_detailed())
+    assert violations == [], "tessera's own docs make a false claim"
+    assert crashed == [], "a doccheck check crashed, so its claim went unverified"
 
 
 # ─── The gate must not go INERT. Commit 8589280 was pushed with doccheck red because nothing
@@ -2349,6 +2355,120 @@ def test_a_clean_closed_world_exits_zero(monkeypatch):
     assert doccheck.main() == 0
 
 
+# ── THE WARN TIER (2026-08-18) ───────────────────────────────────────────────────────────
+# Closed world throughout, for the reason recorded above: the property is about the tier's
+# mechanics, not about whether the live repo is green today.
+
+_WARN_WORLD = {"ok-check": lambda: [], "warny": _false_claim_check}
+
+
+def test_a_warn_tier_finding_does_not_block(monkeypatch):
+    """The decision itself. Same finding, same run — the exit status is the only difference."""
+    monkeypatch.setattr(doccheck, "CHECKS", dict(_WARN_WORLD))
+    monkeypatch.setattr(sys, "argv", ["doccheck"])
+
+    monkeypatch.setattr(doccheck, "WARN_ONLY", {})
+    assert doccheck.main() == 1, "non-vacuity: this finding blocks when the tier is empty"
+
+    monkeypatch.setattr(doccheck, "WARN_ONLY", {"warny": "a stated reason"})
+    assert doccheck.main() == 0
+
+
+def test_a_warn_tier_check_that_crashes_still_blocks(monkeypatch):
+    """The tier admits claims this repo CANNOT VERIFY. It does not admit broken checks —
+    a warn-only check that raises is exactly as much of a defect as any other."""
+    monkeypatch.setattr(doccheck, "CHECKS", {"ok-check": lambda: [], "warny": _raising_check})
+    monkeypatch.setattr(doccheck, "WARN_ONLY", {"warny": "a stated reason"})
+    monkeypatch.setattr(sys, "argv", ["doccheck"])
+    assert doccheck.main() == 1
+
+
+def test_warnings_render_on_the_green_path(monkeypatch):
+    """THE DELIVERY CHANNEL (#9). doccheck exits 0 with warnings present, so if the green
+    headline swallowed them the tier would run and reach nobody. The headline stays true —
+    '0 false claims' is a statement about the blocking tier."""
+    monkeypatch.setattr(doccheck, "CHECKS", dict(_WARN_WORLD))
+    monkeypatch.setattr(doccheck, "WARN_ONLY", {"warny": "a stated reason"})
+
+    out = doccheck.render(doccheck.run_detailed())
+    assert "0 false claims" in out, out
+    assert "1 warning(s) — reported, not blocking:" in out, out
+    assert "a claim that is not true" in out, out
+
+
+def test_a_warning_is_not_counted_as_a_false_claim(monkeypatch):
+    """Its own section and its own verb. Filing it under 'claims that are no longer true'
+    would say the docs are lying when the fact is that nothing here can tell (#12)."""
+    monkeypatch.setattr(doccheck, "CHECKS", dict(
+        _WARN_WORLD, **{"blocky": _false_claim_check}))
+    monkeypatch.setattr(doccheck, "WARN_ONLY", {"warny": "a stated reason"})
+
+    out = doccheck.render(doccheck.run_detailed())
+    assert "1 claim(s) that are no longer true" in out, out
+    assert "1 warning(s) — reported, not blocking:" in out, out
+    assert out.index("no longer true") < out.index("not blocking"), out
+
+
+def test_the_precommit_hook_prints_warnings_on_the_success_path():
+    """The hook is the tier's ONLY channel, and it used to print nothing at all on exit 0.
+
+    WHAT THIS ASSERTS, stated exactly, because a docstring claiming more than the body does
+    is the defect class this repo paid for on 2026-08-17: the hook and `render()` agree on
+    the header string. It is a cross-file agreement check, not an execution test — the hook
+    greps for a literal that lives in another file, and nothing else would notice the two
+    drifting apart.
+
+    IT DOES NOT RUN THE HOOK. Doing so would invoke the real doccheck against the real repo,
+    reintroducing the environmental coupling the `_CLOSED_WORLD` refactor removed. The
+    exit-0 branch was exercised end-to-end by hand instead (2026-08-18: a stale marker,
+    `git commit`, commit succeeded, warning on stderr) — recorded in the ADR, not claimed
+    here, since a test that does not run it cannot vouch for it.
+    """
+    hook = Path(__file__).resolve().parent.parent / ".githooks" / "pre-commit"
+    src = hook.read_text()
+    marker = "warning(s) — reported, not blocking:"
+    assert marker in src, "the hook no longer matches render()'s warning header"
+    assert doccheck._render_warnings([("x", "y")]).startswith("1 " + marker), \
+        "render() and the hook disagree about the warning header"
+
+
+def test_warn_tier_membership_must_name_a_live_check(monkeypatch):
+    """A renamed check leaves a dead entry reading as 'handled' (#10's corollary)."""
+    monkeypatch.setattr(doccheck, "CHECKS", {"real-check": lambda: []})
+    monkeypatch.setattr(doccheck, "WARN_ONLY", {"real-chekc": "typo'd"})
+    found = doccheck.check_warn_tier_membership_is_declared()
+    assert len(found) == 1 and "real-chekc" in found[0], found
+
+
+def test_warn_tier_membership_must_state_a_reason(monkeypatch):
+    """The reason IS the admission bar. A tier whose entries need no justification is just
+    a list of checks somebody wanted to stop seeing."""
+    monkeypatch.setattr(doccheck, "CHECKS", {"real-check": lambda: []})
+    monkeypatch.setattr(doccheck, "WARN_ONLY", {"real-check": "   "})
+    found = doccheck.check_warn_tier_membership_is_declared()
+    assert len(found) == 1 and "admission bar" in found[0], found
+
+
+def test_warn_tier_membership_accepts_a_declared_entry(monkeypatch):
+    """Non-vacuity for the two above."""
+    monkeypatch.setattr(doccheck, "CHECKS", {"real-check": lambda: []})
+    monkeypatch.setattr(doccheck, "WARN_ONLY", {"real-check": "a stated reason"})
+    assert doccheck.check_warn_tier_membership_is_declared() == []
+
+
+def test_the_promo_deploy_marker_is_the_declared_warn_tier_member(monkeypatch):
+    """The LIVE tier, deliberately — this one asserts the decision, not the mechanism.
+    If the promo check ever leaves the tier, that is a posture change and wants a record."""
+    assert list(doccheck.WARN_ONLY) == ["promo-deploy-marker-is-current"], doccheck.WARN_ONLY
+    assert doccheck.check_warn_tier_membership_is_declared() == []
+
+
+def test_the_promo_timeline_check_is_still_blocking():
+    """The other half of the decision, and the half that actually caught the page being 13
+    decisions behind. It asserts something checkable IN-REPO, so it does not qualify."""
+    assert "promo-adr-timeline-is-complete" not in doccheck.WARN_ONLY
+
+
 # REMOVED 2026-08-10: `test_isolation_does_not_swallow_a_clean_green` ran `main()` against
 # the LIVE CHECKS table and asserted exit 0 — reintroducing exactly the environmental
 # coupling the `_CLOSED_WORLD` refactor had just removed two tests above. Any real doc
@@ -2403,6 +2523,125 @@ def test_a_python3_dash_c_heredoc_is_not_mistaken_for_a_script(fake_repo, monkey
 def test_the_live_repo_lists_every_bare_python3_hook_script():
     """No fixture: the real hooks against the real SAFETY_SCRIPTS."""
     assert doccheck.check_bare_python3_hook_scripts_are_probed() == []
+
+
+# --- .githooks/ and heredoc imports (2026-08-18, queue item 8a) --------------------
+
+
+def _githook(root, body: str, script_rel: str = "scripts/thing.py"):
+    (root / ".githooks").mkdir(parents=True, exist_ok=True)
+    (root / ".githooks" / "pre-push").write_text("#!/bin/sh\n" + body)
+    target = root / script_rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("x = 1\n")
+    return target
+
+
+def test_githooks_are_in_scope_despite_having_no_extension(fake_repo, monkeypatch):
+    """THE GAP. The detector globbed `.claude/scripts/*.sh`, and `.githooks/` files are
+    extensionless by git's contract — so a second hook directory was structurally invisible
+    to the interpreter check (#12, one directory over from arbiter's identical default)."""
+    _githook(fake_repo, "python3 scripts/thing.py\n")
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    bad = doccheck.check_bare_python3_hook_scripts_are_probed()
+    assert any("pre-push" in v and "scripts/thing.py" in v for v in bad), bad
+
+
+def test_a_file_without_a_shebang_is_not_treated_as_a_hook(fake_repo, monkeypatch):
+    """Shebang, not extension — but a README dropped in `.githooks/` is not a hook."""
+    (fake_repo / ".githooks").mkdir(parents=True, exist_ok=True)
+    (fake_repo / ".githooks" / "notes.md").write_text("run `python3 scripts/thing.py`\n")
+    (fake_repo / "scripts").mkdir(exist_ok=True)
+    (fake_repo / "scripts" / "thing.py").write_text("x = 1\n")
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    assert doccheck.check_bare_python3_hook_scripts_are_probed() == []
+
+
+def test_a_module_imported_inside_a_heredoc_is_in_scope(fake_repo, monkeypatch):
+    """THE SECOND HALF, and without it the first is decoration. `.githooks/pre-push` reaches
+    `scripts/review/stamp.py` by IMPORT under `python3 - <<'PY'` — never as a path — so the
+    invocation regex sees nothing even with the glob widened. Measured on the live repo
+    2026-08-18: glob-only green, inline-only green, both RED."""
+    _githook(fake_repo, "python3 - \"$ROOT\" <<'PY'\nimport sys\nimport thing\nPY\n")
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    bad = doccheck.check_bare_python3_hook_scripts_are_probed()
+    assert any("scripts/thing.py" in v for v in bad), bad
+
+
+def test_a_heredoc_import_that_is_listed_passes(fake_repo, monkeypatch):
+    """Non-vacuity: the finding is caused by absence from SAFETY_SCRIPTS, not by the shape."""
+    _githook(fake_repo, "python3 - <<'PY'\nimport thing\nPY\n")
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ("scripts/thing.py",))
+    assert doccheck.check_bare_python3_hook_scripts_are_probed() == []
+
+
+def test_stdlib_imports_in_a_heredoc_are_not_flagged(fake_repo, monkeypatch):
+    """Resolution is by search against the tracked `scripts/` tree, which drops stdlib for
+    free — there is no `scripts/**/sys.py`. This is why no stdlib allowlist is needed."""
+    _githook(fake_repo, "python3 - <<'PY'\nimport sys, pathlib\nfrom json import loads\nPY\n")
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    assert doccheck.check_bare_python3_hook_scripts_are_probed() == []
+
+
+def test_an_ambiguous_heredoc_import_is_reported_not_guessed(fake_repo, monkeypatch):
+    """`scripts/icpg/` and `scripts/polyphony/` both carry a `store.py` and a `models.py`
+    (CLAUDE.md records this as why those suites run in separate processes). Picking one
+    would be a coin-flip that reads as a measurement, so the ambiguity is the finding."""
+    _githook(fake_repo, "python3 - <<'PY'\nimport store\nPY\n")
+    for pkg in ("icpg", "polyphony"):
+        (fake_repo / "scripts" / pkg).mkdir(parents=True, exist_ok=True)
+        (fake_repo / "scripts" / pkg / "store.py").write_text("x = 1\n")
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    bad = doccheck.check_bare_python3_hook_scripts_are_probed()
+    assert any("more than one" in v and "store" in v for v in bad), bad
+
+
+@pytest.mark.parametrize("body", [
+    "python3 - \"$ROOT\" <<'PY'\nimport thing\nPY\n",   # the live pre-push shape
+    "python3 <<'PY'\nimport thing\nPY\n",                # no dash: stdin is the default
+    "python3 - <<'PY'\nimport sys, thing\nPY\n",          # one statement, two modules
+    "python3 - <<'PY'\nfrom thing import x\nPY\n",
+    "python3 - <<'PY'\nimport thing.sub\nPY\n",           # dotted, rooted at `thing`
+])
+def test_every_bare_python3_inline_shape_is_seen(fake_repo, monkeypatch, body):
+    """THE DETECTOR'S OWN PATTERN IS A SCOPE CLAIM, and this one took three tries. Both
+    faults were caught before commit, and neither by re-reading the code — only by running
+    these shapes through it.
+
+    v1 handled the live `pre-push` correctly and was blind to two neighbours: `python3
+    <<'PY'` (the pattern demanded a dash, but stdin is python's default) and `import a, b`
+    (the capture took one identifier). v2 widened the capture to `[\\w.,\\s]+` — and `\\s`
+    matches NEWLINES, so it ran past the import line, swallowed the heredoc terminator, and
+    every name failed `isidentifier()`. That version returned [] in silence, which is
+    indistinguishable from "nothing to report" (#2) — a widening that reported less than
+    what it replaced. v3, here, uses horizontal whitespace only.
+    """
+    _githook(fake_repo, body)
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    bad = doccheck.check_bare_python3_hook_scripts_are_probed()
+    assert any("scripts/thing.py" in v for v in bad), (body, bad)
+
+
+def test_an_import_outside_any_python3_invocation_is_ignored(fake_repo, monkeypatch):
+    """Non-vacuity for the parametrised set: the trigger is the bare `python3`, not the word
+    `import`. A shell script mentioning a module name must not be flagged."""
+    _githook(fake_repo, "echo hi\nimport thing\n")
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    assert doccheck.check_bare_python3_hook_scripts_are_probed() == []
+
+
+def test_stamp_py_has_the_3_9_guarantee_it_had_no_way_to_have():
+    """The live assertion, and the point of queue item 8a. `.githooks/pre-push` runs bare
+    `python3` on this module; before 2026-08-18 nothing probed it.
+
+    RE-PLANTED IN THE FILE, and the FIRST re-plant was invalid — a PEP-604 annotation, which
+    `stamp.py` neutralises with `from __future__ import annotations`, so doccheck stayed
+    green and was RIGHT to. That is #10's 2026-08-15 sharpening scoring a hit in real time:
+    the landmine was planted beside the failure mode, not in it. A 3.10 `match` (SyntaxError
+    at compile, future-import or not) went red as required.
+    """
+    assert "scripts/review/stamp.py" in doccheck.SAFETY_SCRIPTS
+    assert doccheck.check_safety_scripts_run_on_the_system_python() == []
 
 
 def test_the_CLAUDE_md_half_is_not_satisfied_by_PROSE_beside_the_list(fake_repo, monkeypatch):
@@ -2954,8 +3193,20 @@ def test_stamp_deploy_is_the_documented_remedy_and_works(fake_repo):
     assert doccheck.check_promo_deploy_marker_is_current() == []
 
 
-def test_the_live_promo_page_is_stamped():
-    assert doccheck.check_promo_deploy_marker_is_current() == []
+# REMOVED 2026-08-18 (ADR-0026): `test_the_live_promo_page_is_stamped` asserted the live page
+# was stamped current. Under the warn tier that state is *expected to be transiently false* —
+# it is false from the moment an ADR adds a timeline row until a human uploads — so the test
+# would hold `tessera-test` red for a condition no repo change can clear. That is the blocking
+# posture re-imposed through the suite instead of the hook, and a permanently-red suite is one
+# people learn to ignore (the reason the chaos probes were held out of `tessera-test` until
+# they were legitimately green).
+#
+# ITS PROPERTY WAS RE-HOMED, NOT DROPPED (#8 — harvest before you cut). "Is the published page
+# behind?" is now reported by `promo-deploy-marker-is-current` on every commit, warn-tier, via
+# the pre-commit hook. What the SUITE still owns is that the check is wired to the tier it was
+# deliberately placed in: `test_the_promo_deploy_marker_is_the_declared_warn_tier_member` and
+# `test_the_promo_timeline_check_is_still_blocking`, above. The mechanism keeps a test; the
+# transient state does not.
 
 
 def test_no_helper_in_this_file_is_defined_twice():

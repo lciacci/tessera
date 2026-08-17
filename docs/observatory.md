@@ -2737,11 +2737,13 @@ marker — is worth more than the 29%.
 standing patterns) ~2,790 — **~15,600 tokens**, plus the Mnemos checkpoint (~2,600) for ~18k in
 practice. (Estimated at chars/4; `count_tokens` if a decision ever rests on it.)
 
-**METERED 2026-08-17: 16,799 tokens tracked** *(16,473 earlier the same day; 15,837 on 08-10, 15,497 on 08-09)* — re-metered
-because `CLAUDE.md` gained the second ADR-editing exception (`Status:` supersession) that day, per
-its own rule; `CLAUDE.md` is now **8,363 of the 16,799**, holding just under half and still the only
-component that grows. In practice 20,518, the extra being a 2,239-byte checkpoint and a
-1,806-byte handoff surfacer, neither asserted. The prior figure was recomputed by
+**METERED 2026-08-18: 16,978 tokens tracked** *(16,799 on 08-17; 16,473 earlier that day; 15,837 on 08-10, 15,497 on 08-09)* — re-metered
+because `CLAUDE.md` gained ADR-0026's warn-tier clause, per its own rule; `CLAUDE.md` is now
+**8,542 of the 16,978**, and the growth is **entirely `CLAUDE.md` (+179)** — `mnemos` 4,354,
+standing patterns as emitted 2,628, `base` 1,454, all three unmoved since 08-17. In practice
+21,287, the extra being a 2,759-byte checkpoint and a 1,550-byte handoff surfacer, neither
+asserted. *(The 08-17 line this replaces said "just under half"; see the blockquote below —
+that share has now actually crossed.)* The prior figure was recomputed by
 `scripts/prefix_meter.py`, which doccheck's `eager-prefix-figure-is-current` asserts this figure
 against within 5%. **Re-metered because `CLAUDE.md` changed three times that day, not because a
 check demanded it** — the 5% band absorbed the drift and stayed green, and CLAUDE.md's own rule is
@@ -4400,7 +4402,14 @@ honest read of their manifest is that **it is a friction mechanism, not a measur
 always raise the ceiling, you just have to say so in the diff. Whether Tessera wants that friction
 is a taste question about how `CLAUDE.md` grows, and taste questions belong to Lorenzo.
 
-> **`CLAUDE.md` IS 50% OF THE PREFIX AS OF 2026-08-17** — 8,363 of 16,799, up from 47% when this
+> **`CLAUDE.md` PASSED 50% OF THE PREFIX ON 2026-08-18 — 8,542 of 16,978, i.e. 50.31%.** The
+> preceding day's line, kept below, claimed 50% at **49.78%**; it is now literally true, one day
+> and one clause later (+179: ADR-0026's warn tier, and `stamp.py` joining the stdlib-only list). **That is worth more than the correction:
+> the rounded headline was wrong on 08-17 and would have been indistinguishable from this one on
+> 08-18 — a claim that becomes true on its own is not thereby vindicated, and the only reason the
+> difference is visible is that the 49.78% was written down.**
+>
+> *(08-17, superseded:)* — 8,363 of 16,799, up from 47% when this
 > entry was written, and it is still the only component that grows. It gained two rules that day
 > (the `Status:` ADR exception, and the re-review rule conclave had written a day earlier and never
 > transferred). Neither is removable and both are load-bearing, which is exactly the case the
@@ -4413,14 +4422,15 @@ is a taste question about how `CLAUDE.md` grows, and taste questions belong to L
 > and the honest options are relocate or accept. Recorded as the datapoint, not as an argument.
 
 **Revisit when:** `eager-prefix-figure-is-current` goes red, i.e. the tracked prefix leaves the 5%
-band around the **`METERED` figure this file records** — 16,799 as of 2026-08-17. **The first draft
+band around the **`METERED` figure this file records** — 16,978 as of 2026-08-18. **The first draft
 of this trigger did not know that**, and neither did the review that corrected it: both quoted the
 prose "~15.6k" as the anchor and computed 16,232 as "4.05% over, one point from failing." The
 asserted anchor was 15,837, so the true figure was **2.50%** — the alarm was overstated by the
 error it was reporting, in both directions at once, and the number the check compares against is
-not the number the prose says. *(Live today, after `CLAUDE.md` gained the `Status:` exception:
-16,799 tracked, `CLAUDE.md` 8,363 of it — re-metered and re-anchored, so the
-band is measured against something real rather than against a rounded sentence.)*
+not the number the prose says. *(Live today, after `CLAUDE.md` gained ADR-0026's warn-tier clause:
+16,978 tracked, `CLAUDE.md` 8,542 of it — re-metered and re-anchored, so the
+band is measured against something real rather than against a rounded sentence. The 08-17 pass
+recorded 16,799 / 8,363 here.)*
 **Or** revisit when a delivery channel truncates again — at which point the question stops
 being about dilution (unmeasured) and becomes about a cap that is real and measurable, which is a
 different and much stronger case.
