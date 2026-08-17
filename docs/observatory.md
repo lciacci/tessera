@@ -2737,7 +2737,7 @@ marker — is worth more than the 29%.
 standing patterns) ~2,790 — **~15,600 tokens**, plus the Mnemos checkpoint (~2,600) for ~18k in
 practice. (Estimated at chars/4; `count_tokens` if a decision ever rests on it.)
 
-**METERED 2026-08-17: 16,784 tokens tracked** *(16,473 earlier the same day; 15,837 on 08-10, 15,497 on 08-09)* — re-metered
+**METERED 2026-08-17: 16,799 tokens tracked** *(16,473 earlier the same day; 15,837 on 08-10, 15,497 on 08-09)* — re-metered
 because `CLAUDE.md` gained the second ADR-editing exception (`Status:` supersession) that day, per
 its own rule; `CLAUDE.md` is now **8,037 of the 16,473**, holding at ~49% and still the only
 component that grows. In practice 20,518, the extra being a 2,239-byte checkpoint and a
