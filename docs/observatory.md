@@ -4450,6 +4450,22 @@ different and much stronger case.
 > repo-prefixing" and stopped there** — true about ADR-0024, and a false green about the class, which
 > is #12 again. These two are the standing instances any fix has to clear, and they are the entire
 > content of live queue item 2 after the five correct keys are set aside.
+>
+> **CLASS CLOSED 2026-08-17 — and NOT by narrowing `DOC_SKIP`, which was measured and rejected.**
+> Dropping it yields 13 findings in ADRs and **11 are correct behaviour**: `bin/kimi`, `bin/review`,
+> `bin/research`, `docs/maggy-rfc.md` and `skills/tessera-code-review/` are real Tessera paths this
+> repo deleted, and `scripts/tdd-loop-check.sh` is one two ADRs correctly record as never built.
+> An ADR naming a path it retired is an ADR doing its job, and a blanket existence rule goes red on
+> every one — exactly what queue item 2 warned against. **So the assertion is DECLARATION, not
+> existence** (`absent-index-paths-are-declared`): an absent index key must be either foreign or
+> listed in `repo_paths.ABSENT_TESSERA_PATHS` **with a stated reason**, and a declaration whose path
+> has come *back* is reported too, so the list cannot rot. Retired paths stay governed — their ADR
+> still fires if anyone recreates them, which is the behaviour worth keeping — while a genuinely
+> foreign path can no longer be added silently. Braintrust's two are now declared as Braintrust's;
+> index 149 → 147. This is also ADR-0024's second adopted concept, so item 4 and that ADR's
+> unexecuted half were the same work. **And the trap claimed a fourth victim on the way out:** the
+> placeholder pattern matched `...` but not `…`, so ADR-0023's own sentence *explaining* this bug
+> put `docs/…` in the index. Fixed in `PLACEHOLDER_PATTERN`.
 
 ---
 

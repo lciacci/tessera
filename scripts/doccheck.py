@@ -46,7 +46,7 @@ from pathlib import Path
 # One definition of the foreign-path data, shared with decision_surface. Only the DATA is
 # shared: each side applies its own comparison, deliberately — see repo_paths' docstring.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from repo_paths import FOREIGN_PATHS, PLACEHOLDER_PATTERN  # noqa: E402
+from repo_paths import ABSENT_TESSERA_PATHS, FOREIGN_PATHS, PLACEHOLDER_PATTERN  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -100,7 +100,11 @@ REPO_DIRS = ("docs/", "scripts/", "bin/", ".claude/", "templates/", "hooks/",
              "_project_specs/", ".tessera/", "commands/", "skills/", "rules/", "agents/")
 
 # Tokens that are illustrative, not paths: placeholders and brace-expansions.
-PLACEHOLDER = re.compile(r"[{}]|/X$|NNNN|YYYY|TITLE|\.\.\.")
+# COMPILED FROM repo_paths.PLACEHOLDER_PATTERN, not re-typed. That module claims to hold the
+# pattern "so the two consumers agree on what a placeholder looks like" — and this file kept a
+# hand-copy anyway, so the claim was prose. Adding `…` there on 2026-08-17 left this copy
+# behind and `docs/…` went red here while the surface correctly ignored it.
+PLACEHOLDER = re.compile(PLACEHOLDER_PATTERN)
 
 # Paths that legitimately aren't on disk. Every entry is a deliberate exemption with a
 # reason — an unexplained allowlist is how a checker rots into theater.
@@ -122,7 +126,14 @@ PATH_ALLOWLIST = {
     # PATH_ALLOWLIST there was the bug — this set answers "is it required to exist on
     # disk", and the entries ABOVE are Tessera's own gitignored runtime state, for which
     # the honest answer to "should a decision surface on it" is YES.
-} | FOREIGN_PATHS
+} | FOREIGN_PATHS | frozenset(ABSENT_TESSERA_PATHS)
+# ABSENT_TESSERA_PATHS is the MIRROR of PLANNED_PATHS below: deliberately-gone rather than
+# deliberately-unbuilt. Unioned in 2026-08-17, when writing the observatory entry that explains
+# why an ADR may name a deleted path tripped this check on `scripts/tdd-loop-check.sh` and
+# `skills/tessera-code-review/` — the entry documenting the exemption was not covered by it.
+# A path formally declared "ours, gone, and here is why" is exactly the answer this check wants,
+# and unlike an inline allowlist entry the declaration is itself checked in both directions by
+# `absent-index-paths-are-declared`, so it cannot rot.
 
 # Designed in docs, never built. NOT the same as a stale reference — these are promises
 # the framework has not kept, and docs/design-principles.md describes them in the PRESENT
@@ -2490,6 +2501,66 @@ def check_superseded_status_is_accountable() -> list[str]:
     return bad
 
 
+def check_absent_index_paths_are_declared() -> list[str]:
+    """Every path the decision surface indexes must exist, or be declared with a reason.
+
+    CLOSES THE RESIDUAL GAP `check_decision_surface_honors_path_exemptions` names in its own
+    docstring: a foreign path *not already* in the exemption list is caught in ordinary docs by
+    `referenced-paths-exist` going red, and is caught by **nothing** inside an ADR, because
+    `DOC_SKIP` exempts `docs/adr/` from that check and five others. That is how Braintrust's
+    two `.mdx` paths sat in the index as Tessera paths from 2026-08-06 to 2026-08-17.
+
+    WHY NOT JUST NARROW `DOC_SKIP`. Measured before choosing: dropping it produces 13 findings
+    in ADRs and **11 are correct behaviour** — `bin/kimi`, `bin/review`, `bin/research`,
+    `docs/maggy-rfc.md`, `skills/tessera-code-review/` are real Tessera paths this repo deleted,
+    and `scripts/tdd-loop-check.sh` is one two ADRs correctly record as never built. An ADR
+    naming a path it retired is an ADR doing its job. A blanket existence rule would go red on
+    all of them, which is why queue item 2 warned against it.
+
+    So the assertion is DECLARATION, not existence. An absent index key must be either foreign
+    (`repo_paths.FOREIGN_PATHS`, already filtered out before indexing) or listed in
+    `ABSENT_TESSERA_PATHS` with a stated reason. That keeps the deliberate behaviour — a
+    retired path stays governed, and its ADR fires if anyone recreates it — while making a
+    genuinely foreign path impossible to add silently.
+
+    Both directions, because a one-way check rots: a declaration whose path has come BACK is
+    stale and is reported, so the list cannot quietly accumulate entries that stopped being
+    true. That is the DeepSeek gate's own property (ADR-0024 §4) and the second half of what
+    that ADR adopted.
+    """
+    try:
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import decision_surface
+        from repo_paths import _DOWNSTREAM, _OTHER_REPOS
+        index = decision_surface.build_index()
+    except Exception as exc:
+        return [f"cannot cross-check the decision-surface index: {exc}"]
+
+    bad = []
+    for path, reason in sorted({**_OTHER_REPOS, **_DOWNSTREAM, **ABSENT_TESSERA_PATHS}.items()):
+        if not reason.strip():
+            bad.append(f"scripts/repo_paths.py: {path!r} is declared with no reason — the "
+                       f"reason is what stops the next reader inferring the set's meaning")
+
+    for path in sorted(index):
+        if (ROOT / path).exists() or path in ABSENT_TESSERA_PATHS:
+            continue
+        # A declared PREFIX covers what sits under it (`skills/tessera-code-review/`).
+        if any(path.startswith(p + "/") for p in ABSENT_TESSERA_PATHS):
+            continue
+        sources = ", ".join(sorted({e["doc"] for e in index[path]}))
+        bad.append(
+            f"{sources}: `{path}` is indexed as a governing Tessera path but is not on disk "
+            f"and is not declared — add it to repo_paths.FOREIGN_PATHS (another repo's or a "
+            f"downstream's) or ABSENT_TESSERA_PATHS (ours, deliberately gone), with a reason")
+
+    for path in sorted(ABSENT_TESSERA_PATHS):
+        if (ROOT / path).exists():
+            bad.append(f"scripts/repo_paths.py: {path!r} is declared absent but EXISTS — the "
+                       f"declaration is stale; drop it so the path is checked normally")
+    return bad
+
+
 def check_adr_status_matches_index() -> list[str]:
     """An ADR's own `Status:` line must agree with its row in the ADR index.
 
@@ -2964,6 +3035,7 @@ CHECKS = {
     "test-command-is-not-a-bare-interpreter": check_test_command_is_not_a_bare_interpreter,
     "unrunnable-hooks-report-themselves": check_unrunnable_hooks_report_themselves,
     "adr-references-resolve": check_adr_references_resolve,
+    "absent-index-paths-are-declared": check_absent_index_paths_are_declared,
     "adr-status-matches-index": check_adr_status_matches_index,
     "superseded-status-is-accountable": check_superseded_status_is_accountable,
     "insert-or-ignore-needs-a-real-key": check_insert_or_ignore_needs_a_real_key,

@@ -44,29 +44,59 @@ copies it alongside `decision_surface.py` and `decision_amendments.py` for that 
 doccheck's `decision-surface-deps-ship-downstream` asserts it stays in that copy set.
 """
 
+# EVERY ENTRY CARRIES ITS REASON, and a stale entry is a finding. Adopted 2026-08-17 from
+# DeepSeek Harness (ADR-0024 §4), whose doc gates key their exemptions as {path: why} and fail
+# when a key stops naming anything real. Bare sets are how `PATH_ALLOWLIST` came to mean two
+# incompatible things at once and silenced the decision surface on a live file: with no reason
+# beside each entry, the next reader infers the set's meaning from whichever comment they
+# happen to read. A required sentence makes "another repo's" and "ours, absent" unmergeable.
+
 # Other repos' files. The observatory *evaluates* Open GSD; it does not claim to contain it.
 _OTHER_REPOS = {
-    "bin/lib/state.cjs",
-    "bin/lib/capability-registry.cjs",
-    "bin/lib/capability-loader.cjs",
-    "docs/ARCHITECTURE.md",
-    ".claude/rules",
+    "bin/lib/state.cjs": "Open GSD's; the observatory evaluates GSD, it does not contain it",
+    "bin/lib/capability-registry.cjs": "Open GSD's, same evaluation",
+    "bin/lib/capability-loader.cjs": "Open GSD's, same evaluation",
+    "docs/ARCHITECTURE.md": "Open GSD's architecture doc, cited by ADR-0001",
+    ".claude/rules": "Open GSD's rules directory; Tessera has no such path",
+    "docs/specification.mdx": "Braintrust's agent-behavior spec, cited by ADR-0020",
+    "docs/client-implementation/adding-behaviors-support.mdx":
+        "Braintrust's client-implementation guide, cited by ADR-0020",
 }
 
 # Claims about DOWNSTREAM projects, not about Tessera. Tessera is the framework: it consumes
 # downstreams' FINDINGS.md (see bin/tessera-findings) and does not carry one, and
 # _project_specs/session/ is the layout the base skill prescribes downstream.
-# scripts/tessera-escalate is a PATH-fallback bridge copy living in downstream repos
-# (conclave, howler); Tessera reaches its own binaries through bin/.
 _DOWNSTREAM = {
-    "docs/FINDINGS.md",
-    "_project_specs/session",
-    "scripts/tessera-escalate",
+    "docs/FINDINGS.md": "downstream projects carry one; Tessera consumes them via bin/tessera-findings",
+    "_project_specs/session": "the layout the base skill prescribes downstream, not here",
+    "scripts/tessera-escalate": "a PATH-fallback bridge copy in conclave/howler; Tessera uses bin/",
 }
 
-FOREIGN_PATHS = _OTHER_REPOS | _DOWNSTREAM
+FOREIGN_PATHS = frozenset(_OTHER_REPOS) | frozenset(_DOWNSTREAM)
+
+# OURS, and deliberately not on disk. A DIFFERENT question from FOREIGN_PATHS, kept apart for
+# the reason that whole file exists: conflating "not ours" with "not here" is the 2026-08-15
+# defect. These stay INDEXED on purpose — an ADR that governed `bin/review` should fire the day
+# someone recreates it, which is correct governance, not a phantom. What they must not be is
+# *undeclared*, because then a genuinely foreign path written into an ADR is indistinguishable
+# from one of these and nothing reports it (DOC_SKIP exempts ADRs from `referenced-paths-exist`).
+ABSENT_TESSERA_PATHS = {
+    "bin/kimi": "a real Tessera binary, deleted; ADR-0007/0014 record why",
+    "bin/review": "a real Tessera binary, deleted by ADR-0014's review-stack prune",
+    "bin/research": "a real Tessera binary, deleted; ADR-0014",
+    # No trailing slash: `referenced-paths-exist` matches `token.rstrip("/") == p or
+    # token.startswith(p + "/")`, so a stored slash matches neither form of the token.
+    "skills/tessera-code-review": "the skill ADR-0014 cut",
+    "docs/maggy-rfc.md": "written, never kept; ADR-0003 cites it as the upstream proposal",
+    "scripts/tdd-loop-check.sh": (
+        "NEVER EXISTED. ADR-0007/0008 record its ABSENCE as the reason `iterative-development` "
+        "is a setup guide rather than a wired mechanism. An ADR firing the day someone creates "
+        "it is the point"),
+}
 
 # Template shapes, never files: `.claude/scripts/X`, `docs/adr/NNNN-*.md`. Kept here rather
 # than in doccheck so the two consumers agree on what a placeholder looks like; as with
 # FOREIGN_PATHS, only the DATA is shared and each side applies it itself.
-PLACEHOLDER_PATTERN = r"[{}]|/X$|NNNN|YYYY|TITLE|\.\.\."
+# `…` (U+2026) as well as `...`: ADR-0023's own explanation of this bug writes `docs/…`, and
+# the ASCII-only pattern indexed it as a Tessera path — the trap, one layer down, again.
+PLACEHOLDER_PATTERN = r"[{}]|/X$|NNNN|YYYY|TITLE|\.\.\.|…"

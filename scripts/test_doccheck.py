@@ -2760,3 +2760,82 @@ def test_the_live_repo_accounts_for_every_retired_adr():
     """2 of 2 comply today — a new rule whose corpus is already green is a rule the repo had,
     unwritten. Re-plant: strip ADR-0011's because-line and this goes red."""
     assert doccheck.check_superseded_status_is_accountable() == []
+
+
+# --- absent-index-paths-are-declared --------------------------------------------------
+# Closes the residual gap check_decision_surface_honors_path_exemptions names in its own
+# docstring: a foreign path not already exempted is caught in ordinary docs by
+# referenced-paths-exist and by NOTHING in an ADR, because DOC_SKIP exempts docs/adr/.
+# Braintrust's two .mdx paths sat in the index as Tessera paths for 11 days.
+
+
+def _surface_repo(tmp_path, monkeypatch, adr_body):
+    """A repo both doccheck and decision_surface read, since the check spans the two."""
+    import decision_surface
+    (tmp_path / "docs" / "adr").mkdir(parents=True)
+    (tmp_path / "docs" / "adr" / "0099-x.md").write_text(
+        f"# ADR-0099: x\n\n- **Status:** Accepted\n\n## Decision\n\n{adr_body}\n")
+    (tmp_path / "docs" / "observatory.md").write_text("# Observatory\n")
+    monkeypatch.setattr(doccheck, "ROOT", tmp_path)
+    monkeypatch.setattr(decision_surface, "ROOT", tmp_path)
+    return tmp_path
+
+
+def test_an_undeclared_absent_index_path_is_flagged(tmp_path, monkeypatch):
+    """The original bug: a foreign path backticked in an ADR, indexed as ours, unreported."""
+    _surface_repo(tmp_path, monkeypatch, "It cites `docs/specification-of-theirs.mdx` here.")
+    out = doccheck.check_absent_index_paths_are_declared()
+    assert any("specification-of-theirs" in b and "not declared" in b for b in out), out
+
+
+def test_a_declared_absent_path_is_accepted(tmp_path, monkeypatch):
+    import repo_paths
+    _surface_repo(tmp_path, monkeypatch, "It cites `bin/gone-on-purpose` here.")
+    monkeypatch.setitem(repo_paths.ABSENT_TESSERA_PATHS, "bin/gone-on-purpose", "deleted, ADR-0099")
+    assert doccheck.check_absent_index_paths_are_declared() == []
+
+
+def test_a_path_that_exists_needs_no_declaration(tmp_path, monkeypatch):
+    _surface_repo(tmp_path, monkeypatch, "It cites `docs/observatory.md` here.")
+    assert doccheck.check_absent_index_paths_are_declared() == []
+
+
+def test_a_declaration_whose_path_came_back_is_reported(tmp_path, monkeypatch):
+    """Both directions, or the list quietly accumulates entries that stopped being true."""
+    import repo_paths
+    root = _surface_repo(tmp_path, monkeypatch, "It cites `bin/resurrected` here.")
+    (root / "bin").mkdir(); (root / "bin" / "resurrected").write_text("x")
+    monkeypatch.setitem(repo_paths.ABSENT_TESSERA_PATHS, "bin/resurrected", "was deleted")
+    assert any("declared absent but EXISTS" in b
+               for b in doccheck.check_absent_index_paths_are_declared())
+
+
+def test_a_declaration_without_a_reason_is_reported(tmp_path, monkeypatch):
+    """The DeepSeek property (ADR-0024 §4): a bare set is how PATH_ALLOWLIST came to mean two
+    incompatible things and silenced the surface on a live file."""
+    import repo_paths
+    _surface_repo(tmp_path, monkeypatch, "nothing cited")
+    monkeypatch.setitem(repo_paths.ABSENT_TESSERA_PATHS, "bin/unexplained", "   ")
+    assert any("declared with no reason" in b
+               for b in doccheck.check_absent_index_paths_are_declared())
+
+
+def test_the_live_index_has_no_undeclared_absent_paths():
+    assert doccheck.check_absent_index_paths_are_declared() == []
+
+
+def test_the_placeholder_pattern_has_one_definition():
+    """repo_paths claims to hold the pattern 'so the two consumers agree'; doccheck kept a
+    hand-copy anyway, so adding `…` there on 2026-08-17 left this side behind. Re-plant:
+    give doccheck its own literal and this fails."""
+    import repo_paths
+    assert doccheck.PLACEHOLDER.pattern == repo_paths.PLACEHOLDER_PATTERN
+
+
+def test_declared_absent_paths_are_matchable_by_the_allowlist():
+    """A stored trailing slash matches NEITHER form the allowlist tests
+    (`token.rstrip('/') == p` or `token.startswith(p + '/')`), so the declaration silently
+    does nothing. `skills/tessera-code-review/` shipped that way and went red."""
+    import repo_paths
+    bad = [p for p in repo_paths.ABSENT_TESSERA_PATHS if p.endswith("/") or p.startswith("/")]
+    assert bad == [], f"unmatchable declarations: {bad}"
