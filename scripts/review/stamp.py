@@ -25,6 +25,14 @@ difference at the outward boundary. A set difference terminates where a recursio
 the output is a fact ("3 files changed since the review saw them") for a human to dispose of.
 Warn-only — the posture ADR-0012 already set for sqlfluff.
 
+KNOWN GAP, found the day this shipped: a stamp records the range a review was TOLD to cover,
+not the range the author meant. On 2026-08-17 `/code-review high 0b27332` was invoked meaning
+"since that commit"; the skill read it as "that commit" and returned six findings, all correct and
+all already fixed one commit later. Nothing here would have caught that — the stamp would have
+faithfully recorded the wrong scope. It is the same certified-at/changed-since gap one level up:
+the certifier's own scope is unverified. Cheap partial remedy if it recurs: have the reviewer
+report the ref range it resolved, and compare that against the stamp.
+
 Stdlib-only: imported by a git hook that runs without the venv.
 """
 from __future__ import annotations
