@@ -229,3 +229,30 @@ def test_a_dismissal_BEFORE_the_denial_does_not_dispose_it():
     denial. Otherwise one dismissal silences the rest of the session."""
     events = [{"type": "spend_dismissed", "ts": "2000-01-01T00:00:00Z"}, DENIED]
     assert len(undispositioned(events, escalated=False)) == 1
+
+
+def test_the_backstop_reads_the_repo_log_not_the_cwd(tmp_path, monkeypatch):
+    """THE FAIL-OPEN THIS SHIPPED WITH. `LOGS` and `FIRE_COUNT` were cwd-relative while
+    `event.py._logs_dir()` had been repo-anchored on 2026-08-10 — the writer got the fix, the
+    reader did not (#11). Measured from /tmp: `_events()` returned 0 for a session whose log held
+    23 denials, so a Tier-1 control reported 'nothing to disposition' and exited 0 after any `cd`.
+
+    Re-plant: make LOGS relative again and this fails.
+    """
+    import backstop
+    assert backstop.LOGS.is_absolute(), "the audit log must not move with the cwd"
+    assert backstop.FIRE_COUNT.is_absolute(), "the fire counter must not move with the cwd"
+    monkeypatch.chdir(tmp_path)
+    assert backstop.LOGS.is_absolute()
+    assert backstop._events("no-such-session") == []          # must not raise from a foreign cwd
+
+
+def test_repo_root_is_overridable_for_tests(monkeypatch, tmp_path):
+    """The override exists so tests can point at a fixture repo; without it the anchor would be
+    untestable and the fix above would be asserted only against this checkout."""
+    import importlib, backstop
+    monkeypatch.setenv("TESSERA_SPEND_ROOT", str(tmp_path))
+    importlib.reload(backstop)
+    assert backstop.LOGS == tmp_path / ".tessera" / "logs"
+    monkeypatch.delenv("TESSERA_SPEND_ROOT")
+    importlib.reload(backstop)

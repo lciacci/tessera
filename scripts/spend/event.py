@@ -57,12 +57,21 @@ def build_event(event_type: str, data: dict, *, session_id: str, ts: str | None 
     }
 
 
-def emit(event_type: str, data: dict) -> Path | None:
+def emit(event_type: str, data: dict, *, session_id: str | None = None) -> Path | None:
     """Append an event. Returns the path written, or None if there is no session to key on.
 
     Never raises: an audit-log failure must never change a spend decision.
+
+    `session_id` OVERRIDES the environment, and exists because ADR-0016's two halves excluded
+    each other. That ADR made `tessera-authorize dismiss` human-only by putting it on the spend
+    guard's deny list — correct, since PreToolUse fires only on the agent's Bash calls. But this
+    function keys on `CLAUDE_CODE_SESSION_ID`, which exists ONLY in the agent's environment. So
+    the verb was reachable only by a human and recordable only by an agent, and the failure was
+    silent: `dismiss` printed success and wrote nothing, every time, for anyone who ran it.
+    Found 2026-08-17 when a false positive needed dispositioning and the documented remedy
+    turned out to be inert. The caller passes `--session`; see `authorize.cmd_dismiss`.
     """
-    session_id = os.environ.get("CLAUDE_CODE_SESSION_ID")
+    session_id = session_id or os.environ.get("CLAUDE_CODE_SESSION_ID")
     if not session_id:
         return None
     path = _logs_dir() / f"{Path(session_id).name or 'unknown'}.jsonl"

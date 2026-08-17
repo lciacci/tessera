@@ -39,13 +39,28 @@ Contract: docs/contracts/spend-authorization.md
 # `from __future__ import annotations` makes annotations lazy strings. DO NOT REMOVE.
 from __future__ import annotations
 import json
+import os
 import sys
 from pathlib import Path
 
-LOGS = Path(".tessera/logs")
+def _repo_root() -> Path:
+    """The repo this file lives in, never the cwd. Mirrors `event.py._logs_dir()`'s anchor."""
+    override = os.environ.get("TESSERA_SPEND_ROOT")
+    return Path(override) if override else Path(__file__).resolve().parents[2]
+
+
+LOGS = _repo_root() / ".tessera" / "logs"
 ESCALATIONS = Path(".tessera/escalations")
 MAX_FIRES = 3
-FIRE_COUNT = Path(".tessera/.spend-backstop-fires")
+# REPO-ANCHORED, NOT CWD-RELATIVE — and this is the same defect, in the same subsystem, that
+# `event.py._logs_dir()` was fixed for on 2026-08-10. The writer got the fix; the READER did not.
+# #11 exactly: fix the pattern, not the row. Measured 2026-08-17 from `/tmp`: `_events()` returned
+# 0 for a session whose log holds 23 denials, so this backstop reported "nothing to disposition"
+# and exited 0 — a Tier-1 control failing OPEN and silent after any `cd`. The fire counter had the
+# same relative path, which additionally meant a session's cap could be tracked in two files at
+# once. Both now resolve through the writer's anchor, so there is ONE definition of where the
+# spend audit lives.
+FIRE_COUNT = _repo_root() / ".tessera" / ".spend-backstop-fires"
 
 
 def _events(session_id: str, root: Path | None = None) -> list[dict]:

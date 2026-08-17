@@ -4565,6 +4565,41 @@ path in backticks and still fails to surface, which is the first moment the defe
 
 ---
 
+### The spend backstop read its own audit log relative to the cwd, and went blind after any `cd` *(2026-08-17)*
+
+- **Status:** Fixed same day, and recorded because the FIX was the row and not the pattern.
+- **Source:** found while trying to disposition a false-positive denial — i.e. by using the
+  control's documented remedy and watching it not work.
+
+**Two defects in one Tier-1 control, both silent, both found by exercising the remedy rather than
+by any check.**
+
+**1. `backstop.py` resolved `LOGS` and `FIRE_COUNT` from the cwd.** Measured from `/tmp`:
+`_events()` returned **0** for a session whose log holds **23** denials, so the backstop reported
+"nothing to disposition" and exited 0. A spend control failing OPEN and quiet. **`event.py`, the
+WRITER, was anchored to the repo on 2026-08-10 for exactly this reason** — the reader was left
+behind, in the same subsystem, in the same session's fix. #11 stated as plainly as it gets: the fix
+went to the row. Both now resolve through one anchor.
+
+**2. `tessera-authorize dismiss` printed success and wrote nothing, always.** ADR-0016 made the verb
+human-only via the guard's deny list — correct, since PreToolUse only intercepts the agent's Bash
+calls. But `emit()` keys on `CLAUDE_CODE_SESSION_ID`, which exists only in an *agent* environment.
+**The verb was reachable only by a human and recordable only by an agent**, and the two halves
+excluded each other silently. Now takes `--session`, and a failed write is loud and non-zero.
+
+**The shape worth keeping.** Both are the same failure as `restore_injected`: a component reporting
+on itself. ADR-0016 was written to stop a disposition riding prose, and its own recorder rode an
+environment variable the intended caller does not have. **A control's remedy path needs exercising,
+not just documenting** — this one was documented in the contract, quoted in the backstop's own
+report, and had never once worked.
+
+**What is still open:** `_segments()` (`guard.py:208`), the tokenisation defect that produced the
+false positive in the first place. Five denials across two sessions, all read-only, all fail-safe.
+Deliberately deferred — it is the guard's DECISION path, not its reporting path, and it carries a
+trap: any fix must not blind the guard to a wrapper-led command that legitimately quotes a boot verb.
+
+---
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.

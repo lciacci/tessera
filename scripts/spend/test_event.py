@@ -63,3 +63,15 @@ def test_an_audit_failure_never_raises(tmp_path, monkeypatch):
     monkeypatch.setenv("TESSERA_ROOT", "/proc/nonexistent-unwritable")
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "sess-x")
     assert event.emit("spend_denied", {"probe": True}) is None
+
+
+def test_emit_accepts_an_explicit_session(tmp_path, monkeypatch):
+    """ADR-0016 made `dismiss` human-only via the guard's deny list; emit() keyed on
+    CLAUDE_CODE_SESSION_ID, which exists only in the AGENT's environment. The two halves excluded
+    each other and the failure was silent. `--session` is the bridge."""
+    import event
+    monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
+    monkeypatch.setenv("TESSERA_SPEND_LOGS", str(tmp_path / ".tessera" / "logs"))
+    assert event.emit("spend_dismissed", {"x": 1}) is None, "no session and no override -> no write"
+    p = event.emit("spend_dismissed", {"x": 1}, session_id="explicit-session")
+    assert p is not None and p.name == "explicit-session.jsonl"

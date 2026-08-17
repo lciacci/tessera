@@ -122,14 +122,35 @@ def cmd_dismiss(args, path: Path, now: datetime) -> int:
 
     Human-invoked: `tessera-authorize dismiss` is on the spend guard's deny list, so a tool
     call cannot reach it. A human's own terminal never passes through a PreToolUse hook.
+
+    WHICH IS EXACTLY WHY `--session` EXISTS, added 2026-08-17. `event.emit()` keyed on
+    `CLAUDE_CODE_SESSION_ID`, which is set in the AGENT's environment and not in a human's
+    terminal — so ADR-0016's two halves excluded each other: the verb was reachable only by a
+    human and recordable only by an agent. This function then printed success unconditionally,
+    so every human dismissal reported "recorded" and wrote nothing. A disposition that marks its
+    own homework is ADR-0015's subject, and it was sitting inside the control ADR-0016 built to
+    stop dispositions riding prose.
+
+    The return value is now CHECKED and a failed write is loud and non-zero. A spend control may
+    fail to record — it must never say it recorded when it did not.
     """
-    emit("spend_dismissed", {
+    session = getattr(args, "session", None)
+    written = emit("spend_dismissed", {
         "dismissed_at": _iso(now),
         "reason": args.reason,
         "dismissed_by": os.environ.get("USER", "unknown"),
-    })
+    }, session_id=session)
+    if written is None:
+        print("NOT RECORDED — no session to key the dismissal to.\n"
+              "  `CLAUDE_CODE_SESSION_ID` is set inside an agent session, not in your terminal.\n"
+              "  Pass the session explicitly:\n"
+              "      tessera-authorize dismiss --session <id> --reason \"...\"\n"
+              "  The id is the basename of the session's log in .tessera/logs/.",
+              file=sys.stderr)
+        return 1
     print(f"recorded — this session's spend denials are dismissed as false positives\n"
-          f"  reason: {args.reason}")
+          f"  reason: {args.reason}\n"
+          f"  written: {written}")
     return 0
 
 
@@ -149,6 +170,9 @@ def main(argv: list[str] | None = None, path: Path | None = None) -> int:
     )
     d.add_argument("--reason", required=True,
                    help="why the denial committed no spend — this is the record")
+    d.add_argument("--session", default=None,
+                   help="session id to record against; required from a human terminal, where "
+                        "CLAUDE_CODE_SESSION_ID is not set (see .tessera/logs/<id>.jsonl)")
     d.set_defaults(fn=cmd_dismiss)
 
     sub.add_parser("show", help="show the live envelope (exit 1 if none)").set_defaults(fn=cmd_show)

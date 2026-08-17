@@ -229,8 +229,19 @@ Both of those exits are wrong for a false positive — a grant authorizes spend 
 a packet manufactures the bogus escalation this contract calls worse than none.
 
 ```bash
-tessera-authorize dismiss --reason "pytest fixture; no spend was attempted"
+tessera-authorize dismiss --session <id> --reason "pytest fixture; no spend was attempted"
 ```
+
+**`--session` IS REQUIRED FROM A HUMAN TERMINAL, and its absence made this verb inert for its
+whole life (fixed 2026-08-17).** ADR-0016 made `dismiss` human-only by putting it on the guard's
+deny list — correct, because PreToolUse fires only on the agent's Bash calls. But `event.emit()`
+keyed on `CLAUDE_CODE_SESSION_ID`, which is set inside an *agent* session and never in a human's
+terminal, so the verb was **reachable only by a human and recordable only by an agent.** It printed
+`recorded — this session's spend denials are dismissed as false positives` and wrote nothing, every
+time, for anyone who ran it. A disposition that marks its own homework is ADR-0015's subject, sitting
+inside the control ADR-0016 built to stop dispositions riding prose. The return value is now checked
+and a failed write is loud and non-zero: **a spend control may fail to record; it must never say it
+recorded when it did not.** The id is the basename of the session's log in `.tessera/logs/`.
 
 Writes a `spend_dismissed` **event**, never the envelope: a dismissal authorizes nothing, has no
 TTL, and cannot boot anything. Honoured when recorded **after** the last denial — the same rule
