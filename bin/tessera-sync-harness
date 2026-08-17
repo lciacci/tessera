@@ -327,7 +327,11 @@ def sync(project: Path, apply: bool, exclude: list[str] | None = None,
         # leaves a dangling hook, which is worse than a missing one. Matched on the script's
         # basename because settings commands carry ${CLAUDE_PROJECT_DIR} prefixes.
         if declined:
-            names = {Path(rel).name for rel in declined}
+            # `honoured`, NOT `declined`: a STALE decline (the file has since appeared) would
+            # otherwise strip the wiring for a script that is present — a script that looks
+            # installed and never runs, which this file's own docstring calls worse than a
+            # missing one. The two halves must agree. (Review, 2026-08-17.)
+            names = {Path(rel).name for rel in honoured}
             hooks_to_add = [(e, h) for e, h in hooks_to_add
                             if not any(n in h.get("command", "") for n in names)]
         if hooks_to_add and apply:
@@ -349,6 +353,19 @@ def sync(project: Path, apply: bool, exclude: list[str] | None = None,
             # nothing, which is how a decoration guard announces itself.)
             tgt_path.parent.mkdir(parents=True, exist_ok=True)
             tgt_path.write_text(json.dumps(tgt_settings, indent=2) + "\n")
+
+    # A decline that matches NO reference component is inert, and silently so — it is neither
+    # honoured, nor complained about, nor stale. That is not just a typo guard: when Tessera
+    # RENAMES a declined file, the decline stops matching and the next `--apply` back-fills the
+    # renamed component into the project that declined it. Which is the howler accident this
+    # file documents — a deferred spend guard installed mid-ship — reintroduced through the
+    # mechanism written to prevent it. (Review, 2026-08-17.)
+    unmatched = sorted(set(declined) - set(ref))
+    if unmatched:
+        print(f"{len(unmatched)} decline(s) match NO harness component — inert, and a rename "
+              f"would silently re-install them:")
+        for rel in unmatched:
+            print(f"  ? {rel}")
 
     # Declines FIRST: a reader who does not know a component was declined reads its absence as
     # drift, which is the state this tool was in until 2026-08-17.

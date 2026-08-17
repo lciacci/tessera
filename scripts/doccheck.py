@@ -2523,10 +2523,17 @@ PROMO_PAGE = "docs/promo/index.html"
 
 
 def promo_body_hash(text: str) -> str:
-    """Hash of the page WITHOUT its marker. Excluding the marker from its own hash is what makes
-    stamping a no-op on the compared value — otherwise the cheapest way to clear the finding
-    would be to edit the marker, which certifies nothing."""
-    return hashlib.sha256(_DEPLOY_BLOCK.sub("", text).encode()).hexdigest()[:16]
+    """Hash of the page with only the HASH TOKEN neutralised — not the whole marker comment.
+
+    Excluding the token is what makes stamping a no-op on the compared value; otherwise the
+    cheapest way to clear the finding would be to edit the marker, which certifies nothing.
+    But the first version stripped the entire `<!-- deployed: … -->` block, ~14 lines of prose
+    that IS part of the uploaded HTML — so rewording it changed the published page while the
+    check stayed green. Blanking just the 16 hex characters keeps the property and closes that.
+    (Review, 2026-08-17.)
+    """
+    neutral = re.sub(r"(<!--\s*deployed:\s*)[0-9a-f]{16}", r"\1" + "0" * 16, text)
+    return hashlib.sha256(neutral.encode()).hexdigest()[:16]
 
 
 def check_promo_deploy_marker_is_current() -> list[str]:
@@ -2565,6 +2572,9 @@ def check_promo_deploy_marker_is_current() -> list[str]:
 def stamp_deploy() -> int:
     """Write the current content hash into the marker. Run AFTER uploading, never before."""
     page = ROOT / PROMO_PAGE
+    if not page.is_file():
+        print(f"{PROMO_PAGE}: not present — nothing to stamp", file=sys.stderr)
+        return 1
     text = page.read_text()
     if not _DEPLOY_MARKER.search(text):
         print(f"{PROMO_PAGE}: no deploy marker to stamp", file=sys.stderr)

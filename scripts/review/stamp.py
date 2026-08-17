@@ -63,6 +63,16 @@ def _git(*args: str) -> str:
     return out.stdout.strip()
 
 
+def _git_ok(*args: str) -> bool:
+    """True when the git command exits 0. `_git` returns stdout, which is empty for the
+    predicates (`merge-base --is-ancestor`) whose whole answer is the exit code."""
+    try:
+        return subprocess.run(["git", *args], cwd=ROOT,
+                              capture_output=True, timeout=15).returncode == 0
+    except Exception:
+        return False
+
+
 def record(base: str = "origin/main") -> int:
     """Stamp the review's coverage: the HEAD it saw and the files in that range."""
     head = _git("rev-parse", "HEAD")
@@ -114,7 +124,21 @@ def changed_since_review(base: str = "origin/main") -> "tuple[dict | None, list[
     head = stamp["data"]["head"]
     if not _git("cat-file", "-t", head):
         return stamp, []            # stamped commit is gone (rebase); nothing honest to say
-    return stamp, [f for f in _git("diff", "--name-only", f"{head}..HEAD").splitlines() if f]
+    # A stamp whose commit is not an ANCESTOR of HEAD describes a different line of history —
+    # stamp on a branch, switch, push, and `stamp_head..HEAD` enumerates everything since the
+    # merge-base and calls it unreviewed. `cat-file` only catches a commit that is GONE.
+    if not _git_ok("merge-base", "--is-ancestor", head, "HEAD"):
+        return stamp, []
+    changed = [f for f in _git("diff", "--name-only", f"{head}..HEAD").splitlines() if f]
+    # SUBTRACT WHAT THE REVIEW ALREADY SAW. `record()` stores the working-tree diff too, because
+    # the review target is usually an UNCOMMITTED tree — so the normal workflow is: review the
+    # tree, stamp, commit those exact files, push. Diffing `head..HEAD` then names files the
+    # review did see and the stamp itself lists, which is a guaranteed false positive on the
+    # primary path. That is the always-fires noise the no-stamp branch was cut for, rebuilt one
+    # field over; the data to prevent it was already being recorded and simply not read.
+    # (Review, 2026-08-17.)
+    seen = set(stamp["data"].get("files", ()))
+    return stamp, [f for f in changed if f not in seen]
 
 
 def _main(argv: "list[str]") -> int:

@@ -2739,7 +2739,7 @@ practice. (Estimated at chars/4; `count_tokens` if a decision ever rests on it.)
 
 **METERED 2026-08-17: 16,799 tokens tracked** *(16,473 earlier the same day; 15,837 on 08-10, 15,497 on 08-09)* — re-metered
 because `CLAUDE.md` gained the second ADR-editing exception (`Status:` supersession) that day, per
-its own rule; `CLAUDE.md` is now **8,037 of the 16,473**, holding at ~49% and still the only
+its own rule; `CLAUDE.md` is now **8,363 of the 16,799**, holding just under half and still the only
 component that grows. In practice 20,518, the extra being a 2,239-byte checkpoint and a
 1,806-byte handoff surfacer, neither asserted. The prior figure was recomputed by
 `scripts/prefix_meter.py`, which doccheck's `eager-prefix-figure-is-current` asserts this figure
@@ -4400,21 +4400,26 @@ honest read of their manifest is that **it is a friction mechanism, not a measur
 always raise the ceiling, you just have to say so in the diff. Whether Tessera wants that friction
 is a taste question about how `CLAUDE.md` grows, and taste questions belong to Lorenzo.
 
-> **`CLAUDE.md` CROSSED 50% OF THE PREFIX ON 2026-08-17** — 8,348 of 16,784, up from 47% when this
+> **`CLAUDE.md` IS 50% OF THE PREFIX AS OF 2026-08-17** — 8,363 of 16,799, up from 47% when this
 > entry was written, and it is still the only component that grows. It gained two rules that day
 > (the `Status:` ADR exception, and the re-review rule conclave had written a day earlier and never
 > transferred). Neither is removable and both are load-bearing, which is exactly the case the
 > word-budget question exists for: the growth is not slop, so "condense" is not obviously available,
+> **and the first version of this line said "CROSSED 50%" when the measurement was 49.8% — a headline
+> rounded in the direction that made the point, in the entry a future budget decision will rest on.
+> Three restatements of the total elsewhere in this file were also left at the superseded 16,473
+> while the METERED headline moved, including the revisit TRIGGER, which then cited a number the
+> line it points at no longer carried. Both found by review.**
 > and the honest options are relocate or accept. Recorded as the datapoint, not as an argument.
 
 **Revisit when:** `eager-prefix-figure-is-current` goes red, i.e. the tracked prefix leaves the 5%
-band around the **`METERED` figure this file records** — 16,473 as of 2026-08-17. **The first draft
+band around the **`METERED` figure this file records** — 16,799 as of 2026-08-17. **The first draft
 of this trigger did not know that**, and neither did the review that corrected it: both quoted the
 prose "~15.6k" as the anchor and computed 16,232 as "4.05% over, one point from failing." The
 asserted anchor was 15,837, so the true figure was **2.50%** — the alarm was overstated by the
 error it was reporting, in both directions at once, and the number the check compares against is
 not the number the prose says. *(Live today, after `CLAUDE.md` gained the `Status:` exception:
-16,473 tracked, 20,518 in practice, `CLAUDE.md` 8,037 of it — re-metered and re-anchored, so the
+16,799 tracked, `CLAUDE.md` 8,363 of it — re-metered and re-anchored, so the
 band is measured against something real rather than against a rounded sentence.)*
 **Or** revisit when a delivery channel truncates again — at which point the question stops
 being about dilution (unmeasured) and becomes about a cap that is real and measurable, which is a
