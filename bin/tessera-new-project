@@ -72,6 +72,16 @@ cp "$TESSERA_ROOT"/scripts/decision_surface.py \
    "$TESSERA_ROOT"/scripts/decision_amendments.py \
    "$TESSERA_ROOT"/scripts/repo_paths.py "$TARGET/scripts/"
 chmod +x "$TARGET/.claude/scripts/tessera-decision-surface.sh"
+# The review anchor, and BOTH halves again: the pre-push hook is inert without stamp.py, and
+# stamp.py with no hook records events nobody reads. Ships because conclave F-004 — "the review
+# gate covers the draft and never the fix" — came FROM a downstream, and the framework's answer
+# to it was Tessera-only for its first day, which is the same one-way street the finding was
+# about. Warn-only by design; see scripts/review/stamp.py for why this is not a blocking gate.
+mkdir -p "$TARGET/scripts/review" "$TARGET/.githooks"
+cp "$TESSERA_ROOT"/scripts/review/stamp.py "$TARGET/scripts/review/stamp.py"
+cp "$TESSERA_ROOT"/.githooks/pre-push "$TARGET/.githooks/pre-push"
+chmod +x "$TARGET/scripts/review/stamp.py" "$TARGET/.githooks/pre-push"
+
 # Escalation: reached by name from PATH (tessera/bin). The copy is a BRIDGE for machines
 # where PATH is not set — delete it once install.sh's PATH check is green everywhere.
 cp "$TESSERA_ROOT"/bin/tessera-escalate "$TARGET/scripts/tessera-escalate"

@@ -43,6 +43,21 @@ Parsed by `bin/tessera-findings`. Everything before the first `:` is the state.
 A finding with **no** Status line is treated as `open` — unknown counts as needs-attention, never
 silently dropped.
 
+## When you act on a finding, update the finding
+
+**Even if the status does not change.** Added 2026-08-17 after conclave's F-004: this repo decided
+the finding's central question on 08-15, wrote the resulting rule into conclave's own `CLAUDE.md`,
+and left the finding untouched — status `open`, `When to fix` still reading *"build nothing yet"*,
+no mention that the rule now existed. The finding itself travelled correctly and Tessera read it;
+what never travelled was the **decision and the argument behind it**, because they lived in a commit
+message and a downstream `CLAUDE.md` that nothing scans. Tessera then re-derived a weaker version of
+the same verdict and built a mechanism a day after conclave had decided not to.
+
+**This is a convention, not a mechanism, on purpose.** The channel already works — `tessera-findings`
+surfaced F-004 at SessionStart. Adding a second channel for decisions would be automating around a
+rule nobody had written, which is the standard conclave itself set: *you cannot skip a rule nobody
+wrote.* Write it, and see whether it gets skipped.
+
 ## Scanner
 
 ```

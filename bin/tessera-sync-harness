@@ -190,6 +190,47 @@ def patch_settings_only(project: Path, apply: bool) -> int:
     return 0
 
 
+DECLINES = ".tessera/harness-declines.yml"
+
+
+def read_declines(project: Path) -> "tuple[dict, list[str]]":
+    """Components this project has deliberately DECLINED, as {path: reason}, plus complaints.
+
+    WHY THIS EXISTS. Before it, this tool could not tell "behind" from "decided against", so it
+    reported howler's absent spend harness — 10 files, CLOSED 2026-08-10 as genuinely not needed
+    for a mobile app with no spend-committing commands — as drift on every single run. A report
+    that is permanently and correctly ignorable is the P13 shape, and it takes the real findings
+    down with it.
+
+    A REASON IS REQUIRED, and a decline whose file has since APPEARED is reported. Both halves
+    are the property this repo landed twice already today (`repo_paths.ABSENT_TESSERA_PATHS`,
+    and findings' `rejected:<reason>` status): a bare exemption list rots into theater, and a
+    one-directional check cannot notice when its own entries stop being true.
+
+    Format is one `path: reason` per line, `#` comments ignored — the same minimal shape the rest
+    of `.tessera/` uses, parsed here rather than pulling in a YAML dependency for three lines.
+    """
+    f = project / DECLINES
+    declined, bad = {}, []
+    if not f.is_file():
+        return declined, bad
+    for n, line in enumerate(f.read_text().splitlines(), 1):
+        line = line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        if ":" not in line:
+            bad.append(f"{DECLINES}:{n}: expected `path: reason`, got {line!r}")
+            continue
+        rel, reason = line.split(":", 1)
+        rel, reason = rel.strip(), reason.strip()
+        if not reason:
+            bad.append(f"{DECLINES}:{n}: {rel!r} declined with no reason — the reason is the "
+                       f"whole point; without it the next reader cannot tell a decision from a gap")
+            continue
+        declined[rel] = reason
+    return declined, bad
+
+
 def sync(project: Path, apply: bool, exclude: list[str] | None = None,
          update_stale: bool = False) -> int:
     exclude = exclude or []
@@ -205,10 +246,15 @@ def sync(project: Path, apply: bool, exclude: list[str] | None = None,
             ref = {rel: src for rel, src in ref.items()
                    if not any(e in rel for e in exclude)}
 
-        added, drifted = [], []
+        declined, decline_complaints = read_declines(project)
+
+        added, drifted, honoured = [], [], []
         for rel, src in ref.items():
             dst = project / rel
             if not dst.exists():
+                if rel in declined:
+                    honoured.append(rel)          # a decision, not a gap
+                    continue
                 added.append(rel)
                 if apply:
                     dst.parent.mkdir(parents=True, exist_ok=True)
@@ -277,6 +323,13 @@ def sync(project: Path, apply: bool, exclude: list[str] | None = None,
         if exclude:
             hooks_to_add = [(e, h) for e, h in hooks_to_add
                             if not any(x in h.get("command", "") for x in exclude)]
+        # Same reasoning for declines: wiring a hook whose script was deliberately not copied
+        # leaves a dangling hook, which is worse than a missing one. Matched on the script's
+        # basename because settings commands carry ${CLAUDE_PROJECT_DIR} prefixes.
+        if declined:
+            names = {Path(rel).name for rel in declined}
+            hooks_to_add = [(e, h) for e, h in hooks_to_add
+                            if not any(n in h.get("command", "") for n in names)]
         if hooks_to_add and apply:
             tgt_settings.setdefault("hooks", {})
             for event, hook in hooks_to_add:
@@ -296,6 +349,23 @@ def sync(project: Path, apply: bool, exclude: list[str] | None = None,
             # nothing, which is how a decoration guard announces itself.)
             tgt_path.parent.mkdir(parents=True, exist_ok=True)
             tgt_path.write_text(json.dumps(tgt_settings, indent=2) + "\n")
+
+    # Declines FIRST: a reader who does not know a component was declined reads its absence as
+    # drift, which is the state this tool was in until 2026-08-17.
+    for complaint in decline_complaints:
+        print(f"!! {complaint}")
+    if honoured:
+        print(f"{len(honoured)} component(s) DECLINED by this project (not drift):")
+        for rel in honoured:
+            print(f"  - {rel} — {declined[rel]}")
+    # A decline whose file now EXISTS is stale, and saying so is the half that stops the list
+    # rotting. Reported, never auto-removed: the project owns its own declarations.
+    stale_declines = [rel for rel in declined if (project / rel).exists()]
+    if stale_declines:
+        print(f"{len(stale_declines)} STALE decline(s) — the file exists, so the decline is "
+              f"no longer true; drop it from {DECLINES}:")
+        for rel in stale_declines:
+            print(f"  ! {rel}")
 
     verb = "added" if apply else "would add"
     print(f"{verb} {len(added)} file(s):")

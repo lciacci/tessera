@@ -4529,6 +4529,42 @@ quietly wrong, because the world moves and the sentence does not.
 
 ---
 
+### The decision surface ships to all six downstreams and indexes NOTHING in any of them *(2026-08-17)*
+
+- **Status:** Investigating. Found while back-filling `repo_paths.py` to the fleet — i.e. by
+  verifying the thing just shipped actually did something, not by any check.
+- **Source:** fleet back-fill, 2026-08-17.
+
+**Measured after the back-fill:** `decision_surface.build_index()` returns **0 keys in all six**
+projects. The hook is wired, imports cleanly on 3.9, and surfaces nothing anywhere. Two independent
+causes, and the first is a real defect:
+
+1. **The ADR title regex does not match downstream ADRs.** `_ADR_TITLE` requires a colon
+   (`# ADR-0001: Title`). settempo writes `# ADR-0001 — UUID primary keys` with an em dash, so all
+   three of its ADRs are skipped before any path extraction happens. Tessera's own house style is
+   the colon, and nothing ever checked that a downstream shares it.
+2. **No downstream ADR backticks a repo path** — 0 matches across every file. Even with the title
+   fixed, the index would stay empty until they do.
+
+**This corrects a claim made earlier the same day.** The back-fill was justified partly as "all six
+carry the foreign-path bug fixed here on 08-15". They do carry the older code, but **the bug has no
+live instance downstream**, because indexing nothing cannot index a foreign path wrongly. The
+back-fill was still right — it ships `repo_paths.py` alongside a `decision_surface.py` that imports
+it, which is the "both halves" requirement — but the *reason* given was overstated.
+
+**The interesting question is not the regex.** It is that a component was distributed to six
+projects, verified as importable, and is inert in all of them, and nothing reports that. Standing
+pattern #1 in its quietest form: not a broken component, a component with nothing to do and no way
+to say so. `tessera-sync-harness` checks that files ARRIVE; nothing checks that they DO anything.
+
+**Deliberately not fixed here, and the choice is real:** widening `_ADR_TITLE` changes Tessera's own
+index and would be a fix aimed at a symptom, since cause 2 keeps the index empty regardless. The
+alternative — a downstream ADR title convention — is a convention nobody has written, which is
+conclave's own "you cannot skip a rule nobody wrote". **Revisit when** a downstream ADR names a repo
+path in backticks and still fails to surface, which is the first moment the defect costs anything.
+
+---
+
 ## Closing notes
 
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.
