@@ -2906,3 +2906,65 @@ def test_a_deleted_path_is_exempt_only_in_history_docs(tmp_path, monkeypatch):
     assert doccheck.check_referenced_paths_exist() == []
     (tmp_path / "docs" / "guide.md").write_text("Run `bin/deleted-thing` to do the thing.\n")
     assert any("bin/deleted-thing" in b for b in doccheck.check_referenced_paths_exist())
+
+
+# --- promo-deploy-marker-is-current (conclave F-004 fix 3) -----------------------------
+# The page is uploaded by hand, so a correction can reach the repo and not the published copy.
+# A DATE marker was built first and was a false green — the page took four commits on 2026-08-17
+# and same-day dates cannot distinguish them, so F-004's proposed design failed on its own case.
+
+
+def _promo_deploy_page(repo, body, marker=None):
+    d = repo / "docs" / "promo"; d.mkdir(parents=True, exist_ok=True)
+    text = f"<html><title>t</title>{body}</html>"
+    if marker is not None:
+        text = text.replace("</title>", f"</title><!-- deployed: {marker} -->", 1)
+    (d / "index.html").write_text(text)
+    return d / "index.html"
+
+
+def test_an_undeployed_content_change_is_flagged(fake_repo):
+    page = _promo_deploy_page(fake_repo, "<p>v1</p>", marker="0" * 16)
+    good = doccheck.promo_body_hash(page.read_text())
+    _promo_deploy_page(fake_repo, "<p>v1</p>", marker=good)
+    assert doccheck.check_promo_deploy_marker_is_current() == []
+    _promo_deploy_page(fake_repo, "<p>v2 — edited, not uploaded</p>", marker=good)
+    assert any("behind the repo" in b for b in doccheck.check_promo_deploy_marker_is_current())
+
+
+def test_editing_only_the_marker_cannot_satisfy_the_check(fake_repo):
+    """The marker is excluded from its own hash, so stamping is a no-op on the compared value.
+    Without that, the cheapest way to clear the finding would be to edit the marker — which
+    certifies nothing."""
+    _promo_deploy_page(fake_repo, "<p>v1</p>", marker="a" * 16)
+    assert doccheck.check_promo_deploy_marker_is_current()
+    _promo_deploy_page(fake_repo, "<p>v1</p>", marker="b" * 16)
+    assert doccheck.check_promo_deploy_marker_is_current(), "a marker-only edit must not clear it"
+
+
+def test_a_missing_marker_is_flagged(fake_repo):
+    _promo_deploy_page(fake_repo, "<p>v1</p>")
+    assert any("no `<!-- deployed:" in b for b in doccheck.check_promo_deploy_marker_is_current())
+
+
+def test_stamp_deploy_is_the_documented_remedy_and_works(fake_repo):
+    _promo_deploy_page(fake_repo, "<p>v2</p>", marker="0" * 16)
+    assert doccheck.check_promo_deploy_marker_is_current()
+    assert doccheck.stamp_deploy() == 0
+    assert doccheck.check_promo_deploy_marker_is_current() == []
+
+
+def test_the_live_promo_page_is_stamped():
+    assert doccheck.check_promo_deploy_marker_is_current() == []
+
+
+def test_no_helper_in_this_file_is_defined_twice():
+    """`_promo` was defined twice while writing these tests — the later definition silently
+    shadowed the earlier one and changed what two OLDER tests wrote, surfacing as those tests
+    failing for reasons unrelated to them. A test file is code; a redefined helper is a live
+    defect in it."""
+    import re as _re, pathlib as _p
+    src = _p.Path(__file__).read_text()
+    names = _re.findall(r"^def (\w+)\(", src, _re.M)
+    dupes = sorted({n for n in names if names.count(n) > 1})
+    assert dupes == [], f"redefined in this file, later wins silently: {dupes}"

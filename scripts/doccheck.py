@@ -38,6 +38,7 @@ import ast
 import fnmatch
 import json
 import os
+import hashlib
 import itertools
 import re
 import subprocess
@@ -2516,6 +2517,64 @@ def check_superseded_status_is_accountable() -> list[str]:
     return bad
 
 
+_DEPLOY_MARKER = re.compile(r"<!--\s*deployed:\s*([0-9a-f]{16})")
+_DEPLOY_BLOCK = re.compile(r"<!--\s*deployed:.*?-->", re.S)
+PROMO_PAGE = "docs/promo/index.html"
+
+
+def promo_body_hash(text: str) -> str:
+    """Hash of the page WITHOUT its marker. Excluding the marker from its own hash is what makes
+    stamping a no-op on the compared value — otherwise the cheapest way to clear the finding
+    would be to edit the marker, which certifies nothing."""
+    return hashlib.sha256(_DEPLOY_BLOCK.sub("", text).encode()).hexdigest()[:16]
+
+
+def check_promo_deploy_marker_is_current() -> list[str]:
+    """The published page must match the repo's copy of it.
+
+    `docs/promo/index.html` is uploaded BY HAND. `promo-adr-timeline-is-complete` catches a
+    MISSING row and blocks; nothing caught a row present and correct in git but stale on the host.
+    conclave F-004 records the cost — a wrong claim reached a deployed page and outlived the commit
+    that fixed it, because "needs re-upload" lived only in whoever remembered doing it.
+
+    A DATE MARKER WAS BUILT FIRST AND WAS A FALSE GREEN. F-004 proposes comparing a `deployed:`
+    date against the file's last content commit. Implemented, it went green immediately: the page
+    took FOUR commits on 2026-08-17 and a same-day date cannot distinguish them. The design failed
+    on the exact instance that motivated it, which is why this compares CONTENT, not time.
+
+    WHAT IT CANNOT DO, said plainly: verify the upload. Nothing here reaches the host, so the
+    marker records a CLAIM — the shape `restore_injected` got wrong. No second party exists, so
+    the achievable goal is narrower and is the whole scope: make FORGETTING loud.
+    """
+    page = ROOT / PROMO_PAGE
+    if not page.is_file():
+        return []
+    text = page.read_text()
+    m = _DEPLOY_MARKER.search(text)
+    if not m:
+        return [f"{PROMO_PAGE}: no `<!-- deployed: <hash> -->` marker — the page is uploaded by "
+                f"hand, so without it nothing can tell whether the published copy is stale"]
+    want = promo_body_hash(text)
+    if m.group(1) != want:
+        return [f"{PROMO_PAGE}: content hash is {want} but the deploy marker says {m.group(1)} — "
+                f"the published page is behind the repo. Upload it, then run "
+                f"`python3 scripts/doccheck.py --stamp-deploy` and commit."]
+    return []
+
+
+def stamp_deploy() -> int:
+    """Write the current content hash into the marker. Run AFTER uploading, never before."""
+    page = ROOT / PROMO_PAGE
+    text = page.read_text()
+    if not _DEPLOY_MARKER.search(text):
+        print(f"{PROMO_PAGE}: no deploy marker to stamp", file=sys.stderr)
+        return 1
+    want = promo_body_hash(text)
+    page.write_text(_DEPLOY_MARKER.sub(f"<!-- deployed: {want}", text, count=1))
+    print(f"stamped {PROMO_PAGE} deployed: {want}")
+    return 0
+
+
 def check_absent_index_paths_are_declared() -> list[str]:
     """Every path the decision surface indexes must exist, or be declared with a reason.
 
@@ -3085,6 +3144,7 @@ CHECKS = {
     "unrunnable-hooks-report-themselves": check_unrunnable_hooks_report_themselves,
     "adr-references-resolve": check_adr_references_resolve,
     "absent-index-paths-are-declared": check_absent_index_paths_are_declared,
+    "promo-deploy-marker-is-current": check_promo_deploy_marker_is_current,
     "adr-status-matches-index": check_adr_status_matches_index,
     "superseded-status-is-accountable": check_superseded_status_is_accountable,
     "insert-or-ignore-needs-a-real-key": check_insert_or_ignore_needs_a_real_key,
@@ -3160,7 +3220,11 @@ def render(results: dict) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description="Assert docs' checkable claims are still true.")
     ap.add_argument("--json", action="store_true", help="machine output")
+    ap.add_argument("--stamp-deploy", action="store_true",
+                    help="record the promo page as deployed (run AFTER uploading)")
     args = ap.parse_args()
+    if args.stamp_deploy:
+        return stamp_deploy()
     detailed = run_detailed()
     if args.json:
         print(json.dumps({n: f for n, (f, _) in detailed.items()}, indent=2))
