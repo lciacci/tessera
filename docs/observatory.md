@@ -161,7 +161,7 @@ Both were found by adversarial verification, **not** by the framework. **The rea
 - **Source:** Open GSD — `gsd-core/workflows/*.md` size budget enforced by `tests/workflow-size-budget.test.cjs`
 - **What it is:** Per-file byte limits enforced via test. Three tiers: XL (90k bytes, top-level orchestrators), LARGE (54k bytes, multi-step planners), DEFAULT (38k bytes, focused workflows). Ceilings track current high-water mark within a grace band (tighten-only ratchet). Specific reference: Codex truncates instruction docs past 32,768 bytes (`project_doc_max_bytes`).
 - **Why it caught our attention:** The *concept* (size as proxy for attention budget) is adopted via ADR-0001. The specific tier numbers are their tuning, not ours.
-- **Status:** Investigating
+- **Status:** Investigating. **THREE RECORDS NOW SHARE THIS SUBJECT AND NONE CITED THE OTHERS — cross-linked 2026-08-17.** ADR-0021 built `scripts/prefix_meter.py` and deliberately declined a threshold; the 2026-08-17 entry "Word budgets on an always-loaded doc" re-opened the same question from DeepSeek Harness's gate-enforced ceilings; and this entry has held the original concept since ADR-0001 without either noticing. **The unresolved question is common to all three and is not the numbers: is size a proxy for the pain, or the payload itself?** ADR-0021 says proxy; the word-budget entry argues an always-loaded file is the one case where it is not. Whoever settles that settles this entry too — the tier numbers were never the hard part.
 - **When to revisit:** When implementing byte-budget enforcement for Tessera. Use their numbers as a starting point but verify against our actual workflow sizes and target runtimes (Claude Code's specific token limits, no Codex-specific concern unless we add Codex support).
 - **Resolution:** Concept adopted (ADR-0001); specific tier numbers deferred.
 
@@ -186,16 +186,16 @@ Both were found by adversarial verification, **not** by the framework. **The rea
 - **Source:** Open GSD — `gsd-core/references/gates.md`
 - **What it is:** Four canonical gate types wired into plan-checker and verifier agents. Confirm gates (user approval), Quality gates (artifact correctness), Safety gates (e.g., supply-chain checks), Transition gates (phase boundaries).
 - **Why it caught our attention:** Tessera has a single "suggestion-gate" concept (#12). GSD's four-type taxonomy might be too rigid for our purposes, or it might be a useful distinction we lack. Worth understanding before deciding.
-- **Status:** Investigating
-- **When to revisit:** When we encounter a real situation where our single gate concept feels insufficient. Possibly during dogfood.
+- **Status:** **CONDITION FIRED, unnoticed — triaged 2026-08-17.** The single gate concept is no longer single: `scripts/gate/emit.py` carries a **closed seven-value enum** (`design | scope | sequencing | process | finding | doc | outward`, unknown kinds exit 2). Tessera grew a gate taxonomy independently and nothing linked it back here, so this entry sat Investigating while its own trigger was met. **Re-scoped, not closed:** the live question is no longer "do we need types" but "does GSD's four-type split — Confirm / Quality / Safety / Transition — carve anything ours does not?" Ours is typed by *what was decided*; theirs by *what the gate protects*. Those are different axes and both may be right.
+- **When to revisit:** When a gate event is hard to classify under the seven, or when a `safety`-shaped gate (supply-chain, spend) wants a different disposition path from a `design` one.
 
 ### Plan drift guard (symbol verification)
 
 - **Source:** Open GSD — ADR-22 (theirs), plan_review.source_grounding
 - **What it is:** Verifies symbol references in generated plans against live source before execution. Catches hallucinated function names, type names, etc. at planning time rather than execution time.
 - **Why it caught our attention:** Concept adopted via ADR-0001 as part of our pipeline pattern. Implementation deferred — need to decide on mechanism (AST parsing, grep-based, semantic search via embeddings).
-- **Status:** Pending eval (concept adopted; implementation design open)
-- **When to revisit:** When implementing the pipeline pattern's plan-validation step in real code. Probably during decibel meter dogfood or shortly after.
+- **Status:** Pending eval (concept adopted; implementation design open). **ITS NAMED VENUE EVAPORATED — triaged 2026-08-17.** The trigger reads "probably during decibel meter dogfood"; that project was the dogfood plan of record in `docs/design-principles.md` and **never happened** — the real dogfood became framework self-development plus six downstreams, and "decibel" appears nowhere in the live queue. So this is not stale, it is *unanchored*: a trigger naming an occasion that no longer exists cannot fire. **That is a class, not a one-off** — any entry whose revisit condition names a planned-but-unbuilt venue inherits it.
+- **When to revisit:** When a pipeline with a generated plan is actually built, in any project. Deliberately re-anchored to a capability rather than to a named project.
 
 ### Adaptive context enrichment (1M-token models)
 
@@ -4466,6 +4466,51 @@ different and much stronger case.
 > unexecuted half were the same work. **And the trap claimed a fourth victim on the way out:** the
 > placeholder pattern matched `...` but not `…`, so ADR-0023's own sentence *explaining* this bug
 > put `docs/…` in the index. Fixed in `PLACEHOLDER_PATTERN`.
+
+---
+
+### The observatory is not rotting, and "untouched for N days" was the wrong question *(2026-08-17)*
+
+- **Status:** Closed — this is the record of a sweep, not an open item.
+- **Source:** Live queue item 5, commissioned as "a 19-entry adjudication pass" after a staleness
+  scan flagged 19 of 80 open entries as untouched ≥30 days or undated.
+
+**The sweep's headline result contradicts the reason it was commissioned.** Of the 18 that survived
+to be read (one closed into ADR-0025 first), **the large majority are correctly open on conditions
+that have not fired**, and the flag was measuring the wrong property.
+
+- **Nine are ADR-0001's original GSD deferrals**, undated because they predate the dating
+  convention — not because nobody looked. Read against their own stated triggers: *two-stage skill
+  routing* waits on 60+ skills and the repo has **49**; *cross-runtime translation* waits on
+  Lorenzo wanting a non-Claude runtime for real work; *wave execution* waits on the orchestrator
+  capability; *adaptive context enrichment* on routing to 1M-token models; *domain probes* on a
+  discuss-phase. **None of those has happened.** An entry whose condition has not fired is doing
+  exactly what an observatory entry is for.
+- **The nine dated ones are actively maintained, not abandoned.** Their status lines carry
+  multi-part adjudications — *"watch #1 answered"*, *"#2 (few-shot) done; #1 outstanding"*,
+  *"kill/keep on an event trigger"*. They are **unfinished, which is not the same as stale**, and
+  their age measures when someone last wrote, not whether anyone is watching.
+
+**So the ≥30-day flag is principle #3 aimed at this file: it counted the artifact (edit recency)
+and not the pain (a condition that fired and nobody noticed).** The honest predicate is the second
+one, and it is *not* mechanically checkable — the conditions are authored prose in no fixed format,
+which is A6's rule that a mechanical check needs a mechanical subject. **A human re-read is the
+correct instrument here, and this is it.** Note the file's own retirement rule ("Investigating for
+>6 months") is also unusable: the repo is ~2 months old, so it cannot fire, and the first version
+of this scan reported "0 stale entries" from that vacuous threshold before the age bound was
+lowered to something the corpus could express.
+
+**Three entries did need action, and all three were found by reading conditions, not dates:**
+
+| Entry | What the read found |
+|---|---|
+| Gate types (Confirm/Quality/Safety/Transition) | **Its condition had fired.** `gate/emit.py` grew a closed seven-value kind enum; the single-gate concept stopped being single and nothing linked back. Re-scoped to the axis question ours does not answer. |
+| Plan drift guard | **Its venue evaporated.** The trigger names the decibel-meter dogfood, which never happened. Re-anchored to a capability instead of a project — a class any entry naming a planned-but-unbuilt occasion inherits. |
+| Byte-budget tier numbers | **Three records, one subject, no cross-links** — this, ADR-0021's prefix meter, and the 2026-08-17 word-budget entry. The shared unresolved question is whether size is a proxy or the payload, not the numbers. |
+
+**What this says about the next sweep:** do not re-run the date scan. Re-read the *conditions*, and
+prefer entries whose trigger names a project, a version, or a count — those are the ones that go
+quietly wrong, because the world moves and the sentence does not.
 
 ---
 
