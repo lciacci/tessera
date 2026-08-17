@@ -53,6 +53,25 @@ handoff block only; a blockquoted list is invisible to it.
    in each. Push or review at leisure; nothing depends on them.
 7. **The checkpoint's goal SELECTION is still parked** — Mnemos records no signal for *use within a
    session*, so building that signal is the first task, not changing the filter.
+8. **The review anchor has three gaps, all found by review, none fixed.** (a) `.githooks/` is
+   outside `check_bare_python3_hook_scripts_are_probed`, which globs only `.claude/scripts/*.sh` —
+   so `.githooks/pre-push` runs bare `python3` on `scripts/review/stamp.py` with **no 3.9
+   guarantee**. It works today (verified), but this is the exact class that silently killed
+   `decision_surface.py`, and the repo now has a second hook directory the detector cannot see.
+   `.githooks/pre-commit` shares the blind spot and stays safe only because `doccheck.py` was
+   listed by hand. (b) **The re-review rule names `stamp.py` and gives no command**, unlike every
+   sibling bullet in that section; there is no `docs/contracts/review-stamp.md` where all nine
+   sibling mechanisms have one, and no caller. Since pre-push is deliberately silent with no
+   stamp, **the failure mode is total silence** — principle #17 against the tool built to serve
+   it. (c) `changed_since_review`'s `base` parameter is still unused.
+9. **THE PROMO DEPLOY CHECK BLOCKS ON A MANUAL OFF-REPO UPLOAD — decide, do not inherit.**
+   `promo-deploy-marker-is-current` makes `.githooks/pre-commit` refuse *any* edit to
+   `docs/promo/index.html` until a human uploads to a foreign host and runs `--stamp-deploy`, and
+   the only escape is `--no-verify`, which drops all 53 checks. **The same commit range argues
+   warn-only for exactly this class** (unverifiable, human-dependent — ADR-0012's sqlfluff
+   posture), so the two postures contradict. doccheck has no warn tier, so the real options are:
+   move it to a surfacer, add a tier, or accept blocking deliberately. **An inconsistency
+   introduced by accident should not be resolved by accident.**
 
 ### Standing patterns
 
