@@ -112,6 +112,14 @@ handoff block only; a blockquoted list is invisible to it.
     warning, not a blocked commit — which was the entire point of ADR-0026.
     **Governs:** ADR-0026 — the warn tier; `promo-deploy-marker-is-current` is its one member.
 
+**Published copies (off-repo, and therefore drift-prone):**
+- ADR-0029 (spend guard retired) — https://claude.ai/code/artifact/9ae5bdbd-56fb-45f9-971a-6458ff6de738
+  Private artifact, readable and commentable. **It is a SNAPSHOT.** The file in `docs/adr/` is the
+  source of truth; if the ADR's `Status:` or `Executed:` line moves, this copy silently disagrees.
+  Same shape as `docs/promo/index.html` — an off-repo publication this repo cannot verify — which
+  is the exact class ADR-0026 built the doccheck WARN tier for. Whether that tier should gain a
+  second member is an open question, deliberately not answered by publishing this.
+
 **Two ceilings recorded rather than fixed, both in `bare-python3-hook-scripts-are-probed`:** a
 target held in a shell VARIABLE (`python3 "$DOCCHECK"`) is not resolved — `doccheck.py` is covered
 only because a human listed it; and on a hook whose `-c` body is shell-interpolated the scan falls
