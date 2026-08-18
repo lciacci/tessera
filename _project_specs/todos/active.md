@@ -58,7 +58,17 @@ handoff block only; a blockquoted list is invisible to it.
    indexes zero keys in every one.
 7. **The checkpoint's goal SELECTION is still parked** — Mnemos records no signal for *use within a
    session*, so building that signal is the first task, not changing the filter.
-8. **The review anchor's three gaps — (a) is CLOSED 2026-08-17, (b) and (c) are open.**
+8. **The review anchor's gaps — (a) CLOSED 2026-08-17; (b), (c) open; (d) NEW and worse.**
+   **(d) `stamp.py record()` unconditionally stamps `rev-parse HEAD` and offers no way to say
+   what a review actually SAW.** The documented workflow is "run `stamp.py` after each review" —
+   but the normal order is review → fix → commit → stamp, and by then HEAD is the *fix*, not the
+   reviewed commit. **Hit live 2026-08-17: a review covering `cc5d2b3` was stamped as covering
+   `5fb4dcb`, a commit no reviewer had seen.** So the anchor whose entire job is answering "what
+   has no review looked at" records the opposite by default, and `changed_since_review` then
+   reports a clean set difference over a false baseline — standing pattern #2 aimed at the tool
+   built to catch #2. The fix is an explicit ref argument (`stamp.py --head <sha>`), which also
+   gives (c)'s unused `base` parameter a reason to exist. Cheap, and it must be re-planted by
+   stamping a commit that was never reviewed and watching `pre-push` disagree.
    ~~(a) `.githooks/` is outside `check_bare_python3_hook_scripts_are_probed`.~~ **Fixed, and the
    gap was TWO gaps that each hid the other.** Widening the glob was not enough: `.githooks/`
    files are extensionless (so `*.sh` never saw them — #12, one directory over from arbiter's

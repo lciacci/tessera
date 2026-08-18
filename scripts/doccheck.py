@@ -1101,6 +1101,15 @@ def _import_targets(text: str) -> list[str]:
     `sys.path.insert(root/"scripts"/"review")` then `import stamp`, and rewriting that as
     `from review.stamp import changed_since_review` is the natural form.
     """
+    # COMMENT LINES ARE STRIPPED FIRST. The `(?:^|;)` alternation added for one-liners also
+    # matches a semicolon inside a comment, so a hook whose prose reads
+    # `# insert scripts on sys.path; import stamp` produced a PHANTOM target — measured, it
+    # returned scripts/review/stamp.py for a hook that imports nothing. On a pre-commit
+    # blocking check a false positive is the expensive kind (ADR-0012), and these hook files
+    # are unusually comment-dense. `#` opens a comment in both shell and Python, so one strip
+    # covers whichever the body turns out to be. A `;` inside a STRING is not covered and is
+    # left as a known ceiling rather than pretended away.
+    text = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
     out = []
     for direct, from_ in _PY_IMPORT.findall(text):
         for clause in (direct or from_).split(","):
@@ -1222,7 +1231,14 @@ def _inline_imported_scripts(text: str) -> list[str]:
                 return sorted(str(m.relative_to(ROOT))
                               for m in (ROOT / "scripts").rglob(pattern)
                               if not {".venv", "build", "dist", "__pycache__"} & set(m.parts))
-            matches = _find(stem + "/__init__.py") or _find(relative)
+            # UNION, NOT `or`. Short-circuiting meant that if any `X/__init__.py` matched,
+            # every `X.py` elsewhere in the tree was never consulted — not even by the
+            # ambiguity branch — so the resolver picked one confidently and the other got no
+            # guarantee and no report. That contradicts this function's stated contract. The
+            # justification for `or` ("only one can be importable") holds for a single
+            # sys.path entry, and this resolver deliberately searches the whole tree BECAUSE
+            # it does not parse the path insert. Reporting the ambiguity is the honest answer.
+            matches = sorted(set(_find(stem + "/__init__.py")) | set(_find(relative)))
             if len(matches) == 1:
                 found.append(matches[0])
             elif len(matches) > 1:
@@ -1264,6 +1280,17 @@ def check_bare_python3_hook_scripts_are_probed() -> list[str]:
     Resolving it needs shell variable tracking, which is a parser this check should not grow.
     So the honest statement is that this detector covers LITERAL paths and IMPORTS, and a
     variable-held path is a known ceiling a human has to cover by listing.
+
+    SECOND CEILING, measured rather than assumed (review round 4): on a hook whose `-c` body
+    is shell-interpolated, the body cannot be extracted and the scan falls back to the WHOLE
+    FILE — so the precision scoping is inert exactly there. Two live files take that path
+    today, `.claude/scripts/mnemos-statusline.sh` and `mnemos-stop-checkpoint.sh`, and the
+    second is the very file whose mixed shape motivated the scoping. They stay green only
+    because their imports are stdlib. **Not fixed, and the reason is a measurement:**
+    `shlex.split` raises `No closing quotation` on the live statusline hook, so recovering
+    precision needs a real shell parser, which a doc-check should not grow to cover two files.
+    The fallback errs toward over-reporting, which is the correct direction here — a false
+    positive is visible and arguable, a silent miss in an interpreter guard is neither.
     """
     bad = []
     invoked = set()

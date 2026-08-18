@@ -163,6 +163,28 @@ narrow-selector mistake was the third instance in one day. None was caught by re
 — re-measurement inherits the original definition — and none by re-reading, which is why the
 guarantees that turned out false were all written with conviction.
 
+**Review round 4 — three findings, all latent, and one of them is where this stops.** A shell
+comment reading `# ... sys.path; import stamp` produced a phantom target, because the `;`
+alternation added in round 3 matches a semicolon anywhere; comments are now stripped first.
+`_find(init) or _find(module)` short-circuited, so a package silently won over a sibling module
+that the ambiguity branch never saw — union now, since this resolver searches the whole tree
+*because* it does not parse the path insert, and guessing contradicts its stated contract.
+
+**The third was accepted as a ceiling rather than fixed, and the reason is a measurement.**
+Round 3's fallback restores recall by disabling precision, and it is disabled on exactly the two
+live files that motivated the scoping — `mnemos-statusline.sh` and `mnemos-stop-checkpoint.sh`
+both take the whole-file path, the second being the mixed-shape case round 2 was written for.
+Recovering precision needs real shell parsing: `shlex.split` raises `No closing quotation` on the
+live statusline hook, so the extraction cannot be made correct without a shell parser inside a
+doc-check. **Documented in the check's own docstring beside the variable-path ceiling, because a
+narrowing that lives only in the source is the #12 shape this check keeps being bitten by.** The
+fallback errs toward over-reporting, which is the right direction for an interpreter guard: a
+false positive is visible and arguable, a silent miss is neither.
+
+**Where the rounds landed.** 7 findings, then 5, then 3 — and the severity fell with the count:
+round 3 caught a live recall regression, round 4 caught nothing live at all. That is the signal
+to stop, and it is a different signal from "the reviewer returned nothing", which never happened.
+
 ## Re-evaluate when
 
 - **A second check is proposed for the tier.** One member is not a tier, it is an exception with

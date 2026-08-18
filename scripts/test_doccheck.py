@@ -2881,6 +2881,42 @@ def test_a_package_import_resolves_to_its_init_not_a_sibling_module(fake_repo, m
     assert any("scripts/pkg/thing.py" in v for v in bad), bad
 
 
+def test_a_semicolon_in_a_COMMENT_is_not_an_import(fake_repo, monkeypatch):
+    """The `(?:^|;)` alternation added for one-liners also matched a semicolon inside a
+    comment, so `# insert scripts on sys.path; import thing` produced a PHANTOM target for a
+    hook that imports nothing. On a blocking check a false positive is the expensive kind."""
+    _githook(fake_repo,
+             '# insert scripts on sys.path; import thing\n'
+             'python3 -c "import json; d = json.loads(\\"$X\\")"\n')
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    assert doccheck.check_bare_python3_hook_scripts_are_probed() == []
+
+
+def test_a_real_semicolon_import_still_resolves_beside_a_comment(fake_repo, monkeypatch):
+    """Non-vacuity: stripping comments must not strip the one-liner support it sits next to."""
+    _githook(fake_repo,
+             '# a comment; import nothing_real\n'
+             "python3 -c 'import sys; import thing'\n")
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    assert any("scripts/thing.py" in v
+               for v in doccheck.check_bare_python3_hook_scripts_are_probed())
+
+
+def test_a_package_and_a_sibling_module_are_reported_as_ambiguous(fake_repo, monkeypatch):
+    """`_find(init) or _find(module)` short-circuited, so if any `X/__init__.py` matched, every
+    `X.py` elsewhere was never consulted — not even by the ambiguity branch. The resolver
+    searches the whole tree precisely BECAUSE it does not parse the path insert, so picking
+    one confidently contradicts 'AMBIGUITY IS REPORTED, NOT GUESSED'."""
+    (fake_repo / "scripts" / "a" / "pkg").mkdir(parents=True, exist_ok=True)
+    (fake_repo / "scripts" / "a" / "pkg" / "__init__.py").write_text("x = 1\n")
+    (fake_repo / "scripts" / "b").mkdir(parents=True, exist_ok=True)
+    (fake_repo / "scripts" / "b" / "pkg.py").write_text("x = 1\n")
+    _githook(fake_repo, "python3 - <<'PY'\nimport pkg\nPY\n", script_rel="scripts/unused.py")
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    bad = doccheck.check_bare_python3_hook_scripts_are_probed()
+    assert any("resolves to 2 files" in v for v in bad), bad
+
+
 def test_stamp_py_has_the_3_9_guarantee_it_had_no_way_to_have():
     """The live assertion, and the point of queue item 8a. `.githooks/pre-push` runs bare
     `python3` on this module; before 2026-08-17 nothing probed it.
