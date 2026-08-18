@@ -101,7 +101,11 @@ DOC_SKIP = ("docs/adr/",)
 
 # A backticked token is treated as a repo path only if it starts with one of these.
 REPO_DIRS = ("docs/", "scripts/", "bin/", ".claude/", "templates/", "hooks/",
-             "_project_specs/", ".tessera/", "commands/", "skills/", "rules/", "agents/")
+             "_project_specs/", ".tessera/", "commands/", "skills/", "rules/", "agents/",
+             # `.githooks/` added 2026-08-18: it was the ONE non-ADR record the live queue
+             # names (`.githooks/pre-push`, item 8) and the only directory of real repo files
+             # that no path check could see — a silent exemption, not a decision.
+             ".githooks/")
 
 # Tokens that are illustrative, not paths: placeholders and brace-expansions.
 # COMPILED FROM repo_paths.PLACEHOLDER_PATTERN, not re-typed. That module claims to hold the
@@ -960,6 +964,13 @@ SAFETY_SCRIPTS = (
     # reaches the module by IMPORT inside a heredoc, not by `python3 <path>.py`, so the
     # invocation regex would have missed it even with the glob widened.
     "scripts/review/stamp.py",
+    # ADDED 2026-08-18, in the review round that shipped it. No hook invokes it — it is
+    # hand-run — so `bare-python3-hook-scripts-are-probed` cannot see it by construction,
+    # and its own docstring plus CLAUDE.md both promise it "runs under bare python3,
+    # possibly 3.9". ADR-0027's verification table records a ONE-TIME manual 3.9.6 parse,
+    # which is exactly the state `decision_surface.py` was in before 2026-08-10: a true
+    # claim with nothing keeping it true. Membership here is the guarantee.
+    "scripts/degraded_ack.py",
 )
 OLDEST_PYTHON = "/usr/bin/python3"  # macOS system python — the floor a PATH can drop you to
 
@@ -1828,6 +1839,125 @@ def check_handoff_heading_is_current() -> list[str]:
                 f"magic handoff heading (line {magic + 1}) — the surfacer will print a "
                 f"stale handoff; retitle the newest section"]
     return []
+
+
+def check_handoff_items_name_their_records() -> list[str]:
+    """Each item in the LIVE queue must carry a `**Governs:**` field naming real records.
+
+    ADDED 2026-08-18. The handoff's contract is "read this top section, run tessera-watch,
+    and you are caught up", and it distils the queue well. It does NOT distil the reasoning
+    behind each item, and on 2026-08-18 that gap cost a full re-read of the decision corpus:
+    item 6 summarised ADR-0016 as leaving an option open that the ADR had **rejected by
+    name**. The pointer was right and the summary was backwards, and nothing could tell.
+    Reading 16,118 lines to find a four-line contradiction is the failure this field exists
+    to prevent — with an anchor, reviewing an item costs ~150 lines.
+
+    WHAT THIS CHECKS, AND THE CEILING, STATED because a narrowing that lives only in the
+    source is standing pattern #12: it asserts every item HAS the field and that every
+    record the field names EXISTS — an ADR number resolving to a file, a backticked path
+    resolving on disk. Both are mechanical, which is what makes this checkable at all
+    (principle #3's corollary from the A6 audit: a mechanical check needs a mechanical
+    subject, and two candidate handoff checks were rejected on measurement for lacking one).
+
+    It does NOT check that the anchor is CORRECT or COMPLETE. "Is ADR-0016 really what
+    governs this item" is judgement wearing a regex, and the honest answer there is a human
+    re-read. This check stops the cheap failure — a pointer to nothing — not the expensive
+    one.
+
+    Only the FIRST `### Next —` block is checked. Later blocks are historical record, and
+    retro-fitting a field onto frozen prose is how a format requirement becomes a reason to
+    edit history.
+    """
+    handoff = ROOT / "_project_specs" / "todos" / "active.md"
+    if not handoff.is_file():
+        return []
+    lines = handoff.read_text().splitlines()
+
+    # ANCHOR TO THE LIVE HANDOFF, not to the first `### Next —` in the file. active.md holds
+    # five of those headings and only the topmost is live. Searching the whole file made this
+    # check depend on the live block winning a race it has no reason to win: rename the live
+    # heading (the surfacer tolerates `Pick up` / `Next` / `Priorit`, and that form HAS drifted
+    # before — 2026-07-17) and the check silently jumps to a superseded block, demanding
+    # `**Governs:**` on frozen history while the live queue goes unchecked. Both failures at
+    # once, in the direction that looks like working coverage. Found in review, 2026-08-18.
+    handoff_start = next((i for i, l in enumerate(lines)
+                          if l.startswith("## Handoff — pick up here")), None)
+    if handoff_start is None:
+        return []          # check_handoff_heading_is_current owns that failure
+    section_end = next((i for i in range(handoff_start + 1, len(lines))
+                        if lines[i].startswith("## ")), len(lines))
+    # `#{3,}`, NOT `### `. An earlier version of this line used `^### ` while claiming in a
+    # comment to be "the surfacer's own set" — it was not: the awk in
+    # `.claude/scripts/tessera-watch-surface.sh:77` matches `^#{3,} `, so a `#### Next —`
+    # heading surfaces items to the model that this check cannot see, and the queue goes
+    # unvalidated while reporting clean. That is the same failure this check's own heading
+    # fix was written to close, one character narrower — and the comment asserting parity
+    # is what would have stopped anyone looking. The terminator has to match too, or the
+    # block runs past a deeper subheading the surfacer would have stopped at.
+    queue = re.compile(r"^#{3,} .*([Pp]ick up|[Nn]ext|[Pp]riorit)")
+    start = next((i for i in range(handoff_start + 1, section_end)
+                  if queue.match(lines[i])), None)
+    if start is None:
+        return []
+    end = next((i for i in range(start + 1, section_end)
+                if re.match(r"^#{3,} ", lines[i])), section_end)
+    block = lines[start + 1:end]
+
+    # Split into numbered items; a continuation line is anything not starting a new item.
+    items: list[tuple[str, list[str]]] = []
+    for line in block:
+        m = re.match(r"^(\d+)\. ", line)
+        if m:
+            items.append((m.group(1), [line]))
+        elif items:
+            items[-1][1].append(line)
+    if not items:
+        return []
+
+    problems = []
+    for number, body in items:
+        text = "\n".join(body)
+        if "**Governs:**" not in text:
+            problems.append(
+                f"active.md queue item {number}: no `**Governs:**` field. Name the ADRs and "
+                f"contracts that decide it, or `**Governs:** none — <why>` if nothing does.")
+            continue
+        # BOUND THE FIELD TO ITSELF. Slurping to the end of the item validated every
+        # ADR-NNNN and backticked token in whatever prose followed, as if it were part of
+        # the anchor. Latent today only because every item happens to end with Governs —
+        # the first item to add a note underneath would have gone red for tokens that were
+        # never a claim about a record. The field ends at a blank line or the next bold
+        # field marker. Found in review, 2026-08-18.
+        field_lines = []
+        for line in text[text.index("**Governs:**"):].splitlines():
+            if field_lines and (not line.strip() or re.match(r"^\s*\*\*[A-Z]", line)):
+                break
+            field_lines.append(line)
+        field = "\n".join(field_lines)
+
+        if re.match(r"^\*\*Governs:\*\*\s*none\b", field):
+            continue
+        for adr in sorted(set(re.findall(r"ADR-(\d{4})", field))):
+            if not list((ROOT / "docs" / "adr").glob(f"{adr}-*.md")):
+                problems.append(f"active.md queue item {number}: names ADR-{adr}, which has "
+                                f"no file in docs/adr/")
+        # SCOPED LIKE `referenced-paths-exist`, not by "contains a slash". A backticked
+        # token with a `/` is not necessarily a repo path: `origin/main..HEAD` is the
+        # obvious one (item 8 is entirely about that range), and a URL or a `--flag a/b`
+        # example fail identically. Requiring a REPO_DIRS prefix is the same discipline the
+        # sibling check uses, and PATH_ALLOWLIST is matched by prefix rather than equality
+        # for the same reason it is there. Found in review, 2026-08-18.
+        for token in sorted(set(re.findall(r"`([^`]+)`", field))):
+            token = token.strip().rstrip(".,;:")
+            if not token.startswith(REPO_DIRS) or PLACEHOLDER.search(token):
+                continue
+            if any(token == p or token.startswith(p.rstrip("/") + "/")
+                   for p in PATH_ALLOWLIST):
+                continue
+            if not (ROOT / token).exists():
+                problems.append(f"active.md queue item {number}: names `{token}`, which does "
+                                f"not exist")
+    return problems
 
 
 def check_standing_patterns_are_surfaced() -> list[str]:
@@ -3388,6 +3518,7 @@ CHECKS = {
     "eager-prefix-figure-is-current": check_eager_prefix_figure_is_current,
     "tier-vocabulary-is-consistent": check_tier_vocabulary_is_consistent,
     "handoff-retires-its-own-figures": check_handoff_retires_its_own_figures,
+    "handoff-items-name-their-records": check_handoff_items_name_their_records,
     "drift-dimensions-have-producers": check_drift_dimensions_have_producers,
     "chaos-suite-is-reachable": check_chaos_suite_is_reachable,
     "chaos-probe-count-is-current": check_chaos_probe_count_is_current,

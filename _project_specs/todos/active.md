@@ -18,7 +18,9 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
 > SINGLE atomic write** — build the whole file in memory, write once, and the block is never absent
 > on disk. Both times: zero degraded events. Do the same.
 
-### Next — 2026-08-17 evening. Queue items 8(a) and 9 are CLOSED; 8(d) is new.
+### Next — 2026-08-18. Item 9 CLOSED (ADR-0027); item 1's scope half closed and its fix
+half REVERTED to a pinned ceiling (ADR-0028); item 6 corrected; every item now carries a
+`**Governs:**` field naming the records that decide it.
 
 **TOP-LEVEL and unindented on purpose** — the surfacer extracts `/^[0-9]+\. /` from the first
 handoff block only; a blockquoted list is invisible to it.
@@ -28,27 +30,62 @@ handoff block only; a blockquoted list is invisible to it.
    inside quotes reaches `COMMITTING`. It is the guard's DECISION path, and **any fix must not
    blind it to a wrapper-led command that legitimately quotes a boot verb** (what `WRAPPER`
    catches). Do not add a `grep` exemption; do not widen `REDUCING`. Wants a full session.
+   **ATTEMPTED AND REVERTED 2026-08-18 — ADR-0028. The scope half CLOSED; the fix half is now
+   a decided CEILING.** Three review rounds produced two block→allow regressions on a
+   deny-by-default control, the last being an ordinary apostrophe classifying a boot as
+   `reducing` (allowed unconditionally). The false positive is the SAFE direction and a human
+   `dismiss` disposes it; every fix was the unsafe one. Correct tokenisation needs a real shell
+   parser — `shlex.split` already raises on a live file here. Ceilings pinned in
+   `scripts/spend/test_segments_known_ceilings.py`, including a THIRD false-positive class
+   catalogued that session (`INVOKED_SCRIPT` denies a probe file for strings it merely lists).
+   **Reopen only with a real parser.** The scope half stands: the evasion/launcher enumeration
+   is frozen, `COMMITTING` boot verbs are not, and safety is bought at layer 3.
+   **Governs:** ADR-0028 · `docs/contracts/spend-authorization.md` · ADR-0006 — the tier
+   ranking that made this a scope decision rather than a patch.
 2. **The decision surface's SORT.** The truncation notice says what was dropped; it does not
    choose better survivors. **23 of the 46 truncated keys would hide a NEW ADR outright.** The
    right key is *specificity*, which `_matches()` cannot compute. Needs a human. Re-plant IN
    `lookup()`, not beside it.
+   **Governs:** ADR-0024 — the evaluation that surfaced `MAX_DOCS=3` sorted oldest-ADR-first.
 3. **The decision surface indexes NOTHING in any downstream — re-verified 2026-08-17 (settempo 0
    keys, conclave 0).** Distributed to six projects, importable, inert in all of them, with
    nothing reporting it. `tessera-sync-harness` checks files ARRIVE, never that they DO anything.
    **Biggest live gap on this list.**
+   **Governs:** ADR-0003 (Tessera owns its distribution) · ADR-0006 §2 — before building a
+   detector, ask what would make the state unrepresentable. Ship-or-prune is the live fork.
 4. **Nine live ADR review cadences, not four**, and a purpose-written parser missed one on
    punctuation. The cheap remedy is a required FIELD FORMAT, not a `P17` predicate. Lorenzo's call.
+   **Governs:** `docs/design-principles.md` principle #16 (evaluate on a cadence; document the
+   verdict) · `docs/adr/README.md` — the index the cadences are read against.
 5. **ADR-0005's readiness re-assessment is formally due**, deferred by ADR-0025 on purpose.
+   **NOT ACTIONABLE YET (checked 2026-08-18):** "formally due" is ADR-0025 §3's word for *owed*.
+   Both ADR-0005 and ADR-0025 name the cadence as **2026-10-09**. Pull it forward deliberately
+   or leave it; it is not overdue.
+   **Governs:** ADR-0005 · ADR-0025 · ADR-0006 — the readiness claim it withdrew.
 6. **THE OPEN ESCALATION NEEDS A DISPOSITION** — `esc-20260816-025221`, blocking, open since
    08-16, and P6 fires on it every session. Spend denials the agent cannot disposition. Three
    options are written out; **option 2 (allow the agent `dismiss` but not `grant`) looks
    strongest** — dismiss writes an event and never an envelope, so ADR-0016's self-authorization
    argument does not reach it. Note the escalation's own text is now partly stale: `dismiss` was
    fixed 08-17 and works for a human.
+   **CORRECTED 2026-08-18 — the summary above misreads the ADR.** ADR-0016 considered
+   "convention-only `dismiss`" and **rejected it by name**: *a dismissal is cheaper to abuse
+   than a grant because it carries no dollar figure and reads as bookkeeping.* So option 2 is a
+   reversal needing a superseding ADR, not a preference. And the premise is the DESIGNED
+   behaviour: the contract's answer is that the agent says so in its final message and a HUMAN
+   runs `tessera-authorize dismiss --session <id> --reason "…"`. That path was inert for its
+   whole life, was fixed 08-17, and its first real run is recorded. Resolution is two commands,
+   not a three-way fork. Read `.tessera/.spend-backstop-fires` after — a dispositioned backstop
+   and an exhausted one both present as rc=0.
+   **Governs:** ADR-0016 · `docs/contracts/spend-authorization.md` · `docs/contracts/escalation.md`.
 7. **The checkpoint's goal SELECTION is still parked** — Mnemos records no signal for *use within
    a session*, so building that signal is the first task, not changing the filter. **P3 is live,
    not theoretical: it spilled on me this session** (checkpoint 9,458b vs an 8,000b budget) and
    the T2 receipt was filed `insufficient` — Progress and Files never arrived.
+   **Second instance 2026-08-18:** spilled again at 9,973b; receipt filed `insufficient`, missing
+   progress + files. The `goal` field carried a PRIOR session's goal with 95 older goals elided —
+   the predicate's own "check the goal field first" is confirmed.
+   **Governs:** ADR-0015 · `docs/contracts/restore-receipt.md`.
 8. **The review anchor — (a) CLOSED; (b), (c) open; (d) NEW and worse.**
    (b) **The re-review rule names `stamp.py` and gives no command**, and there is no
    `docs/contracts/review-stamp.md` where all ten sibling mechanisms have one.
@@ -60,12 +97,20 @@ handoff block only; a blockquoted list is invisible to it.
    whose job is "what has no review looked at" records the opposite by default. Fix with an
    explicit `--head <sha>`, which also gives (c)'s `base` a reason to exist. Re-plant by stamping
    an unreviewed commit and watching `pre-push` disagree.
+   **Governs:** ADR-0014 · `.githooks/pre-push`.
 9. **G-a graduation is firing** — P3, P6, P13, P15 for 3 consecutive runs: build a remedy or add
    a snooze. Note **P13 is currently correct-but-SPENT**: all 10 events are from 08-16, the block
    was fixed, and the window rolls off 08-23. That is the "no acknowledgment state" problem
    `stamp.py`'s own docstring already names.
+   **CLOSED 2026-08-18 — ADR-0027.** P13 has an acknowledgment: `scripts/degraded_ack.py` writes
+   a WATERMARK per `(component, reason)`, honoured only for events recorded before it, so a new
+   failure still fires and — unlike a snooze — the predicate is never blinded. The 08-16 events
+   are acked and P13 is quiet; G-a's streak clears as it re-runs. **Shipped with an inverted
+   default that would have silenced P13 entirely**, caught by re-planting it.
+   **Governs:** ADR-0027 · ADR-0025 · `docs/contracts/degraded-event.md`.
 10. **Housekeeping: the promo page needs a manual upload + `--stamp-deploy`.** It is now a
     warning, not a blocked commit — which was the entire point of ADR-0026.
+    **Governs:** ADR-0026 — the warn tier; `promo-deploy-marker-is-current` is its one member.
 
 **Two ceilings recorded rather than fixed, both in `bare-python3-hook-scripts-are-probed`:** a
 target held in a shell VARIABLE (`python3 "$DOCCHECK"`) is not resolved — `doccheck.py` is covered

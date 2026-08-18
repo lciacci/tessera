@@ -54,6 +54,8 @@ Auto-generated below as ADRs are created. Update when adding a new ADR.
 | 0024 | 2026-08-17 | DeepSeek Harness — rejected on layer for the third time, and the mirror is that our own decision surface silently drops its newest records | Watching |
 | 0025 | 2026-08-17 | Spec 11's bar is met and the general claim is not — the mechanism is proven, the coverage is one component | Accepted |
 | 0026 | 2026-08-17 | doccheck gains a warn tier — a gate cannot enforce a fact it cannot see | Accepted |
+| 0027 | 2026-08-18 | P13 gains an acknowledgment — a watermark, because a snooze blinds the predicate | Accepted |
+| 0028 | 2026-08-18 | The spend guard's evasion enumeration is frozen — and its tokenisation was fixed, measured, and reverted | Accepted |
 
 ---
 

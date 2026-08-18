@@ -3506,3 +3506,124 @@ def test_no_helper_in_this_file_is_defined_twice():
     names = _re.findall(r"^def (\w+)\(", src, _re.M)
     dupes = sorted({n for n in names if names.count(n) > 1})
     assert dupes == [], f"redefined in this file, later wins silently: {dupes}"
+
+
+# ─── handoff-items-name-their-records (2026-08-18). The handoff distils the QUEUE but not
+# the reasoning behind it, and on 2026-08-18 item 6 summarised ADR-0016 as leaving open an
+# option that ADR had rejected by name. The pointer was right, the summary backwards, and
+# nothing could tell — 16,118 lines read to find a four-line contradiction. Each test plants
+# the failure; verified by re-planting each against the live file (3 of 3 caught).
+
+def _queue_handoff(repo, body: str, *, heading: str = "## Handoff — pick up here\n\n") -> None:
+    """The check anchors to the LIVE handoff section, so tests must build one."""
+    d = repo / "_project_specs" / "todos"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "active.md").write_text(heading + body)
+
+
+def test_handoff_item_without_a_governs_field_is_flagged(fake_repo):
+    _queue_handoff(fake_repo, "### Next — today\n\n1. **Something.** Do the thing.\n")
+    out = doccheck.check_handoff_items_name_their_records()
+    assert out and "queue item 1" in out[0] and "Governs" in out[0]
+
+
+def test_handoff_governs_naming_a_nonexistent_adr_is_flagged(fake_repo):
+    _queue_handoff(fake_repo, "### Next — today\n\n1. **Something.**\n   **Governs:** ADR-9999.\n")
+    out = doccheck.check_handoff_items_name_their_records()
+    assert out and "ADR-9999" in out[0]
+
+
+def test_handoff_governs_naming_a_nonexistent_path_is_flagged(fake_repo):
+    _queue_handoff(fake_repo, "### Next — today\n\n1. **X.**\n   **Governs:** `docs/nope.md`.\n")
+    out = doccheck.check_handoff_items_name_their_records()
+    assert out and "docs/nope.md" in out[0]
+
+
+def test_handoff_governs_with_real_records_passes(fake_repo):
+    _queue_handoff(fake_repo,
+             "### Next — today\n\n1. **X.**\n   **Governs:** ADR-0001 · `docs/adr/README.md`.\n")
+    assert doccheck.check_handoff_items_name_their_records() == []
+
+
+def test_handoff_governs_none_is_an_accepted_value(fake_repo):
+    """Housekeeping items have no governing decision. Forcing an anchor there is ceremony,
+    and the same `not yet` / `n/a — <why>` shape ADR execution lines already use."""
+    _queue_handoff(fake_repo, "### Next — today\n\n1. **Upload a page.**\n"
+                        "   **Governs:** none — pure housekeeping, no decision behind it.\n")
+    assert doccheck.check_handoff_items_name_their_records() == []
+
+
+def test_handoff_check_reads_only_the_first_block(fake_repo):
+    """Later blocks are frozen history. A format requirement that reaches backwards becomes
+    a reason to edit the record, which is the opposite of what the handoff is for."""
+    _queue_handoff(fake_repo,
+             "### Next — today\n\n1. **X.**\n   **Governs:** ADR-0001.\n\n"
+             "### Next — last week\n\n1. **Old item with no anchor at all.**\n")
+    assert doccheck.check_handoff_items_name_their_records() == []
+
+
+def test_handoff_check_is_silent_when_there_is_no_queue_block(fake_repo):
+    """Downstream projects scaffold an active.md with no `### Next —` block. A check that
+    fires there would make every new project start red."""
+    _queue_handoff(fake_repo, "# Active Focus\n\nNothing yet.\n")
+    assert doccheck.check_handoff_items_name_their_records() == []
+
+
+# ─── Review round 1 on ADR-0027 (2026-08-18). Three defects in the check above, all found
+# by an independent reviewer, none by re-running anything. Each test re-plants its finding.
+
+def test_handoff_check_anchors_to_the_live_section_not_the_first_next_heading(fake_repo):
+    """FINDING 2. active.md carries five `### Next —` headings and only the topmost is live.
+    Searching the whole file made the check depend on the live block winning a race: rename
+    the live heading to a form the surfacer still accepts (`Pick up`), and the check jumped
+    to a SUPERSEDED block — demanding `**Governs:**` on frozen history, which the docstring
+    says it must never do, while the live queue went entirely unchecked. Both failures at
+    once, in the direction that looks like coverage.
+
+    THE FIRST RE-PLANT OF THIS WAS INVALID AND THIS TEST PASSED AGAINST IT. Reverting only
+    the `start =` line left the NEW `section_end` in place, so `range(start + 1,
+    section_end)` was empty, the block came back empty, and the check returned [] for a
+    reason that had nothing to do with the defect. Planted beside the failure, not in it —
+    #10's 2026-08-15 sharpening, scored again. Only restoring the whole original anchoring
+    block reproduces it, and then this test fails with exactly the reviewer's symptom.
+    """
+    _queue_handoff(fake_repo,
+                   "### Pick up here — today\n\n1. **Live item.**\n   **Governs:** ADR-0001.\n\n"
+                   "## Older\n\n### Next — last week\n\n1. **Frozen item, no anchor.**\n")
+    assert doccheck.check_handoff_items_name_their_records() == []
+
+
+def test_handoff_governs_tolerates_a_non_path_token_containing_a_slash(fake_repo):
+    """FINDING 3. `origin/main..HEAD` is very plausible in item 8's anchor, which is entirely
+    about that range — and under 'any backticked token with a slash is a repo path' it blocked
+    the commit. So would a URL or a `--flag a/b` example. Scoped to REPO_DIRS, like the
+    sibling `referenced-paths-exist`."""
+    _queue_handoff(fake_repo,
+                   "### Next — today\n\n1. **X.**\n"
+                   "   **Governs:** ADR-0001 · the `origin/main..HEAD` range · "
+                   "`https://example.com/a/b`.\n")
+    assert doccheck.check_handoff_items_name_their_records() == []
+
+
+def test_handoff_governs_field_does_not_slurp_the_prose_after_it(fake_repo):
+    """FINDING 4. `text[text.index("**Governs:**"):]` validated every ADR number and
+    backticked token in whatever followed, as if it were part of the anchor. Latent only
+    because every item happens to end with Governs today; the first item to add a note
+    underneath goes red for tokens that were never a claim about a record."""
+    _queue_handoff(fake_repo,
+                   "### Next — today\n\n1. **X.**\n"
+                   "   **Governs:** ADR-0001.\n"
+                   "\n"
+                   "   **Note:** superseded by ADR-9999, see `docs/not-a-real-file.md`.\n")
+    assert doccheck.check_handoff_items_name_their_records() == []
+
+
+def test_handoff_governs_still_catches_a_bad_record_on_a_wrapped_field(fake_repo):
+    """The bound must not become an escape hatch: a Governs field spanning two lines is the
+    normal shape in the live file, and both lines are still checked."""
+    _queue_handoff(fake_repo,
+                   "### Next — today\n\n1. **X.**\n"
+                   "   **Governs:** ADR-0001 —\n"
+                   "   and also ADR-9999.\n")
+    out = doccheck.check_handoff_items_name_their_records()
+    assert out and "ADR-9999" in out[0]
