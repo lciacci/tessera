@@ -1687,10 +1687,17 @@ evidence is now here; the decision is not made.
      writes at all; a new session starts at zero because its key is absent. Unreadable or
      legacy state reads as EMPTY, i.e. fails toward the backstop being **alive** — failing the
      other way is how a corrupt file becomes a silent kill switch.
-  2. `tessera-watch` **P15** fires on a legacy scalar file, or on the cap being reached in 2+
-     recorded sessions (chronically undispositioned denials, or a wedging backstop). It stays
-     quiet for ONE capped session, which is the loop-safety working. It reads `MAX_FIRES` out
-     of `backstop.py` rather than restating it, so tuning the cap moves the predicate with it.
+  2. ~~`tessera-watch` **P15** fires on a legacy scalar file, or on the cap being reached in 2+
+     recorded sessions (chronically undispositioned denials, or a wedging backstop).~~
+     **P15 AND ITS SUBJECT ARE BOTH GONE (ADR-0029, 2026-08-18)** — the whole in-band spend
+     guard was retired, so the predicate, its eleven tests and the backstop it watched no
+     longer exist. Struck rather than deleted because the *lesson* is the entry's point and is
+     entirely portable: **a limit written for one session, stored for all time, is a kill
+     switch** — and a fix is not a signal, so a mechanism whose failure is *being off* needs a
+     paired detector that announces what it cannot. Nothing in this repo ties an
+     observatory-named predicate to `bin/tessera-watch`'s `PREDICATES` dict, so this entry
+     claimed a live predicate for the length of one PR and stayed green; that is a finding
+     about the checker, not only about the doc.
   3. Five backstop tests + six P15 tests, including that a prior session at the cap cannot
      silence the next one.
 

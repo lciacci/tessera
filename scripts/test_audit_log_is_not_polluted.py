@@ -20,7 +20,6 @@ the thing found it.
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 from pathlib import Path
@@ -68,6 +67,13 @@ def test_driving_a_real_event_writer_as_a_subprocess_writes_no_production_event(
                         "--detail", "asserting the suite writes no production event"],
                        text=True, capture_output=True, cwd=ROOT)
 
+    after = {p.name for p in LOGS.glob("*.jsonl")} if LOGS.is_dir() else set()
+    assert after == before, (
+        f"the suite created {sorted(after - before)} — a test manufactured a real event in "
+        f"the production journal. That is the 2026-07-12 bug through the subprocess door: "
+        f"the env var must be stripped before the subprocess can inherit it."
+    )
+
     # ASSERT THE PATH WAS ACTUALLY EXERCISED, not merely that nothing appeared. Found in
     # review 2026-08-18: the first re-point checked only `after == before`, and
     # `tessera-degraded` ends in `exit 0` unconditionally ("never fail the caller") while
@@ -79,10 +85,3 @@ def test_driving_a_real_event_writer_as_a_subprocess_writes_no_production_event(
     assert "no session id; cannot record" in (r.stderr + r.stdout), (
         f"the probe did not reach the session-key branch — this test is exercising nothing. "
         f"rc={r.returncode} stdout={r.stdout!r} stderr={r.stderr!r}")
-
-    after = {p.name for p in LOGS.glob("*.jsonl")} if LOGS.is_dir() else set()
-    assert after == before, (
-        f"the suite created {sorted(after - before)} — a test manufactured a real event in "
-        f"the production journal. That is the 2026-07-12 bug through the subprocess door: "
-        f"the env var must be stripped before the subprocess can inherit it."
-    )

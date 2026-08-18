@@ -3598,3 +3598,23 @@ def test_an_adr_written_after_the_removal_cannot_claim_to_have_created_the_path(
     _adr_with_executed(fake_repo, "0030", "2026-09-01 — `scripts/gone.py`")
     out = [b for b in doccheck.check_adr_execution_recorded() if "0030" in b]
     assert out, "an ADR numbered after the remover was excused by it"
+
+
+def test_adr_number_fails_closed_on_an_unparseable_name():
+    """FINDING 5, round 3 — asserted at the UNIT, because the scenario is unreachable through
+    the check. `_adr_number` returned 0 while its docstring claimed that "fails closed". It
+    failed OPEN: the call site exempts when a remover compares GREATER, and every remover
+    beats 0.
+
+    A first version of this test built an oddly-named ADR in a fake repo and asserted the
+    check flagged it. **It could never pass**: `check_adr_execution_recorded` globs
+    `[0-9][0-9][0-9][0-9]-*.md`, so such a file is never scanned and `_adr_number` never sees
+    it. That is a regression test for an unreachable state — the "true report, no coverage"
+    shape, written while fixing four instances of it. Recorded rather than quietly replaced.
+
+    So the sentinel is defence-in-depth, not a live path, and this asserts the property
+    directly where it is actually decidable.
+    """
+    assert doccheck._adr_number(Path("0029-x.md")) == 29
+    n = doccheck._adr_number(Path("draft-untitled.md"))
+    assert n > 9000, f"unparseable name returned {n} — anything low EXEMPTS at the call site"

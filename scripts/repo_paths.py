@@ -104,6 +104,8 @@ ABSENT_TESSERA_PATHS = {
     "scripts/spend/test_event.py": "retired with its subject, ADR-0029",
     "scripts/spend/test_segments_known_ceilings.py": "the pinned ceilings; ADR-0029",
     ".claude/scripts/tessera-spend-guard.sh": "the PreToolUse shim; ADR-0029",
+    "templates/tessera-spend-guard.sh": "the shim's template twin, orphaned; ADR-0029",
+    "templates/tessera-spend-backstop.sh": "the shim's template twin, orphaned; ADR-0029",
     ".claude/scripts/tessera-spend-backstop.sh": "the Stop shim; ADR-0029",
     "bin/tessera-authorize": "the envelope CLI; ADR-0029",
     # scripts/tdd-loop-check.sh is deliberately NOT here: it never existed, which makes it

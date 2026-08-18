@@ -3119,10 +3119,23 @@ def _looks_like_path(token: str) -> bool:
 
 
 def _adr_number(adr: Path) -> int:
-    """The ADR's own number, from its filename. 0 if unparseable — which makes any
-    later-ADR comparison fail closed, i.e. the finding is still reported."""
+    """The ADR's own number, from its filename.
+
+    UNPARSEABLE RETURNS 9999, NOT 0, and the difference is the whole safety property. The
+    call site is `any(remover > _adr_number(adr))`, so a low number EXEMPTS: with 0, every
+    remover (>= 0001) compares greater and the finding is suppressed — an ADR whose filename
+    did not match would silently excuse any declared-absent path in its Executed line, which
+    is the broad-exemption hole the narrowing was written to close, reopened one line down.
+    This docstring claimed "fail closed" while the code failed OPEN (found in review,
+    2026-08-18); 9999 makes the claim true.
+
+    Defence-in-depth rather than a live path: the caller globs `[0-9][0-9][0-9][0-9]-*.md`,
+    so an unparseable name cannot reach here today. Kept correct anyway — the glob is one
+    edit away from widening, and a sentinel that silently inverts is not the thing to leave
+    behind for that edit.
+    """
     m = re.match(r"(\d{4})-", adr.name)
-    return int(m.group(1)) if m else 0
+    return int(m.group(1)) if m else 9999
 
 
 def check_adr_execution_recorded() -> list[str]:

@@ -18,30 +18,24 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
 > SINGLE atomic write** — build the whole file in memory, write once, and the block is never absent
 > on disk. Both times: zero degraded events. Do the same.
 
-### Next — 2026-08-18. Item 9 CLOSED (ADR-0027); item 1's scope half closed and its fix
-half REVERTED to a pinned ceiling (ADR-0028); item 6 corrected; every item now carries a
-`**Governs:**` field naming the records that decide it.
+### Next — 2026-08-18. Item 1 CLOSED — the spend guard is RETIRED (ADR-0029), so its old work
+order is void; item 6 is moot and awaits a human `resolve`; item 9 CLOSED (ADR-0027). Every item
+carries a `**Governs:**` field naming the records that decide it.
 
 **TOP-LEVEL and unindented on purpose** — the surfacer extracts `/^[0-9]+\. /` from the first
 handoff block only; a blockquoted list is invisible to it.
 
-1. **`_segments()` — the spend guard's tokenisation defect. Still deliberately deferred.**
-   `scripts/spend/guard.py:208` splits on the pipe **before** quotes are stripped, so text safely
-   inside quotes reaches `COMMITTING`. It is the guard's DECISION path, and **any fix must not
-   blind it to a wrapper-led command that legitimately quotes a boot verb** (what `WRAPPER`
-   catches). Do not add a `grep` exemption; do not widen `REDUCING`. Wants a full session.
-   **ATTEMPTED AND REVERTED 2026-08-18 — ADR-0028. The scope half CLOSED; the fix half is now
-   a decided CEILING.** Three review rounds produced two block→allow regressions on a
-   deny-by-default control, the last being an ordinary apostrophe classifying a boot as
-   `reducing` (allowed unconditionally). The false positive is the SAFE direction and a human
-   `dismiss` disposes it; every fix was the unsafe one. Correct tokenisation needs a real shell
-   parser — `shlex.split` already raises on a live file here. Ceilings pinned in
-   `scripts/spend/test_segments_known_ceilings.py`, including a THIRD false-positive class
-   catalogued that session (`INVOKED_SCRIPT` denies a probe file for strings it merely lists).
-   **Reopen only with a real parser.** The scope half stands: the evasion/launcher enumeration
-   is frozen, `COMMITTING` boot verbs are not, and safety is bought at layer 3.
-   **Governs:** ADR-0028 · `docs/contracts/spend-authorization.md` · ADR-0006 — the tier
-   ranking that made this a scope decision rather than a patch.
+1. **CLOSED — the whole in-band spend guard is RETIRED (ADR-0029, 2026-08-18).**
+   This item used to order a fix to `_segments()`. **Do not do that work: the file is gone.**
+   The guard, its backstop, `tessera-authorize`, both hook shims, P15 and chaos probes 1–4 were
+   removed. It never prevented a real spend in five weeks, every denial was a false positive,
+   and three review rounds trying to fix its tokenisation introduced two block→allow
+   regressions. It also contradicted ADR-0006's charter — *instrumentation, not control*.
+   **Per-run spend authorization, if a downstream needs it, is a scoped credential with a TTL
+   (tier 1: the capability is ABSENT, not denied), bounded by the out-of-band cloud budget
+   (tier 2).** conclave keeps its own copy and is unaffected. Full design preserved as a
+   RETIRED record in `docs/contracts/spend-authorization.md`.
+   **Governs:** ADR-0029 · ADR-0006 · `docs/contracts/spend-authorization.md`.
 2. **The decision surface's SORT.** The truncation notice says what was dropped; it does not
    choose better survivors. **23 of the 46 truncated keys would hide a NEW ADR outright.** The
    right key is *specificity*, which `_matches()` cannot compute. Needs a human. Re-plant IN
@@ -62,22 +56,18 @@ handoff block only; a blockquoted list is invisible to it.
    Both ADR-0005 and ADR-0025 name the cadence as **2026-10-09**. Pull it forward deliberately
    or leave it; it is not overdue.
    **Governs:** ADR-0005 · ADR-0025 · ADR-0006 — the readiness claim it withdrew.
-6. **THE OPEN ESCALATION NEEDS A DISPOSITION** — `esc-20260816-025221`, blocking, open since
-   08-16, and P6 fires on it every session. Spend denials the agent cannot disposition. Three
-   options are written out; **option 2 (allow the agent `dismiss` but not `grant`) looks
-   strongest** — dismiss writes an event and never an envelope, so ADR-0016's self-authorization
-   argument does not reach it. Note the escalation's own text is now partly stale: `dismiss` was
-   fixed 08-17 and works for a human.
-   **CORRECTED 2026-08-18 — the summary above misreads the ADR.** ADR-0016 considered
-   "convention-only `dismiss`" and **rejected it by name**: *a dismissal is cheaper to abuse
-   than a grant because it carries no dollar figure and reads as bookkeeping.* So option 2 is a
-   reversal needing a superseding ADR, not a preference. And the premise is the DESIGNED
-   behaviour: the contract's answer is that the agent says so in its final message and a HUMAN
-   runs `tessera-authorize dismiss --session <id> --reason "…"`. That path was inert for its
-   whole life, was fixed 08-17, and its first real run is recorded. Resolution is two commands,
-   not a three-way fork. Read `.tessera/.spend-backstop-fires` after — a dispositioned backstop
-   and an exhausted one both present as rc=0.
-   **Governs:** ADR-0016 · `docs/contracts/spend-authorization.md` · `docs/contracts/escalation.md`.
+6. **THE OPEN ESCALATION IS NOW MOOT AND STILL OPEN — a human must resolve it.**
+   `esc-20260816-025221`, blocking, open since 08-16. **Every option in it is about a mechanism
+   that no longer exists** (ADR-0029), and the disposition path this item used to prescribe —
+   `tessera-authorize dismiss`, then reading `.tessera/.spend-backstop-fires` — names two
+   deleted artifacts. **Do not follow it.** The packet is answered by the retirement, not by a
+   choice among its three options. It still fires `P6` and one leg of `G-a` at every
+   SessionStart until closed:
+   `bin/tessera-escalate resolve esc-20260816-025221 --note "<the decision>"`.
+   **Left for Lorenzo deliberately:** `resolve --note` is human-emitted by the disposition-verb
+   axis (ADR-0016) — the note IS the record — and an agent closing the packet it raised is the
+   shape that axis exists to refuse. Retiring the mechanism does not transfer the verb.
+   **Governs:** ADR-0029 · ADR-0016 · `docs/contracts/escalation.md`.
 7. **The checkpoint's goal SELECTION is still parked** — Mnemos records no signal for *use within
    a session*, so building that signal is the first task, not changing the filter. **P3 is live,
    not theoretical: it spilled on me this session** (checkpoint 9,458b vs an 8,000b budget) and
@@ -111,6 +101,16 @@ handoff block only; a blockquoted list is invisible to it.
 10. **Housekeeping: the promo page needs a manual upload + `--stamp-deploy`.** It is now a
     warning, not a blocked commit — which was the entire point of ADR-0026.
     **Governs:** ADR-0026 — the warn tier; `promo-deploy-marker-is-current` is its one member.
+
+11. **Downstream cleanup owed by ADR-0029: howler's harness declines.**
+    `../howler/.tessera/harness-declines.yml` declines 9 spend-harness paths that no longer
+    exist in the reference scaffold, so `tessera-sync-harness ../howler` now prints
+    *"9 decline(s) match NO harness component — inert, and a rename would silently re-install
+    them"* on every run. **Measured, not predicted** — the count is 9, and the warning is
+    permanent until the entries are pruned. That is the permanently-ignorable-report shape the
+    branch was written to prevent, so leaving it teaches the reader to skip that section.
+    Not fixed here because it is another repo's file and this branch should not reach into it.
+    **Governs:** ADR-0029 · `bin/tessera-sync-harness`.
 
 **Published copies (off-repo, and therefore drift-prone):**
 - ADR-0029 (spend guard retired) — https://claude.ai/code/artifact/9ae5bdbd-56fb-45f9-971a-6458ff6de738

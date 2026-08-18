@@ -10,12 +10,19 @@
   in it... maybe there's a better design to audit autonomy, and this is just the wrong shape for
   this framework and Claude."* And then: *"note it as what it is, a failed approach and experiment,
   what worked and more importantly what didn't, then unwind it."*
-- **Executed:** 2026-08-18 — removed: `scripts/spend`, `bin/tessera-authorize`,
-  `.claude/scripts/tessera-spend-guard.sh`, `.claude/scripts/tessera-spend-backstop.sh`. Also
-  unwired from `.claude/settings.json` (PreToolUse + Stop), dropped from
-  `bin/tessera-new-project`, and removed from `bin/tessera-watch` (P15), `chaos/test_chaos.py`
-  (probes 1–4) and `scripts/doccheck.py` (two wiring checks, four `SAFETY_SCRIPTS` entries).
-  `docs/contracts/spend-authorization.md` is KEPT as a retired design record.
+- **Executed:** 2026-08-18 — removed: `scripts/spend` `bin/tessera-authorize` `.claude/scripts/tessera-spend-guard.sh` `.claude/scripts/tessera-spend-backstop.sh` `templates/tessera-spend-guard.sh` `templates/tessera-spend-backstop.sh`
+- **Also changed, not removed:** unwired from `.claude/settings.json` (PreToolUse + Stop) and both
+  scaffold templates; dropped from `bin/tessera-new-project`; P15 cut from `bin/tessera-watch`;
+  probes 1–4 from `chaos/test_chaos.py`; two wiring checks and four `SAFETY_SCRIPTS` entries from
+  `scripts/doccheck.py`. `docs/contracts/spend-authorization.md` is KEPT as a retired design record.
+
+  > **This split is load-bearing, not formatting.** `_ADR_EXECUTED` matches a SINGLE line, so the
+  > four-line value this originally carried was parsed down to its first line — and the removal
+  > claims for both hook shims were **verified by nothing**: restore either file and
+  > `adr-execution-recorded` stays green, in the ADR whose subject is honest execution accounting.
+  > Reflowing it naively is worse, not better: everything after `removed:` reads as removed, and
+  > the continuation named six paths that were deliberately KEPT — so the one-line version would
+  > have gone red demanding their deletion. Found in review, 2026-08-18.
 
 ---
 

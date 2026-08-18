@@ -16,7 +16,6 @@ anchor itself breaking.
 """
 from __future__ import annotations
 
-import json
 import re
 import subprocess
 from pathlib import Path
@@ -36,24 +35,12 @@ _UNANCHORED = re.compile(r'PROJECT_DIR="\$\{CWD:-\$PWD\}"')
 
 
 
-def _hook_input(cwd: str, command: str) -> str:
-    return json.dumps({
-        "session_id": "anchor-test", "cwd": cwd,
-        "tool_name": "Bash", "tool_input": {"command": command},
-    })
-
-
 def _extract_anchor_root(hook: Path) -> str:
     """Pull the shipped `_anchor_root` out of a hook so tests run the real thing."""
     lines = hook.read_text().splitlines()
     start = next(i for i, l in enumerate(lines) if l.startswith("_anchor_root() {"))
     end = next(i for i, l in enumerate(lines[start:], start) if l == "}")
     return "\n".join(lines[start:end + 1])
-
-
-def _run(script: Path, payload: str) -> int:
-    return subprocess.run(["bash", str(script)], input=payload, text=True,
-                          capture_output=True, cwd=ROOT).returncode
 
 
 def test_no_hook_derives_its_project_dir_from_the_session_cwd():
