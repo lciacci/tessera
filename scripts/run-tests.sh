@@ -61,13 +61,13 @@ run() {
 echo "Tessera test suite"
 echo "──────────────────"
 
-# Separate processes: gate/ and override/ cannot share one (see header). spend/ gets its
+# Separate processes: gate/ and override/ cannot share one (see header). spend/ had its own
+# until 2026-08-18, when ADR-0029 retired the in-band spend guard and its suite with it.
 # own for the same reason — it has a same-dir `event.py`/`guard.py` import contract, and
 # joining the pool is how the collision bites the next suite that lands.
-run "top-level" "$PY" -m pytest scripts/ -q --ignore=scripts/gate --ignore=scripts/override --ignore=scripts/mnemos --ignore=scripts/spend --ignore=scripts/verify --ignore=scripts/restore --ignore=scripts/icpg
+run "top-level" "$PY" -m pytest scripts/ -q --ignore=scripts/gate --ignore=scripts/override --ignore=scripts/mnemos --ignore=scripts/verify --ignore=scripts/restore --ignore=scripts/icpg
 run "gate"      "$PY" -m pytest scripts/gate -q
 run "override"  "$PY" -m pytest scripts/override -q
-run "spend"     "$PY" -m pytest scripts/spend -q
 run "verify"    "$PY" -m pytest scripts/verify -q
 run "restore"   "$PY" -m pytest scripts/restore -q
 # icpg/ and polyphony/ BOTH carry a store.py and a models.py. polyphony has no tests

@@ -18,7 +18,7 @@ verification — make the falsifier a channel; ADR-0006 decision 4).
       {
         "text": "the guard blocks unauthorized boots",  // the claim, verbatim, as the author stated it
         "verdict": "REFUTED",       // CONFIRMED | REFUTED | PARTIAL | NO_VERDICT
-        "evidence": "ran scripts/spend/guard.py under /usr/bin/python3; boot proceeded"
+        "evidence": "ran the guard under /usr/bin/python3; boot proceeded"
       }
     ],
     "self_test": false,             // true: the claim was a planted landmine (criterion 5)
@@ -106,7 +106,7 @@ it. It is the honest prior on any future "done" claim.
 
 Invocable-but-forgotten is a sentence. The Stop hook (`.claude/scripts/tessera-verify-scan.sh`
 → `scripts/verify/scan.py`) fires when a session touched a safety path
-(`scripts/spend/`, `.claude/scripts/`, `hooks/`, `install.sh`, `scripts/doccheck.py`,
+(`.claude/scripts/`, `hooks/`, `install.sh`, `scripts/doccheck.py`,
 `scripts/verify/`) AND an assistant turn claimed done/fixed/closed AND no `verification`
 event exists for the session. Detection is a recall net; the model is the precision filter,
 and `skip --reason` is the auditable escape hatch.

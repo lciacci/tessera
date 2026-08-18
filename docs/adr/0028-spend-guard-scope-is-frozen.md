@@ -1,7 +1,11 @@
 # ADR-0028: The spend guard's evasion enumeration is frozen — and its tokenisation was fixed, measured, and reverted
 
 - **Date:** 2026-08-18
-- **Status:** Accepted
+- **Status:** Superseded by ADR-0029
+- **Superseded because:** one day later the mechanism itself was retired. This ADR froze the
+  scope of a control ADR-0029 removed entirely — its diagnosis (tier 4, unbounded input space,
+  buy safety at layer 3) was right and became the argument for retirement rather than for a
+  freeze.
 - **Decision driver:** Human disposition. Lorenzo, on queue item 1: *"do 1 and 2"* — fix the
   tokenisation, then declare layer 1 finished at "stops the honest mistake" and stop growing the
   pattern list. After three review rounds measured the fix as a net safety regression, the

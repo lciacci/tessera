@@ -92,8 +92,15 @@ exactly what the deferral was predicated on being impossible.
 The trigger was never "the first unsupervised run" in substance; it was *"the moment a block
 stops halting the agent."* Spec 06 was that moment.
 
-**Shape:** Stop hook `.claude/scripts/tessera-spend-backstop.sh` → `scripts/spend/backstop.py`.
-A denial must end in one of two places, and it checks which:
+**RETIRED WITH ITS SUBJECT (ADR-0029, 2026-08-18).** The spend backstop was a Stop hook that
+read `spend_denied` events and checked a denial ended in a grant or a packet. It is gone
+because the guard that produced those events is gone — the whole in-band spend control was
+retired as a failed approach. **The reasoning above is kept because it is general and it
+outlives spec 06**: the moment a block *stops halting the agent*, silence becomes the failure
+mode, and a Stop-hook backstop is the shape that answers it. That argument applies to the next
+control with the same property, and this is where it is written down.
+
+For the record, its shape was:
 
 | denied → | verdict |
 |---|---|

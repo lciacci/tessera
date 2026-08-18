@@ -34,7 +34,7 @@ for f in "$TPL/CLAUDE.md.template" "$TPL/settings.base.json" "$TPL/gitignore.bas
 done
 
 mkdir -p "$TARGET/.claude/scripts" "$TARGET/.tessera/logs" "$TARGET/.mnemos" \
-         "$TARGET/scripts/gate" "$TARGET/scripts/spend" "$TARGET/scripts/restore"
+         "$TARGET/scripts/gate" "$TARGET/scripts/restore"
 
 # Harness scripts. Default (global): no local mnemos copies — settings.json falls
 # back to ~/.claude/templates. Frozen: pin live copies now (anti-drift snapshot).
@@ -94,21 +94,11 @@ chmod +x "$TARGET/scripts/tessera-escalate"
 cp "$TESSERA_ROOT"/bin/tessera-degraded "$TARGET/scripts/tessera-degraded"
 chmod +x "$TARGET/scripts/tessera-degraded"
 
-# Spend guard (spec 06). The hook wrapper FAILS OPEN when guard.py is absent — so shipping
-# tessera-spend-guard.sh without scripts/spend/ ships a hook that silently protects nothing
-# and still looks wired. Same shape as the gate recorder above: ship both halves or neither.
-# The backstop rides along, same rule as the gate recorder: the guard's deny path ends in a
-# PROSE instruction ("raise a packet"), which is model recall — the exact trigger that missed
-# ~85% of gates. Shipping the guard without its backstop ships the broken half.
-cp "$TESSERA_ROOT"/scripts/spend/guard.py "$TESSERA_ROOT"/scripts/spend/event.py \
-   "$TESSERA_ROOT"/scripts/spend/authorize.py "$TESSERA_ROOT"/scripts/spend/backstop.py \
-   "$TESSERA_ROOT"/scripts/spend/conftest.py "$TESSERA_ROOT"/scripts/spend/test_guard.py \
-   "$TESSERA_ROOT"/scripts/spend/test_backstop.py \
-   "$TARGET/scripts/spend/"
-cp "$TESSERA_ROOT"/.claude/scripts/tessera-spend-guard.sh \
-   "$TESSERA_ROOT"/.claude/scripts/tessera-spend-backstop.sh "$TARGET/.claude/scripts/"
-chmod +x "$TARGET"/.claude/scripts/tessera-spend-guard.sh \
-         "$TARGET"/.claude/scripts/tessera-spend-backstop.sh "$TARGET"/scripts/spend/guard.py
+# NO SPEND GUARD. Retired 2026-08-18 (ADR-0029): the in-band, text-matching, pre-execution
+# guard was a classifier over an unbounded input space, never prevented a real spend, and
+# contradicted ADR-0006's charter. A new project must not inherit it. Per-run spend
+# authorization, when a downstream genuinely needs it, is bought at tier 1 (scoped
+# credentials with a TTL) and bounded at tier 3 (an out-of-band cloud budget) — not here.
 
 # Restore receipt (T2, ADR-0015). Both parties ship or neither, and here that rule has an
 # extra edge: the two halves are written by DIFFERENT parties on purpose. offer.py is the

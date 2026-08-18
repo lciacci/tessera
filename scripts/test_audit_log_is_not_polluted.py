@@ -29,10 +29,9 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-GUARD = ROOT / ".claude" / "scripts" / "tessera-spend-guard.sh"
+DEGRADED = ROOT / "bin" / "tessera-degraded"
 LOGS = ROOT / ".tessera" / "logs"
 
-needs_jq = pytest.mark.skipif(shutil.which("jq") is None, reason="hook requires jq")
 
 
 def test_the_session_id_is_stripped_inside_the_suite():
@@ -44,33 +43,35 @@ def test_the_session_id_is_stripped_inside_the_suite():
     )
 
 
-@needs_jq
-def test_driving_the_real_spend_guard_writes_no_production_event():
-    """THE regression, at the level it actually failed: a real hook, a real subprocess.
+def test_driving_a_real_event_writer_as_a_subprocess_writes_no_production_event():
+    """THE regression, at the level it actually failed: a real binary, a real subprocess.
 
-    Deliberately runs under the suite's OWN environment — re-setting the session id here
-    would defeat the fixture under test and assert the opposite of the property. Snapshots
-    `.tessera/logs/` and requires it unchanged.
+    RE-POINTED 2026-08-18. The original vehicle was `tessera-spend-guard.sh`, retired with the
+    rest of the in-band spend guard by ADR-0029. **The property is not spend-specific and
+    outlives it** — `.tessera/logs/` is the shared channel for gate, override, restore,
+    degraded and whatever a downstream adds next, and the bug travelled through the *subprocess
+    inheriting the environment*, not through anything about spend. So the vehicle moved to
+    `bin/tessera-degraded`: a real binary, run as a subprocess, that writes to the same log
+    keyed by session id and refuses to write without one.
 
-    HONEST LIMIT: on a machine with no ambient `CLAUDE_CODE_SESSION_ID` this cannot fail, so
-    it is weaker than `test_the_session_id_is_stripped_inside_the_suite` above, which pins the
-    mechanism directly. It is kept because it is the only one that exercises the *path* the
-    bug travelled — hook, subprocess, inherited env — and because it fails exactly where the
-    bug bit: a suite run inside a real Claude Code session.
+    Deliberately runs under the suite's OWN environment — re-setting the session id here would
+    defeat the fixture under test and assert the opposite of the property.
+
+    HONEST LIMIT, unchanged by the re-point: on a machine with no ambient
+    `CLAUDE_CODE_SESSION_ID` this cannot fail, so it is weaker than
+    `test_the_session_id_is_stripped_inside_the_suite` above, which pins the mechanism
+    directly. It is kept because it is the only one that exercises the PATH the bug travelled.
     """
     before = {p.name for p in LOGS.glob("*.jsonl")} if LOGS.is_dir() else set()
 
-    payload = json.dumps({
-        "session_id": "probe", "cwd": str(ROOT),
-        "tool_name": "Bash", "tool_input": {"command": "terraform apply"},
-    })
-    rc = subprocess.run(["bash", str(GUARD)], input=payload, text=True,
-                        capture_output=True, cwd=ROOT).returncode
-    assert rc == 2, "the guard did not deny — this test is not exercising the deny path"
+    subprocess.run([str(DEGRADED), "--component", "audit-log-probe",
+                    "--reason", "suite-pollution-probe",
+                    "--detail", "asserting the suite writes no production event"],
+                   text=True, capture_output=True, cwd=ROOT)
 
     after = {p.name for p in LOGS.glob("*.jsonl")} if LOGS.is_dir() else set()
     assert after == before, (
-        f"the suite created {sorted(after - before)} — a test manufactured a spend_denied "
-        f"event in the production journal. That is the 2026-07-12 bug through the subprocess "
-        f"door: the env var must be stripped before the subprocess can inherit it."
+        f"the suite created {sorted(after - before)} — a test manufactured a real event in "
+        f"the production journal. That is the 2026-07-12 bug through the subprocess door: "
+        f"the env var must be stripped before the subprocess can inherit it."
     )

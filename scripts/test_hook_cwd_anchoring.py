@@ -26,7 +26,10 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 HOOKS = ROOT / ".claude" / "scripts"
-GUARD = HOOKS / "tessera-spend-guard.sh"
+# The `_anchor_root` CARRIER these two tests extract from. Was `tessera-spend-guard.sh`
+# until 2026-08-18 (ADR-0029 retired it); `_anchor_root` is a shared idiom across five
+# hooks, so the function under test is unchanged — only the file it is read out of.
+ANCHOR_CARRIER = HOOKS / "tessera-gate-scan.sh"
 DEGRADED = ROOT / "bin" / "tessera-degraded"
 
 # The exact shape that shipped the bug: project dir taken straight from session cwd.
@@ -63,34 +66,17 @@ def test_no_hook_derives_its_project_dir_from_the_session_cwd():
         f"{offenders} take PROJECT_DIR from the session cwd; a Bash `cd` silences them")
 
 
-@needs_jq
-@pytest.mark.parametrize("sub", ["", "scripts", "scripts/spend", "docs/adr"])
-def test_spend_guard_denies_identically_from_any_subdirectory(sub):
-    """THE regression. rc=2 denies, rc=0 ALLOWS the spend — the fail-open being guarded."""
-    cwd = str(ROOT / sub) if sub else str(ROOT)
-    assert _run(GUARD, _hook_input(cwd, "terraform apply")) == 2, (
-        f"guard did not deny with cwd={cwd!r} — a `cd` disabled the spend gate")
-
-
-@needs_jq
-def test_anchoring_does_not_block_cost_reducing_commands():
-    """A spend gate must never be able to block the exit (CLAUDE.md). Teardown from a
-    subdirectory must still pass, or the anchor fix has traded one failure for a worse one."""
-    cwd = str(ROOT / "scripts")
-    assert _run(GUARD, _hook_input(cwd, "terraform apply -var enable_gpu=false")) == 0
-
-
 def test_degraded_reports_to_the_project_root_not_the_cwd(tmp_path):
     """The report must reach the room the alarm is read in — P13 reads the project root."""
     log = ROOT / ".tessera" / "logs" / "anchor-pytest.jsonl"
     log.unlink(missing_ok=True)
     subprocess.run(
         [str(DEGRADED), "--component", "anchor-pytest", "--reason", "cwd-shift",
-         "--session", "anchor-pytest", "--project", str(ROOT / "scripts" / "spend")],
+         "--session", "anchor-pytest", "--project", str(ROOT / "scripts" / "gate")],
         capture_output=True, cwd=ROOT, check=False)
     try:
         assert log.exists(), "degraded event did not land at the project root"
-        assert not (ROOT / "scripts" / "spend" / ".tessera").exists(), "leaked into the subdir"
+        assert not (ROOT / "scripts" / "gate" / ".tessera").exists(), "leaked into the subdir"
     finally:
         log.unlink(missing_ok=True)
 
@@ -109,7 +95,7 @@ def test_root_marker_cannot_be_forged_by_a_stray_tessera_dir(tmp_path):
 
     # Extract the SHIPPED function rather than restating it — an embedded copy would drift
     # from the hooks and quietly start testing something nobody runs.
-    script = f'{_extract_anchor_root(GUARD)}\n_anchor_root "{decoy}"\nprintf %s "$_root"\n'
+    script = f'{_extract_anchor_root(ANCHOR_CARRIER)}\n_anchor_root "{decoy}"\nprintf %s "$_root"\n'
     out = subprocess.run(["sh", "-c", script], capture_output=True, text=True).stdout
     assert out == str(real), f"stray .tessera/ forged a root: {out!r}"
 
@@ -117,6 +103,6 @@ def test_root_marker_cannot_be_forged_by_a_stray_tessera_dir(tmp_path):
 def test_anchor_root_falls_back_rather_than_yielding_empty(tmp_path):
     """No marker anywhere must return the input, not "" — an empty project dir would make
     every path resolve against / and fail open in a new way."""
-    script = f'{_extract_anchor_root(GUARD)}\n_anchor_root "{tmp_path}"\nprintf %s "$_root"\n'
+    script = f'{_extract_anchor_root(ANCHOR_CARRIER)}\n_anchor_root "{tmp_path}"\nprintf %s "$_root"\n'
     out = subprocess.run(["sh", "-c", script], capture_output=True, text=True).stdout
     assert out == str(tmp_path)

@@ -4,7 +4,8 @@
 # THE BAR: break a component on purpose, and Tessera tells you within one session,
 # without a human asking.
 #
-# **ALL 11 PROBES ARE GREEN as of 2026-07-27** — `tessera-degraded` and `tessera-watch` P13
+# **ALL 7 PROBES ARE GREEN.** (11 until 2026-08-18, when ADR-0029 retired the in-band spend
+# guard and probes 1-4 went with it — see the coverage accounting in that ADR.) — `tessera-degraded` and `tessera-watch` P13
 # shipped, and the suite is now ALSO folded into `scripts/run-tests.sh` as the `chaos` run,
 # so `tessera-test` covers it. **A red probe here is now a real regression in Tessera's
 # ability to report its own failure, not the expected state.**
@@ -43,7 +44,7 @@ fi
 
 echo "Tessera chaos probes — spec 11"
 echo "──────────────────────────────"
-echo "All 11 green as of 2026-07-27. A RED probe here is a real regression: Tessera has"
+echo "All 7 green. A RED probe here is a real regression: Tessera has"
 echo "stopped reporting one of its own failures."
 echo
 

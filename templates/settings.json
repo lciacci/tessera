@@ -99,17 +99,6 @@
             "statusMessage": "Applying Claude effort tier to subagent..."
           }
         ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-spend-guard.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-spend-guard.sh\"; fi; exit 0",
-            "timeout": 5,
-            "statusMessage": "Checking spend authorization..."
-          }
-        ]
       }
     ],
     "PostToolUse": [
@@ -162,16 +151,6 @@
             "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-gate-scan.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-gate-scan.sh\"; elif [ -x \"$HOME/.claude/templates/tessera-gate-scan.sh\" ]; then exec \"$HOME/.claude/templates/tessera-gate-scan.sh\"; fi; exit 0",
             "timeout": 10,
             "statusMessage": "Scanning for unlogged suggestion-gates..."
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "if [ -x \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-spend-backstop.sh\" ]; then exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/tessera-spend-backstop.sh\"; fi; exit 0",
-            "timeout": 5,
-            "statusMessage": "Checking spend denials were dispositioned..."
           }
         ]
       }

@@ -214,40 +214,6 @@ def _settings(repo: Path, hooks: dict) -> None:
     (repo / ".claude" / "settings.json").write_text(json.dumps(hooks))
 
 
-def test_catches_spend_contract_with_no_hook_wired(fake_repo):
-    _spend_contract(fake_repo)
-    _settings(fake_repo, {"hooks": {"PreToolUse": [{"matcher": "Edit|Write", "hooks": []}]}})
-    bad = doccheck.check_spend_guard_is_wired()
-    assert len(bad) == 1
-    assert "boot a GPU with no authorization" in bad[0]
-
-
-def test_passes_when_spend_guard_is_wired(fake_repo):
-    _spend_contract(fake_repo)
-    _settings(fake_repo, {"hooks": {"PreToolUse": [{
-        "matcher": "Bash",
-        "hooks": [{"type": "command", "command": ".claude/scripts/tessera-spend-guard.sh"}],
-    }]}})
-    assert doccheck.check_spend_guard_is_wired() == []
-
-
-def test_spend_guard_wired_under_wrong_matcher_is_a_violation(fake_repo):
-    """Wired to Edit|Write instead of Bash: the script exists, and guards nothing."""
-    _spend_contract(fake_repo)
-    _settings(fake_repo, {"hooks": {"PreToolUse": [{
-        "matcher": "Edit|Write",
-        "hooks": [{"type": "command", "command": ".claude/scripts/tessera-spend-guard.sh"}],
-    }]}})
-    assert doccheck.check_spend_guard_is_wired() != []
-
-
-def test_no_spend_contract_means_no_claim_to_check(fake_repo):
-    _settings(fake_repo, {"hooks": {}})
-    assert doccheck.check_spend_guard_is_wired() == []
-
-
-# ── spend-auth-is-not-tracked ─────────────────────────────────────────────────
-
 def test_runtime_state_is_not_tracked_in_the_real_repo():
     """Two real bugs, both shipped by `git add -A`, one hour apart, in the same directory.
 
@@ -271,29 +237,6 @@ def _escalation_contract(repo: Path) -> None:
     (repo / "docs" / "contracts" / "escalation.md").write_text(
         "Stop hook `.claude/scripts/tessera-spend-backstop.sh` catches undispositioned denials.")
 
-
-def test_catches_backstop_claimed_but_not_wired(fake_repo):
-    _escalation_contract(fake_repo)
-    _settings(fake_repo, {"hooks": {"Stop": [{"hooks": [{"command": "mnemos-stop.sh"}]}]}})
-    bad = doccheck.check_spend_backstop_is_wired()
-    assert len(bad) == 1
-    assert "riding model recall" in bad[0]
-
-
-def test_passes_when_backstop_is_wired(fake_repo):
-    _escalation_contract(fake_repo)
-    _settings(fake_repo, {"hooks": {"Stop": [{"hooks": [
-        {"command": ".claude/scripts/tessera-spend-backstop.sh"}]}]}})
-    assert doccheck.check_spend_backstop_is_wired() == []
-
-
-def test_no_backstop_claim_means_nothing_to_check(fake_repo):
-    (fake_repo / "docs" / "contracts" / "escalation.md").write_text("Escalation packets.")
-    _settings(fake_repo, {"hooks": {}})
-    assert doccheck.check_spend_backstop_is_wired() == []
-
-
-# ── verify-scan-is-wired ──────────────────────────────────────────────────────
 
 def _verification_contract(repo: Path) -> None:
     (repo / "docs" / "contracts" / "verification-event.md").write_text(
