@@ -73,8 +73,29 @@ So: if a segment invokes a local `.sh`/`.py`/`.bash` file that exists, the guard
 
 > **The pattern list is a recall net, not an oracle.** A script that calls a script that boots
 > a GPU still slips through, as does anything using a cloud SDK (boto3 `run_instances`) rather
-> than the CLI. Layer 3 is what bounds the misses. A miss is a finding *about the list*, and
-> the fix is a pattern plus a regression test — same standing rule as `doccheck.py`.
+> than the CLI. Layer 3 is what bounds the misses.
+>
+> **SCOPE FROZEN 2026-08-18 (ADR-0028), and the freeze is deliberately partial.** "A miss is a
+> finding about the list, and the fix is a pattern plus a regression test" was true of one half
+> and false of the other, and the single phrase "the pattern list" hid the difference:
+>
+> - **The evasion / launcher enumeration is FROZEN.** Measured: five forms closed on
+>   2026-07-27, seven more (`script`, `stdbuf`, `nohup`, `time`, `nice`, `xargs`, `script …
+>   python3 …`) passed immediately. The launcher set is every exec-wrapper on the system; it
+>   cannot terminate, and each addition makes this control look more complete than it is. New
+>   forms are recorded as ceilings here, **not patched.**
+> - **The `COMMITTING` boot verbs are NOT frozen.** The covered class must stay *enumerable* —
+>   that is the whole condition under which "this guard does not cover X" is a ceiling rather
+>   than a hole. A genuinely new provisioning verb is a member of the class this guard claims,
+>   and is still a bug with a pattern and a regression test.
+> - **Tokenisation is FROZEN as of ADR-0028** — not for lack of a defect, but because three
+>   attempts to fix it produced two block→allow regressions. Reopens only with a real shell
+>   parser; the pinned ceilings are its acceptance tests.
+> - **Other correctness fixes are NOT frozen.** Freezing a list is not freezing the code.
+>
+> **Layer 1's scope is: stop an agent that commits spend by mistake or without authorization.**
+> It is not a control that defeats an agent trying to evade it. If more safety is wanted, buy
+> it at **layer 3**, not by lengthening a regex.
 
 ### A mention is not an invocation
 
@@ -99,6 +120,34 @@ on the `;` *inside its own quotes*, and the resulting fragment no longer looks l
 judging fragments in isolation reopens the exact bypass the stripping is only safe without.
 Global, and conservative: if any part of the command can execute its own literals, none of it
 is stripped.
+
+**THE SPLIT IS NOT QUOTE-AWARE, AND THAT IS NOW A DECIDED CEILING (2026-08-18, ADR-0028).**
+`_segments()` splits the RAW command, so a quoted span containing `|`, `;` or a newline is
+torn into fragments with **unbalanced quotes** — which `QUOTED` cannot match — and the text
+inside reaches `COMMITTING`. `grep -E "terraform apply|aws ec2 run-instances" notes.txt` is
+denied as a GPU boot. **Five denials in one session, a 100% false-positive rate, and one
+blocking escalation about being unable to disposition them.**
+
+**A fix was written and reverted after three review rounds, because every version of it made
+the guard less safe.** Round 1's quote-aware split stopped catching a wrapper after a
+separator — the naive tear had been catching it *by accident*. Round 2's per-segment
+`WRAPPER` test added three new false positives, including denying a heredoc that merely
+documents this contract. Round 3 found the one that ended it: a quote-aware splitter will not
+split while a quote is open, so an ordinary **apostrophe** swallows the rest of the command,
+and because `REDUCING` is checked first, any teardown token in the swallowed span classifies
+the whole thing `reducing` — **allowed unconditionally**:
+
+```
+echo don't run terraform destroy || terraform apply      ALLOWED
+```
+
+All four in-repo suites stayed green through both fail-opens; each was found only by an
+independent reviewer diffing classifications against the original. Correct tokenisation needs
+a real shell parser, and `shlex.split` already raises `No closing quotation` on a live file
+here. **So the false positive stays: it is the safe direction, it never allows spend, and a
+human `dismiss` disposes it.** The ceilings — including the third class catalogued that
+session, where `INVOKED_SCRIPT` reads a probe file and denies it for the strings it merely
+lists — are pinned in `scripts/spend/test_segments_known_ceilings.py`.
 
 > The first version of this guard stripped nothing and blocked every mention. It produced four
 > false positives against its own author in one session — a test heredoc, the command that
