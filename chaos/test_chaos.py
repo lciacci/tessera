@@ -47,9 +47,6 @@ REPO = Path(__file__).resolve().parents[1]
 SCAFFOLD = REPO / "bin" / "tessera-new-project"
 SESSION = "chaos-probe"
 
-# A command the spend guard must block: external, irreversible, commitment (not teardown).
-SPEND_CMD = "aws ec2 run-instances --instance-type p4d.24xlarge"
-DENY = 2  # the ONLY exit code that blocks. 0 and 1 both allow the command through.
 
 
 def _scaffold(target: Path, *flags: str) -> Path:
@@ -173,8 +170,6 @@ def assert_reported(toy: Path, what: str, component: str):
 # legitimately needs and point PATH at it (see probe 5). Do NOT use `PATH=/nonexistent` —
 # that makes even `sh` unresolvable, so the probe measures its own broken setup instead of
 # the hook's behaviour. It did exactly that once, returning 127 from `env: bash: not found`.
-# ─────────────────────────────────────────────────────────────────────────────────────
-# ─────────────────────────────────────────────────────────────────────────────────────
 
 def test_probe_5_gate_scan_without_jq_is_silent(toy, tmp_path):
     """`remove jq from PATH → does anything say so?`

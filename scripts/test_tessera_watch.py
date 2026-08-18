@@ -714,18 +714,9 @@ def test_p9_icpg_branch_is_reachable_when_the_db_is_present(tmp_path, monkeypatc
     assert "silently dead" not in quiet, quiet
 
 
-# ── P15: the spend backstop's own cap had become a permanent kill switch ───────────────
-#
-# `.spend-backstop-fires` was a global integer nothing reset; backstop.main() returns 0 once
-# it exceeds MAX_FIRES. Found 2026-07-27 at 47 — the backstop that catches a vanished spend
-# denial had been silently dead, and rc=0 reads exactly like "nothing to report". The counter
-# is per-session now, but a fix is not a signal: this is the paired detector, because the
-# failure it guards is the guard being off, which announces nothing by construction.
-
-def _fires_file(root, content: str):
-    (root / ".tessera").mkdir(parents=True, exist_ok=True)
-    (root / ".tessera" / ".spend-backstop-fires").write_text(content)
-
+# ── P16: the T2 read-trigger. Guards against reading EARLY, so the tests must drive it
+# to the state where it SHOULD fire — asserting only that it is quiet today would pass
+# against a predicate that can never fire at all (standing pattern #1, aimed at P16).
 
 def _fleet(tmp_path: Path, receipts: dict[str, int], own: int = 0) -> Path:
     """A tessera root with sibling downstream projects, the shape _downstream_projects globs.

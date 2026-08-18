@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -35,7 +34,6 @@ DEGRADED = ROOT / "bin" / "tessera-degraded"
 # The exact shape that shipped the bug: project dir taken straight from session cwd.
 _UNANCHORED = re.compile(r'PROJECT_DIR="\$\{CWD:-\$PWD\}"')
 
-needs_jq = pytest.mark.skipif(shutil.which("jq") is None, reason="hook requires jq")
 
 
 def _hook_input(cwd: str, command: str) -> str:

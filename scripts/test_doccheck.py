@@ -205,11 +205,6 @@ def test_missing_run_tests_sh_is_a_violation(fake_repo):
 
 # ── spend-guard-is-wired ──────────────────────────────────────────────────────
 
-def _spend_contract(repo: Path) -> None:
-    (repo / "docs" / "contracts" / "spend-authorization.md").write_text(
-        "PreToolUse, matcher Bash, blocks unauthorized spend.")
-
-
 def _settings(repo: Path, hooks: dict) -> None:
     (repo / ".claude" / "settings.json").write_text(json.dumps(hooks))
 
@@ -232,11 +227,6 @@ def test_runtime_state_is_not_tracked_in_the_real_repo():
 
 
 # ── spend-backstop-is-wired ───────────────────────────────────────────────────
-
-def _escalation_contract(repo: Path) -> None:
-    (repo / "docs" / "contracts" / "escalation.md").write_text(
-        "Stop hook `.claude/scripts/tessera-spend-backstop.sh` catches undispositioned denials.")
-
 
 def _verification_contract(repo: Path) -> None:
     (repo / "docs" / "contracts" / "verification-event.md").write_text(
@@ -3570,3 +3560,41 @@ def test_handoff_governs_still_catches_a_bad_record_on_a_wrapped_field(fake_repo
                    "   and also ADR-9999.\n")
     out = doccheck.check_handoff_items_name_their_records()
     assert out and "ADR-9999" in out[0]
+
+
+# ─── adr-execution-recorded: supersession by deletion (2026-08-18, ADR-0029) ────────────
+# The first repo decision executed BY DELETING another decision's artifacts. The check
+# verified Executed paths exist, so it called ADR-0016 and ADR-0028 liars for correctly
+# recording creations that ADR-0029 later removed — with the only remedies being to edit an
+# accepted decision or carry a permanent red.
+
+def _adr_with_executed(repo, number, executed):
+    (repo / "docs" / "adr" / f"{number}-x.md").write_text(
+        f"# ADR-{number}\n\n- **Status:** Accepted\n- **Executed:** {executed}\n")
+
+
+def test_execution_paths_removed_by_a_later_adr_are_not_findings(fake_repo, monkeypatch):
+    monkeypatch.setattr(doccheck, "ABSENT_TESSERA_PATHS",
+                        {"scripts/gone.py": "removed by ADR-0029"})
+    _adr_with_executed(fake_repo, "0016", "2026-07-27 — `scripts/gone.py`")
+    assert not [b for b in doccheck.check_adr_execution_recorded() if "0016" in b]
+
+
+def test_an_undeclared_missing_execution_path_is_still_a_finding(fake_repo, monkeypatch):
+    """The exemption is DECLARED absence, not mere absence — a typo or an unexecuted claim
+    must read exactly as it did before."""
+    monkeypatch.setattr(doccheck, "ABSENT_TESSERA_PATHS", {})
+    _adr_with_executed(fake_repo, "0016", "2026-07-27 — `scripts/gone.py`")
+    assert [b for b in doccheck.check_adr_execution_recorded() if "0016" in b]
+
+
+def test_an_adr_written_after_the_removal_cannot_claim_to_have_created_the_path(fake_repo, monkeypatch):
+    """THE NARROWING, found in review. The first version exempted any declared-absent path in
+    ANY ADR, so a FUTURE decision claiming to have created something already removed passed
+    silently — the check's comment argued the narrow case while its code implemented the broad
+    one. A removal cannot excuse a decision written after it."""
+    monkeypatch.setattr(doccheck, "ABSENT_TESSERA_PATHS",
+                        {"scripts/gone.py": "removed by ADR-0029"})
+    _adr_with_executed(fake_repo, "0030", "2026-09-01 — `scripts/gone.py`")
+    out = [b for b in doccheck.check_adr_execution_recorded() if "0030" in b]
+    assert out, "an ADR numbered after the remover was excused by it"

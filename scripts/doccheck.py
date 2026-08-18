@@ -3118,6 +3118,13 @@ def _looks_like_path(token: str) -> bool:
     return "/" in token or token.endswith(_PATH_EXT)
 
 
+def _adr_number(adr: Path) -> int:
+    """The ADR's own number, from its filename. 0 if unparseable — which makes any
+    later-ADR comparison fail closed, i.e. the finding is still reported."""
+    m = re.match(r"(\d{4})-", adr.name)
+    return int(m.group(1)) if m else 0
+
+
 def check_adr_execution_recorded() -> list[str]:
     """Every Accepted ADR must say whether it was actually BUILT — and name artifacts
     that exist.
@@ -3190,7 +3197,19 @@ def check_adr_execution_recorded() -> list[str]:
             # decision that removed it. An undeclared missing path is still a finding, so a
             # genuine typo or an unexecuted claim reads exactly as before. Added 2026-08-18,
             # the first time this repo superseded a decision BY DELETION.
-            if p.rstrip("/") in ABSENT_TESSERA_PATHS:
+            # NARROWED after review, 2026-08-18. The first version exempted ANY
+            # declared-absent path in ANY ADR's Executed line — so a future ADR that claimed
+            # to have CREATED `scripts/spend/guard.py` (typo, copy-paste, or a plain
+            # unexecuted claim) would pass silently where the old check caught it. The
+            # comment argued the narrow case while the code implemented the broad one, which
+            # is the gap this checker exists to close, in this checker.
+            #
+            # The exemption now requires the declaring reason to name a LATER ADR than the
+            # one being checked — i.e. the removal genuinely postdates the creation. An ADR
+            # cannot be excused by a decision that had already happened when it was written.
+            reason = ABSENT_TESSERA_PATHS.get(p.rstrip("/"), "")
+            removers = [int(n) for n in re.findall(r"ADR-(\d{4})", reason)]
+            if any(n > _adr_number(adr) for n in removers):
                 continue
             bad.append(f"{_rel(adr)}: Executed names `{p}`, which does not exist")
         for p in removed:

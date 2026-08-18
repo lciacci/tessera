@@ -80,7 +80,12 @@ def test_unrecognised_shape_is_left_alone():
 
 
 def test_component_is_derived_not_looked_up():
-    assert report_settings.component_of("tessera-spend-backstop.sh") == "spend-backstop"
+    # Two hyphenated names, because the point is that the component is DERIVED from the
+    # filename rather than read off a list — one example cannot show that. The first was
+    # `tessera-spend-backstop.sh` until 2026-08-18 (ADR-0029 deleted it); re-pointed rather
+    # than dropped, since the derivation is generic and losing the second case would quietly
+    # weaken the test to "it handles one name".
+    assert report_settings.component_of("tessera-restore-scan.sh") == "restore-scan"
     assert report_settings.component_of("tessera-gate-scan.sh") == "gate-scan"
 
 

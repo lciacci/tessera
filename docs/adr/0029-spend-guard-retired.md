@@ -131,10 +131,26 @@ coverage rather than actual — but a reader in six months should not have to in
 ## Consequences
 
 - **Nominal safety coverage is reduced; measured coverage is unchanged.** Say it in that order.
-- **The chaos suite drops from 11 probes to 9** (probes 1 and 2 are the guard and backstop). ADR-0025's
-  verdict cites "11 of 11" as the evidence that spec 11's bar is met — that figure and its
-  `chaos-probe-count-is-current` check both move, and ADR-0025's *reasoning* is unaffected because
-  the retired probes tested a mechanism that no longer exists.
+- **The chaos suite drops from 11 probes to 7.** Probes **1–4** used spend as their vehicle: 1–3 the
+  guard, 4 the backstop. Coverage accounting, because "four probes deleted" is not the same claim as
+  "four probes' worth of coverage lost": probe 3 asserted the guard parsed under Python 3.9, which
+  `safety-scripts-run-on-the-system-python` asserts directly for every member; probe 4 exercised
+  `settings.json`'s never-ran branch, which probe 8 covers with a generic, non-spend vehicle. Probes
+  1 and 2 are genuinely retired with their subject. ADR-0025 cites "11 of 11" as the evidence that
+  spec 11's bar is met — that figure moves, and its *reasoning* is unaffected because the retired
+  probes tested a mechanism that no longer exists.
+
+  > **CORRECTED BEFORE THIS COMMIT LANDED, and the error is worth more than the fix.** The first
+  > draft of this bullet read "drops from 11 probes to 9 (probes 1 and 2)". Both numbers were wrong,
+  > and they contradicted this ADR's own `Executed:` line ("probes 1–4") six paragraphs above and the
+  > measured suite result (7 passed) — **in the decision record whose entire subject is honest
+  > accounting of what a mechanism cost.** Caught by an independent reviewer, not by re-reading and
+  > not by any check: `chaos-probe-count-is-current` compares `bin/tessera-chaos` against
+  > `chaos/test_chaos.py` and cannot see a third copy of the figure in prose.
+  >
+  > Sharper still: the published snapshot of this ADR carried the corrected "11 → 7" while this file
+  > carried "11 → 9", so **the off-repo copy was more accurate than the source** — the exact drift
+  > that copy was flagged for, arriving within the hour and pointing the other way.
 - **P15 goes with it**, which removes one of G-a's two remaining legs.
 - **ADR-0016's spend half is retired; its drift half and its central argument stand**, and its
   argument is now load-bearing for ADR-0027 rather than for anything here.

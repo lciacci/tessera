@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -64,10 +63,22 @@ def test_driving_a_real_event_writer_as_a_subprocess_writes_no_production_event(
     """
     before = {p.name for p in LOGS.glob("*.jsonl")} if LOGS.is_dir() else set()
 
-    subprocess.run([str(DEGRADED), "--component", "audit-log-probe",
-                    "--reason", "suite-pollution-probe",
-                    "--detail", "asserting the suite writes no production event"],
-                   text=True, capture_output=True, cwd=ROOT)
+    r = subprocess.run([str(DEGRADED), "--component", "audit-log-probe",
+                        "--reason", "suite-pollution-probe",
+                        "--detail", "asserting the suite writes no production event"],
+                       text=True, capture_output=True, cwd=ROOT)
+
+    # ASSERT THE PATH WAS ACTUALLY EXERCISED, not merely that nothing appeared. Found in
+    # review 2026-08-18: the first re-point checked only `after == before`, and
+    # `tessera-degraded` ends in `exit 0` unconditionally ("never fail the caller") while
+    # exiting 64 on a usage error BEFORE touching the log. So a renamed flag would make the
+    # subprocess write nothing, the equality would hold, and this test would pass green over
+    # zero coverage — the "true report, no coverage" shape (#12), inside the test that exists
+    # to pin a silent failure. The message proves the writer REACHED the session-key branch
+    # that the stripped env var is supposed to starve.
+    assert "no session id; cannot record" in (r.stderr + r.stdout), (
+        f"the probe did not reach the session-key branch — this test is exercising nothing. "
+        f"rc={r.returncode} stdout={r.stdout!r} stderr={r.stderr!r}")
 
     after = {p.name for p in LOGS.glob("*.jsonl")} if LOGS.is_dir() else set()
     assert after == before, (

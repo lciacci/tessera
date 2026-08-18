@@ -1,6 +1,23 @@
-# Contract: external-spend authorization
+# Contract: external-spend authorization — RETIRED
 
-**Status:** Canonical. Owned by Tessera (the producer). Defined here; consumers conform.
+**Status:** **RETIRED 2026-08-18 by ADR-0029. NOT canonical. Nothing conforms to this.**
+The mechanism it specifies — the in-band, pre-execution spend guard, its backstop, and
+`tessera-authorize` — was deleted. **Every command, hook path and module named below is gone.**
+
+> **DO NOT FOLLOW THE INSTRUCTIONS IN THIS FILE.** It is kept as a *design record*, not a
+> specification: ADR-0029's harvest is a summary, and whoever builds the tier-1 replacement
+> (a scoped credential with a TTL, rather than permission to pass a regex) wants the full
+> reasoning — the three-layer taxonomy, the never-block-the-exit invariant, the measured
+> ceilings, and the failure modes. That is why it survives the cut instead of being deleted.
+>
+> **conclave is unaffected** and keeps its own copy of the mechanism.
+>
+> The file is listed in `doccheck.HISTORY_DOCS`, which suppresses `referenced-paths-exist`
+> on the dead paths it names. **That suppression is only honest while this banner is here** —
+> without it the file reads as authoritative AND is unverifiable, which is strictly worse than
+> either alone. Found in review, 2026-08-18, having been introduced by the retirement itself.
+
+*Everything below this line describes the mechanism as it stood before removal.*
 
 The authorization layer between an agent and *external, irreversible* spend — booting a GPU,
 starting an instance. Spec 06; promoted to Tier 1 by ADR-0005.
