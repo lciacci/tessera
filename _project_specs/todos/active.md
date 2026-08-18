@@ -6,7 +6,7 @@ Declared current priority for Tessera framework dev. One focus at a time.
 
 ---
 
-## Handoff — pick up here (2026-08-17 late. **THE SPEND BACKSTOP HAD BEEN READING ITS AUDIT LOG RELATIVE TO THE CWD, AND WENT BLIND AFTER ANY `cd`** — measured from `/tmp`, `_events()` returned 0 for a session whose log held 23 denials, so a Tier-1 control reported "nothing to disposition" and exited 0. `event.py`, the WRITER, was anchored to the repo on 2026-08-10 for exactly this reason; the READER was left behind in the same subsystem in the same session's fix. #11 as plainly as it gets. **And `tessera-authorize dismiss` printed success and wrote nothing, always** — ADR-0016 made it human-only via the guard's deny list, correct since PreToolUse only intercepts the agent's Bash calls, but `emit()` keys on `CLAUDE_CODE_SESSION_ID`, which exists only in an AGENT environment. The verb was reachable only by a human and recordable only by an agent; the halves excluded each other in silence. Both found not by a check but by trying to USE the documented remedy for a false positive. Fixed, re-planted, `--session` added, failed writes now loud and non-zero. **Earlier the same day:** DeepSeek Harness rejected on layer (ADR-0024, 7 of 30 hook events mapped, no Anthropic adapter); ADR-0025 promoted the fail-open entry with a deliberately narrow claim (spec 11's bar met, 11/11 chaos probes confirmed by an independent session, but all 16 `degraded` events come from one component — remaining bar is three distinct components, count today 1); CLAUDE.md gained a second ADR-editing exception bounded by `superseded-status-is-accountable`; the decision surface got a truncation notice (it cuts 46 of 146 keys, oldest-ADR-first, and said nothing); the fleet was back-filled with `repo_paths.py` after it was found missing from all six downstreams; `tessera-sync-harness` learned to tell a DECLINE from drift, so howler's spend harness stopped being reported as missing forever; conclave F-004 was dispositioned. **THE TWO THINGS I GOT WRONG AND REVIEW CAUGHT:** a new doccheck check blocked every commit on a clean clone — the identical 2026-08-09 regression, re-committed while editing the very comment block that records it — and I published a verification claim that was false, saying a re-plant "failed as required" when it had never been run. **A verification claim is a doc claim: it goes false the same way any other does, and nothing checks prose asserting a test was run.** Also: a duplicate-key guard I wrote shipped with `if a_name >= b_name: continue`, true for every pair because `_` sorts above `A`, so it never executed once. **THE SESSION'S SHAPE, because it is the part worth carrying: three review rounds, ~25 findings, and the sharpest defects were CLAIMS rather than code.** A verification claim asserting a re-plant that was never run; a `CROSSED 50%` headline that measured 49.78%, with numbers matching no measurement, in the entry a future word-budget decision rests on; a `14 of 146` figure that was reproducible but measured the wrong property; three restatements of a prefix total left behind when its headline moved, including the revisit TRIGGER. **Every one was found by an independent reviewer, none by re-running anything** — because re-measuring inherits the original definition, and prose asserting that a test ran is checked by nothing. The code defects were ordinary and the reviews caught them; the claims were the expensive part. **NOT promoted to a standing pattern, deliberately** — all four instances are one session, one afternoon, and conclave's F-004 standard says n=3 in one sitting reads as n=1. Promote it if it recurs in a DIFFERENT session on DIFFERENT work; that is the same trigger conclave set, and using a different one here would be convenient rather than principled.)
+## Handoff — pick up here (2026-08-17 evening. **FOUR REVIEW ROUNDS ON ONE CHANGE, AND EVERY ROUND'S WORST DEFECT WAS IN THE PREVIOUS ROUND'S FIX.** 7 findings, then 5, then 3; severity fell with the count, and round 4 caught nothing live — that, not a clean report, was the stop signal. ADR-0026 gives doccheck a **warn tier**: `promo-deploy-marker-is-current` reports without blocking. The framing understated the problem twice over — the two promo checks COMPOSE (a new ADR must add a timeline row, which changes the body hash, which blocked the ADR commit) and **11 of the 15 commits that page has ever seen are ADR commits**, so the gate sat on the critical path of the repo's own decision record; and blocking coerced nothing, because nothing reaches the host, so `--stamp-deploy` alone discharges it and the FALSE STAMP was the cheapest path. Warnings print on the GREEN path — the hook printed nothing at all on exit 0, so the tier would have run and reached nobody. The admission bar is the whole safeguard: **a check qualifies only when this repo CANNOT VERIFY the fact it asserts**; annoyance is not a qualification. `tessera-watch` P8 is deliberately silent on warnings, so pre-commit is the tier's ONLY channel — a real narrowing, stated in the ADR rather than implied. **THE CLAIMS WERE AGAIN THE EXPENSIVE PART, and this time it recurred in a DIFFERENT session on DIFFERENT work, which is the promotion trigger conclave's F-004 set.** The whole change was written with TOMORROW'S DATE (2026-08-18), and the observatory built an argument on it — that CLAUDE.md crossed 50% of the prefix "one day and one clause later" than a line claiming 50% at 49.78%. Same day, hours apart: an argument resting on a day that did not pass, inside the entry warning about frozen figures. A docstring figure of mine ("~40 colliding stems") was **wrong by ~6x** — it counted `build/lib/**` copies and dunders; true count over source is 7. A comment I wrote claimed "six downstream copies of doccheck.py predate it"; measured, it is ZERO, and the 2026-08-10 comment I modelled it on says the same — **neither `doccheck.py` nor `bin/tessera-watch` is distributed to any downstream**, so a "ship both halves" note pointed at a fleet with nothing to receive it. And I **stamped a review that had not happened**, which exposed queue 8(d). **QUEUE 8(a) CLOSED:** `.githooks/` was outside the bare-python3 probe — and it was TWO gaps that each hid the other (extensionless files, plus a heredoc IMPORT the path regex cannot match; measured glob-only green, inline-only green, both RED). `scripts/review/stamp.py` now has a 3.9 guarantee. **THE FIRST RE-PLANT WAS INVALID AND DOCCHECK WAS RIGHT TO STAY GREEN** — a PEP-604 annotation in a file carrying `from __future__ import annotations`, i.e. planted BESIDE the failure mode. #10's 2026-08-15 sharpening, scored live.)
 
 *(Load-bearing heading — `.claude/scripts/tessera-watch-surface.sh` greps it at SessionStart.
 Newest section carries it; doccheck `handoff-heading-is-current` guards the ordering.)*
@@ -18,85 +18,61 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
 > SINGLE atomic write** — build the whole file in memory, write once, and the block is never absent
 > on disk. Both times: zero degraded events. Do the same.
 
-### Next — 2026-08-17 late. The morning queue's items 1-5 and conclave F-004 are all CLOSED.
+### Next — 2026-08-17 evening. Queue items 8(a) and 9 are CLOSED; 8(d) is new.
 
 **TOP-LEVEL and unindented on purpose** — the surfacer extracts `/^[0-9]+\. /` from the first
 handoff block only; a blockquoted list is invisible to it.
 
-1. **`_segments()` — the spend guard's tokenisation defect. NOW FIVE DENIALS, all read-only.**
-   `scripts/spend/guard.py:208` splits on the pipe **before** quotes are stripped, so a quoted
-   alternation or a heredoc body is torn into fragments and text that sat safely inside quotes
-   reaches `COMMITTING`. Latest instance: writing a YAML file into a downstream. **Still
-   deliberately deferred** — it is the guard's DECISION path, not its reporting path, and it
-   carries a trap: **any fix must not blind the guard to a wrapper-led command that legitimately
-   quotes a boot verb**, which is what `WRAPPER` catches. Do not add a `grep` exemption and do not
-   widen `REDUCING`. The reporting half around it is now fixed, so a false positive can finally be
-   dispositioned — which removes the excuse for leaving this one alone.
-2. **The decision surface's SORT — the larger half of the truncation finding.** The notice now says
-   what was dropped; it does not choose better survivors. **23 of the 46 truncated keys would hide
-   a NEW ADR outright**, so a decision recorded today against one of those files is invisible on it
-   tomorrow. The right key is *specificity*, which `_matches()` cannot compute — prefix matching
-   cannot distinguish a record naming `scripts/` from one naming the exact file. Needs a human. Any
-   fix must be re-planted IN `lookup()`, not beside it.
-3. **The decision surface indexes NOTHING in any downstream** — 0 keys in all six, verified after
-   the back-fill. Two causes: `_ADR_TITLE` requires a colon and settempo's ADRs use an em dash, so
-   they are skipped before path extraction; and no downstream ADR backticks a repo path anyway.
-   A component distributed to six projects, importable, and inert in all of them, with nothing
-   reporting it. `tessera-sync-harness` checks files ARRIVE, never that they DO anything.
-4. **Nine live ADR review cadences, not four**, and a purpose-written parser still missed one on
-   punctuation (three prose formats). The cheap remedy nobody had considered is a required FIELD
-   FORMAT rather than a `P17` predicate. Lorenzo's call.
-5. **ADR-0005's readiness re-assessment is formally due**, deferred by ADR-0025 on purpose. Two of
-   its preconditions were declared met on 2026-07-12 and later found broken; both are fixed now.
-   Its own cadence is 2026-10-09.
-6. **The fleet back-fill is PUSHED — all six, nothing outstanding.** Every downstream now carries
-   `repo_paths.py`, `scripts/review/stamp.py` and `.githooks/pre-push`, with five provably
-   un-customised files refreshed and imports verified on 3.9 in each. `.githooks/pre-commit` was
-   left alone everywhere — it matched no tessera version, so it is genuinely customised downstream
-   and wants a per-project read. **Left as the one open thread: nothing checks that a back-filled
-   component DOES anything** — see item 3, where the decision surface arrived in all six and
-   indexes zero keys in every one.
-7. **The checkpoint's goal SELECTION is still parked** — Mnemos records no signal for *use within a
-   session*, so building that signal is the first task, not changing the filter.
-8. **The review anchor's gaps — (a) CLOSED 2026-08-17; (b), (c) open; (d) NEW and worse.**
-   **(d) `stamp.py record()` unconditionally stamps `rev-parse HEAD` and offers no way to say
-   what a review actually SAW.** The documented workflow is "run `stamp.py` after each review" —
-   but the normal order is review → fix → commit → stamp, and by then HEAD is the *fix*, not the
-   reviewed commit. **Hit live 2026-08-17: a review covering `cc5d2b3` was stamped as covering
-   `5fb4dcb`, a commit no reviewer had seen.** So the anchor whose entire job is answering "what
-   has no review looked at" records the opposite by default, and `changed_since_review` then
-   reports a clean set difference over a false baseline — standing pattern #2 aimed at the tool
-   built to catch #2. The fix is an explicit ref argument (`stamp.py --head <sha>`), which also
-   gives (c)'s unused `base` parameter a reason to exist. Cheap, and it must be re-planted by
-   stamping a commit that was never reviewed and watching `pre-push` disagree.
-   ~~(a) `.githooks/` is outside `check_bare_python3_hook_scripts_are_probed`.~~ **Fixed, and the
-   gap was TWO gaps that each hid the other.** Widening the glob was not enough: `.githooks/`
-   files are extensionless (so `*.sh` never saw them — #12, one directory over from arbiter's
-   identical default), *and* `pre-push` reaches `stamp.py` by IMPORT inside a heredoc, which the
-   `python3 <path>.py` regex cannot match. **Measured: glob-only green, inline-only green, both
-   RED.** `scripts/review/stamp.py` is now in `SAFETY_SCRIPTS` and executed on 3.9. **The first
-   re-plant was INVALID and doccheck was right to stay green** — a PEP-604 annotation, in a file
-   carrying `from __future__ import annotations`, i.e. planted beside the failure mode rather
-   than in it (#10's 2026-08-15 sharpening, scored live). A 3.10 `match` went red as required.
-   (b) **The re-review rule names `stamp.py` and gives no command**, unlike every
-   sibling bullet in that section; there is no `docs/contracts/review-stamp.md` where all nine
-   sibling mechanisms have one, and no caller. Since pre-push is deliberately silent with no
-   stamp, **the failure mode is total silence** — principle #17 against the tool built to serve
-   it. (c) `changed_since_review`'s `base` parameter is still unused.
-9. ~~**THE PROMO DEPLOY CHECK BLOCKS ON A MANUAL OFF-REPO UPLOAD.**~~ **CLOSED 2026-08-17 —
-   ADR-0026, warn tier (Lorenzo: "I just wanted a way to know if I needed to update the html
-   page").** The framing understated it: the two promo checks COMPOSE — a new ADR must add a
-   timeline row, which changes the body hash, which blocked the ADR commit — and **11 of the 15
-   commits that page has ever seen are ADR commits**, so the gate sat on the critical path of the
-   repo's own decision record. And blocking coerced nothing: nothing reaches the host, so
-   `--stamp-deploy` alone discharges it, which made the false stamp the cheapest path.
-   `doccheck.WARN_ONLY` reports without blocking, prints on the green path (the hook printed
-   *nothing* on exit 0 — the tier would have reached nobody), and `promo-adr-timeline-is-complete`
-   stays blocking. **The live proof is this queue entry's own commit**: writing ADR-0026 forced a
-   promo row, the marker went stale, and it warned. **The one thing to watch is the admission bar**
-   — a check qualifies only when the repo *cannot verify* the fact; a tier is otherwise where reds
-   go to die (#6). `tessera-watch` P8 is deliberately silent on warnings, so pre-commit is the
-   tier's only channel — a real narrowing, stated in ADR-0026 rather than left implicit.
+1. **`_segments()` — the spend guard's tokenisation defect. Still deliberately deferred.**
+   `scripts/spend/guard.py:208` splits on the pipe **before** quotes are stripped, so text safely
+   inside quotes reaches `COMMITTING`. It is the guard's DECISION path, and **any fix must not
+   blind it to a wrapper-led command that legitimately quotes a boot verb** (what `WRAPPER`
+   catches). Do not add a `grep` exemption; do not widen `REDUCING`. Wants a full session.
+2. **The decision surface's SORT.** The truncation notice says what was dropped; it does not
+   choose better survivors. **23 of the 46 truncated keys would hide a NEW ADR outright.** The
+   right key is *specificity*, which `_matches()` cannot compute. Needs a human. Re-plant IN
+   `lookup()`, not beside it.
+3. **The decision surface indexes NOTHING in any downstream — re-verified 2026-08-17 (settempo 0
+   keys, conclave 0).** Distributed to six projects, importable, inert in all of them, with
+   nothing reporting it. `tessera-sync-harness` checks files ARRIVE, never that they DO anything.
+   **Biggest live gap on this list.**
+4. **Nine live ADR review cadences, not four**, and a purpose-written parser missed one on
+   punctuation. The cheap remedy is a required FIELD FORMAT, not a `P17` predicate. Lorenzo's call.
+5. **ADR-0005's readiness re-assessment is formally due**, deferred by ADR-0025 on purpose.
+6. **THE OPEN ESCALATION NEEDS A DISPOSITION** — `esc-20260816-025221`, blocking, open since
+   08-16, and P6 fires on it every session. Spend denials the agent cannot disposition. Three
+   options are written out; **option 2 (allow the agent `dismiss` but not `grant`) looks
+   strongest** — dismiss writes an event and never an envelope, so ADR-0016's self-authorization
+   argument does not reach it. Note the escalation's own text is now partly stale: `dismiss` was
+   fixed 08-17 and works for a human.
+7. **The checkpoint's goal SELECTION is still parked** — Mnemos records no signal for *use within
+   a session*, so building that signal is the first task, not changing the filter. **P3 is live,
+   not theoretical: it spilled on me this session** (checkpoint 9,458b vs an 8,000b budget) and
+   the T2 receipt was filed `insufficient` — Progress and Files never arrived.
+8. **The review anchor — (a) CLOSED; (b), (c) open; (d) NEW and worse.**
+   (b) **The re-review rule names `stamp.py` and gives no command**, and there is no
+   `docs/contracts/review-stamp.md` where all ten sibling mechanisms have one.
+   (c) `changed_since_review`'s `base` parameter is still unused.
+   (d) **`record()` unconditionally stamps `rev-parse HEAD` with no way to say what a review
+   actually SAW.** The documented workflow is "stamp after each review", but the normal order is
+   review → fix → commit → stamp, and by then HEAD is the *fix*. **Hit live 2026-08-17: a review
+   covering `cc5d2b3` was stamped as covering `5fb4dcb`, which no reviewer had seen.** The anchor
+   whose job is "what has no review looked at" records the opposite by default. Fix with an
+   explicit `--head <sha>`, which also gives (c)'s `base` a reason to exist. Re-plant by stamping
+   an unreviewed commit and watching `pre-push` disagree.
+9. **G-a graduation is firing** — P3, P6, P13, P15 for 3 consecutive runs: build a remedy or add
+   a snooze. Note **P13 is currently correct-but-SPENT**: all 10 events are from 08-16, the block
+   was fixed, and the window rolls off 08-23. That is the "no acknowledgment state" problem
+   `stamp.py`'s own docstring already names.
+10. **Housekeeping: the promo page needs a manual upload + `--stamp-deploy`.** It is now a
+    warning, not a blocked commit — which was the entire point of ADR-0026.
+
+**Two ceilings recorded rather than fixed, both in `bare-python3-hook-scripts-are-probed`:** a
+target held in a shell VARIABLE (`python3 "$DOCCHECK"`) is not resolved — `doccheck.py` is covered
+only because a human listed it; and on a hook whose `-c` body is shell-interpolated the scan falls
+back to the WHOLE FILE, so the precision scoping is inert on the two live files that motivated it.
+`shlex.split` raises `No closing quotation` on the live statusline hook, so correct extraction
+needs a real shell parser. Both are in the docstring, not just here.
 
 ### Standing patterns
 
@@ -230,6 +206,87 @@ Add a line only when a lesson recurs; the value is that the list is short enough
    why this line is struck rather than deleted: `The tool you reach for to check your work is
    in scope for the check.`**
 
+
+## Superseded handoff (2026-08-17 late. **THE SPEND BACKSTOP HAD BEEN READING ITS AUDIT LOG RELATIVE TO THE CWD, AND WENT BLIND AFTER ANY `cd`** — measured from `/tmp`, `_events()` returned 0 for a session whose log held 23 denials, so a Tier-1 control reported "nothing to disposition" and exited 0. `event.py`, the WRITER, was anchored to the repo on 2026-08-10 for exactly this reason; the READER was left behind in the same subsystem in the same session's fix. #11 as plainly as it gets. **And `tessera-authorize dismiss` printed success and wrote nothing, always** — ADR-0016 made it human-only via the guard's deny list, correct since PreToolUse only intercepts the agent's Bash calls, but `emit()` keys on `CLAUDE_CODE_SESSION_ID`, which exists only in an AGENT environment. The verb was reachable only by a human and recordable only by an agent; the halves excluded each other in silence. Both found not by a check but by trying to USE the documented remedy for a false positive. Fixed, re-planted, `--session` added, failed writes now loud and non-zero. **Earlier the same day:** DeepSeek Harness rejected on layer (ADR-0024, 7 of 30 hook events mapped, no Anthropic adapter); ADR-0025 promoted the fail-open entry with a deliberately narrow claim (spec 11's bar met, 11/11 chaos probes confirmed by an independent session, but all 16 `degraded` events come from one component — remaining bar is three distinct components, count today 1); CLAUDE.md gained a second ADR-editing exception bounded by `superseded-status-is-accountable`; the decision surface got a truncation notice (it cuts 46 of 146 keys, oldest-ADR-first, and said nothing); the fleet was back-filled with `repo_paths.py` after it was found missing from all six downstreams; `tessera-sync-harness` learned to tell a DECLINE from drift, so howler's spend harness stopped being reported as missing forever; conclave F-004 was dispositioned. **THE TWO THINGS I GOT WRONG AND REVIEW CAUGHT:** a new doccheck check blocked every commit on a clean clone — the identical 2026-08-09 regression, re-committed while editing the very comment block that records it — and I published a verification claim that was false, saying a re-plant "failed as required" when it had never been run. **A verification claim is a doc claim: it goes false the same way any other does, and nothing checks prose asserting a test was run.** Also: a duplicate-key guard I wrote shipped with `if a_name >= b_name: continue`, true for every pair because `_` sorts above `A`, so it never executed once. **THE SESSION'S SHAPE, because it is the part worth carrying: three review rounds, ~25 findings, and the sharpest defects were CLAIMS rather than code.** A verification claim asserting a re-plant that was never run; a `CROSSED 50%` headline that measured 49.78%, with numbers matching no measurement, in the entry a future word-budget decision rests on; a `14 of 146` figure that was reproducible but measured the wrong property; three restatements of a prefix total left behind when its headline moved, including the revisit TRIGGER. **Every one was found by an independent reviewer, none by re-running anything** — because re-measuring inherits the original definition, and prose asserting that a test ran is checked by nothing. The code defects were ordinary and the reviews caught them; the claims were the expensive part. **NOT promoted to a standing pattern, deliberately** — all four instances are one session, one afternoon, and conclave's F-004 standard says n=3 in one sitting reads as n=1. Promote it if it recurs in a DIFFERENT session on DIFFERENT work; that is the same trigger conclave set, and using a different one here would be convenient rather than principled.)
+### Next — 2026-08-17 late. The morning queue's items 1-5 and conclave F-004 are all CLOSED.
+
+**TOP-LEVEL and unindented on purpose** — the surfacer extracts `/^[0-9]+\. /` from the first
+handoff block only; a blockquoted list is invisible to it.
+
+1. **`_segments()` — the spend guard's tokenisation defect. NOW FIVE DENIALS, all read-only.**
+   `scripts/spend/guard.py:208` splits on the pipe **before** quotes are stripped, so a quoted
+   alternation or a heredoc body is torn into fragments and text that sat safely inside quotes
+   reaches `COMMITTING`. Latest instance: writing a YAML file into a downstream. **Still
+   deliberately deferred** — it is the guard's DECISION path, not its reporting path, and it
+   carries a trap: **any fix must not blind the guard to a wrapper-led command that legitimately
+   quotes a boot verb**, which is what `WRAPPER` catches. Do not add a `grep` exemption and do not
+   widen `REDUCING`. The reporting half around it is now fixed, so a false positive can finally be
+   dispositioned — which removes the excuse for leaving this one alone.
+2. **The decision surface's SORT — the larger half of the truncation finding.** The notice now says
+   what was dropped; it does not choose better survivors. **23 of the 46 truncated keys would hide
+   a NEW ADR outright**, so a decision recorded today against one of those files is invisible on it
+   tomorrow. The right key is *specificity*, which `_matches()` cannot compute — prefix matching
+   cannot distinguish a record naming `scripts/` from one naming the exact file. Needs a human. Any
+   fix must be re-planted IN `lookup()`, not beside it.
+3. **The decision surface indexes NOTHING in any downstream** — 0 keys in all six, verified after
+   the back-fill. Two causes: `_ADR_TITLE` requires a colon and settempo's ADRs use an em dash, so
+   they are skipped before path extraction; and no downstream ADR backticks a repo path anyway.
+   A component distributed to six projects, importable, and inert in all of them, with nothing
+   reporting it. `tessera-sync-harness` checks files ARRIVE, never that they DO anything.
+4. **Nine live ADR review cadences, not four**, and a purpose-written parser still missed one on
+   punctuation (three prose formats). The cheap remedy nobody had considered is a required FIELD
+   FORMAT rather than a `P17` predicate. Lorenzo's call.
+5. **ADR-0005's readiness re-assessment is formally due**, deferred by ADR-0025 on purpose. Two of
+   its preconditions were declared met on 2026-07-12 and later found broken; both are fixed now.
+   Its own cadence is 2026-10-09.
+6. **The fleet back-fill is PUSHED — all six, nothing outstanding.** Every downstream now carries
+   `repo_paths.py`, `scripts/review/stamp.py` and `.githooks/pre-push`, with five provably
+   un-customised files refreshed and imports verified on 3.9 in each. `.githooks/pre-commit` was
+   left alone everywhere — it matched no tessera version, so it is genuinely customised downstream
+   and wants a per-project read. **Left as the one open thread: nothing checks that a back-filled
+   component DOES anything** — see item 3, where the decision surface arrived in all six and
+   indexes zero keys in every one.
+7. **The checkpoint's goal SELECTION is still parked** — Mnemos records no signal for *use within a
+   session*, so building that signal is the first task, not changing the filter.
+8. **The review anchor's gaps — (a) CLOSED 2026-08-17; (b), (c) open; (d) NEW and worse.**
+   **(d) `stamp.py record()` unconditionally stamps `rev-parse HEAD` and offers no way to say
+   what a review actually SAW.** The documented workflow is "run `stamp.py` after each review" —
+   but the normal order is review → fix → commit → stamp, and by then HEAD is the *fix*, not the
+   reviewed commit. **Hit live 2026-08-17: a review covering `cc5d2b3` was stamped as covering
+   `5fb4dcb`, a commit no reviewer had seen.** So the anchor whose entire job is answering "what
+   has no review looked at" records the opposite by default, and `changed_since_review` then
+   reports a clean set difference over a false baseline — standing pattern #2 aimed at the tool
+   built to catch #2. The fix is an explicit ref argument (`stamp.py --head <sha>`), which also
+   gives (c)'s unused `base` parameter a reason to exist. Cheap, and it must be re-planted by
+   stamping a commit that was never reviewed and watching `pre-push` disagree.
+   ~~(a) `.githooks/` is outside `check_bare_python3_hook_scripts_are_probed`.~~ **Fixed, and the
+   gap was TWO gaps that each hid the other.** Widening the glob was not enough: `.githooks/`
+   files are extensionless (so `*.sh` never saw them — #12, one directory over from arbiter's
+   identical default), *and* `pre-push` reaches `stamp.py` by IMPORT inside a heredoc, which the
+   `python3 <path>.py` regex cannot match. **Measured: glob-only green, inline-only green, both
+   RED.** `scripts/review/stamp.py` is now in `SAFETY_SCRIPTS` and executed on 3.9. **The first
+   re-plant was INVALID and doccheck was right to stay green** — a PEP-604 annotation, in a file
+   carrying `from __future__ import annotations`, i.e. planted beside the failure mode rather
+   than in it (#10's 2026-08-15 sharpening, scored live). A 3.10 `match` went red as required.
+   (b) **The re-review rule names `stamp.py` and gives no command**, unlike every
+   sibling bullet in that section; there is no `docs/contracts/review-stamp.md` where all nine
+   sibling mechanisms have one, and no caller. Since pre-push is deliberately silent with no
+   stamp, **the failure mode is total silence** — principle #17 against the tool built to serve
+   it. (c) `changed_since_review`'s `base` parameter is still unused.
+9. ~~**THE PROMO DEPLOY CHECK BLOCKS ON A MANUAL OFF-REPO UPLOAD.**~~ **CLOSED 2026-08-17 —
+   ADR-0026, warn tier (Lorenzo: "I just wanted a way to know if I needed to update the html
+   page").** The framing understated it: the two promo checks COMPOSE — a new ADR must add a
+   timeline row, which changes the body hash, which blocked the ADR commit — and **11 of the 15
+   commits that page has ever seen are ADR commits**, so the gate sat on the critical path of the
+   repo's own decision record. And blocking coerced nothing: nothing reaches the host, so
+   `--stamp-deploy` alone discharges it, which made the false stamp the cheapest path.
+   `doccheck.WARN_ONLY` reports without blocking, prints on the green path (the hook printed
+   *nothing* on exit 0 — the tier would have reached nobody), and `promo-adr-timeline-is-complete`
+   stays blocking. **The live proof is this queue entry's own commit**: writing ADR-0026 forced a
+   promo row, the marker went stale, and it warned. **The one thing to watch is the admission bar**
+   — a check qualifies only when the repo *cannot verify* the fact; a tier is otherwise where reds
+   go to die (#6). `tessera-watch` P8 is deliberately silent on warnings, so pre-commit is the
+   tier's only channel — a real narrowing, stated in ADR-0026 rather than left implicit.
 
 ## Superseded handoff (2026-08-17 morning. **EVERY GUARD I WROTE TODAY WAS REVIEWED, AND THREE OF THEM WERE STILL WRONG IN WAYS THE REVIEW FOUND — including one that blocked every commit on a clean clone.** Four commits, three review rounds, ~25 findings, all verified before acting. DeepSeek Harness evaluated and REJECTED on layer (ADR-0024) — no Anthropic adapter, and its Claude Code hook bridge maps 7 of 30 events with the four Tessera leans on unsupported or partial, so every hook would exit 0 while delivering nothing. Six documentation-integrity patterns recorded, two adopted. **The evaluation was the smaller half.** Checking whether an ADR was even a viable channel found the pre-edit decision surface truncating at 3 records sorted OLDEST-ADR-FIRST: ADR-0022 invisible on `doccheck.py`, ADR-0015 invisible on `bin/tessera-watch`, no notice that anything was dropped, on 46 of 146 keys. **Getting that number right took four attempts** — a figure stale within the session, then a "correction" that re-ran my own script and inherited its wrong denominator (direct attachment, ignoring the prefix matching `lookup()` performs, understating ~3×). Both caught by review, neither by re-measuring: **re-measuring is not re-deriving what to measure.** ADR-0025 promotes the observatory's self-described most consequential entry with a deliberately NARROW claim — spec 11's bar is met (11/11 chaos probes, confirmed by an independent session 21 days on) but all 16 `degraded` events ever written come from one component and one cause plus deliberate probes, so the remaining bar is **three distinct components reporting a genuine unplanned failure unprompted; count today: 1**. ADR-0005's readiness re-assessment is formally due and deliberately NOT performed. **CLAUDE.md gained a second ADR-editing exception**: writing `adr-status-matches-index` made a stale `Status:` visible for the first time and its only remedy was an edit the rules forbade — the supersession pointer is a fact a later ADR creates, so it joins `Executed:`; a VERDICT change stays forbidden; bounded by `superseded-status-is-accountable`, not by prose. Both retired ADRs already complied, which means **it was a rule the repo had, unwritten.** Item 4 closed WITHOUT narrowing `DOC_SKIP` — measured first, dropping it yields 13 ADR findings of which 11 are correct behaviour, so the assertion is DECLARATION not existence. Item 5's sweep **contradicted its own framing**: the ≥30d staleness flag was principle #3 aimed at this file, counting edit recency rather than whether a condition fired; the large majority of entries are correctly open, and only 3 needed action. **THE WORST THING TODAY WAS MINE AND IT WAS A VERIFICATION CLAIM.** I wrote that a re-plant "dropping `cut` at the call site" had failed as required. It was never run — I broke it inside `render()`, which is covered, while the call site is `emit_hook`, which was not. Deleting the truncation notice from the ONLY channel that reaches the model left 23/23 tests and doccheck green. **A verification claim is a doc claim: it goes false the same way any other does, and nothing checks prose that asserts a test was run.** Also: the duplicate-key guard I added shipped with `if a_name >= b_name: continue`, true for EVERY pair because `_` sorts above `A`, so it never executed once — caught by the test written for it, not by inspection.)
 
