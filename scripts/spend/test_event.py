@@ -71,7 +71,14 @@ def test_emit_accepts_an_explicit_session(tmp_path, monkeypatch):
     each other and the failure was silent. `--session` is the bridge."""
     import event
     monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
-    monkeypatch.setenv("TESSERA_SPEND_LOGS", str(tmp_path / ".tessera" / "logs"))
+    # TESSERA_ROOT, not TESSERA_SPEND_LOGS. The original wrote the latter — a variable NOTHING
+    # reads — so this test believed it was sandboxed and appended 31 real `spend_dismissed`
+    # events to the production audit log, the one artifact the contract says must never be
+    # manufactured. conftest now redirects the root suite-wide, so this line is belt-and-braces
+    # rather than the only containment; it stays because a test that names its own sandbox is
+    # readable, and because the assertion below is about a PATH.
+    monkeypatch.setenv("TESSERA_ROOT", str(tmp_path))
     assert event.emit("spend_dismissed", {"x": 1}) is None, "no session and no override -> no write"
     p = event.emit("spend_dismissed", {"x": 1}, session_id="explicit-session")
     assert p is not None and p.name == "explicit-session.jsonl"
+    assert tmp_path in p.parents, f"escaped the sandbox and wrote to {p}"
