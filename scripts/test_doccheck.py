@@ -129,7 +129,7 @@ def test_ignores_placeholders(fake_repo):
 def test_real_repo_is_green():
     """The live repo must pass. Seeding to green once is what makes future red mean something.
 
-    AMENDED 2026-08-18 (ADR-0026): green now means **no BLOCKING findings**. A warn-tier
+    AMENDED 2026-08-17 (ADR-0026): green now means **no BLOCKING findings**. A warn-tier
     finding is a legitimate state by design — the promo page is routinely ahead of the host
     between an edit and an upload — so asserting on the flat finding list would re-impose the
     block this suite has no business imposing, and would leave `tessera-test` red for a
@@ -2355,7 +2355,7 @@ def test_a_clean_closed_world_exits_zero(monkeypatch):
     assert doccheck.main() == 0
 
 
-# ── THE WARN TIER (2026-08-18) ───────────────────────────────────────────────────────────
+# ── THE WARN TIER (2026-08-17) ───────────────────────────────────────────────────────────
 # Closed world throughout, for the reason recorded above: the property is about the tier's
 # mechanics, not about whether the live repo is green today.
 
@@ -2420,7 +2420,7 @@ def test_the_precommit_hook_prints_warnings_on_the_success_path():
 
     IT DOES NOT RUN THE HOOK. Doing so would invoke the real doccheck against the real repo,
     reintroducing the environmental coupling the `_CLOSED_WORLD` refactor removed. The
-    exit-0 branch was exercised end-to-end by hand instead (2026-08-18: a stale marker,
+    exit-0 branch was exercised end-to-end by hand instead (2026-08-17: a stale marker,
     `git commit`, commit succeeded, warning on stderr) — recorded in the ADR, not claimed
     here, since a test that does not run it cannot vouch for it.
     """
@@ -2525,7 +2525,7 @@ def test_the_live_repo_lists_every_bare_python3_hook_script():
     assert doccheck.check_bare_python3_hook_scripts_are_probed() == []
 
 
-# --- .githooks/ and heredoc imports (2026-08-18, queue item 8a) --------------------
+# --- .githooks/ and heredoc imports (2026-08-17, queue item 8a) --------------------
 
 
 def _githook(root, body: str, script_rel: str = "scripts/thing.py"):
@@ -2561,7 +2561,7 @@ def test_a_module_imported_inside_a_heredoc_is_in_scope(fake_repo, monkeypatch):
     """THE SECOND HALF, and without it the first is decoration. `.githooks/pre-push` reaches
     `scripts/review/stamp.py` by IMPORT under `python3 - <<'PY'` — never as a path — so the
     invocation regex sees nothing even with the glob widened. Measured on the live repo
-    2026-08-18: glob-only green, inline-only green, both RED."""
+    2026-08-17: glob-only green, inline-only green, both RED."""
     _githook(fake_repo, "python3 - \"$ROOT\" <<'PY'\nimport sys\nimport thing\nPY\n")
     monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
     bad = doccheck.check_bare_python3_hook_scripts_are_probed()
@@ -2583,6 +2583,44 @@ def test_stdlib_imports_in_a_heredoc_are_not_flagged(fake_repo, monkeypatch):
     assert doccheck.check_bare_python3_hook_scripts_are_probed() == []
 
 
+def test_a_dunder_import_is_not_treated_as_a_first_party_module(fake_repo, monkeypatch):
+    """`import __main__` is legal Python, and `__init__`/`__main__` are carried by 11 and 8
+    files under `scripts/` — so without this guard one such import in a hook heredoc reports
+    an ambiguity and BLOCKS a commit over a name that is never a first-party module.
+
+    PRECAUTIONARY, not observed: no hook does this today. Kept because a blocking check's
+    false positives are the expensive kind — ADR-0012's "a gate that cries wolf gets
+    bypassed" — and re-planted to prove it is load-bearing rather than decorative
+    (guard removed -> ['!ambiguous:__main__']; restored -> []).
+    """
+    _githook(fake_repo, "python3 - <<'PY'\nimport __main__\nPY\n")
+    for pkg in ("a", "b"):
+        (fake_repo / "scripts" / pkg).mkdir(parents=True, exist_ok=True)
+        (fake_repo / "scripts" / pkg / "__main__.py").write_text("x = 1\n")
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    assert doccheck.check_bare_python3_hook_scripts_are_probed() == []
+
+
+def test_a_test_file_is_only_matched_by_its_own_literal_name(fake_repo, monkeypatch):
+    """ADJUDICATING AN ARBITER FINDING (2026-08-17), recorded because it was REJECTED.
+
+    arbiter reported that `rglob(f"{name}.py")` could match test files, so "any other test
+    file happens to share a name with an imported module" would be a false positive blocking
+    a commit. The mechanism does not hold: `test_thing.py` has stem `test_thing`, and
+    `rglob("thing.py")` cannot match it. And the reachable case is the opposite of a false
+    positive — a hook that genuinely imports `test_thing` under a bare interpreter really
+    does need the 3.9 guarantee, so flagging it is correct.
+
+    This test pins the fact that makes the finding wrong, so the claim cannot be re-litigated
+    from memory.
+    """
+    _githook(fake_repo, "python3 - <<'PY'\nimport thing\nPY\n")
+    (fake_repo / "scripts" / "test_thing.py").write_text("x = 1\n")
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ("scripts/thing.py",))
+    # scripts/thing.py is listed, and test_thing.py must not be pulled in beside it.
+    assert doccheck.check_bare_python3_hook_scripts_are_probed() == []
+
+
 def test_an_ambiguous_heredoc_import_is_reported_not_guessed(fake_repo, monkeypatch):
     """`scripts/icpg/` and `scripts/polyphony/` both carry a `store.py` and a `models.py`
     (CLAUDE.md records this as why those suites run in separate processes). Picking one
@@ -2593,7 +2631,7 @@ def test_an_ambiguous_heredoc_import_is_reported_not_guessed(fake_repo, monkeypa
         (fake_repo / "scripts" / pkg / "store.py").write_text("x = 1\n")
     monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
     bad = doccheck.check_bare_python3_hook_scripts_are_probed()
-    assert any("more than one" in v and "store" in v for v in bad), bad
+    assert any("resolves to" in v and "store" in v for v in bad), bad
 
 
 @pytest.mark.parametrize("body", [
@@ -2630,9 +2668,154 @@ def test_an_import_outside_any_python3_invocation_is_ignored(fake_repo, monkeypa
     assert doccheck.check_bare_python3_hook_scripts_are_probed() == []
 
 
+@pytest.mark.parametrize("directory,name", [
+    (".claude/scripts", "extensionless-hook"),   # the dir it ALREADY scanned, non-.sh file
+    ("hooks", "route-task-hook"),                # a whole directory it never opened
+    (".githooks", "pre-push"),
+])
+def test_all_three_hook_directories_are_scanned(fake_repo, monkeypatch, directory, name):
+    """THE WIDENING'S OWN BLIND SPOT, caught by review the same day it was written.
+
+    The first fix added `.githooks/` and kept the `*.sh` glob for `.claude/scripts/` — which
+    itself holds two extensionless hooks — and left `hooks/` out entirely, though
+    `.claude/settings.json` wires `hooks/subagent-route-hook` and `hooks/tier-classify-hook`
+    and `hooks/route-task-hook` already runs an inline `python3 -c`. So the fix for a
+    file-selector blind spot shipped with the same blind spot in two more places (#12).
+    """
+    d = fake_repo / directory
+    d.mkdir(parents=True, exist_ok=True)
+    (d / name).write_text("#!/bin/sh\npython3 scripts/thing.py\n")
+    (fake_repo / "scripts").mkdir(exist_ok=True)
+    (fake_repo / "scripts" / "thing.py").write_text("x = 1\n")
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    bad = doccheck.check_bare_python3_hook_scripts_are_probed()
+    assert any(name in v and "scripts/thing.py" in v for v in bad), bad
+
+
+@pytest.mark.parametrize("stmt", [
+    "import thing",
+    "import thing as t",
+    "import sys, thing as t",
+    "from thing import x",
+])
+def test_import_aliases_and_lists_resolve(fake_repo, monkeypatch, stmt):
+    """`import stamp as s` returned [] — the alias made the token fail `isidentifier()` and it
+    was dropped in silence, which is what a recall gap in a detector looks like (#2)."""
+    _githook(fake_repo, "python3 - <<'PY'\n%s\nPY\n" % stmt)
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    bad = doccheck.check_bare_python3_hook_scripts_are_probed()
+    assert any("scripts/thing.py" in v for v in bad), (stmt, bad)
+
+
+@pytest.mark.parametrize("stmt", ["import pkg.thing", "from pkg.thing import x"])
+def test_dotted_imports_resolve_to_the_submodule(fake_repo, monkeypatch, stmt):
+    """The `from` branch could not cross a dot, so `from review.stamp import x` matched
+    nothing at all; and `import review.stamp` rooted at `review`, where no `review.py`
+    exists. Rewriting pre-push's heredoc that way would have silently dropped its module."""
+    (fake_repo / "scripts" / "pkg").mkdir(parents=True, exist_ok=True)
+    (fake_repo / "scripts" / "pkg" / "thing.py").write_text("x = 1\n")
+    _githook(fake_repo, "python3 - <<'PY'\n%s\nPY\n" % stmt, script_rel="scripts/unused.py")
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    bad = doccheck.check_bare_python3_hook_scripts_are_probed()
+    assert any("scripts/pkg/thing.py" in v for v in bad), (stmt, bad)
+
+
+def test_a_dotted_import_also_covers_the_PACKAGE_it_loads(fake_repo, monkeypatch):
+    """`import a.b` imports `a` AND THEN `a.b`; the bare interpreter loads both, so both need
+    the guarantee. Resolving only the dotted path missed the package, resolving only the root
+    missed the submodule — Python's semantics settle it and neither guess did."""
+    (fake_repo / "scripts" / "pkg").mkdir(parents=True, exist_ok=True)
+    (fake_repo / "scripts" / "pkg" / "thing.py").write_text("x = 1\n")
+    (fake_repo / "scripts" / "pkg.py").write_text("x = 1\n")
+    _githook(fake_repo, "python3 - <<'PY'\nimport pkg.thing\nPY\n", script_rel="scripts/unused.py")
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    bad = doccheck.check_bare_python3_hook_scripts_are_probed()
+    assert any("scripts/pkg/thing.py" in v for v in bad), bad
+    assert any("scripts/pkg.py" in v for v in bad), bad
+
+
+def test_an_ambiguous_import_is_discharged_when_every_candidate_is_listed(fake_repo, monkeypatch):
+    """WITHOUT THIS THE AMBIGUITY BRANCH WAS UNFIXABLE. It reported before testing
+    SAFETY_SCRIPTS, so a hook importing a colliding name blocked every commit and the only
+    remedy was renaming a module — even though the fact the check asserts was fully
+    satisfied. If every candidate carries the guarantee, whichever one loads is covered."""
+    _githook(fake_repo, "python3 - <<'PY'\nimport store\nPY\n", script_rel="scripts/unused.py")
+    for pkg in ("a", "b"):
+        (fake_repo / "scripts" / pkg).mkdir(parents=True, exist_ok=True)
+        (fake_repo / "scripts" / pkg / "store.py").write_text("x = 1\n")
+
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    assert doccheck.check_bare_python3_hook_scripts_are_probed(), "non-vacuity: unlisted -> reported"
+
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS",
+                        ("scripts/a/store.py", "scripts/b/store.py"))
+    assert doccheck.check_bare_python3_hook_scripts_are_probed() == []
+
+
+def test_build_artifacts_are_not_counted_as_source(fake_repo, monkeypatch):
+    """`scripts/*/build/lib/**` holds packaging copies of the modules beside them. Counting
+    them reported an ambiguity between a file and its own build output — and also inflated
+    this module's own documented collision count by ~6x until it was re-measured."""
+    (fake_repo / "scripts" / "pkg").mkdir(parents=True, exist_ok=True)
+    (fake_repo / "scripts" / "pkg" / "thing.py").write_text("x = 1\n")
+    build = fake_repo / "scripts" / "pkg" / "build" / "lib" / "pkg"
+    build.mkdir(parents=True, exist_ok=True)
+    (build / "thing.py").write_text("x = 1\n")
+    _githook(fake_repo, "python3 - <<'PY'\nimport thing\nPY\n", script_rel="scripts/unused.py")
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ("scripts/pkg/thing.py",))
+    assert doccheck.check_bare_python3_hook_scripts_are_probed() == []
+
+
+def test_imports_are_attributed_to_the_BARE_interpreter_only(fake_repo, monkeypatch):
+    """A hook can run BOTH interpreters. Scanning every import in the file attributed a
+    venv-python heredoc's module to the bare `python3 -c` beside it, producing a blocking
+    finding for a module the bare interpreter never loads.
+    `.claude/scripts/mnemos-stop-checkpoint.sh` already has that mixed shape."""
+    _githook(fake_repo,
+             'JSON=$(python3 -c "import json,os; print(1)")\n'
+             '"$ROOT/.venv/bin/python" - <<\'PY\'\n'
+             'import thing\n'
+             'PY\n')
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    assert doccheck.check_bare_python3_hook_scripts_are_probed() == []
+
+
+def test_the_same_import_under_a_BARE_heredoc_is_still_caught(fake_repo, monkeypatch):
+    """Non-vacuity for the test above: the exclusion is about WHICH interpreter, not about
+    heredocs being invisible."""
+    _githook(fake_repo, "python3 - <<'PY'\nimport thing\nPY\n")
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    assert any("scripts/thing.py" in v
+               for v in doccheck.check_bare_python3_hook_scripts_are_probed())
+
+
+def test_an_unparseable_bare_python3_falls_back_to_the_whole_file(fake_repo, monkeypatch):
+    """`cat x | python3 -` hands the interpreter piped stdin, so no body can be extracted.
+    Falling back to the whole file keeps recall exactly where it was — the tradeoff is
+    deliberate, because a missed module gets no 3.9 guarantee and nothing says so."""
+    _githook(fake_repo, "cat x | python3 -\nimport thing\n")
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    assert any("scripts/thing.py" in v
+               for v in doccheck.check_bare_python3_hook_scripts_are_probed())
+
+
+def test_json_output_carries_the_tier(monkeypatch, capsys):
+    """Before the warn tier, the payload and the exit status agreed by construction. They can
+    now disagree, so a consumer reading findings alone would file a warning as a false claim
+    while main() returns 0 (#12). `findings` keeps its prior shape; the tier is additive."""
+    monkeypatch.setattr(doccheck, "CHECKS", dict(_WARN_WORLD))
+    monkeypatch.setattr(doccheck, "WARN_ONLY", {"warny": "a stated reason"})
+    monkeypatch.setattr(sys, "argv", ["doccheck", "--json"])
+    assert doccheck.main() == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["warn_only"] == ["warny"], payload
+    assert payload["findings"]["warny"], payload
+    assert payload["crashed"] == [], payload
+
+
 def test_stamp_py_has_the_3_9_guarantee_it_had_no_way_to_have():
     """The live assertion, and the point of queue item 8a. `.githooks/pre-push` runs bare
-    `python3` on this module; before 2026-08-18 nothing probed it.
+    `python3` on this module; before 2026-08-17 nothing probed it.
 
     RE-PLANTED IN THE FILE, and the FIRST re-plant was invalid — a PEP-604 annotation, which
     `stamp.py` neutralises with `from __future__ import annotations`, so doccheck stayed
@@ -3193,7 +3376,7 @@ def test_stamp_deploy_is_the_documented_remedy_and_works(fake_repo):
     assert doccheck.check_promo_deploy_marker_is_current() == []
 
 
-# REMOVED 2026-08-18 (ADR-0026): `test_the_live_promo_page_is_stamped` asserted the live page
+# REMOVED 2026-08-17 (ADR-0026): `test_the_live_promo_page_is_stamped` asserted the live page
 # was stamped current. Under the warn tier that state is *expected to be transiently false* —
 # it is false from the moment an ADR adds a timeline row until a human uploads — so the test
 # would hold `tessera-test` red for a condition no repo change can clear. That is the blocking

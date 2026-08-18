@@ -447,7 +447,7 @@ def p8_doc_drift(root: Path) -> tuple[bool, str]:
     # half is on six other machines.
     detailed_fn = getattr(doccheck, "run_detailed", None)
 
-    # THE WARN TIER IS READ THROUGH getattr FOR THE SAME REASON `run_detailed` IS (2026-08-18):
+    # THE WARN TIER IS READ THROUGH getattr FOR THE SAME REASON `run_detailed` IS (2026-08-17):
     # six downstream copies of doccheck.py predate it, and assuming the attribute would turn
     # "your doccheck is older" into a crashed predicate. A doccheck without the tier has no
     # warn-only checks, so an empty mapping is the correct reading, not a fallback.

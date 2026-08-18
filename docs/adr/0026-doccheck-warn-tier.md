@@ -1,9 +1,9 @@
 # ADR-0026: doccheck gains a warn tier — a gate cannot enforce a fact it cannot see
 
-- **Date:** 2026-08-18
+- **Date:** 2026-08-17
 - **Status:** Accepted
 - **Decision driver:** Human disposition. Queue item 9 asked for a posture, not for work. Lorenzo's instruction: *"do the warn tier in doccheck, I just wanted a way to know if I needed to update the html page."* The gate had been built to coerce an action when the ask was for a signal.
-- **Executed:** 2026-08-18 — `scripts/doccheck.py` (`WARN_ONLY`, `_split`, `_render_warnings`, `check_warn_tier_membership_is_declared`, `render`, `main`), `.githooks/pre-commit`, `bin/tessera-watch` (`p8_doc_drift`), `scripts/test_doccheck.py`, `docs/contracts/doc-claims.md`, `CLAUDE.md`.
+- **Executed:** 2026-08-17 — `scripts/doccheck.py` (`WARN_ONLY`, `_split`, `_render_warnings`, `check_warn_tier_membership_is_declared`, `render`, `main`), `.githooks/pre-commit`, `bin/tessera-watch` (`p8_doc_drift`), `scripts/test_doccheck.py`, `docs/contracts/doc-claims.md`, `CLAUDE.md`; review round 2 the same day added `scripts/test_tessera_watch.py` and widened `_hook_files` to `hooks/`.
 
 ---
 
@@ -102,6 +102,40 @@ one identical stale tree:
 | `WARN_ONLY` reason blanked | exit 1 — `warn-tier-membership-is-declared` fires |
 | P8 with the marker stale | `fired: False` — quiet, as decided |
 | P8 with the tier emptied (an older downstream's shape) | `fired: True`, *"1 false doc claim"* — the exclusion is load-bearing |
+
+## Corrections, recorded rather than made silently
+
+**The `Date:` field of this ADR was wrong and was edited (2026-08-17).** It said `2026-08-18`,
+as did the index row, the promo timeline row, three figures in `docs/observatory.md`, and every
+dated comment in the diff — the whole change was written with tomorrow's date. The immutability
+rule covers *what was decided*; a wrong date is a defect in the record rather than a revision of
+the decision, and leaving it would have desynchronised the ADR from an index row that had to be
+corrected anyway. **Flagged here because "I corrected an accepted ADR" should never be something
+a reader has to diff to discover.**
+
+The cost was not the date. `docs/observatory.md` built an argument on it — that `CLAUDE.md`
+crossed 50% of the eager prefix "one day and one clause later" than a line claiming 50% at
+49.78%. Both measurements are the same day, hours apart, so the elapsed day did not elapse. That
+paragraph is corrected in place with its own error recorded. **An argument resting on a day that
+did not pass, inside the entry warning about frozen figures, found by a reviewer checking `git
+log` rather than by re-reading the prose.**
+
+**Three further corrections from the same review round, all in the widening this ADR ships:**
+
+1. `_hook_files()` was **still too narrow after the fix**. It added `.githooks/` but left
+   `hooks/` out (13 extensionless scripts; `settings.json` wires two of them, and
+   `hooks/route-task-hook` already runs an inline `python3 -c`) and kept the `*.sh` glob for
+   `.claude/scripts/`, which itself holds two extensionless hooks. The fix for a file-selector
+   blind spot shipped with the same blind spot in two more places (#12).
+2. `_PY_IMPORT` silently missed `import x as y`, `import a.b`, and `from a.b import x` —
+   measured, each returning `[]`, which in a detector is indistinguishable from nothing to
+   report (#2). Now resolved by every dotted prefix, because `import a.b` loads `a` *and* `a.b`.
+3. The `!ambiguous` branch reported **before** testing `SAFETY_SCRIPTS`, so a colliding import
+   was a blocking finding no listing could clear — the only remedy would have been renaming a
+   module. And a figure in its own docstring ("~40 colliding stems") was **wrong by ~6x**: it
+   counted `build/lib/**` packaging copies and dunder files. The true count over source files
+   is 7. *Re-measured with the same exclusion the resolver uses — a figure and the code it
+   describes must be measured the same way, or the comment is a third definition.*
 
 ## Re-evaluate when
 

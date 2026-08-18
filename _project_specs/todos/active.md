@@ -58,7 +58,7 @@ handoff block only; a blockquoted list is invisible to it.
    indexes zero keys in every one.
 7. **The checkpoint's goal SELECTION is still parked** — Mnemos records no signal for *use within a
    session*, so building that signal is the first task, not changing the filter.
-8. **The review anchor's three gaps — (a) is CLOSED 2026-08-18, (b) and (c) are open.**
+8. **The review anchor's three gaps — (a) is CLOSED 2026-08-17, (b) and (c) are open.**
    ~~(a) `.githooks/` is outside `check_bare_python3_hook_scripts_are_probed`.~~ **Fixed, and the
    gap was TWO gaps that each hid the other.** Widening the glob was not enough: `.githooks/`
    files are extensionless (so `*.sh` never saw them — #12, one directory over from arbiter's
@@ -73,7 +73,7 @@ handoff block only; a blockquoted list is invisible to it.
    sibling mechanisms have one, and no caller. Since pre-push is deliberately silent with no
    stamp, **the failure mode is total silence** — principle #17 against the tool built to serve
    it. (c) `changed_since_review`'s `base` parameter is still unused.
-9. ~~**THE PROMO DEPLOY CHECK BLOCKS ON A MANUAL OFF-REPO UPLOAD.**~~ **CLOSED 2026-08-18 —
+9. ~~**THE PROMO DEPLOY CHECK BLOCKS ON A MANUAL OFF-REPO UPLOAD.**~~ **CLOSED 2026-08-17 —
    ADR-0026, warn tier (Lorenzo: "I just wanted a way to know if I needed to update the html
    page").** The framing understated it: the two promo checks COMPOSE — a new ADR must add a
    timeline row, which changes the body hash, which blocked the ADR commit — and **11 of the 15

@@ -105,7 +105,7 @@ Two design points, both learned the hard way the same day:
 Bypass with `git commit --no-verify`. It is a gate, not a jail — but the bypass is now a
 decision you make on purpose, which is the entire point of a suggestion-gate (principle #12).
 
-### The warn tier — checks that report and do not block (ADR-0026, 2026-08-18)
+### The warn tier — checks that report and do not block (ADR-0026, 2026-08-17)
 
 `doccheck.WARN_ONLY` is `{check name: why it cannot honestly block}`. Its findings render in
 their own section (`N warning(s) — reported, not blocking:`), do not affect the exit status,

@@ -42,7 +42,7 @@ OUTPUT=$(python3 "$DOCCHECK" 2>&1)
 STATUS=$?
 
 if [ "$STATUS" -eq 0 ]; then
-    # THE WARN TIER'S ONLY DELIVERY CHANNEL (2026-08-18). doccheck exits 0 with warnings
+    # THE WARN TIER'S ONLY DELIVERY CHANNEL (2026-08-17). doccheck exits 0 with warnings
     # present, and this hook used to print nothing at all on exit 0 — so a warn-tier check
     # would have run, reported, and reached NOBODY (#9). The commit still succeeds; the
     # point is that it succeeds *out loud*. Matched to the section header render() emits,

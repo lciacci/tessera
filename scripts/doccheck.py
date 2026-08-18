@@ -23,7 +23,9 @@ found that has no matching check, that is a finding about *this file*, not just 
 it is how we learn the assertion set has rotted into theater.
 
     python3 scripts/doccheck.py           # human output; exit 1 if any claim is false
-    python3 scripts/doccheck.py --json    # machine output
+    python3 scripts/doccheck.py --json    # {findings, warn_only, crashed}
+                                          # warn_only names the checks whose findings
+                                          # do NOT affect the exit status (ADR-0026)
 """
 # MUST STAY 3.9-COMPATIBLE: `safety-scripts-run-on-system-python` asserts this file runs
 # on /usr/bin/python3 (3.9.6 here), because a hook invokes it via bare `python3` and a
@@ -949,7 +951,7 @@ SAFETY_SCRIPTS = (
     # check would have stayed green over a dead hook. Listing it here makes the 3.9 probe
     # unconditional instead of dependent on which interpreter runs the checker.
     "scripts/decision_surface.py",
-    # ADDED 2026-08-18. `.githooks/pre-push` runs bare `python3` and imports this. It ran on
+    # ADDED 2026-08-17. `.githooks/pre-push` runs bare `python3` and imports this. It ran on
     # 3.9 the day it shipped — measured, not assumed — so this is a GUARANTEE where there was
     # none, not a bug fix. The detector below could not see it for two compounding reasons,
     # and both are repeat offenders: it globbed `.claude/scripts/*.sh`, and `.githooks/` holds
@@ -1029,71 +1031,168 @@ _BARE_PY3_INLINE = re.compile(r"(?<![/\w.-])python3\s+(?:-c\b|-(?=\s|$)|<<)")
 # past the end of the import line and swallowed the heredoc terminator — every name then
 # failed `isidentifier()` and the function returned [] in silence. Caught by probing the
 # shapes the widening was FOR, not by re-reading it.
-_PY_IMPORT = re.compile(r"^[\t ]*(?:import[\t ]+([\w.,\t ]+)|from[\t ]+([A-Za-z_]\w*)[\t ]+import)", re.M)
+_PY_IMPORT = re.compile(r"^[\t ]*(?:import[\t ]+([\w.,\t ]+)|from[\t ]+([\w.]+)[\t ]+import)", re.M)
+
+
+# Every directory this repo runs HOOKS out of. Kept beside `SHELL_SCOPE` (which lists the same
+# three plus `bin/`, `templates/` and loose `*.sh`) because that check answers a broader
+# question — "does any shell file name an interpreter" — while this one answers "what does a
+# HOOK load under a bare interpreter". `bin/` is deliberately out: those are tools a human or
+# agent invokes deliberately, not unattended hooks inheriting whatever PATH they are handed.
+# Stated as a scope boundary, not as a proof that `bin/` is safe.
+HOOK_DIRS = (".claude/scripts", "hooks", ".githooks")
 
 
 def _hook_files() -> list[Path]:
-    """Every hook script in the repo, from BOTH hook directories.
+    """Every hook script in the repo, from ALL THREE hook directories.
 
-    `.githooks/` was outside this detector until 2026-08-18 purely because the glob said
-    `*.sh`, and `.githooks/` files are EXTENSIONLESS by git's own contract (`pre-commit`,
-    `pre-push`). So the repo grew a second hook directory that the interpreter detector was
-    structurally unable to see — standing pattern #12, one directory over from where arbiter
-    had just been fixed for the identical extensionless-file default.
+    THIS LIST WAS WRONG TWICE IN ONE DAY, both times by the same mechanism (#12 — a file
+    selector is a scope claim, and a narrow one reports success over what it cannot see).
 
-    SHEBANG, NOT EXTENSION, for the same reason arbiter's `is_reviewable()` was fixed that
-    way: a name is not a fact about the file. `.githooks/` may also hold `*.sample` files
-    git ships, which are shebanged too — harmless here, since a hook that invokes no bare
-    `python3` contributes nothing either way.
+    1. It globbed `.claude/scripts/*.sh` only, so `.githooks/` — extensionless by git's
+       contract — was structurally invisible. Fixed 2026-08-17.
+    2. That fix was ALSO too narrow, and review caught it the same day: it left `hooks/`
+       out entirely (13 extensionless scripts, and `.claude/settings.json` wires
+       `hooks/subagent-route-hook` and `hooks/tier-classify-hook`), and it KEPT the `*.sh`
+       glob for `.claude/scripts/`, which itself holds two extensionless hooks. So the
+       widening reproduced the exact blind spot it was written to close, inside the one
+       directory it was already scanning. `hooks/route-task-hook` already runs an inline
+       `python3 -c`, so the shape was live, not hypothetical.
+
+    SHEBANG, NOT EXTENSION, for the reason arbiter's `is_reviewable()` was fixed the same
+    way: a name is not a fact about a file. `.sample` files git ships are skipped by name
+    because they are inert by definition, not by content.
     """
-    files = []
-    hooks = ROOT / ".claude" / "scripts"
-    if hooks.is_dir():
-        files += sorted(hooks.glob("*.sh"))
-    githooks = ROOT / ".githooks"
-    if githooks.is_dir():
-        for candidate in sorted(githooks.iterdir()):
+    files: list[Path] = []
+    for rel in HOOK_DIRS:
+        directory = ROOT / rel
+        if not directory.is_dir():
+            continue
+        for candidate in sorted(directory.iterdir()):
             if not candidate.is_file() or candidate.suffix == ".sample":
                 continue
             try:
-                if candidate.read_bytes()[:2] == b"#!":
+                if candidate.suffix == ".sh" or candidate.read_bytes()[:2] == b"#!":
                     files.append(candidate)
             except OSError:
                 continue
     return files
 
 
+def _import_targets(text: str) -> list[str]:
+    """Dotted module references a bare-`python3` block imports, aliases stripped.
+
+    FOUR SHAPES, and three of them were silently missed by the first version — measured, not
+    reasoned: `import stamp as s` -> [] (the alias made the token fail `isidentifier()`),
+    `from review.stamp import x` -> [] (the `from` branch could not cross a dot), and
+    `import review.stamp` -> [] (rooted at `review`, and `scripts/review.py` does not exist).
+    Each returns [] rather than erroring, which is the failure mode that matters: a recall
+    gap in a detector looks exactly like nothing to report (#2).
+
+    The shape that motivates this is not exotic — `.githooks/pre-push` already does
+    `sys.path.insert(root/"scripts"/"review")` then `import stamp`, and rewriting that as
+    `from review.stamp import changed_since_review` is the natural form.
+    """
+    out = []
+    for direct, from_ in _PY_IMPORT.findall(text):
+        for clause in (direct or from_).split(","):
+            name = clause.strip().split(" as ")[0].strip()
+            if name and all(part.isidentifier() for part in name.split(".")):
+                out.append(name)
+    return out
+
+
+_HEREDOC = re.compile(r"(?<![/\w.-])python3\b[^\n<]*<<-?\s*[\"']?(\w+)[\"']?\s*$", re.M)
+_DASH_C = re.compile(r"(?<![/\w.-])python3\s+(?:-\S+\s+)*-c\s+([\"'])(.*?)\1", re.S)
+
+
+def _bare_python3_bodies(text: str) -> str:
+    """The Python actually handed to a BARE `python3`, not the whole shell file.
+
+    WHY THIS EXISTS (review, 2026-08-17). The first version gated on "is there a bare
+    `python3` anywhere in this file" and then scanned EVERY import in it, so a hook that runs
+    a `.venv/bin/python` heredoc importing a venv-only module *and* has one unrelated
+    `python3 -c "import json"` would get a blocking finding demanding a 3.9 guarantee for a
+    module the bare interpreter never loads. `.claude/scripts/mnemos-stop-checkpoint.sh`
+    already has that mixed shape. False positives on a blocking check are the expensive kind
+    (ADR-0012: a gate that cries wolf gets bypassed).
+
+    FALLS BACK TO THE WHOLE FILE when a bare `python3` is present but no body can be
+    extracted — `python3 -` reading piped stdin, say. That keeps recall exactly where it was
+    and can only *remove* false positives, never add a silent miss. Stated because the
+    reverse tradeoff would be the worse one here: a missed module gets no 3.9 guarantee and
+    nothing says so.
+    """
+    bodies = []
+    for match in _HEREDOC.finditer(text):
+        delimiter = match.group(1)
+        rest = text[match.end():].split("\n")
+        collected = []
+        for line in rest[1:] if rest and not rest[0].strip() else rest:
+            if line.strip() == delimiter:
+                break
+            collected.append(line)
+        bodies.append("\n".join(collected))
+    bodies += [m.group(2) for m in _DASH_C.finditer(text)]
+    if not bodies and _BARE_PY3_INLINE.search(text):
+        return text
+    return "\n".join(bodies)
+
+
 def _inline_imported_scripts(text: str) -> list[str]:
-    """`scripts/**/<name>.py` modules a hook reaches by IMPORT under a bare `python3`.
+    """`scripts/**` modules a hook reaches by IMPORT under a bare `python3`.
 
     `.githooks/pre-push` does `python3 - <<'PY'` and then `import stamp` after a
     `sys.path.insert`. The module is never named as a path, so the invocation regex sees
     nothing and the file gets no 3.9 guarantee — which is the whole finding.
 
-    RESOLUTION IS BY SEARCH, NOT BY PARSING THE PATH INSERT. Reconstructing `sys.path`
-    from shell-embedded Python is a parser this repo does not need; matching the imported
-    NAME against the tracked `scripts/` tree answers the actual question — "is there a
-    first-party module here that a bare interpreter has to load?" — and drops stdlib
-    imports for free, since there is no `scripts/**/sys.py`.
+    RESOLUTION IS BY SEARCH, NOT BY PARSING THE PATH INSERT. Reconstructing `sys.path` from
+    shell-embedded Python is a parser this repo does not need; matching the dotted reference
+    against the tracked `scripts/` tree answers the actual question — "is there a first-party
+    module here that a bare interpreter has to load?" — and drops stdlib for free, since there
+    is no `scripts/**/sys.py`.
 
-    AMBIGUITY IS REPORTED, NOT GUESSED. `scripts/icpg/` and `scripts/polyphony/` both carry
-    a `store.py` and a `models.py` (CLAUDE.md records this as the reason the suites run in
-    separate processes). A name matching two files cannot be resolved from the import alone,
-    and picking one would be a coin-flip that reads as a measurement.
+    AMBIGUITY IS REPORTED, NOT GUESSED. Measured 2026-08-17 over SOURCE files only: **7 stems**
+    under `scripts/` are carried by more than one file — `scan` by four, `emit`/`store`/`models`
+    by three, `conftest`/`report`/`spec` by two. (An earlier draft of this line said "~40, store
+    and models by six each". That was wrong by ~6x: it counted `build/lib/**` packaging copies
+    of the modules beside them, plus `__init__`/`__main__`. Corrected by re-running the count
+    with the same exclusion the resolver uses — a figure and the code it describes have to be
+    measured the same way, or the comment is a third definition.) A name matching two
+    files cannot be resolved from the import alone, and picking one would be a coin-flip that
+    reads as a measurement. **The matched paths travel WITH the marker so the caller can
+    discharge it**: if every candidate is already in `SAFETY_SCRIPTS`, the fact this check
+    asserts is satisfied and there is nothing to report. Without that the ambiguity branch was
+    a blocking finding that listing could not clear — the only remedy would have been renaming
+    a module (review, 2026-08-17).
+
+    DUNDER NAMES ARE SKIPPED, precautionary rather than observed. `import __main__` is legal,
+    and `__init__`/`__main__` are carried by 11 and 8 files here, so one such import would
+    block a commit over a name that is never a first-party module.
     """
     if not _BARE_PY3_INLINE.search(text):
         return []
     found = []
-    for direct, from_ in _PY_IMPORT.findall(text):
-        # `import a, b` is one statement naming two modules; a dotted `a.b` is rooted at `a`.
-        names = [n.split(".")[0].strip() for n in (direct or from_).split(",")]
-        for name in [n for n in names if n.isidentifier()]:
-            matches = sorted(p for p in (ROOT / "scripts").rglob(f"{name}.py")
-                             if ".venv" not in p.parts)
+    for name in _import_targets(_bare_python3_bodies(text)):
+        if name.split(".")[0].startswith("__"):
+            continue
+        # EVERY PREFIX, because `import a.b` imports `a` AND THEN `a.b` — both are loaded by
+        # the bare interpreter, so both need the guarantee. Resolving only the full dotted
+        # path missed the package; resolving only the root (the first version) missed the
+        # submodule. Python's own semantics settle it, and neither guess did.
+        parts = name.split(".")
+        for depth in range(1, len(parts) + 1):
+            relative = "/".join(parts[:depth]) + ".py"
+            # BUILD ARTIFACTS ARE NOT SOURCE. `scripts/*/build/lib/**` holds packaging copies
+            # of the very modules beside them, so counting them tripled every collision and
+            # would have reported an ambiguity between a file and its own build output.
+            matches = sorted(str(m.relative_to(ROOT))
+                             for m in (ROOT / "scripts").rglob(relative)
+                             if not {".venv", "build", "dist", "__pycache__"} & set(m.parts))
             if len(matches) == 1:
-                found.append(str(matches[0].relative_to(ROOT)))
+                found.append(matches[0])
             elif len(matches) > 1:
-                found.append("!ambiguous:" + name)
+                found.append("!ambiguous:" + ".".join(parts[:depth]) + ":" + ",".join(matches))
     return sorted(set(found))
 
 
@@ -1116,13 +1215,21 @@ def check_bare_python3_hook_scripts_are_probed() -> list[str]:
     An explicit interpreter path (`.venv/bin/python`) is the toolchain split working as
     designed and is not in scope.
 
-    WIDENED 2026-08-18, TWICE OVER, and the two gaps compounded. It globbed
+    WIDENED 2026-08-17, TWICE OVER, and the two gaps compounded. It globbed
     `.claude/scripts/*.sh`, so the whole of `.githooks/` — a second hook directory, added
     later, holding extensionless files — was invisible to it (#12). And it matched only
     `python3 <path>.py`, while `.githooks/pre-push` reaches `scripts/review/stamp.py` by
     IMPORT inside a heredoc, so widening the glob alone would have left it green. **Either
     fix alone reports success and covers nothing**, which is why both are here and why the
     re-plant was run against a 3.10+ construct in `stamp.py` rather than against the glob.
+
+    WHAT IT STILL DOES NOT COVER, stated because a narrowing that lives only in the source is
+    the #12 shape this check keeps being bitten by: **an interpreter target held in a shell
+    VARIABLE.** `.githooks/pre-commit` runs `python3 "$DOCCHECK"`, and no pattern here resolves
+    that — it is safe only because `scripts/doccheck.py` was put in SAFETY_SCRIPTS by hand.
+    Resolving it needs shell variable tracking, which is a parser this check should not grow.
+    So the honest statement is that this detector covers LITERAL paths and IMPORTS, and a
+    variable-held path is a known ceiling a human has to cover by listing.
     """
     bad = []
     invoked = set()
@@ -1134,11 +1241,20 @@ def check_bare_python3_hook_scripts_are_probed() -> list[str]:
         targets = set(_BARE_PY3.findall(text)) | set(_inline_imported_scripts(text))
         for target in sorted(targets):
             if target.startswith("!ambiguous:"):
-                name = target.split(":", 1)[1]
+                _marker, name, paths = target.split(":", 2)
+                candidates = paths.split(",")
+                # DISCHARGEABLE BY LISTING. If every candidate already carries the 3.9
+                # guarantee, the fact this check asserts is satisfied whichever one the hook
+                # loads. Without this the branch was a blocking finding no listing could
+                # clear, whose only remedy was renaming a module (review, 2026-08-17).
+                if all(c in SAFETY_SCRIPTS for c in candidates):
+                    invoked.update(candidates)
+                    continue
                 bad.append(
-                    f"{sh.relative_to(ROOT)} imports `{name}` under a bare `python3`, and more "
-                    f"than one scripts/**/{name}.py exists — this detector cannot tell which "
-                    f"needs the {OLDEST_PYTHON} guarantee. Disambiguate the import or the name")
+                    f"{sh.relative_to(ROOT)} imports `{name}` under a bare `python3` and it "
+                    f"resolves to {len(candidates)} files ({', '.join(candidates)}) — this "
+                    f"detector cannot tell which needs the {OLDEST_PYTHON} guarantee. List "
+                    f"them all in SAFETY_SCRIPTS, or disambiguate the import")
                 continue
             if not (ROOT / target).exists():
                 continue
@@ -3260,7 +3376,7 @@ CHECKS = {
 }
 
 
-# ── THE WARN TIER (2026-08-18) ───────────────────────────────────────────────────────────
+# ── THE WARN TIER (2026-08-17) ───────────────────────────────────────────────────────────
 # Checks that REPORT but do not block. `{name: why it cannot honestly block}` — a dict and
 # not a set, so a reason is structurally required rather than conventionally expected, and
 # `warn-tier-membership-is-declared` asserts every key is a live check.
@@ -3425,7 +3541,17 @@ def main() -> int:
         return stamp_deploy()
     detailed = run_detailed()
     if args.json:
-        print(json.dumps({n: f for n, (f, _) in detailed.items()}, indent=2))
+        # THE TIER TRAVELS WITH THE PAYLOAD (review, 2026-08-17). Before the warn tier this
+        # dict and the exit status agreed by construction: any non-empty entry meant exit 1.
+        # They can now disagree, so a consumer reading only `findings` would file the promo
+        # warning as a false claim while `main()` returns 0 — the same "true report, wrong
+        # about what happened" shape the crashed-check section exists to prevent (#12).
+        # Additive: `findings` keeps its exact prior shape, so nothing that reads it breaks.
+        print(json.dumps({
+            "findings": {n: f for n, (f, _) in detailed.items()},
+            "warn_only": sorted(WARN_ONLY),
+            "crashed": sorted(n for n, (_f, e) in detailed.items() if e is not None),
+        }, indent=2))
     else:
         print(render(detailed))
     # A crashed check BLOCKS (decision 2026-08-10). The pre-commit rule it reverses —

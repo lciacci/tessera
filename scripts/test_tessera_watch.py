@@ -1524,6 +1524,74 @@ def test_p8_fires_and_NAMES_a_crashed_check_rather_than_calling_it_a_doc_claim(t
     assert "healthy-check" not in detail, detail
 
 
+def _p8_against(root, doccheck_src):
+    """Run p8_doc_drift against a synthetic doccheck, restoring module state exactly."""
+    import sys
+    (root / "scripts").mkdir(exist_ok=True)
+    (root / "scripts" / "doccheck.py").write_text(doccheck_src)
+    saved = sys.modules.pop("doccheck", None)
+    try:
+        return tw.p8_doc_drift(root)
+    finally:
+        sys.modules.pop("doccheck", None)
+        if saved is not None:
+            sys.modules["doccheck"] = saved
+        while str(root / "scripts") in sys.path:
+            sys.path.remove(str(root / "scripts"))
+
+
+_WARN_DOCCHECK = """
+CHECKS = {'warny': None, 'ok': None}
+WARN_ONLY = {'warny': 'a stated reason'}
+def run_detailed():
+    return {'warny': (['a fact this repo cannot verify'], None), 'ok': ([], None)}
+def run():
+    return {k: v[0] for k, v in run_detailed().items()}
+"""
+
+
+def test_p8_does_not_fire_on_a_warn_tier_finding(tmp_path):
+    """ADR-0026. Left alone, P8 flattens every non-crashed finding into `violations`, so a
+    warn-tier finding turns session start RED and the message calls it a false doc claim —
+    the wrong label (#12), and it half-undoes the decision the tier encodes."""
+    fired, detail = _p8_against(_root(tmp_path), _WARN_DOCCHECK)
+    assert fired is False, detail
+    assert "false doc claim" not in detail, detail
+
+
+def test_p8_DOES_fire_on_the_same_finding_when_the_tier_is_empty(tmp_path):
+    """Non-vacuity, and the one that matters: the filter is load-bearing, not decorative.
+    Identical findings, only WARN_ONLY differs."""
+    fired, detail = _p8_against(_root(tmp_path), _WARN_DOCCHECK.replace(
+        "WARN_ONLY = {'warny': 'a stated reason'}", "WARN_ONLY = {}"))
+    assert fired is True, detail
+    assert "false doc claim" in detail, detail
+
+
+def test_p8_treats_a_doccheck_with_no_WARN_ONLY_as_having_no_warn_tier(tmp_path):
+    """THE QUIET FAILURE MODE. `getattr(doccheck, "WARN_ONLY", ())` defaults to empty, so a
+    RENAME of WARN_ONLY silently reverts P8 to filing warnings under "false doc claim(s)".
+    That default is correct for the six downstream copies that predate the tier (#5) — and
+    it is exactly why the case needs pinning rather than trusting."""
+    fired, detail = _p8_against(_root(tmp_path), _WARN_DOCCHECK.replace(
+        "WARN_ONLY = {'warny': 'a stated reason'}", ""))
+    assert fired is True, detail
+    assert "false doc claim" in detail, detail
+
+
+def test_p8_warn_filter_also_applies_on_the_run_only_fallback(tmp_path):
+    """The `run()`-only path is what downstream copies take. The warn filter was added to
+    both comprehensions; only this exercises the second one."""
+    src = """
+CHECKS = {'warny': None}
+WARN_ONLY = {'warny': 'a stated reason'}
+def run():
+    return {'warny': ['a fact this repo cannot verify']}
+"""
+    fired, detail = _p8_against(_root(tmp_path), src)
+    assert fired is False, detail
+
+
 def test_p8_still_works_against_a_doccheck_that_predates_isolation(tmp_path):
     """bin/tessera-watch runs against DOWNSTREAM copies of doccheck.py, which have run()
     only. Assuming run_detailed() would turn 'your doccheck is older' into an
