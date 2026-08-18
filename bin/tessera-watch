@@ -440,17 +440,26 @@ def p8_doc_drift(root: Path) -> tuple[bool, str]:
     previous_root = getattr(doccheck, "ROOT", missing)
     doccheck.ROOT = root
 
-    # `run_detailed` is READ THROUGH getattr, not assumed. This file also runs against
-    # DOWNSTREAM copies of doccheck.py, which are older and have `run()` only — assuming
-    # the new API here would turn "your doccheck predates isolation" into an AttributeError
-    # that reads as a crashed predicate. Ship both halves or neither (#5), and the other
-    # half is on six other machines.
+    # `run_detailed` is READ THROUGH getattr, not assumed — an older doccheck has `run()`
+    # only, and assuming the new API would turn that into an AttributeError reading as a
+    # crashed predicate.
+    #
+    # THE ORIGINAL RATIONALE FOR THIS WAS FALSE, and is corrected rather than deleted
+    # (2026-08-17). It read: "This file also runs against DOWNSTREAM copies of doccheck.py
+    # ... the other half is on six other machines." **Measured across all six downstream
+    # repos: none carries `scripts/doccheck.py`, none carries `bin/tessera-watch`, and
+    # `main()` calls `evaluate(ROOT)` with the tessera root only — the `root` parameter is
+    # exercised by tests, not by a fleet.** The defensiveness is still correct and still
+    # earns its place, because the TEST harness feeds this function synthetic doccheck
+    # modules with and without each attribute. But "ship both halves to six machines" was a
+    # distribution claim about files that were never distributed, and left standing it would
+    # send the next person to propagate a change to a fleet that has nothing to receive it.
     detailed_fn = getattr(doccheck, "run_detailed", None)
 
-    # THE WARN TIER IS READ THROUGH getattr FOR THE SAME REASON `run_detailed` IS (2026-08-17):
-    # six downstream copies of doccheck.py predate it, and assuming the attribute would turn
-    # "your doccheck is older" into a crashed predicate. A doccheck without the tier has no
-    # warn-only checks, so an empty mapping is the correct reading, not a fallback.
+    # THE WARN TIER IS READ THROUGH getattr FOR THE SAME REASON `run_detailed` IS. A doccheck
+    # without the tier has no warn-only checks, so an empty mapping is the correct reading,
+    # not a fallback. (This comment first said "six downstream copies of doccheck.py predate
+    # it" — a specific number I did not check and that is zero. See above.)
     #
     # AND P8 MUST HONOUR IT, not merely tolerate it. Left alone, every warn-tier finding
     # would land in `violations` — session start goes red and the message calls it a false

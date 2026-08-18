@@ -2813,6 +2813,74 @@ def test_json_output_carries_the_tier(monkeypatch, capsys):
     assert payload["crashed"] == [], payload
 
 
+def test_a_truncated_dash_c_body_falls_back_instead_of_dropping_imports(fake_repo, monkeypatch):
+    """THE REGRESSION THE SCOPING INTRODUCED, under a comment promising it could not.
+
+    `_DASH_C` stops at the first quote NESTED inside the -c argument, so the body is
+    truncated mid-statement — non-empty, so the `if not bodies` fallback did not fire, and
+    every import past that point vanished. Measured on the live
+    `.claude/scripts/mnemos-statusline.sh`: 135 chars extracted from a 4,202-char file.
+    An unparseable body is now proof the extraction was wrong, and forces the whole-file scan.
+    """
+    _githook(fake_repo,
+             'python3 -c "import sys; sys.path.insert(0, \\"$ROOT/scripts\\"); import thing"\n')
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    bad = doccheck.check_bare_python3_hook_scripts_are_probed()
+    assert any("scripts/thing.py" in v for v in bad), bad
+
+
+def test_a_clean_body_still_scopes_and_does_not_over_report(fake_repo, monkeypatch):
+    """Non-vacuity for the fallback: a body that PARSES keeps the precision win, so the
+    venv-heredoc-beside-a-bare-`-c` false positive stays fixed."""
+    _githook(fake_repo,
+             'JSON=$(python3 -c "import json")\n'
+             '"$ROOT/.venv/bin/python" - <<\'PY\'\n'
+             'import thing\n'
+             'PY\n')
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    assert doccheck.check_bare_python3_hook_scripts_are_probed() == []
+
+
+def test_semicolon_chained_imports_are_seen(fake_repo, monkeypatch):
+    """`^[\\t ]*` anchoring meant only the FIRST statement on a line could be an import, and
+    semicolon one-liners are the dominant `python3 -c` shape in this repo. The exact
+    `sys.path.insert(...); import <module>` case this detector exists for returned ['sys']."""
+    _githook(fake_repo,
+             "python3 -c 'import sys; sys.path.insert(0,\"scripts\"); import thing'\n")
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    bad = doccheck.check_bare_python3_hook_scripts_are_probed()
+    assert any("scripts/thing.py" in v for v in bad), bad
+
+
+def test_hook_subdirectories_are_scanned(fake_repo, monkeypatch):
+    """`iterdir()` is flat, so `hooks/workspace/` sat outside a detector whose docstring
+    declared 'ALL THREE hook directories'. Third instance of the narrow-selector mistake in
+    one day, and the second was inside the fix for the first (#12)."""
+    nested = fake_repo / "hooks" / "workspace"
+    nested.mkdir(parents=True, exist_ok=True)
+    (nested / "contract-hook.sh").write_text("#!/bin/sh\npython3 scripts/thing.py\n")
+    (fake_repo / "scripts").mkdir(exist_ok=True)
+    (fake_repo / "scripts" / "thing.py").write_text("x = 1\n")
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    bad = doccheck.check_bare_python3_hook_scripts_are_probed()
+    assert any("contract-hook.sh" in v for v in bad), bad
+
+
+def test_a_package_import_resolves_to_its_init_not_a_sibling_module(fake_repo, monkeypatch):
+    """`import a.b` loads `a` then `a.b`; for a real package the depth-1 file is
+    `a/__init__.py`, never `a.py`. The comment asserted both were probed and only the second
+    was. Both can never be importable at once, so reporting both would be a false positive."""
+    pkg = fake_repo / "scripts" / "pkg"
+    pkg.mkdir(parents=True, exist_ok=True)
+    (pkg / "__init__.py").write_text("x = 1\n")
+    (pkg / "thing.py").write_text("x = 1\n")
+    _githook(fake_repo, "python3 - <<'PY'\nimport pkg.thing\nPY\n", script_rel="scripts/unused.py")
+    monkeypatch.setattr(doccheck, "SAFETY_SCRIPTS", ())
+    bad = doccheck.check_bare_python3_hook_scripts_are_probed()
+    assert any("scripts/pkg/__init__.py" in v for v in bad), bad
+    assert any("scripts/pkg/thing.py" in v for v in bad), bad
+
+
 def test_stamp_py_has_the_3_9_guarantee_it_had_no_way_to_have():
     """The live assertion, and the point of queue item 8a. `.githooks/pre-push` runs bare
     `python3` on this module; before 2026-08-17 nothing probed it.

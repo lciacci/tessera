@@ -1031,7 +1031,11 @@ _BARE_PY3_INLINE = re.compile(r"(?<![/\w.-])python3\s+(?:-c\b|-(?=\s|$)|<<)")
 # past the end of the import line and swallowed the heredoc terminator — every name then
 # failed `isidentifier()` and the function returned [] in silence. Caught by probing the
 # shapes the widening was FOR, not by re-reading it.
-_PY_IMPORT = re.compile(r"^[\t ]*(?:import[\t ]+([\w.,\t ]+)|from[\t ]+([\w.]+)[\t ]+import)", re.M)
+# `(?:^|;)` because a `python3 -c` one-liner chains statements with semicolons, and that is
+# the DOMINANT -c shape in this repo (`hooks/route-task-hook`,
+# `.claude/scripts/tessera-decision-surface.sh`). Anchored at line-start only, the exact
+# `sys.path.insert(...); import <module>` case this detector exists for returned ['sys'].
+_PY_IMPORT = re.compile(r"(?:^|;)[\t ]*(?:import[\t ]+([\w.,\t ]+)|from[\t ]+([\w.]+)[\t ]+import)", re.M)
 
 
 # Every directory this repo runs HOOKS out of. Kept beside `SHELL_SCOPE` (which lists the same
@@ -1068,7 +1072,11 @@ def _hook_files() -> list[Path]:
         directory = ROOT / rel
         if not directory.is_dir():
             continue
-        for candidate in sorted(directory.iterdir()):
+        # RECURSIVE. `iterdir()` is flat, so `hooks/workspace/` — four more shell hooks —
+        # sat outside a detector whose own docstring declared "ALL THREE hook directories".
+        # Third instance of the same narrow-selector mistake in one day (#12), and the second
+        # of them was in the fix for the first.
+        for candidate in sorted(directory.rglob("*")):
             if not candidate.is_file() or candidate.suffix == ".sample":
                 continue
             try:
@@ -1134,7 +1142,25 @@ def _bare_python3_bodies(text: str) -> str:
             collected.append(line)
         bodies.append("\n".join(collected))
     bodies += [m.group(2) for m in _DASH_C.finditer(text)]
-    if not bodies and _BARE_PY3_INLINE.search(text):
+
+    # AN UNPARSEABLE BODY IS PROOF THE EXTRACTION WAS WRONG, and this is what makes the
+    # docstring's guarantee true rather than merely stated (review round 3, 2026-08-17).
+    # `_DASH_C` stops at the first quote NESTED inside the -c argument, so
+    # `python3 -c "... sys.path.insert(0, \\"$ROOT/scripts\\") ; import x"` yielded a body
+    # truncated mid-statement — non-empty, so the old `if not bodies` fallback did not fire,
+    # and the import vanished. Measured on `.claude/scripts/mnemos-statusline.sh`: 135 chars
+    # extracted from a 4,202-char file. **That was a RECALL REGRESSION against the whole-file
+    # scan it replaced, under a comment promising it could not be one.**
+    #
+    # Shell-interpolated heredocs (`$(...)` inside the body) also fail to parse and also fall
+    # back — over-inclusive, which is the safe direction: a false positive is visible and
+    # arguable, a silent miss is neither.
+    for body in bodies:
+        try:
+            ast.parse(body)
+        except (SyntaxError, ValueError):
+            return text
+    if not any(b.strip() for b in bodies) and _BARE_PY3_INLINE.search(text):
         return text
     return "\n".join(bodies)
 
@@ -1182,13 +1208,21 @@ def _inline_imported_scripts(text: str) -> list[str]:
         # submodule. Python's own semantics settle it, and neither guess did.
         parts = name.split(".")
         for depth in range(1, len(parts) + 1):
-            relative = "/".join(parts[:depth]) + ".py"
+            stem = "/".join(parts[:depth])
+            # BOTH FORMS, because a package's depth-1 file is `pkg/__init__.py`, never
+            # `pkg.py`. The comment above claimed `import a.b` loads `a` and then `a.b`; for a
+            # real package the first of those is the __init__, which this never probed. Only
+            # one of the two can be importable, so reporting both would be a false positive on
+            # a blocking check — hence `or`, first match wins, package form preferred.
+            relative = stem + ".py"
             # BUILD ARTIFACTS ARE NOT SOURCE. `scripts/*/build/lib/**` holds packaging copies
             # of the very modules beside them, so counting them tripled every collision and
             # would have reported an ambiguity between a file and its own build output.
-            matches = sorted(str(m.relative_to(ROOT))
-                             for m in (ROOT / "scripts").rglob(relative)
-                             if not {".venv", "build", "dist", "__pycache__"} & set(m.parts))
+            def _find(pattern):
+                return sorted(str(m.relative_to(ROOT))
+                              for m in (ROOT / "scripts").rglob(pattern)
+                              if not {".venv", "build", "dist", "__pycache__"} & set(m.parts))
+            matches = _find(stem + "/__init__.py") or _find(relative)
             if len(matches) == 1:
                 found.append(matches[0])
             elif len(matches) > 1:
@@ -3546,7 +3580,12 @@ def main() -> int:
         # They can now disagree, so a consumer reading only `findings` would file the promo
         # warning as a false claim while `main()` returns 0 — the same "true report, wrong
         # about what happened" shape the crashed-check section exists to prevent (#12).
-        # Additive: `findings` keeps its exact prior shape, so nothing that reads it breaks.
+        # BREAKING AT THE TOP LEVEL, unchanged under `findings`. An earlier version of this
+        # comment said "additive ... nothing that reads it breaks", which was false: the top
+        # level went from {check: findings} to {findings, warn_only, crashed}, so a consumer
+        # doing `json.loads(out)["some-check"]` now gets a KeyError. Only the INNER dict is
+        # unchanged. No in-repo consumer exists, so the cost is external tooling — but a
+        # comment calling a breaking change additive is how that cost goes unnoticed.
         print(json.dumps({
             "findings": {n: f for n, (f, _) in detailed.items()},
             "warn_only": sorted(WARN_ONLY),

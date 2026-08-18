@@ -137,6 +137,32 @@ log` rather than by re-reading the prose.**
    is 7. *Re-measured with the same exclusion the resolver uses — a figure and the code it
    describes must be measured the same way, or the comment is a third definition.*
 
+**Review round 3 — and the sharpest finding was a regression this ADR's own round 2 introduced.**
+Scoping the import scan to the bare interpreter's actual body (round 2's fix for a false
+positive) shipped under a comment promising it "keeps recall exactly where it was and can only
+*remove* false positives, never add a silent miss." **It did add one.** The `-c` extractor stops
+at the first quote nested inside the argument, so the body came back truncated mid-statement —
+non-empty, so the fallback did not fire, and every import past that point vanished. Measured on
+`.claude/scripts/mnemos-statusline.sh`: 135 characters extracted from a 4,202-character file.
+Fixed by treating an **unparseable extracted body as proof the extraction was wrong**, which
+forces the whole-file scan; that makes the guarantee true rather than merely asserted.
+
+Four more from the same round, each verified before fixing: `_PY_IMPORT` was anchored at
+line-start, so semicolon-chained one-liners — *the* dominant `python3 -c` shape here — dropped
+everything after the first statement, including the exact `sys.path.insert(...); import <module>`
+case the detector exists for; `_hook_files()` used flat `iterdir()`, leaving `hooks/workspace/`
+outside a docstring that declared "ALL THREE hook directories"; the depth-1 probe looked for
+`pkg.py` and never `pkg/__init__.py`, so the claim that `import a.b` covers both was unmet for a
+real package; and the `--json` comment called a top-level shape change "additive" when a consumer
+doing `json.loads(out)["some-check"]` now gets a `KeyError`.
+
+**The pattern across three rounds is worth more than any single finding: every round's worst
+defect was in the previous round's fix.** Round 1 widened a file selector and reproduced its blind
+spot in two more places; round 2 fixed a false positive and introduced a silent miss; round 3's
+narrow-selector mistake was the third instance in one day. None was caught by re-running anything
+— re-measurement inherits the original definition — and none by re-reading, which is why the
+guarantees that turned out false were all written with conviction.
+
 ## Re-evaluate when
 
 - **A second check is proposed for the tier.** One member is not a tier, it is an exception with
