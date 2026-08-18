@@ -373,6 +373,21 @@ unsupervised run is the signal that the envelope was set too small** — it is d
 > a *real* `spend_denied` to the production log — 26 of one session's 31 denials were made by
 > pytest. Same lesson as the Mnemos trial's `manual`/`auto` compaction split: **a test must
 > never become evidence about the thing it tests.**
+>
+> **IT HAPPENED AGAIN, and the second instance is more instructive than the first
+> (2026-08-18).** ADR-0016's human-only `dismiss` broke `emit()`'s keying, so the 08-17 fix
+> added an explicit `session_id=` parameter — which takes precedence over the environment **by
+> design**, and therefore walks straight past the strip above. The test that exercised it tried
+> to sandbox itself with `TESSERA_SPEND_LOGS`, **a variable nothing reads** (`event.py` resolves
+> `TESSERA_ROOT`), so the containment was inert and every run appended a real `spend_dismissed`
+> to the production journal: **31 manufactured dispositions**, discovered only because a query
+> counting them looked wrong. Standing pattern #9 inside the containment — the monkeypatch ran;
+> it just set a name no consumer resolves.
+>
+> The strip is no longer the guarantee. **conftest now redirects `TESSERA_ROOT` to a tmp dir for
+> the whole suite**, which makes the bad state unrepresentable rather than unlikely (ADR-0006
+> §2). Verified by a two-stage re-plant: with both guards removed the production log is polluted
+> again; with only the conftest redirect restored it is not.
 
 ## The backstop — a denial must be dispositioned
 
