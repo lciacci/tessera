@@ -117,12 +117,64 @@ reader does not mistake the silence for coverage.
 
 ## Consumers
 
-- **`tessera-watch` P13** — fires on any degraded event in the last `DEGRADED_WINDOW_DAYS` (7).
+- **`tessera-watch` P13** — fires on any *unacknowledged* degraded event in the last
+  `DEGRADED_WINDOW_DAYS` (7).
   **Windowed on purpose:** a degraded event is an *incident*, not a standing state. "The guard was
   missing last Tuesday" is history; "the guard is missing now" is the alarm. This is the direct
   lesson of iCPG's drift backlog, which reached 700 undisposed rows because nothing could ever
   leave the open set — a counter that only increments is indistinguishable from a broken detector.
-  Windowing means P13 needs no disposition verb to stay honest.
+
+  ~~Windowing means P13 needs no disposition verb to stay honest.~~ **That was this contract's
+  claim until 2026-08-18, and it was wrong in one specific way — struck rather than deleted,
+  because the reasoning above it still holds and is why the ack is a watermark rather than an open
+  set.** The window distinguishes old from recent. It cannot distinguish *recent and live* from
+  *recent and already fixed*, so a condition resolved the day it was reported keeps firing for the
+  remainder of its 7 days. Measured cost (ADR-0025): 14 of 16 degraded events ever written came
+  from one detector, and G-a graduated on the streak with no right answer available — snoozing
+  would have blinded P13 to new events, and waiting it out is what trains a reader to ignore the
+  channel. **A channel that trains its reader to ignore it cannot carry an autonomy precondition.**
+
+- **`degraded_ack`** — the disposition, added by ADR-0027. `scripts/degraded_ack.py` writes a
+  watermark per `(component, reason)`; P13 honours it **only for events recorded before the ack's
+  own `ts`**. That is the spend contract's grant/dismiss rule, and it is what makes the verb safe
+  to hand the model: an ack cannot suppress a break that has not happened yet, so unlike a snooze
+  it can never blind the predicate. Acks are watermarks, not an open set, so nothing accumulates
+  and the iCPG failure mode above cannot recur through them.
+
+  **BLANK-`ts` EVENTS FOLLOW A DIFFERENT RULE, AND IT IS A CEILING — stated here because the
+  sentence above is not true of them, and a narrowing that lives only in the source is standing
+  pattern #12.** An event with no `ts` (chaos probe 5 hides `date`) has no clock to compare, and
+  its mtime fallback is a fact about the *file*, which the ack itself mutates by being appended
+  to it. So those are acknowledged by POSITION — an ack later in the **same log file**.
+  `degraded_ack.py` writes to the *current* session's log while P13 surfaces at the *next*
+  session's start, so in practice a blank-`ts` event from a prior session **cannot be
+  acknowledged at all** and will fire until the 7-day window rolls off. That is tolerable
+  because it errs toward reporting and because a missing `date` is rare outside the chaos
+  probes — but it is a real limit, not a rule, and the honest fix is for `tessera-degraded` to
+  always carry a stamp.
+
+  ```jsonc
+  {
+    "type": "degraded_ack",
+    "ts": "2026-08-18T20:41:00Z",     // THE WATERMARK — not decoration
+    "session_id": "uuid",
+    "source": "model",
+    "data": {"component": "standing-patterns", "reason": "block-missing", "note": "…"}
+  }
+  ```
+
+  `--note` is required (≥25 chars) for the same reason `restore/emit.py` requires evidence: a bare
+  verdict is the failure mode. An ack naming a `(component, reason)` that has **never** written a
+  degraded event is **refused** — otherwise a typo leaves a watermark indistinguishable from a
+  deliberate disposition.
+
+  **Where a suppression is visible, precisely.** When P13 fires with a partial ack, the detail
+  names the count. When acks silence it entirely, the detail says so — but **that string reaches
+  nobody**: `append_log()` records fired/crashed predicate *names* only, and `render()` has no
+  section for a quiet predicate, so a non-fired detail is computed and discarded (measured
+  2026-08-18; ADR-0027 §3 records why it is a stated ceiling rather than a fix). The durable trail
+  is the `degraded_ack` event itself, whose `note` sits in the same session log beside the events
+  it covers. A suppression is always reconstructable; it is not announced.
 - **SessionStart surface** — prints fired watcher predicates, so a degraded event from the
   previous session is reported at the start of the next one. That is spec 11's bar: *break a
   component on purpose, and Tessera tells you within one session, without a human asking.*

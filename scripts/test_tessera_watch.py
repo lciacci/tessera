@@ -1616,3 +1616,185 @@ def test_p8_still_works_against_a_doccheck_that_predates_isolation(tmp_path):
     assert fired is True, detail
     assert "false doc claim(s)" in detail, detail
     assert "CRASHED" not in detail, detail
+
+
+# ── P13 acknowledgement (ADR-0027) ─────────────────────────────────────────────────────
+# The window alone cannot tell "broken now" from "broken Sunday, fixed Sunday"; the second
+# fires for the rest of its 7 days. An ack is a watermark per (component, reason) honoured
+# only for events recorded BEFORE it. Every test below plants the failure it guards.
+
+def _stamp(now, **delta):
+    return (now + _dt.timedelta(**delta)).isoformat().replace("+00:00", "Z")
+
+
+def _write_events(root: Path, *events) -> None:
+    logs = root / ".tessera" / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    (logs / "s.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
+
+
+def _degraded(now, component="standing-patterns", reason="block-missing", **delta):
+    return {"type": "degraded", "ts": _stamp(now, **delta),
+            "data": {"component": component, "reason": reason}}
+
+
+def _ack(now, component="standing-patterns", reason="block-missing", **delta):
+    return {"type": "degraded_ack", "ts": _stamp(now, **delta),
+            "data": {"component": component, "reason": reason, "note": "fixed and re-planted"}}
+
+
+def test_p13_unacked_event_fires_when_no_ack_exists(tmp_path):
+    """THE RE-PLANT FOR THE DEFECT THIS FEATURE SHIPPED WITH, and it is the whole reason
+    this test exists rather than being implied by the others.
+
+    The filter was first written `when > acked_through.get(key, when)`. With no ack the
+    default equals the value it is compared against, so `when > when` is False and EVERY
+    unacknowledged event read as acknowledged — P13 goes silent altogether, which is the
+    exact fail-open class spec 11 exists to detect, inside spec 11's own predicate.
+
+    Verified by restoring that expression in the live file and re-running: 4 fail, 3 pass.
+    An earlier draft of this docstring claimed the other ack tests "all still PASSED
+    against it, because they each plant an ack" — MEASURED, that is false. The scoping and
+    acknowledged-count tests fail too, and so does the pre-existing naive-timestamp test,
+    which plants no ack at all and was the widest net of the four. The three that pass are
+    the two watermark-direction tests and the empty-log test. Corrected rather than
+    deleted: a plausible claim about which guard catches what, written without running it,
+    is the failure mode this repo keeps paying for.
+    """
+    root = _root(tmp_path)
+    now = _dt.datetime.now(_dt.timezone.utc)
+    _write_events(root, _degraded(now, hours=-1))
+    fired, detail = tw.p13_degraded(root, now=now)
+    assert fired is True, detail
+    assert "standing-patterns/block-missing" in detail
+
+
+def test_p13_ack_recorded_after_the_event_suppresses_it(tmp_path):
+    root = _root(tmp_path)
+    now = _dt.datetime.now(_dt.timezone.utc)
+    _write_events(root, _degraded(now, hours=-3), _ack(now, hours=-1))
+    fired, detail = tw.p13_degraded(root, now=now)
+    assert fired is False, detail
+
+
+def test_p13_ack_recorded_before_the_event_does_not_suppress_it(tmp_path):
+    """The watermark's direction, and the property that makes a model-emitted ack safe:
+    an ack cannot suppress a break that has not happened yet. Same rule as the spend
+    contract's grant/dismiss — a disposition logged earlier says nothing about a later
+    failure. Without this, acking once would silence the pair forever."""
+    root = _root(tmp_path)
+    now = _dt.datetime.now(_dt.timezone.utc)
+    _write_events(root, _ack(now, hours=-3), _degraded(now, hours=-1))
+    fired, detail = tw.p13_degraded(root, now=now)
+    assert fired is True, detail
+    assert "standing-patterns/block-missing" in detail
+
+
+def test_p13_ack_is_scoped_to_its_own_component_reason_pair(tmp_path):
+    """Acking the noisy detector must not silence a genuine spend-guard failure sitting in
+    the same window. A whole-channel watermark would have — this is why the key is the
+    pair and not the channel."""
+    root = _root(tmp_path)
+    now = _dt.datetime.now(_dt.timezone.utc)
+    _write_events(
+        root,
+        _degraded(now, hours=-3),
+        _ack(now, hours=-2),
+        _degraded(now, component="spend-guard", reason="guard-missing", hours=-1),
+    )
+    fired, detail = tw.p13_degraded(root, now=now)
+    assert fired is True, detail
+    assert "spend-guard/guard-missing" in detail
+    assert "standing-patterns" not in detail
+
+
+def test_p13_reports_the_acknowledged_count_rather_than_dropping_it(tmp_path):
+    """Standing pattern #12: a narrowing that appears only in the source reads as full
+    coverage. Both the fired and the quiet path must say that suppression happened."""
+    root = _root(tmp_path)
+    now = _dt.datetime.now(_dt.timezone.utc)
+    _write_events(
+        root,
+        _degraded(now, hours=-3),
+        _ack(now, hours=-2),
+        _degraded(now, component="spend-guard", reason="guard-missing", hours=-1),
+    )
+    _, detail = tw.p13_degraded(root, now=now)
+    assert "1 acknowledged" in detail, detail
+
+    root2 = _root(tmp_path / "quiet")
+    _write_events(root2, _degraded(now, hours=-3), _ack(now, hours=-2))
+    fired, quiet_detail = tw.p13_degraded(root2, now=now)
+    assert fired is False
+    assert "acknowledged" in quiet_detail and "no degraded events" not in quiet_detail
+
+
+def test_p13_distinguishes_no_events_from_all_acknowledged(tmp_path):
+    """Two different facts that a bare `fired: False` collapses into one. The watch log
+    records the detail, so this is the only place the difference survives."""
+    root = _root(tmp_path)
+    (root / ".tessera" / "logs").mkdir(parents=True)
+    _, detail = tw.p13_degraded(root, now=_dt.datetime.now(_dt.timezone.utc))
+    assert "no degraded events" in detail
+
+
+# ─── Review round 1 on ADR-0027 (2026-08-18): two real bugs in the acknowledgement itself.
+
+def _write_named(root: Path, name: str, *events) -> None:
+    logs = root / ".tessera" / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    (logs / name).write_text("".join(json.dumps(e) + "\n" for e in events))
+
+
+def test_p13_blank_ts_event_is_acknowledged_by_position_in_the_same_log(tmp_path):
+    """FINDING 1, and it was a live bug, not a latent one.
+
+    A blank `ts` (chaos probe 5 hides `date`) falls back to the log file's MTIME. But the ack
+    is appended to THAT SAME FILE, which pushes mtime past the ack's own second-precision
+    stamp — so the event compared as newer than its own acknowledgement and stayed live
+    forever, while the CLI printed `acknowledged through …`. Any later gate/spend/restore
+    append moved it again. Silent in both directions.
+
+    Reproduced before fixing: event with `"ts": ""`, ack written 1.1s later into the same
+    log, P13 still firing with an identical detail. Fixed by ordering blank-`ts` events by
+    POSITION within their own file — the one ordering a missing clock cannot take away.
+    """
+    root = _root(tmp_path)
+    now = _dt.datetime.now(_dt.timezone.utc)
+    _write_named(root, "s.jsonl",
+                 {"type": "degraded", "ts": "",
+                  "data": {"component": "c", "reason": "r"}},
+                 _ack(now, component="c", reason="r", hours=-1))
+    fired, detail = tw.p13_degraded(root, now=now)
+    assert fired is False, detail
+
+
+def test_p13_blank_ts_event_stays_live_when_the_ack_is_in_another_log(tmp_path):
+    """The other half of finding 1's fix, and the reason it errs toward firing: across files
+    there is no causal order at all, so a blank-`ts` event cannot be shown to precede the ack.
+    It stays live and ages out on the window rather than being silently cleared."""
+    root = _root(tmp_path)
+    now = _dt.datetime.now(_dt.timezone.utc)
+    _write_named(root, "a.jsonl",
+                 {"type": "degraded", "ts": "", "data": {"component": "c", "reason": "r"}})
+    _write_named(root, "b.jsonl", _ack(now, component="c", reason="r", hours=-1))
+    fired, detail = tw.p13_degraded(root, now=now)
+    assert fired is True, detail
+
+
+def test_p13_event_sharing_a_second_with_the_ack_stays_live(tmp_path):
+    """FINDING 7. Both `_utc_now_iso()` (timespec='seconds') and tessera-degraded's `date`
+    truncate to the second, and the comparison was a strict `>`. So a failure occurring
+    AFTER an ack but inside the same second compared equal and was silently acknowledged —
+    breaking the single structural property ADR-0027 §2 rests its 'the model may emit this'
+    argument on. `>=` on the live side closes it, at the cost of an ack needing a second to
+    settle, which is the safe direction."""
+    root = _root(tmp_path)
+    now = _dt.datetime.now(_dt.timezone.utc)
+    same = _stamp(now, hours=-1)
+    _write_named(root, "s.jsonl",
+                 {"type": "degraded_ack", "ts": same,
+                  "data": {"component": "c", "reason": "r", "note": "n" * 30}},
+                 {"type": "degraded", "ts": same, "data": {"component": "c", "reason": "r"}})
+    fired, detail = tw.p13_degraded(root, now=now)
+    assert fired is True, detail

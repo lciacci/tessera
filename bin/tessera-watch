@@ -853,6 +853,34 @@ def p12_skill_registry_drift(root: Path, global_dir: Path | None = None) -> tupl
     return False, "repo skills/ == global mirror"
 
 
+def _event_time(event: dict, mtime: datetime) -> datetime:
+    """When an event happened, tolerant of the two ways `ts` legitimately goes wrong.
+
+    `ts` may be EMPTY: `tessera-degraded` runs with shell builtins only and `date` is not
+    guaranteed (chaos probe 5 hides it). Those fall back to the log file's mtime rather
+    than being dropped — losing the loudest events to a missing clock would be spec 11's
+    own failure mode reproduced inside its fix.
+
+    A NAIVE stamp PARSES and then explodes on any later subtraction ("can't subtract
+    offset-naive and offset-aware datetimes"), so the except below never sees it.
+    `tessera-degraded` always writes Z — but P13 scans EVERY .jsonl in .tessera/logs,
+    written by six producers (gate, spend, override, restore, degraded, degraded_ack) and
+    by whatever a downstream adds next. One producer omitting an offset would crash the
+    spec-11 channel: the one predicate whose job is to report that something else broke.
+    Treated as UTC, which is what every current writer means.
+
+    Shared by the degraded events and their acks ON PURPOSE — if the two used different
+    parsers, a stamp one accepted and the other rejected would make an ack silently miss
+    the event it was written for, which is the quietest possible way for this to break.
+    """
+    stamp = event.get("ts") or ""
+    try:
+        when = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return mtime
+    return when if when.tzinfo else when.replace(tzinfo=timezone.utc)
+
+
 def p13_degraded(root: Path, now: datetime | None = None) -> tuple[bool, str]:
     """A component reported that it COULD NOT DO ITS JOB (spec 11).
 
@@ -865,19 +893,29 @@ def p13_degraded(root: Path, now: datetime | None = None) -> tuple[bool, str]:
     the open set, and a counter that only increments is indistinguishable from a broken
     detector. A `degraded` event is an INCIDENT, not a standing state — "the guard was
     missing last Tuesday" is history; "the guard is missing now" is the alarm. So this
-    asks about the recent past only, and needs no disposition verb to stay honest.
+    asks about the recent past only.
 
-    `ts` may legitimately be empty: tessera-degraded runs with shell builtins only and
-    `date` is not guaranteed (chaos probe 5 hides it). Those fall back to the log file's
-    mtime rather than being dropped — losing the loudest events to a missing clock would
-    be this spec's own failure mode.
+    ACKNOWLEDGEMENT (2026-08-18, ADR-0027). The window alone cannot tell "the guard is
+    missing now" from "it was missing on Sunday and I fixed it on Sunday" — the second
+    keeps firing for the rest of its 7 days, which is how 14 of 16 events came from one
+    detector and G-a graduated on a streak with no right answer available (ADR-0025).
+    `scripts/degraded_ack.py` writes a `degraded_ack` watermark per (component, reason);
+    events recorded BEFORE it are acknowledged, events after it are not. That is the
+    spend contract's grant/dismiss rule, chosen because it makes the dangerous case
+    unrepresentable: an ack cannot suppress a break that has not happened yet, so unlike
+    a snooze it never blinds this predicate. Acks are watermarks, not an open set, so
+    nothing accumulates and the iCPG backlog failure mode cannot recur through them.
     """
     now = now or datetime.now(timezone.utc)
     logs = root / ".tessera" / "logs"
     if not logs.is_dir():
         return False, "no .tessera/logs/"
 
-    recent: list[str] = []
+    # Each recent event carries where it was READ FROM, not just when: a blank `ts` cannot
+    # be compared against an ack's clock at all (see the acknowledgement rules below).
+    recent: list[tuple[tuple[str, str], datetime, str, int, bool]] = []
+    acked_through: dict[tuple[str, str], datetime] = {}
+    ack_lines: dict[tuple[str, str], dict[str, int]] = {}
     for log in logs.glob("*.jsonl"):
         if log.name == "watch.jsonl":
             continue
@@ -885,36 +923,77 @@ def p13_degraded(root: Path, now: datetime | None = None) -> tuple[bool, str]:
             mtime = datetime.fromtimestamp(log.stat().st_mtime, timezone.utc)
         except OSError:
             continue
-        for line in _read_lines(log):
+        for lineno, line in enumerate(_read_lines(log)):
             try:
                 event = json.loads(line)
             except ValueError:
                 continue
-            if event.get("type") != "degraded":
+            kind = event.get("type")
+            if kind not in ("degraded", "degraded_ack"):
                 continue
-            stamp = event.get("ts") or ""
-            try:
-                when = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
-            except (ValueError, AttributeError):
-                when = mtime          # blank/unparseable/non-string ts — see docstring
-            if when.tzinfo is None:
-                # A NAIVE stamp PARSES and then explodes on the subtraction below
-                # ("can't subtract offset-naive and offset-aware datetimes"), so the
-                # except above never sees it. `tessera-degraded` always writes Z — but
-                # this predicate scans EVERY .jsonl in .tessera/logs, written by five
-                # producers (gate, spend, override, restore, degraded) and by whatever a
-                # downstream adds next. One producer omitting an offset would crash the
-                # spec-11 channel: the one predicate whose job is to report that something
-                # else broke. Treated as UTC, which is what every current writer means.
-                when = when.replace(tzinfo=timezone.utc)
+            when = _event_time(event, mtime)
+            data = event.get("data") or {}
+            key = (data.get("component", "?"), data.get("reason", "?"))
+            if kind == "degraded_ack":
+                # An ack watermarks its own pair. Latest wins; a later ack covers more.
+                # NOT windowed: an ack older than the window still legitimately covers the
+                # events it was written for, and those events age out on their own.
+                if key not in acked_through or when > acked_through[key]:
+                    acked_through[key] = when
+                per_file = ack_lines.setdefault(key, {})
+                per_file[log.name] = max(per_file.get(log.name, -1), lineno)
+                continue
             if (now - when).days <= DEGRADED_WINDOW_DAYS:
-                data = event.get("data") or {}
-                recent.append(f"{data.get('component', '?')}/{data.get('reason', '?')}")
+                recent.append((key, when, log.name, lineno, not (event.get("ts") or "")))
+
+    def _is_live(key, when, logname, lineno, ts_blank) -> bool:
+        """True = still needs reporting. Two rules, because there are two kinds of event.
+
+        A STAMPED event is acknowledged when an ack for its pair is at or after it. The
+        comparison is `>=` on the live side, so an event sharing a second with the ack
+        stays live: both `_utc_now_iso()` and `tessera-degraded`'s `date` truncate to the
+        second, and a strict `>` silently acknowledged a failure that happened AFTER the
+        ack inside that second. That is the one structural property ADR-0027 rests its
+        "the model may emit this" argument on, so it errs toward firing.
+
+        A BLANK-`ts` event (chaos probe 5 hides `date`) has no clock to compare. It falls
+        back to the log's MTIME for the window test — but mtime is not a fact about the
+        event, it is a fact about the file, and **the ack itself is appended to that same
+        file**, which pushes mtime past the ack's own stamp. Measured: the event stayed
+        live forever while the CLI reported success, and any later gate/spend/restore
+        append moved it again. So blank-`ts` events are acknowledged by POSITION instead —
+        an ack later in the SAME file is causally after them, which is the one ordering a
+        missing clock cannot take away. Across files there is no such order, so they stay
+        live and age out on the window. Erring toward firing, again.
+        """
+        if ts_blank:
+            return lineno >= ack_lines.get(key, {}).get(logname, -1)
+        return key not in acked_through or when >= acked_through[key]
+
+    # SPELLED OUT rather than `when > acked_through.get(key, when)`, which is how this was
+    # first written and is inverted: with no ack the default made the comparison `when >
+    # when`, false, so EVERY unacknowledged event read as acknowledged and P13 went silent
+    # altogether. A default that happens to equal the value it is compared against is not
+    # a default, it is a coin flip that always lands the same way. Re-planted (see
+    # test_p13_unacked_event_fires_when_no_ack_exists).
+    live = [f"{entry[0][0]}/{entry[0][1]}" for entry in recent if _is_live(*entry)]
+    acked = len(recent) - len(live)
+    tail = f", {acked} acknowledged" if acked else ""
 
     if not recent:
         return False, f"no degraded events in {DEGRADED_WINDOW_DAYS}d"
-    unique = sorted(set(recent))
-    return True, (f"{len(recent)} degraded event(s) in {DEGRADED_WINDOW_DAYS}d "
+    if not live:
+        # Reported rather than silent: a narrowing that appears only in the source is
+        # standing pattern #12. NOTE THE CEILING, corrected 2026-08-18 after review: this
+        # detail reaches NOBODY. `append_log()` records fired/crashed predicate NAMES only
+        # and `render()` has no section for a quiet predicate, so it is computed and
+        # discarded. An earlier version of this comment claimed it "reaches the watch log",
+        # which is false and contradicted the ADR shipping beside it. The durable trail is
+        # the `degraded_ack` event and its required note. See ADR-0027 §3.
+        return False, (f"{acked} degraded event(s) in {DEGRADED_WINDOW_DAYS}d, all "
+                       f"acknowledged (scripts/degraded_ack.py)")
+    unique = sorted(set(live))
+    return True, (f"{len(live)} degraded event(s) in {DEGRADED_WINDOW_DAYS}d{tail} "
                   f"({', '.join(unique[:4])}{'…' if len(unique) > 4 else ''}) — a component "
                   f"could not do its job; see .tessera/logs/ and docs/contracts/degraded-event.md")
 
