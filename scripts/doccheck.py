@@ -1423,7 +1423,28 @@ def check_verify_scan_is_wired() -> list[str]:
 # Per-session runtime state. Tracking any of these ships one machine's live state to every
 # clone. `tessera-yml-is-tracked` asserts config MUST be tracked; this asserts the opposite,
 # for the opposite reason. Both directions of "tracked" are claims about every clone.
-RUNTIME_STATE = (".tessera/spend-auth.json", ".tessera/.spend-backstop-fires")
+# `git ls-files` PATHSPECS, so globs are allowed and used — session logs have dynamic names.
+#
+# REPOPULATED 2026-08-18. Both original entries were spend-guard artifacts, and ADR-0029 made
+# them unproducible — so this check could no longer fail at all, while still counting among the
+# green ones and still passing its own test. A check that CANNOT fail is worse than no check:
+# it reports coverage it does not have. The two real bugs it was written for are recorded in the
+# docstring below and stay there; what changed is that it now guards runtime state that EXISTS.
+#
+# `.tessera/` is deliberately NOT blanket-matched: `config.yml`, `escalations/` and
+# `logs/README.md` are legitimately tracked. The globs pick the per-session artifacts only.
+RUNTIME_STATE = (
+    ".mnemos/mnemo.db", ".mnemos/mnemo.db-shm", ".mnemos/mnemo.db-wal",
+    ".mnemos/fatigue.json", ".mnemos/checkpoint-latest.json", ".mnemos/signals.jsonl",
+    ".tessera/logs/*.jsonl",
+    ".icpg/reason.db",
+)
+# NOT `.tessera/watch-snooze.json`, and the exclusion is the definition. Adding it fired
+# immediately — and the fire was wrong. A snooze entry carries a `reason` and is committed
+# deliberately (b78f941, 2680542); it is a DECISION someone made, the same shape as an
+# escalation packet, which is also tracked on purpose. The line this check draws is not
+# "lives under .tessera/" but **transient state of one machine vs a reasoned decision meant to
+# be shared**. Written down because the first repopulation got it wrong within a minute.
 
 
 def check_runtime_state_is_not_tracked() -> list[str]:
@@ -2662,8 +2683,10 @@ def check_chaos_probe_count_is_current() -> list[str]:
     `tessera-test`, because a hardcoded number drifts on every test added. The difference is
     ownership: this is not a number restated in a second place, it is a CONSISTENCY
     ASSERTION between two live sources — the banner and the probe file. Same shape as
-    `tessera-watch`'s `_max_spend_fires`, which reads MAX_FIRES out of the backstop rather
-    than copying it, and for the same reason: whoever adds probe 12 gets told.
+    `bin/tessera-watch`'s P8, which reads doccheck's own `WARN_ONLY` through `getattr` rather
+    than restating the membership, and for the same reason: whoever adds probe 8 gets told.
+    (The previous exemplar here was `_max_spend_fires`, deleted with the spend guard by
+    ADR-0029 — a docstring citing a live example is itself a claim that can go stale.)
 
     Deliberately does NOT check the date beside it. "As of <date>" is a claim about when a
     human last ran them, which no file can verify — asserting it would be a mechanical check

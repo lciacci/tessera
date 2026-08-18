@@ -24,7 +24,6 @@ import os
 import subprocess
 from pathlib import Path
 
-import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 DEGRADED = ROOT / "bin" / "tessera-degraded"
@@ -65,7 +64,11 @@ def test_driving_a_real_event_writer_as_a_subprocess_writes_no_production_event(
     r = subprocess.run([str(DEGRADED), "--component", "audit-log-probe",
                         "--reason", "suite-pollution-probe",
                         "--detail", "asserting the suite writes no production event"],
-                       text=True, capture_output=True, cwd=ROOT)
+                       # input="" CLOSES stdin. `tessera-degraded` does `[ -t 0 ] || cat`,
+                       # so an inherited pipe that stays open (CI, or `x | run-tests.sh`)
+                       # makes it BLOCK — the test would hang rather than fail, which is
+                       # strictly worse than a red.
+                       input="", text=True, capture_output=True, cwd=ROOT)
 
     after = {p.name for p in LOGS.glob("*.jsonl")} if LOGS.is_dir() else set()
     assert after == before, (

@@ -864,7 +864,7 @@ def _event_time(event: dict, mtime: datetime) -> datetime:
     A NAIVE stamp PARSES and then explodes on any later subtraction ("can't subtract
     offset-naive and offset-aware datetimes"), so the except below never sees it.
     `tessera-degraded` always writes Z — but P13 scans EVERY .jsonl in .tessera/logs,
-    written by six producers (gate, spend, override, restore, degraded, degraded_ack) and
+    written by five producers (gate, override, restore, degraded, degraded_ack) and
     by whatever a downstream adds next. One producer omitting an offset would crash the
     spec-11 channel: the one predicate whose job is to report that something else broke.
     Treated as UTC, which is what every current writer means.

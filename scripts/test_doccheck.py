@@ -203,7 +203,7 @@ def test_missing_run_tests_sh_is_a_violation(fake_repo):
     assert doccheck.check_ignored_test_suites_are_run() != []
 
 
-# ── spend-guard-is-wired ──────────────────────────────────────────────────────
+# ── runtime-state-is-not-tracked ─────────────────────────────────────
 
 def _settings(repo: Path, hooks: dict) -> None:
     (repo / ".claude" / "settings.json").write_text(json.dumps(hooks))
@@ -226,7 +226,7 @@ def test_runtime_state_is_not_tracked_in_the_real_repo():
     assert doccheck.check_runtime_state_is_not_tracked() == []
 
 
-# ── spend-backstop-is-wired ───────────────────────────────────────────────────
+# ── verify-scan-is-wired ─────────────────────────────────────────────
 
 def _verification_contract(repo: Path) -> None:
     (repo / "docs" / "contracts" / "verification-event.md").write_text(
