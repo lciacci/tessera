@@ -73,6 +73,11 @@ _HEAD_ANCHORED = re.compile(r"^(?:HEAD|@)(?:[~^].*)?$")
 # Past this, an orphaned stamp is old news and reads as "no review on record", which this hook
 # does not report. Matches `tessera-watch`'s DEGRADED_WINDOW_DAYS — an incident, not a state.
 STALE_NOTE_DAYS = 7
+# Sentinel: `None` is a MEANINGFUL value for `usable` ("there is no usable stamp"), so it cannot
+# double as "not supplied". `pre-push` passes the value it already computed rather than making
+# `latest_usable()` walk every log a second time — two git subprocesses per stamp row, per push,
+# on an append-only log nothing prunes. (Review round 5.)
+_UNSET = object()
 
 
 def _log_path() -> Path:
@@ -156,16 +161,28 @@ def record(base: str = "origin/main", head: "str | None" = None) -> int:
         print(f"base {base!r} is HEAD-anchored — refusing to stamp. It resolves to something "
               f"different at push time; name a branch, tag or sha.", file=sys.stderr)
         return 2
-    # AND TEST THE EFFECT, NOT ONLY THE SPELLING. The check above rejects `HEAD`/`@`/`HEAD~1`
-    # and nothing else, so the failure it exists to prevent was one keystroke away: on branch
-    # `main`, `stamp.py main --head <sha>` gives an outgoing range of `main...HEAD` — empty
-    # forever, so the report is filtered to nothing on every push while nothing reports it
-    # stale. Same for `@{-1}` and `HEAD@{1}`. Not exotic: `bin/tessera-new-project` scaffolds
-    # into a repo made by bare `git init` with NO remote, so `origin/main` does not resolve
-    # there and naming the current branch is the obvious workaround. (Review round 4.)
-    if _git("rev-parse", base) == _git("rev-parse", "HEAD"):
-        print(f"base {base!r} resolves to HEAD — refusing to stamp. The outgoing range would "
-              f"be empty forever and this check would go silent.", file=sys.stderr)
+    # A REFLOG-RELATIVE BASE MOVES TOO. `@{-1}` and `HEAD@{1}` are re-resolved at push time
+    # against the reflog and the last-checked-out branch, which is the same moving-base failure
+    # `_HEAD_ANCHORED` exists to prevent. Round 4's comment CLAIMED these were covered and they
+    # were not — the pattern has no `@{` case and the sha guard below only caught them when they
+    # happened to point at HEAD. A false claim in a comment about a guard's coverage.
+    # (Review round 5.)
+    if "@{" in base:
+        print(f"base {base!r} is reflog-relative — refusing to stamp. It resolves to something "
+              f"different at push time; name a branch, tag or sha.", file=sys.stderr)
+        return 2
+    # THE BASE MUST NOT BE THE BRANCH YOU ARE ON — and the test is which REF it is, not which
+    # commit it points at today. Round 4 compared `rev-parse base` to `rev-parse HEAD`, which
+    # catches the real failure (`stamp.py main` on branch `main`: the outgoing range is
+    # `main...HEAD`, empty forever) AND ALSO BLOCKS THE DOCUMENTED PRIMARY PATH: branch off a
+    # synced `main`, review the uncommitted tree, run bare `stamp.py`, and `origin/main` equals
+    # HEAD, so it refused to stamp at all. The premise only holds for refs that ADVANCE with the
+    # local branch; `origin/main` stays put while HEAD moves. The fixture never caught it
+    # because every test commits past `origin/main` before stamping. (Review round 5.)
+    base_ref = _git("rev-parse", "--symbolic-full-name", base)
+    if base_ref and base_ref == _git("rev-parse", "--symbolic-full-name", "HEAD"):
+        print(f"base {base!r} is the branch you are on — refusing to stamp. The outgoing range "
+              f"would be empty forever and this check would go silent.", file=sys.stderr)
         return 2
     if head is None:
         head = _git("rev-parse", "HEAD")
@@ -439,7 +456,7 @@ def changed_since_review(base: str = "origin/main") -> "tuple[dict | None, list[
     return stamp, [f for f in changed if f not in seen]
 
 
-def staleness_note(stamp: "dict | None") -> "str | None":
+def staleness_note(stamp: "dict | None", usable: "dict | None" = _UNSET) -> "str | None":
     """Why the last stamp cannot be reported against, if it cannot. None when it can.
 
     `changed_since_review` returns an empty list for THREE different reasons — nothing changed,
@@ -463,7 +480,7 @@ def staleness_note(stamp: "dict | None") -> "str | None":
     # stamp, so a stamp on another branch no longer shadows a good one — and this note must not
     # fire while a usable stamp is being reported against. Callers pass `latest()`; the note is
     # the difference between "a stamp exists" and "a stamp I can use exists". (Review round 4.)
-    if latest_usable() is not None:
+    if (latest_usable() if usable is _UNSET else usable) is not None:
         return None
     # BOUNDED IN TIME, because an unbounded version is the signal this hook exists to avoid.
     # A stale stamp is never replaced on its own — stamping rides model recall (3 stamps / 47

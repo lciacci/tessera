@@ -90,7 +90,15 @@ bare-hex base with no `--head` gets a loud note rather than a refusal: `stamp.py
 "base = that sha, head = HEAD", which is the fix stamped as reviewed, and the two intentions are
 indistinguishable from argv alone.
 
-**A base that RESOLVES to HEAD is refused, however it is spelled** — the spelling check below
+**A base that is the branch you are ON is refused** — keyed on which REF it is, not which commit
+it points at today. The first version compared `rev-parse base` with `rev-parse HEAD`, which
+**blocked the documented primary path**: branch off a synced `main`, review the uncommitted tree,
+run bare `stamp.py`, and `origin/main` equals HEAD, so it refused to stamp at all. The premise
+holds only for refs that advance with the local branch. **Reflog-relative bases (`@{-1}`,
+`HEAD@{1}`) are refused too** — a comment claimed the HEAD-anchored pattern covered them and it
+never did.
+
+*(Superseded phrasing, kept because the narrowing matters:)* **A base that resolves to HEAD** — the spelling check below
 was one keystroke from useless. On branch `main`, `stamp.py main --head <sha>` makes the outgoing
 range `main...HEAD`, empty forever, so the report is filtered to nothing on every push and
 nothing reports it stale. Not exotic: `bin/tessera-new-project` scaffolds into a repo made by
@@ -156,8 +164,12 @@ on the majority of pushes and taken the useful branch down with it.
    **An empty report had three causes and one voice until 2026-08-19** — nothing changed, the
    commit is gone, HEAD moved off its line — so "you are clear" and "I am blind" printed
    identically. An `--amend` or a rebase after stamping produces the second permanently, because
-   `latest()` keeps serving that stamp. `staleness_note()` now names it and `pre-push` prints a
-   one-line **review anchor is blind** note. Still not blocking, and **bounded to 7 days**: a
+   `latest()` keeps serving that stamp. `staleness_note()` names it and `pre-push` prints a
+   one-line **review anchor is blind** note — **and that branch was DEAD CODE for one commit.**
+   `staleness_note` returns None whenever a usable stamp exists, so the note is reachable only
+   when `changed_since_review` found nothing usable; testing `st is None` first swallowed every
+   case. Two fixes that individually made sense cancelled the feature between them. The hook's
+   branch ORDER is now the thing under test, by a test that runs the hook. Still not blocking, and **bounded to 7 days**: a
    stale stamp is never replaced on its own, so an unbounded note is true on every push forever
    — P13's shape, on the same channel as the useful report, in the hook whose header rejects
    always-true signals. A recent orphaned stamp is news; an old one is indistinguishable from no

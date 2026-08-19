@@ -670,6 +670,80 @@ def test_restamping_within_the_same_second_wins(tmp_path, monkeypatch):
     assert stamp.latest()["data"]["head"] == b, "the correction must win"
 
 
+def test_the_REAL_HOOK_reports_a_blind_anchor(tmp_path, monkeypatch):
+    """RUNS `.githooks/pre-push` ITSELF, because the defect lived in the hook's branch ORDER and
+    every existing test called `staleness_note` directly.
+
+    `st` comes from `changed_since_review`, which selects via `latest_usable()`, and
+    `staleness_note` returns None whenever a usable stamp exists — so `stale` is truthy ONLY
+    when `st is None`. Testing `st is None` first therefore swallowed every stale case. The two
+    round-4 changes individually made sense and together made the branch DEAD CODE, restoring
+    the exact defect it was written to fix.
+
+    Standing pattern #9: a mechanism that runs has not necessarily reached its audience. The
+    unit was correct the whole time; the wire was not. Falsify by moving `elif st is None: pass`
+    back above the `stale` branch."""
+    repo = _repo(tmp_path, monkeypatch)
+    (repo / "scripts" / "review").mkdir(parents=True)
+    (repo / "scripts" / "review" / "stamp.py").write_text(
+        (Path(__file__).resolve().parent / "review" / "stamp.py").read_text())
+    hook = Path(__file__).resolve().parent.parent / ".githooks" / "pre-push"
+
+    reviewed = _commit(repo, "a.py")
+    assert stamp.record(head=reviewed) == 0
+    _run(repo, "commit", "-q", "--amend", "-m", "amended out from under the stamp")
+    _commit(repo, "c.py")
+
+    out = subprocess.run(["sh", str(hook)], cwd=repo, capture_output=True, text=True)
+    assert out.returncode == 0, "warn-only: never block a push"
+    assert "blind" in out.stderr, (
+        f"the hook must say it cannot answer; it printed {out.stderr!r}")
+
+
+def test_the_documented_primary_path_works_on_a_synced_branch(tmp_path, monkeypatch):
+    """ROUND 4'S GUARD BLOCKED THE PATH THE CONTRACT CALLS PRIMARY.
+
+    It refused whenever `rev-parse base == rev-parse HEAD`. That premise holds only for refs
+    that ADVANCE with the local branch; `origin/main` stays put while HEAD moves. So: branch off
+    a synced main, review the uncommitted tree, run bare `stamp.py` — refused, nothing recorded.
+
+    The fixture never caught it because every other test commits past `origin/main` before
+    stamping. This one deliberately does not.
+
+    Falsify by restoring the raw sha comparison."""
+    repo = _repo(tmp_path, monkeypatch)          # origin/main is AT HEAD here
+    assert _run(repo, "rev-parse", "origin/main") == _run(repo, "rev-parse", "HEAD")
+    (repo / "a.py").write_text("the uncommitted review target\n")
+    _run(repo, "add", "-A")
+
+    assert stamp.record() == 0, "the primary path must work on a synced branch"
+    assert _events(repo)[-1]["data"]["uncommitted"] == ["a.py"]
+
+
+def test_the_branch_you_are_on_is_still_refused_as_a_base(tmp_path, monkeypatch):
+    """The narrowing must not give back the failure it was narrowed from: `stamp.py main` on
+    branch `main` still makes the outgoing range empty forever. Keyed on which REF it is, not
+    which commit it points at."""
+    repo = _repo(tmp_path, monkeypatch)
+    sha = _commit(repo, "a.py")
+    branch = _run(repo, "rev-parse", "--abbrev-ref", "HEAD")
+    assert stamp.record(base=branch, head=sha) == 2
+    assert _events(repo) == []
+
+
+@pytest.mark.parametrize("base", ["@{-1}", "HEAD@{1}", "main@{yesterday}"])
+def test_reflog_relative_bases_are_refused(tmp_path, monkeypatch, base):
+    """Round 4's comment CLAIMED `@{-1}` and `HEAD@{1}` were covered by `_HEAD_ANCHORED`. They
+    were not — it has no `@{` case — and the sha guard caught them only when they happened to
+    point at HEAD. A false claim in a comment about a guard's own coverage, which is the class
+    this session kept paying for. They re-resolve at push time against the reflog and the
+    last-checked-out branch: the same moving-base failure the pattern exists to prevent."""
+    repo = _repo(tmp_path, monkeypatch)
+    sha = _commit(repo, "a.py")
+    assert stamp.record(base=base, head=sha) == 2
+    assert _events(repo) == []
+
+
 # ── the CLI surface ────────────────────────────────────────────────────────────────────────
 
 def test_cli_accepts_both_head_spellings_and_a_positional_base(tmp_path, monkeypatch):
