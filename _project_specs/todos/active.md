@@ -92,6 +92,24 @@ handoff block only; a blockquoted list is invisible to it.
    it must start from that docstring — including the measured table showing why a scope UNION was
    also declined (668 of 719 reachable files come from bare directory prefixes, taking a typical
    file from 0–2 predicates to a median of 15).
+   **THREE OPTIONS, none cheap, deliberately left for a fresh session (2026-08-19):**
+   1. **Tighten the scope discriminator.** `_select_constraints`' own table: 668 of 719 reachable
+      files come from bare DIRECTORY-prefix scope entries (`scripts/` alone is on 4 intents).
+      Requiring exact-file or deeper paths would cut the payload sharply. **Most likely the real
+      fix** — and it changes what the pre-edit channel delivers too, so it needs its own
+      measurement before and after, not just a checkpoint-size reading.
+   2. **Make P3 report the DISTRIBUTION, not a spot reading.** It currently states whatever the
+      last-written checkpoint measured; the truth is "8 of the last 30 exceeded budget". A spot
+      reading on a fluctuating quantity is why this read as a goal problem for weeks, and an
+      intermittent alarm indistinguishable from noise is what trains a reader to ignore the board.
+      Cheapest, and it makes the SIGNAL honest without claiming to fix the cause. **Start here** —
+      it gives 1 and 3 a real number to be judged against.
+   3. **Shrink the constraint TEXT.** ~160b of prose each; nothing has tried summarising or
+      truncating individual invariants rather than dropping them wholesale. Untested.
+
+   **Do NOT start by reading P3's own message.** It says "check the goal field first", which is
+   how two sessions were sent at the wrong field — goals have been capped and flat at 1,214b since
+   2026-07-26. The predicate's hint is older than the fix it predates.
    **Governs:** ADR-0015 · `scripts/mnemos/checkpoint.py` (`_select_constraints`) · `docs/contracts/restore-receipt.md`.
 
 8. **The review anchor — (a) CLOSED; (b), (c) open; (d) NEW and worse.**

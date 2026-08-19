@@ -2744,9 +2744,9 @@ marker — is worth more than the 29%.
 standing patterns) ~2,790 — **~15,600 tokens**, plus the Mnemos checkpoint (~2,600) for ~18k in
 practice. (Estimated at chars/4; `count_tokens` if a decision ever rests on it.)
 
-**METERED 2026-08-18: 17,384 tokens tracked** *(16,978 on 08-17 — third measurement that day, after 16,799 and 16,473; 15,837 on 08-10, 15,497 on 08-09)* — re-metered
+**METERED 2026-08-19: 17,462 tokens tracked** *(16,978 on 08-17 — third measurement that day, after 16,799 and 16,473; 15,837 on 08-10, 15,497 on 08-09)* — re-metered
 because `CLAUDE.md` gained ADR-0029's retirement clause, per its own rule; `CLAUDE.md` is now
-**8,948 of the 17,384** (51.47%), and the growth is again **entirely `CLAUDE.md` (+406)** —
+**9,026 of the 17,462** (51.69%), and the growth is again **entirely `CLAUDE.md` (+78 on top of the +406)** —
 `mnemos` 4,354, standing patterns as emitted 2,628, `base` 1,454, all three unmoved across all five.
 
 > **This figure was stale for the length of one PR, INSIDE the 5% band, which is the failure

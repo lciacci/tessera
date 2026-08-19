@@ -79,8 +79,27 @@ and not in the exit code.
 
 Left alone, P8 would have flattened every warn-tier finding into `violations`: session start goes
 red and the message calls it a *false doc claim*, which is the wrong label (#12) and half-undoes
-this decision. P8 now excludes them, read through `getattr(doccheck, "WARN_ONLY", ())` so the six
-downstream copies that predate the tier are not turned into crashed predicates (#5).
+this decision. P8 now excludes them, read through `getattr(doccheck, "WARN_ONLY", ())` so that a
+copy of `doccheck.py` predating the tier could not be turned into a crashed predicate (#5).
+
+> **CORRECTED 2026-08-18: this sentence originally said "the six downstream copies that predate
+> the tier", and the true count is ZERO.** Measured across the whole home tree: seven `.tessera`
+> projects exist (conclave, tess-dashboard, settempo, arbiter, howler, heaviside, plus `~`), and
+> **not one carries `doccheck.py` or `bin/tessera-watch`** — neither is distributed downstream by
+> anything. The "six" was almost certainly a count of downstream *projects*, which is real, applied
+> to the wrong noun. That is retired-P4's exact error (counting projects, not bytes) inside an ADR
+> whose author had the standing patterns in context.
+>
+> **The correction is larger than the digit, which is why it is recorded rather than silently
+> fixed.** The figure was the *justification* for the defensive `getattr`: it argued the fallback
+> protected six live consumers. It protects none. The code is unchanged and still correct — the
+> fallback costs nothing and would be right the day `doccheck.py` *is* distributed — but the reason
+> given for it was false, and a defensive branch justified by a phantom is how dead defensiveness
+> accumulates unexamined.
+>
+> Corrected in place under the same carve-out this ADR used for its own `Date:` field: **a wrong
+> figure is a defect in the record, not a revision of the decision.** The decision — a warn tier
+> exists, P8 stays silent on it — is untouched.
 
 **The consequence is a real reduction in coverage and is written here rather than left implicit:
 the warn tier's only channel is the pre-commit hook.** That is defensible because the hook fires
