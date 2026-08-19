@@ -153,19 +153,35 @@ def test_explicit_past_head_does_not_absorb_todays_uncommitted_edits(tmp_path, m
     assert ev["data"]["had_uncommitted"] is False
 
 
-def test_stamping_head_explicitly_still_captures_the_working_tree(tmp_path, monkeypatch):
-    """The primary path: review an UNCOMMITTED tree, stamp, commit, push. Naming HEAD
-    explicitly must behave exactly like defaulting to it — otherwise the flag punishes being
-    precise, and the dirty files reappear in `changed_since_review` as false positives."""
+def test_an_explicit_head_never_absorbs_the_working_tree(tmp_path, monkeypatch):
+    """PREMISE REVERSED 2026-08-19, and the original was a real defect.
+
+    This test used to assert the opposite — that naming HEAD explicitly should behave exactly
+    like defaulting to it, "otherwise the flag punishes being precise". Wrong, and the way it
+    is wrong is the whole feature: **an explicit head is a claim about a COMMIT, not about the
+    tree sitting on top of it.**
+
+    The documented order is review -> fix -> commit -> stamp, and the fix is UNCOMMITTED for a
+    window. Stamping during that window with `--head <reviewed-sha>` — precise, documented
+    usage — recorded the fix as `uncommitted`, `changed_since_review` subtracted it, and
+    pre-push went silent about the exact edit this mechanism exists to catch. Probed before
+    fixing. Nothing is lost by the narrowing: a reviewer of an uncommitted tree runs
+    `stamp.py` with no flag, which is what the default is for.
+
+    Falsify by restoring `at_head = (not explicit) or head == _git("rev-parse", "HEAD")`."""
     repo = _repo(tmp_path, monkeypatch)
-    head = _commit(repo, "a.py")
-    (repo / "wip.py").write_text("wip\n")
+    head = _commit(repo, "a.py", "v1 — reviewed\n")
+    (repo / "a.py").write_text("v2 — the fix, not yet committed\n")
     _run(repo, "add", "-A")
 
     assert stamp.record(head=head) == 0
     ev = _events(repo)[-1]
-    assert "wip.py" in ev["data"]["files"]
-    assert ev["data"]["had_uncommitted"] is True
+    assert ev["data"]["uncommitted"] == [], "an explicit stamp covers a commit, not a tree"
+    assert ev["data"]["had_uncommitted"] is False
+
+    _run(repo, "commit", "-qm", "the terminal fix")
+    _, changed = stamp.changed_since_review()
+    assert changed == ["a.py"], "the fix must survive to the report"
 
 
 def test_a_staged_tree_counts_as_uncommitted(tmp_path, monkeypatch):
@@ -377,6 +393,70 @@ def test_changed_since_review_says_nothing_when_the_stamped_commit_is_not_an_anc
     assert st is not None and changed == []
 
 
+def test_pre_push_is_told_when_the_stamp_is_off_this_line_of_history(tmp_path, monkeypatch):
+    """AN EMPTY REPORT HAD THREE CAUSES AND ONE VOICE. `changed_since_review` returns [] when
+    nothing changed, when the stamped commit is gone, and when HEAD has moved off its line —
+    and `pre-push` printed nothing for all three, so "you are clear" and "I am blind" were the
+    same output. An `--amend` or a rebase after stamping produces the second PERMANENTLY,
+    because `latest()` keeps serving that stamp by timestamp and stamping rides recall.
+
+    The record-time guard covers stamp time only; this covers HEAD leaving afterwards.
+
+    Falsify by making `staleness_note` return None unconditionally."""
+    repo = _repo(tmp_path, monkeypatch)
+    reviewed = _commit(repo, "a.py")
+    assert stamp.record(head=reviewed) == 0
+    st, changed = stamp.changed_since_review()
+    assert stamp.staleness_note(st) is None, "a healthy stamp is not stale"
+
+    _run(repo, "commit", "-q", "--amend", "-m", "amended out from under the stamp")
+    _commit(repo, "c.py")
+    st, changed = stamp.changed_since_review()
+    assert changed == []
+    note = stamp.staleness_note(st)
+    assert note is not None and "BLIND" in note, (
+        "silence here is indistinguishable from 'nothing changed since the review'")
+
+
+def test_the_report_uses_the_base_the_stamp_was_recorded_under(tmp_path, monkeypatch):
+    """`pre-push` always calls `changed_since_review()` with the default `origin/main`, while
+    `record()` stores the base actually used and the contract documents
+    `stamp.py origin/release --head <sha>`. Reporting a release-line stamp against main's
+    outgoing range drops files whose HEAD content matches main's merge-base.
+
+    Falsify by using the `base` parameter instead of `stamp['data']['base']`."""
+    repo = _repo(tmp_path, monkeypatch)
+    _run(repo, "update-ref", "refs/remotes/origin/release", "HEAD")   # release stays at seed
+    reviewed = _commit(repo, "a.py")
+    assert stamp.record(base="origin/release", head=reviewed) == 0
+    _commit(repo, "b.py")
+    # main is level with HEAD, so NOTHING is outgoing relative to main — the two bases now
+    # disagree, which is what makes this a discriminating test. Against the stamp's own base
+    # (release, still at seed) both files are outgoing; against main, neither is.
+    _run(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    _, changed = stamp.changed_since_review()          # caller's default is origin/main
+    assert changed == ["b.py"], (
+        "the stamp was taken against origin/release; reporting it against main's outgoing "
+        "range drops the finding entirely")
+
+
+def test_record_refuses_a_base_with_no_merge_base(tmp_path, monkeypatch):
+    """`git diff base...head` exits non-zero when the two have no common ancestor, and the
+    fail-open `_git` returned "" — so the stamp was written with `files: []`, recording "git
+    could not tell me" as "there is nothing". The same shape `_git_lines` was added for, left
+    on the old helper one function away in the same diff."""
+    repo = _repo(tmp_path, monkeypatch)
+    _commit(repo, "a.py")
+    _run(repo, "checkout", "-q", "--orphan", "orphan")
+    _run(repo, "commit", "-q", "--allow-empty", "-m", "unrelated history")
+    orphan = _run(repo, "rev-parse", "HEAD")
+    _run(repo, "checkout", "-q", "main")
+
+    assert stamp.record(base=orphan) == 2
+    assert _events(repo) == []
+
+
 # ── the CLI surface ────────────────────────────────────────────────────────────────────────
 
 def test_cli_accepts_both_head_spellings_and_a_positional_base(tmp_path, monkeypatch):
@@ -386,6 +466,20 @@ def test_cli_accepts_both_head_spellings_and_a_positional_base(tmp_path, monkeyp
     for argv in (["--head", reviewed], [f"--head={reviewed}"], ["main", "--head", reviewed]):
         assert stamp._main(argv) == 0
         assert _events(repo)[-1]["data"]["head"] == reviewed
+
+
+def test_cli_refuses_an_unknown_flag_instead_of_eating_its_argument(tmp_path, monkeypatch):
+    """A TYPO MUST NOT BECOME A BASE REF. The first parser silently DROPPED any unrecognised
+    `-` token, so `--haed <sha>` dropped the flag and let the sha fall through as the positional
+    base: `review stamped: 1350ddb5 (HEAD) over 0 file(s) vs 1350ddb5...`, rc=0, the fix stamped
+    as reviewed against a phantom base. `_main` refuses an unresolvable base for exactly this
+    reason, and a mistyped flag routed around that guard.
+
+    New failure mode in this feature: before `--head` there was no sha argument to mistype."""
+    repo = _repo(tmp_path, monkeypatch)
+    sha = _commit(repo, "a.py")
+    assert stamp._main(["--haed", sha]) == 2
+    assert _events(repo) == [], "a typo must not write a stamp at all"
 
 
 def test_cli_refuses_a_dangling_head_flag(tmp_path, monkeypatch):

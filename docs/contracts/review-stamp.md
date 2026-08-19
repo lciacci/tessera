@@ -67,9 +67,24 @@ python3 scripts/review/stamp.py origin/release --head cc5d2b3
   HEAD before there was anything to record. `pre-push` on that branch reported its files as
   unreviewed against a stamp from the *previous session*.
 
-An explicit head is a claim about the past, so it is **verified**: a ref that does not resolve to
-a commit is refused rather than stamped, `rc=2`, nothing written. `changed_since_review` will
-happily diff from whatever it is given, and a stamp against a phantom is worse than no stamp.
+An explicit head is a claim about the past, so it is **verified** — two ways, both `rc=2` with
+nothing written. A ref that does not resolve **to a commit** is refused; `changed_since_review`
+will happily diff from whatever it is given, and a stamp against a phantom is worse than no
+stamp. A commit that is **not an ancestor of HEAD** is refused too: it is resolvable, so the
+first check passes, and then the report's own ancestor guard returns nothing forever while
+`latest()` keeps serving that stamp by timestamp. Silence is indistinguishable from "nothing
+changed since the review", and a sha pasted from another branch's review round is the easy way
+in — which "copy the sha the review saw" makes likely.
+
+**An explicit head is a claim about a COMMIT, not about the tree on top of it**, so it never
+captures uncommitted work: `uncommitted` is empty on every explicit stamp. The first version
+keyed on "is the named commit HEAD", which comes apart in the documented workflow — the fix is
+uncommitted for a window, stamping during it is natural, and the fix was then recorded as
+reviewed. Nothing is lost: a reviewer of an uncommitted tree runs `stamp.py` with no flag.
+
+A mistyped flag is refused rather than absorbed. `stamp.py --haed <sha>` used to drop the unknown
+token and let the sha fall through as the positional BASE, writing an rc=0 stamp against a
+phantom base — routing around the very check `_main` performs on the base.
 
 `explicit_head` is recorded because the two cases are not equally trustworthy: a defaulted head
 means *"whatever HEAD was when someone remembered"*, an explicit one means someone named the
@@ -82,26 +97,40 @@ past it.** Absence of a stamp is absence of evidence, and it does not report tha
 2026-08-17, 3 stamps against 47 session logs, so warning on "no review recorded" would have fired
 on the majority of pushes and taken the useful branch down with it.
 
-`changed_since_review` narrows three ways, and each is load-bearing:
+`changed_since_review` narrows four ways, and each is load-bearing:
 
-1. **Subtract what the stamp already saw.** The review target is usually an uncommitted tree, so
-   the normal flow is review → stamp → commit those exact files → push. Diffing `head..HEAD`
-   alone names files the review *did* see, which is a guaranteed false positive on the primary
-   path.
+1. **Subtract the stamp's `uncommitted` list — and ONLY that.** The review target is often an
+   uncommitted tree, so the normal flow is review → stamp → commit those exact files → push, and
+   those files would otherwise be a guaranteed false positive.
+   **It subtracted the whole `files` list until 2026-08-19, which cancelled `--head` for its
+   dominant case:** a fix made in response to review findings almost always re-edits a file the
+   review looked at, every such file is in `base...reviewed`, so the terminal fix was filtered
+   out and the report went silent. Files already *committed* at stamp time cannot reappear in
+   `head..HEAD` unless edited again — which is exactly what is worth reporting. Legacy rows
+   written before the `uncommitted` field keep the wide subtraction they were recorded under.
 2. **Intersect with the outgoing range** (`base...HEAD`). `head..HEAD` is "everything since the
    review", which over-reports the moment the stamped commit sits behind the base — stamp, pull,
    push, and every commit someone else already pushed is listed as unreviewed by you.
-3. **Say nothing when the stamp is not an ancestor of HEAD.** Stamp on a branch, switch away,
-   push, and `head..HEAD` would enumerate everything since the merge-base. `cat-file` only
-   catches a commit that is *gone*, which is why the ancestor test is separate.
+3. **Say nothing when the stamp is not an ancestor of HEAD — but say SO loudly.** Stamp on a
+   branch, switch away, push, and `head..HEAD` would enumerate everything since the merge-base.
+   `cat-file` only catches a commit that is *gone*, which is why the ancestor test is separate.
+   **An empty report had three causes and one voice until 2026-08-19** — nothing changed, the
+   commit is gone, HEAD moved off its line — so "you are clear" and "I am blind" printed
+   identically. An `--amend` or a rebase after stamping produces the second permanently, because
+   `latest()` keeps serving that stamp. `staleness_note()` now names it and `pre-push` prints
+   **REVIEW ANCHOR IS BLIND**. Still not blocking.
+4. **Report against the base the STAMP was recorded under**, not the caller's default. `pre-push`
+   always passes `origin/main`; a stamp taken against `origin/release` would otherwise be
+   reported against an unrelated outgoing range.
 
 ## Known limits — stated so they are not mistaken for coverage
 
 1. **Untracked files are never claimed as reviewed.** `git diff` does not report them, and
    sweeping them in with `ls-files --others --exclude-standard` cannot distinguish a new module
    the reviewer read from a scratch file sitting in the tree. **The two error directions are not
-   symmetrical:** the report subtracts the stamped list, so over-claiming silently drops a real
-   finding while under-claiming costs a false positive in a warn-only hook. Prefer the noise.
+   symmetrical:** the report subtracts the stamp's `uncommitted` list, so over-claiming silently
+   drops a real finding while under-claiming costs a false positive in a warn-only hook. Prefer
+   the noise.
    *(Staged files DO count — they did not until 2026-08-19, when writing this module's first
    test found that `record()` read only the unstaged diff.)*
 2. **A stamp records the range a review was TOLD to cover, not the range it read.** On 2026-08-17

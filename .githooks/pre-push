@@ -24,6 +24,7 @@ sys.path.insert(0, str(root / "scripts" / "review"))
 try:
     import stamp
     st, changed = stamp.changed_since_review()
+    stale = stamp.staleness_note(st)
 except Exception as exc:                      # never block a push on this hook's own failure
     print("pre-push: review-anchor check unavailable (%s)" % exc, file=sys.stderr)
     sys.exit(0)
@@ -39,6 +40,14 @@ BAR = "-" * 66
 # past it. Absence of a stamp is absence of evidence, and this hook does not report that.
 if st is None:
     pass
+elif stale:
+    # AN EMPTY REPORT HAD THREE CAUSES AND ONE VOICE. `changed_since_review` returns [] when
+    # nothing changed, when the stamped commit is gone, and when HEAD has moved off its line —
+    # and this hook printed nothing for all three, so "I checked and you are clear" and "I am
+    # blind" were the same output. An --amend or a rebase after stamping produces the second
+    # PERMANENTLY, because `latest()` keeps serving that stamp and stamping rides model recall.
+    # Loud, still not blocking. (Review round 2, 2026-08-19.)
+    print("\n%s\n  REVIEW ANCHOR IS BLIND:\n    %s\n%s\n" % (BAR, stale, BAR), file=sys.stderr)
 elif changed:
     print("\n%s\n  %d FILE(S) CHANGED SINCE THE LAST REVIEW SAW THEM:" % (BAR, len(changed)),
           file=sys.stderr)

@@ -39,8 +39,10 @@ pattern #12, and this module's output is what anyone actually reads:
 1. **Untracked files are never claimed as reviewed.** `git diff` does not report them, and
    sweeping them in with `ls-files --others` cannot tell a new module the reviewer read from a
    scratch file in the tree. The two error directions are not symmetrical —
-   `changed_since_review` SUBTRACTS the stamped list, so over-claiming silently drops a real
-   finding while under-claiming only costs a false positive in a warn-only hook. Prefer noise.
+   `changed_since_review` SUBTRACTS the stamp's `uncommitted` list, so over-claiming silently
+   drops a real finding while under-claiming only costs a false positive in a warn-only hook.
+   Prefer noise. *(It subtracted the WHOLE `files` list until 2026-08-19, which cancelled
+   `--head` for its dominant case — see `changed_since_review`.)*
 2. **A stamp records the range a review was TOLD to cover, not the range it actually read.**
    On 2026-08-17 `/code-review high 0b27332` was invoked meaning "since that commit"; the skill
    read it as "that commit". Nothing here would catch that — the stamp would faithfully record
@@ -159,7 +161,15 @@ def record(base: str = "origin/main", head: "str | None" = None) -> int:
     if not head:
         print("not a git repo, or no HEAD", file=sys.stderr)
         return 1
-    files = [f for f in _git("diff", "--name-only", f"{base}...{head}").splitlines() if f]
+    # `_git_lines`, not `_git`: `git diff base...head` exits non-zero when the two have no merge
+    # base, and `_git` returns "" — recording "git could not tell me" as "there is nothing".
+    # That is the shape `_git_lines` was added for one function below, and this call site was
+    # left on the fail-open helper in the same diff (review round 2).
+    files = _git_lines("diff", "--name-only", f"{base}...{head}")
+    if files is None:
+        print(f"cannot diff {base}...{head[:12]} — no merge base? refusing to stamp",
+              file=sys.stderr)
+        return 2
     # THE WORKING TREE BELONGS TO *NOW*, NOT TO AN ARBITRARY PAST COMMIT. `record()` stores the
     # dirty diff because the review target is usually an uncommitted tree — true when stamping
     # HEAD, and false when stamping a commit from an hour ago, where today's uncommitted edits
@@ -175,7 +185,21 @@ def record(base: str = "origin/main", head: "str | None" = None) -> int:
     # would have, because the field it corrupts is only read one function away.
     # `checkpoint.py:_get_git_state` already read both, which is the usual shape of this repo's
     # defects: the correct version was next door.
-    at_head = (not explicit) or head == _git("rev-parse", "HEAD")
+    # AN EXPLICIT HEAD IS A CLAIM ABOUT A COMMIT, NOT ABOUT THE TREE SITTING ON TOP OF IT.
+    #
+    # The first version keyed on `head == rev-parse HEAD`, reasoning that naming HEAD should
+    # behave like defaulting to it. That reads "the named commit is HEAD" as "the working tree
+    # is what the reviewer saw", and the two come apart in exactly the documented workflow:
+    # review -> fix -> commit -> stamp, where the fix is UNCOMMITTED for a window and stamping
+    # during it is the natural moment. Probed 2026-08-19: review commit A, write and stage the
+    # fix, `record(head=A)`, commit — the fix is recorded as `uncommitted`, subtracted by
+    # `changed_since_review`, and pre-push says nothing. **The terminal fix stamped as
+    # reviewed**, which is the over-claiming direction this module names as the dangerous one.
+    # (Review round 2 on this branch.)
+    #
+    # So: the dirty tree belongs to the DEFAULT path only. A reviewer of an uncommitted tree
+    # runs `stamp.py` with no flag — that is what the default is for — and nothing is lost.
+    at_head = not explicit
     dirty = []
     if at_head:
         for args in (("diff", "--name-only"), ("diff", "--cached", "--name-only")):
@@ -245,7 +269,13 @@ def changed_since_review(base: str = "origin/main") -> "tuple[dict | None, list[
     # truthiness skipped the filter in that case and fell back to the un-narrowed `head..HEAD`,
     # re-reporting commits that had already been pushed. Failure is the other branch and keeps
     # the wider report, because a filter that cannot be computed must not silently narrow.
-    outgoing = _git_lines("diff", "--name-only", f"{base}...HEAD")
+    # THE STAMP'S OWN BASE WINS. `pre-push` always calls this with the default `origin/main`,
+    # while `record()` stores the base actually used — and the contract documents
+    # `stamp.py origin/release --head <sha>`. Reporting a release-line stamp against main's
+    # outgoing range drops files whose HEAD content matches main's merge-base. The parameter
+    # stays as the fallback for legacy rows and for direct callers. (Review round 2.)
+    outgoing = _git_lines("diff", "--name-only",
+                          f"{stamp['data'].get('base') or base}...HEAD")
     if outgoing is not None:
         changed = [f for f in changed if f in set(outgoing)]
     # SUBTRACT ONLY THE UNCOMMITTED FILES, and this distinction is the whole feature.
@@ -273,6 +303,36 @@ def changed_since_review(base: str = "origin/main") -> "tuple[dict | None, list[
     return stamp, [f for f in changed if f not in seen]
 
 
+def staleness_note(stamp: "dict | None") -> "str | None":
+    """Why the last stamp cannot be reported against, if it cannot. None when it can.
+
+    `changed_since_review` returns an empty list for THREE different reasons — nothing changed,
+    the stamped commit is gone, or HEAD has moved off its line of history — and `pre-push`
+    printed nothing for all three. The record-time guard refuses a head that is not an ancestor
+    AT STAMP TIME; nothing covered HEAD leaving that line afterwards, which an `--amend` or a
+    rebase does routinely. Probed 2026-08-19: stamp, amend, commit something new, and the report
+    is silent — indistinguishable from "nothing changed since the review", permanently, because
+    `latest()` keeps serving that stamp by timestamp and stamping rides recall (limit 3).
+
+    The record-time guard's own argument applies here verbatim: a stamp that cannot be reported
+    against is worse than no stamp, and the failure is quiet rather than loud. So say it.
+
+    Separate from `changed_since_review` rather than folded into it, because that function's
+    contract is "what changed" and this one's is "can I answer at all". Merging them would make
+    an empty list mean two things, which is the defect.
+    """
+    if stamp is None:
+        return None
+    head = stamp["data"]["head"]
+    if not _git("cat-file", "-t", head):
+        return (f"the last review stamp ({head[:12]}) names a commit that no longer exists — "
+                f"rebased or amended away. This check is BLIND until you re-stamp.")
+    if not _git_ok("merge-base", "--is-ancestor", head, "HEAD"):
+        return (f"the last review stamp ({head[:12]}) is off this line of history — amended, "
+                f"rebased, or taken on another branch. This check is BLIND until you re-stamp.")
+    return None
+
+
 def _main(argv: "list[str]") -> int:
     if any(a in ("-h", "--help") for a in argv):
         print("usage: stamp.py [BASE_REF] [--head SHA]   (default origin/main, HEAD)\n\n"
@@ -293,7 +353,17 @@ def _main(argv: "list[str]") -> int:
                 return 2
         elif a.startswith("--head="):
             head = a.split("=", 1)[1]
-        elif not a.startswith("-"):
+        elif a.startswith("-"):
+            # A TYPO MUST NOT BECOME A BASE REF. The first parser silently DROPPED any
+            # unrecognised `-` token, so `stamp.py --haed <sha>` dropped the flag and let the
+            # sha fall through as the positional base: `review stamped: 1350ddb5 (HEAD) over 0
+            # file(s) vs 1350ddb5...`, rc=0, the fix stamped as reviewed against a phantom base.
+            # `_main` refuses an unresolvable base for exactly this reason and a mistyped flag
+            # routed around it. New failure mode in this diff — before it there was no sha
+            # argument to mistype. (Review round 2.)
+            print(f"unknown option {a!r}", file=sys.stderr)
+            return 2
+        else:
             rest.append(a)
     args = rest
     base = args[0] if args else "origin/main"
