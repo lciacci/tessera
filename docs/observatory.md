@@ -2755,7 +2755,16 @@ marker — is worth more than the 29%.
 standing patterns) ~2,790 — **~15,600 tokens**, plus the Mnemos checkpoint (~2,600) for ~18k in
 practice. (Estimated at chars/4; `count_tokens` if a decision ever rests on it.)
 
-**METERED 2026-08-19: 17,566 tokens tracked** *(17,462 on 08-18; 16,978 on 08-17 — third measurement that day, after 16,799 and 16,473; 15,837 on 08-10, 15,497 on 08-09)* — re-metered
+**METERED 2026-08-19: 17,667 tokens tracked** — the first re-anchor taken against a
+MERGED tree rather than a branch, and deliberately so. Two branches were open at once and each
+moved a different component: `CLAUDE.md` 9,026 → **9,127** (the re-review rule gained the command
+it never had) and `.claude/skills/mnemos/SKILL.md` 4,354 → **4,458** (the T2-instrument
+correction). Either alone is inside the 5% band, so nothing would have gone red, and computing a
+"merged" figure from one branch would have put a number in this file that no tree ever had —
+in the entry about frozen figures. Standing patterns 2,628 and `base` 1,454 unmoved.
+**`CLAUDE.md` is 51.66% of the prefix** and is no longer the only component that grows.
+
+*(Superseded, branch-local:)* **17,566 tokens tracked** *(17,462 on 08-18; 16,978 on 08-17 — third measurement that day, after 16,799 and 16,473; 15,837 on 08-10, 15,497 on 08-09)* — re-metered
 because `.claude/skills/mnemos/SKILL.md` gained the correction that T2's instrument SHIPPED
 (it had said UNBUILT since 2026-07-26, in the copy loaded into every session). **This is the
 first re-anchor in the series driven by something OTHER than `CLAUDE.md`:** `mnemos` moved
