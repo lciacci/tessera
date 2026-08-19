@@ -49,15 +49,44 @@ handoff block only; a blockquoted list is invisible to it.
    variance", which this item claimed until 2026-08-19**, and an earlier correction of that
    claim published "~45%", which does not reconcile with any of these numbers (48.8% of the
    summed per-field swings). `goal` is the flattest field in the payload.
-   **THREE OPTIONS, unchanged, and the fork is Lorenzo's:**
-   1. **Tighten the scope discriminator** in `_select_constraints` — 668 of 719 reachable files
-      arrive via bare DIRECTORY-prefix scope entries. Most likely the real fix, and it changes
-      what the pre-edit channel delivers, so it needs its own before/after measurement.
+   **THE FORK IS COSTED — MEASURED 2026-08-19, and it is not the fork this item described.**
+   1. **Tighten the scope discriminator** in `_select_constraints`. **Two of this item's own
+      premises about it were FALSE, and the measurement changes the answer:**
+      - ~~"it changes what the pre-edit channel delivers, so it needs its own before/after
+        measurement"~~ — **it cannot.** `_scope_relevant` has exactly ONE caller
+        (`checkpoint.py:279`). The pre-edit channel runs `icpg query constraints <file>` →
+        `get_constraints_for_scope`, which despite the name **delegates to
+        `get_reasons_for_file` — symbol edges, not `reason.scope`**. The function name is the
+        whole trap. So option 1 is one-sided and materially cheaper than this item claimed.
+      - ~~"668 of 719 reachable files arrive via bare DIRECTORY-prefix entries"~~ — that figure
+        belongs to the **scope-union proposal declined on 2026-08-10**, not to the tag corpus.
+        Measured: of 80 distinct scope tags, **59 are exact files** and only 6 are bare
+        one-segment directories.
+      **What tightening actually buys** (best candidate: keep only file-shaped tags; 89 archived
+      sessions, today's 108-constraint corpus held constant so the RULE is what varies — the
+      absolute bytes are projections, the comparison is controlled):
+
+      | session width | n | current | tightened | saving | over budget |
+      |---|---:|---:|---:|---:|---|
+      | 1–3 files | 44 | 6,006b | 6,006b | **0** | 2/44 → 2/44 |
+      | 4–6 | 21 | 8,971b | 7,680b | 1,291b | 15/21 → **10/21** |
+      | 7–12 | 21 | 8,902b | 7,708b | 1,194b | 18/21 → **9/21** |
+      | 13+ (wide) | 3 | 10,510b | 9,810b | 700b | 3/3 → **3/3** |
+
+      **So 1 and 3 are COMPLEMENTARY, not alternatives, and this item framing them as a fork is
+      the thing to drop.** Tightening does nothing for narrow sessions (the filter already keeps
+      almost nothing), roughly **halves** the over-budget rate in the 4–12 band where most
+      spills live, and **does not fix the tail at all** — the widest sessions still spill, and
+      max payload only moves 11,122b → 9,969b, still above the ~9,895b derived delivery ceiling.
+      Option 3 is what attacks the tail.
    2. ~~**Make P3 report the DISTRIBUTION, not a spot reading.**~~ **DONE 2026-08-19.** It made
       the signal honest and, as its own description said, claims nothing about the cause — which
       is why 1 and 3 are still open and now have an instrument to be judged against.
    3. **Shrink the constraint TEXT.** ~160b of prose each; nothing has tried summarising rather
-      than dropping wholesale. Untested.
+      than dropping wholesale. Untested — and per the table above it is **the only candidate that
+      touches the tail**, because a wide session's payload is many constraints rather than
+      badly-chosen ones. Do 1 for the middle band and 3 for the tail; neither alone clears the
+      ceiling on the widest sessions.
    **Do NOT re-propose capping goals or capping constraints by recency — both are decided.** And
    note `MAX_CHECKPOINT_GOALS = 8` alone did NOT flatten the goal field: it landed 07-26 and the
    field sat at 11,245b for two more days until the 07-27 `_select_goals` bridge-import
