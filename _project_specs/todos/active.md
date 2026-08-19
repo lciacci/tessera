@@ -18,9 +18,10 @@ Newest section carries it; doccheck `handoff-heading-is-current` guards the orde
 > SINGLE atomic write** — build the whole file in memory, write once, and the block is never absent
 > on disk. Both times: zero degraded events. Do the same.
 
-### Next — 2026-08-18. Item 1 CLOSED — the spend guard is RETIRED (ADR-0029), so its old work
-order is void; item 6 is moot and awaits a human `resolve`; item 9 CLOSED (ADR-0027). Every item
-carries a `**Governs:**` field naming the records that decide it.
+### Next — 2026-08-18. Items 1, 6, 9, 12 CLOSED. The spend guard is RETIRED (ADR-0029) and its
+old work order is void; the escalation is resolved; P13 has an acknowledgment (ADR-0027). Every
+item carries a `**Governs:**` field naming the records that decide it. **P3 (item 7) is the live
+one, and it is INTERMITTENT — a quiet watcher is not evidence it went away.**
 
 **TOP-LEVEL and unindented on purpose** — the surfacer extracts `/^[0-9]+\. /` from the first
 handoff block only; a blockquoted list is invisible to it.
@@ -56,17 +57,11 @@ handoff block only; a blockquoted list is invisible to it.
    Both ADR-0005 and ADR-0025 name the cadence as **2026-10-09**. Pull it forward deliberately
    or leave it; it is not overdue.
    **Governs:** ADR-0005 · ADR-0025 · ADR-0006 — the readiness claim it withdrew.
-6. **THE OPEN ESCALATION IS NOW MOOT AND STILL OPEN — a human must resolve it.**
-   `esc-20260816-025221`, blocking, open since 08-16. **Every option in it is about a mechanism
-   that no longer exists** (ADR-0029), and the disposition path this item used to prescribe —
-   `tessera-authorize dismiss`, then reading `.tessera/.spend-backstop-fires` — names two
-   deleted artifacts. **Do not follow it.** The packet is answered by the retirement, not by a
-   choice among its three options. It still fires `P6` and one leg of `G-a` at every
-   SessionStart until closed:
-   `bin/tessera-escalate resolve esc-20260816-025221 --note "<the decision>"`.
-   **Left for Lorenzo deliberately:** `resolve --note` is human-emitted by the disposition-verb
-   axis (ADR-0016) — the note IS the record — and an agent closing the packet it raised is the
-   shape that axis exists to refuse. Retiring the mechanism does not transfer the verb.
+6. **CLOSED 2026-08-18 — `esc-20260816-025221` resolved by Lorenzo as moot.** Every option in it
+   concerned the in-band spend guard, which ADR-0029 removed. Resolved by a human on purpose:
+   `resolve --note` is human-emitted under ADR-0016's disposition-verb axis (the note IS the
+   record), and an agent closing the packet it raised is the shape that axis refuses — retiring
+   the mechanism does not transfer the verb. P6 and one leg of G-a went quiet with it.
    **Governs:** ADR-0029 · ADR-0016 · `docs/contracts/escalation.md`.
 7. **P3 — MEASURED 2026-08-18, and the field everyone reaches for is the wrong one.**
    **Do not cap goals.** `MAX_CHECKPOINT_GOALS = 8` has existed since 2026-07-26 and works:
@@ -124,20 +119,18 @@ handoff block only; a blockquoted list is invisible to it.
    explicit `--head <sha>`, which also gives (c)'s `base` a reason to exist. Re-plant by stamping
    an unreviewed commit and watching `pre-push` disagree.
    **Governs:** ADR-0014 · `.githooks/pre-push`.
-9. **G-a graduation is firing** — P3, P6, P13, P15 for 3 consecutive runs: build a remedy or add
-   a snooze. Note **P13 is currently correct-but-SPENT**: all 10 events are from 08-16, the block
-   was fixed, and the window rolls off 08-23. That is the "no acknowledgment state" problem
-   `stamp.py`'s own docstring already names.
-   **CLOSED 2026-08-18 — ADR-0027.** P13 has an acknowledgment: `scripts/degraded_ack.py` writes
-   a WATERMARK per `(component, reason)`, honoured only for events recorded before it, so a new
-   failure still fires and — unlike a snooze — the predicate is never blinded. The 08-16 events
-   are acked and P13 is quiet; G-a's streak clears as it re-runs. **Shipped with an inverted
-   default that would have silenced P13 entirely**, caught by re-planting it.
-   **Governs:** ADR-0027 · ADR-0025 · `docs/contracts/degraded-event.md`.
-10. **Housekeeping: the promo page needs a manual upload + `--stamp-deploy`.** It is now a
-    warning, not a blocked commit — which was the entire point of ADR-0026.
-    **Governs:** ADR-0026 — the warn tier; `promo-deploy-marker-is-current` is its one member.
-
+9. **CLOSED 2026-08-18 — G-a is quiet, and three of its four legs are gone for good.**
+   It fired on P3, P6, P13, P15 for 3 consecutive runs. **P15 was deleted** with the spend guard
+   (ADR-0029); **P6** resolved (item 6); **P13** acknowledged via the watermark verb ADR-0027
+   added, which is that verb's first real use. Only **P3** remains and it is item 7.
+   **Note the shape rather than the score:** G-a did its job — it demanded a remedy or a snooze,
+   and what it actually surfaced was that two of the four predicates should not have existed in
+   that form. A graduation predicate that provokes deletion is working, not failing.
+   **Governs:** ADR-0027 · ADR-0029.
+10. **CLOSED 2026-08-18 — promo page uploaded and stamped** (`--stamp-deploy`, marker
+    `6baf835d478e9145`). First full cycle of ADR-0026's warn tier: it printed on the green path of
+    every commit that evening without blocking one, and went silent when the fact became true.
+    **Governs:** ADR-0026.
 11. **Downstream cleanup owed by ADR-0029: howler's harness declines.**
     `../howler/.tessera/harness-declines.yml` declines 9 spend-harness paths that no longer
     exist in the reference scaffold, so `tessera-sync-harness ../howler` now prints
@@ -155,6 +148,17 @@ handoff block only; a blockquoted list is invisible to it.
     rule and why (b) and (c) were not taken — **(c), generating it from the markdown, is the one
     to build if a page starts being re-published repeatedly.**
     **Governs:** ADR-0029 · `docs/adr/snapshots/README.md`.
+
+13. **T2 IS READABLE AND NOBODY HAS READ IT — measured 2026-08-18, previously unrecorded.**
+    The restore-receipt bars are **met**: 24 receipts across 3 projects (tessera 17, conclave 4,
+    arbiter 3) against bars of 10 and 3. P16 is therefore not "waiting for data" — it is waiting
+    for an adjudication that has never happened. **This is the only question that can produce a
+    verdict on Mnemos's recovery half (ADR-0015), and it has been answerable for a while.**
+    Caveat that must not be skipped: **16 of tessera's 17 receipts are `insufficient`, and the
+    missing fields (decisions 5, goal 5, progress 4, files 3) are what a SPILL truncates** — so
+    much of this corpus is measuring the P3 payload problem, not restore sufficiency. Read the
+    two apart before drawing anything, or the verdict will be about item 7 wearing T2's clothes.
+    **Governs:** ADR-0015 · `docs/contracts/restore-receipt.md` · item 7 (the confound).
 
 **Published copies (off-repo, and therefore drift-prone):**
 - ADR-0029 (spend guard retired) — https://claude.ai/code/artifact/9ae5bdbd-56fb-45f9-971a-6458ff6de738
