@@ -28,6 +28,7 @@ import os
 import shutil
 import sqlite3
 import subprocess
+import time
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -134,17 +135,13 @@ def _recent_checkpoint_sizes(mnemos: Path) -> "list[int] | None":
     # stat inside a bare comprehension, ONE entry removed by a concurrent Stop hook — or one
     # unreadable file — discarded the entire distribution as unknown. A sample is not a reading:
     # losing one of thirty costs nothing, losing thirty costs the instrument. (Review, 2026-08-19.)
-    rows = []
+    # THE ABSENT-CATCH COVERS THE `scandir()` CALL ONLY. Wrapping the whole loop meant a
+    # FileNotFoundError raised DURING iteration — the directory removed mid-scan by a concurrent
+    # reset — collapsed to "no archived checkpoints yet" and returned GREEN on a repo with a
+    # thousand of them. That widened the absent arm past the one call it was reasoned about, in
+    # the helper whose docstring argues the two must not collapse. (Review round 2.)
     try:
-        with os.scandir(archive) as it:
-            for e in it:
-                if not e.name.endswith(".json"):
-                    continue
-                try:
-                    st = e.stat()
-                except OSError:
-                    continue
-                rows.append((st.st_mtime, st.st_size))
+        scan = os.scandir(archive)
     except FileNotFoundError:
         # ABSENT IS A REAL ANSWER: a fresh clone has no archive, and calling that "unreadable"
         # would put an alarm-shaped phrase in front of every new checkout. Only a path that
@@ -155,22 +152,57 @@ def _recent_checkpoint_sizes(mnemos: Path) -> "list[int] | None":
         return []
     except OSError:
         return None
-    rows.sort()
-    return [size for _, size in rows[-DISTRIBUTION_WINDOW:]]
+
+    rows = []
+    try:
+        with scan as it:
+            for e in it:
+                if not e.name.endswith(".json"):
+                    continue
+                # PER-ENTRY GUARD: one entry removed by a concurrent Stop hook, or one
+                # unreadable file, must cost one SAMPLE and not the whole reading — which now
+                # fires, so a routine race would otherwise produce a spurious "instrument dead".
+                try:
+                    st = e.stat()
+                except OSError:
+                    continue
+                rows.append((st.st_mtime, e.name, st.st_size))
+    except OSError:
+        return None
+
+    # TIE-BREAK ON NAME, NOT SIZE. Sorting bare `(mtime, size)` tuples meant equal mtimes were
+    # ordered by BYTES, so any operation stamping many archive files alike — a `cp -r`, a restore
+    # from a copy, a coarse-granularity filesystem — made the "most recent N" slice select the
+    # LARGEST files. That biases the over-budget count upward, i.e. exactly in the direction that
+    # makes this predicate fire. (Review round 2.)
+    rows.sort(key=lambda r: (r[0], r[1]))
+    return [(mtime, size) for mtime, _, size in rows[-DISTRIBUTION_WINDOW:]]
 
 
-def _distribution_note(sizes: "list[int] | None") -> "tuple[int, str]":
-    """(over-budget count, prose). The count is what decides; the prose is what a reader gets."""
-    if sizes is None:
+def _distribution_note(rows: "list | None", now: "float | None" = None) -> "tuple[int, str]":
+    """(over-budget count, prose). The count is what decides; the prose is what a reader gets.
+
+    THE AGE IS CARRIED because a window is a COUNT with no time bound. If checkpoint writing dies
+    — the F-001 class, where the toolchain silently stops being reachable — the archive freezes
+    and this reports "across the last 30: 14 over budget" forever, as a statement about current
+    behaviour, while the real finding is that nothing has been written in weeks. Reported rather
+    than fired: a stale archive is not itself a spill, and P3 already has a branch for a missing
+    checkpoint. **Known limit: a frozen-but-CLEAN archive is invisible, because the predicate
+    stays quiet and `render()` prints only what fires.** (Review round 2.)
+    """
+    if rows is None:
         return 0, ("recent-checkpoint distribution UNREADABLE — .mnemos/checkpoints/ could not "
                    "be scanned, so this reading is a spot check with nothing behind it")
-    if not sizes:
+    if not rows:
         return 0, "no archived checkpoints yet, so this is a spot reading"
+    sizes = [size for _, size in rows]
     over = [n for n in sizes if n > RESTORE_BUDGET_BYTES]
     mid = sorted(sizes)[len(sizes) // 2]
+    age_days = int(((now or time.time()) - max(m for m, _ in rows)) // 86400)
+    age = f", newest {age_days}d old" if age_days >= 1 else ""
     return len(over), (
         f"across the last {len(sizes)} archived checkpoints: {len(over)} over budget, "
-        f"median {mid:,}b, max {max(sizes):,}b")
+        f"median {mid:,}b, max {max(sizes):,}b{age}")
 
 
 def p3_restore_integrity(root: Path) -> tuple[bool, str]:
@@ -343,9 +375,22 @@ def p3_restore_integrity(root: Path) -> tuple[bool, str]:
     # `n_over` and cannot corroborate itself; recurrence therefore means n_over > 1. And the
     # FIRST spill after a clean run is exactly when a reader needs to be told it IS one.
     # (Review, 2026-08-19.)
-    recurrence = (f"AND THIS IS NOT A ONE-OFF — {dist}."
-                  if n_over > 1 else
-                  f"This looks like a FIRST occurrence rather than a pattern — {dist}.")
+    # THREE ARMS, NOT TWO. `n_over` is 0 for an unreadable archive AND for an empty one, so a
+    # two-arm version printed "This looks like a FIRST occurrence rather than a pattern —
+    # distribution UNREADABLE" — an unsupported conclusion in the sentence a reader trusts most,
+    # which is the defect this whole commit was written to remove, recreated one branch over via
+    # the same None/0 collapse. **And the over-budget branch RETURNS before the `sizes is None`
+    # branch below**, so the "instrument is dead" notice is unreachable exactly when the payload
+    # is also spilling — which is when it matters. (Review round 2.)
+    if sizes is None:
+        recurrence = (f"WHETHER THIS RECURS CANNOT BE TOLD — {dist}. The distribution instrument "
+                      f"is dead; check .mnemos/checkpoints/ permissions.")
+    elif not sizes:
+        recurrence = f"No history to compare against — {dist}."
+    elif n_over > 1:
+        recurrence = f"AND THIS IS NOT A ONE-OFF — {dist}."
+    else:
+        recurrence = f"This looks like a FIRST occurrence rather than a pattern — {dist}."
 
     if size > RESTORE_BUDGET_BYTES:
         # MEASURED PER FIRING, NOT ASSERTED ONCE. The first version of this branch replaced a
@@ -425,7 +470,13 @@ def p3_restore_integrity(root: Path) -> tuple[bool, str]:
         return True, (
             f"PreCompact payload_probe now reports keys {sorted(set(probe_keys))} — the harness "
             f"has started sending a payload, so T3 (compaction frequency) may be answerable "
-            f"HERE for the first time. Re-read ADR-0015's re-evaluate triggers. {tally}")
+            f"HERE for the first time. Re-read ADR-0015's re-evaluate triggers. "
+            # APPENDED, not short-circuited. This branch returns before both distribution
+            # branches, so on the day the harness starts sending a payload — the ADR-0015
+            # re-evaluate trigger this exists to catch — a recent-spill pattern or a dead
+            # instrument would be silently dropped in favour of the T3 message. They are
+            # independent facts. (Review round 2.)
+            f"Separately, {dist}. {tally}")
 
     # THE QUIET PATH IS THE ONE A READER ACTUALLY SEES, and it carried the retracted claim for
     # one commit while the docstring above carried the correction. Standing pattern #9 inside
