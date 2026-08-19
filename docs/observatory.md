@@ -3478,6 +3478,23 @@ The hint is not merely unhelpful; it is *directionally wrong*, and it was presum
 the goal blob was the overflow (the 2026-07-27 receipt saw `+90 older goal(s) omitted`). The blob
 shrank; the hint did not follow.
 
+> **CLOSED 2026-08-19, thirteen days later, and it took THREE attempts — which is the durable
+> part.** The hint was replaced by an imperative-free version, then by a population claim ("the
+> driver is `active_constraints`, every other field stays flat") that review measured false
+> twice, then by a per-payload computation that was honest and *still* aimed the reader at
+> `goal`. Measured over 55 over-budget checkpoints, **`goal` is the largest field in zero of
+> them** (rank 3 or 4 in every one) while that clause printed "dropping goal WOULD clear it" in
+> 22. **The version that holds asks the removal question of the measured DRIVER and reports
+> `goal`'s rank rather than any claim about it** — computed, so it cannot rot the way three
+> successive sentences did.
+>
+> This entry's finding 1 (the budget above the real threshold) landed 2026-08-07. Its finding 3
+> — that the T2 gap is a `write_checkpoint` defect no byte fix reaches — is **untouched and
+> still the sharp one**. And the entry's own prediction is now testable in a way it was not:
+> P3 also reports the DISTRIBUTION of recent checkpoint sizes and fires on it, so "P3 goes green
+> while the receipt still reads insufficient" can be checked against a signal that no longer
+> flickers with whichever checkpoint happened to be written last.
+
 **3. Fixing the bytes turns P3 green and does not answer T2 — this is ADR-0020's finding landing on
 the predicate itself.**
 
@@ -4379,8 +4396,11 @@ the tool you reach for to check your work is in scope for the check.
 3. **Changing the sort — not taken, and this is the one to be most careful with.** "Newest first" is
    as arbitrary as "oldest first"; the right key is *specificity*, which is not currently computed
    (`lookup()` matches by prefix, so a record naming `scripts/` and one naming the exact file are
-   indistinguishable at sort time). Live queue item 1 exists because this file has already been
-   reworked twice in a month, and both reworks shipped defects.
+   indistinguishable at sort time). The live queue's decision-surface items exist because this
+   file has already been reworked twice in a month, and both reworks shipped defects. *(This
+   read "live queue item 1" until 2026-08-19; the handoff was renumbered and item 1 is now the
+   P3 payload, so the sentence had come to point at an unrelated subject. See the closing note
+   of "The figures are guarded" for the class.)*
 
 **The trap any fix must clear:** a guard for this must not share `lookup()` with the thing it
 guards. Stubbing `_is_exempt` on 2026-08-15 fully restored a defect while the guard that called it
@@ -4746,8 +4766,21 @@ If an entry sits in "Investigating" for >6 months without being touched, that it
   Three more and this is a pattern worth a standing-patterns line rather than an entry — the bar
   ADR-0025 set for the fail-open claim, applied here.
 
-- **Cross-refs:** `_project_specs/todos/active.md` item 7 (P3's options, and the explicit warning
-  not to start from P3's own message) · ADR-0026 (the corrected figure) · ADR-0022.
+- **Cross-refs:** `_project_specs/todos/active.md` — **the P3 payload item** (its options, and
+  the explicit warning not to start from P3's own message); it was item 7 when this was written
+  and is **item 1** as of 2026-08-19 · ADR-0026 (the corrected figure) · ADR-0022.
+- **AND THE RENUMBER IS ITSELF AN INSTANCE OF THIS ENTRY, found 2026-08-19 by sweeping for
+  drift after a handoff rewrite.** A queue item's NUMBER is a citation to a moving target: the
+  handoff is rewritten every session or two and items close, so `active.md item 7` silently
+  becomes a pointer to something else while every artifact citing it stays green. Two live
+  cross-references had already gone wrong this way — this one, and the decision-surface sort
+  entry's "live queue item 1", which after the rewrite read as though P3's item were about the
+  decision surface. **No check is proposed and that is the considered answer:** an assertion
+  that `item N` exists is trivially satisfiable and says nothing about whether it still means
+  what the citing sentence meant, so it would be a false comfort — principle #3's A6 corollary,
+  a judgement wearing a regex. The cheap discipline instead: **cite the SUBJECT, and let the
+  number be the convenience** — "the P3 payload item (item 1 today)" survives a renumber where
+  "item 7" does not.
 
 ---
 

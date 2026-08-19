@@ -227,7 +227,14 @@ def p3_restore_integrity(root: Path) -> tuple[bool, str]:
 
     ── WHAT THIS DOES AND DOES NOT CLAIM ─────────────────────────────────────────────────
 
-    GREEN HERE MEANS "THE PAYLOAD SURVIVES DELIVERY". It does NOT mean restore works. That
+    GREEN HERE MEANS "THE PAYLOAD SURVIVED DELIVERY, AND SO DID THE LAST 30". Since 2026-08-19
+    this reads the recent archive rather than only the newest checkpoint, and **fires on that
+    distribution even when the last-written payload is fine** — because `render()` prints only
+    FIRED predicates, so a distribution reported on the quiet path reaches nobody. The trigger is
+    "did the payload spill recently", never a rate: a rate threshold would be an invented number
+    and three predicates have been retired here for exactly that. The rate is severity.
+
+    It does NOT mean restore works. That
     question is T2 in ADR-0015 (does the agent resume without re-deriving?) and only the model
     can answer it. Reading this predicate as a verdict on Mnemos would mint proxy #5 after P2
     (verb count), old-P4 (project count), and sqlfluff (file existence). It is a REGRESSION
