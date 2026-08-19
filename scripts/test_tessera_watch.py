@@ -405,8 +405,19 @@ def _mnemos(tmp_path):
     return m
 
 
-def _checkpoint(tmp_path, *, pad=0, drop=()):
-    data = {"goal": "g" + "x" * pad, "active_constraints": ["c"], "task_narrative": "n"}
+def _checkpoint(tmp_path, *, pad=0, drop=(), pad_field="goal"):
+    """`pad_field` lets a test choose WHICH field dominates. Default is unchanged, so every
+    existing caller keeps its exact fixture; the over-budget message is now computed per
+    payload, so testing it needs payloads with different shapes."""
+    # FIVE fields, not three. With three, the message's top-3 list contains every field and
+    # `"goal" in named` holds regardless of ORDER — the assertions read as ranking checks and
+    # were vacuous. Proven by review: dropping `reverse=True` from the sort left them green.
+    data = {"goal": "g", "active_constraints": ["c"], "task_narrative": "n",
+            "active_results": ["r"], "decisions": ["d"]}
+    if pad_field == "goal":
+        data["goal"] = "g" + "x" * pad
+    else:
+        data[pad_field] = ["c" + "x" * pad]
     for f in drop:
         data.pop(f, None)
     (_mnemos(tmp_path) / "checkpoint-latest.json").write_text(json.dumps(data))
@@ -435,6 +446,118 @@ def test_p3_fires_when_checkpoint_exceeds_the_delivery_budget(tmp_path):
     assert "EVERY session start" in detail, "must not re-frame this as a compaction-only bug"
 
 
+def _first_named_field(detail):
+    """The field the message ranks FIRST, parsed out of the rendered string.
+
+    Membership (`"goal" in named`) is not a ranking test when the list is as long as the
+    payload. This reads position 1, so inverting the sort changes the answer."""
+    seg = detail.split("Largest fields in THIS checkpoint (indent=2, as written): ")[1]
+    return seg.split(" · ")[0].rsplit(" ", 1)[0]
+
+
+def test_p3_over_budget_message_measures_THIS_payload_not_the_population(tmp_path):
+    """THE HINT IS PART OF THE INSTRUMENT, and this branch has now been wrong three times.
+
+    v1 (until 2026-08-19): *"Check the goal field first — goals are never-evict and one is
+    minted per ingested session."* True on 2026-07-26; two sessions were aimed at the wrong
+    field by the alarm's own advice.
+
+    v2 (same day, caught by review): a POPULATION claim — "the driver is active_constraints,
+    every other field stays flat" — plus "deleting goal does not get under budget". Measured:
+    roughly two in five over-budget checkpoints clear on goal removal alone, and
+    `decisions`/`recent_files` each swing ~1.7KB.
+
+    v3 COMPUTES, and THIS TEST WAS STILL VACUOUS. Both fixtures had three fields and the
+    message prints three, so membership held under any ordering; review proved it by dropping
+    `reverse=True` and watching the test pass. Its docstring claimed the opposite. **A
+    verification claim is a doc claim** — that is the 2026-08-17 lesson, scored again here.
+
+    v4 asserts POSITION on a five-field fixture. Falsify by removing `reverse=True` from the
+    sort in `p3_restore_integrity`: both cases then name the smallest field first."""
+    goal_heavy = _checkpoint(tmp_path, pad=tw.RESTORE_BUDGET_BYTES)
+    fired, detail = tw.p3_restore_integrity(goal_heavy)
+    assert fired is True
+    assert _first_named_field(detail) == "goal"
+    assert "dropping goal alone would clear it" in detail
+    assert "goal ranks #1 of 5 here" in detail, "the rank is computed, never asserted"
+
+    con_heavy = _checkpoint(tmp_path, pad=tw.RESTORE_BUDGET_BYTES,
+                            pad_field="active_constraints")
+    fired, detail = tw.p3_restore_integrity(con_heavy)
+    assert fired is True
+    assert _first_named_field(detail) == "active_constraints"
+    assert "dropping active_constraints alone would clear it" in detail, (
+        "the removal question must be asked of the DRIVER; v3 asked it of `goal`, which is "
+        "the largest field in 0 of 55 over-budget checkpoints and printed WOULD-clear in 22")
+    assert "dropping goal" not in detail, "v3's goal-specific arithmetic is back"
+    assert "Check the goal field first" not in detail, "v1's misdirecting imperative is back"
+
+
+def test_p3_ranks_fields_in_the_unit_the_file_is_WRITTEN_in(tmp_path):
+    """FINDING 6, and it needed a payload built specially to be visible at all.
+
+    `size` is the on-disk byte count of a file `checkpoint.py` writes with `indent=2`. The
+    first version of this branch measured fields with COMPACT `json.dumps`, so the parts were
+    in one unit and the whole in another — 9,480b of fields reported inside a payload called
+    10,111b. On ordinary checkpoints the ranking agrees under both units, which is exactly why
+    reverting the fix left every test green when it was first tried.
+
+    It disagrees when a field is a long LIST of short strings (every element gains indentation)
+    against a single long STRING (which gains none). 500 ten-char paths are 7,000b compact and
+    8,002b indented; a 7,000-char goal is 7,002b either way. Compact ranks goal first and is
+    wrong about which field is consuming the budget.
+
+    Falsify by changing `len(json.dumps(v, indent=2))` back to `len(json.dumps(v))` in
+    `p3_restore_integrity`."""
+    m = _mnemos(tmp_path)
+    (m / "checkpoint-latest.json").write_text(json.dumps({
+        "goal": "x" * 7000,
+        "recent_files": ["p" * 10] * 500,
+        "active_constraints": ["c"],
+        "task_narrative": "n",
+    }, indent=2))
+    fired, detail = tw.p3_restore_integrity(tmp_path)
+    assert fired is True
+    assert _first_named_field(detail) == "recent_files", (
+        "ranked in compact bytes, `goal` wins by 2 bytes and the alarm names the wrong field")
+
+
+def test_p3_cap_citation_matches_the_real_constant(tmp_path):
+    """FINDING 5, and it is the one guard that survives a changed cap.
+
+    The message cites `MAX_CHECKPOINT_GOALS = 8` so a reader can see what bounds the field it
+    rules out. `bin/` is stdlib-only (doccheck `bin-scripts-are-stdlib-only`) and cannot import
+    mnemos, so that literal is a SECOND DEFINITION — the same situation `checkpoint-budget-
+    matches-p3` exists for. Without this, raising the cap to 20 leaves the alarm asserting a
+    bound that no longer holds, and every test stays green.
+
+    Binds to the real constant rather than to 8, so it fails on the change rather than on a
+    number someone has to remember to update here too."""
+    from mnemos.checkpoint import MAX_CHECKPOINT_GOALS, BRIDGE_ORIGIN
+    root = _checkpoint(tmp_path, pad=tw.RESTORE_BUDGET_BYTES)
+    _, detail = tw.p3_restore_integrity(root)
+    assert f"MAX_CHECKPOINT_GOALS = {MAX_CHECKPOINT_GOALS}" in detail, (
+        "P3's cited cap has drifted from scripts/mnemos/checkpoint.py")
+    # BOTH bounds, because citing only the COUNT cap to argue a BYTE bound is the error this
+    # branch's own docstring establishes: 8 goals at ~1,400b each is ~11,200b, over the whole
+    # budget. If `_select_goals`' bridge exclusion regresses, goal bytes return to ~11k while
+    # the cap still reads 8 and the alarm again steers the reader off the field blowing the
+    # budget — v1's failure, reachable through a filter nobody cited. (Review, round 2.)
+    assert f"origin='{BRIDGE_ORIGIN}'" in detail, (
+        "the bound that actually caps goal BYTES is the bridge-import exclusion, and the "
+        "message must name it")
+
+
+# NO TEST ASSERTS THE DOCSTRING'S "instrument IS NOT BUILT" CLAIM IS GONE, and the attempt is
+# worth recording. One was written and it FAILED — on the corrected file — because the docstring
+# now quotes the old sentence in order to record that it was wrong. The guard could not tell a
+# live false claim from an honest history note, which is #10's corollary verbatim and the same
+# shape as the `cmd_record` comment-match. `docs/observatory.md` -> "The figures are guarded"
+# says it directly: do not build a prose-validity checker; principle #3's A6 corollary adds that
+# authored prose in an unenforced format wants a human re-read, not a regex. So that claim is
+# fixed and unguarded, said out loud rather than left implied.
+
+
 def test_p3_quiet_on_a_deliverable_checkpoint_but_claims_no_verdict(tmp_path):
     """Green here means the payload survives delivery — NOT that restore works.
 
@@ -445,6 +568,15 @@ def test_p3_quiet_on_a_deliverable_checkpoint_but_claims_no_verdict(tmp_path):
     fired, detail = tw.p3_restore_integrity(_checkpoint(tmp_path))
     assert fired is False
     assert "NOT a verdict" in detail and "T2" in detail
+    # ADDED 2026-08-19. This string said T2's "instrument is unbuilt" for one commit AFTER the
+    # docstring above was corrected to say it shipped — the corrected copy was a docstring
+    # nothing prints, and this is the string emitted at every GREEN session start. #9 inside a
+    # fix for a stale-claim bug, found by review. The subject is a runtime string, not prose
+    # about code, which is what makes it checkable at all.
+    assert "instrument is unbuilt" not in detail, (
+        "T2's instrument shipped 2026-07-26; the reason there is no verdict is DATA, and P16 "
+        "owns that bar")
+    assert "P16" in detail, "the quiet path must point at who actually answers the question"
 
 
 def test_p3_fires_when_a_required_field_is_missing(tmp_path):

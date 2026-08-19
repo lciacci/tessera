@@ -71,11 +71,37 @@ handoff block only; a blockquoted list is invisible to it.
    one a standing property, so a cap would pick winners by age on the payload's most valuable
    field."* Proposing it again is re-doing a decided question.
 
-   **What the numbers actually say.** Last 30 checkpoints: min 4,141b, median 5,270b, max 8,598b,
-   and **8 of 30 over the 8,000b budget**. Every byte of the variance is `active_constraints`,
-   which swings 989 ↔ 5,397 while goals and results stay flat. At the spike: 34 constraints,
-   32 of them ~160b `INV:` prose from PAST intents, exactly 1 `file_exists` — so the 2026-08-10
-   static-fact filter is working and is not the gap.
+   **What the numbers actually say — RE-MEASURED 2026-08-19 over a bigger, cleaner window, and
+   two of the 08-18 figures do not survive it.** The old reading was "last 30 checkpoints: min
+   4,141b, median 5,270b, max 8,598b, 8 of 30 over budget; **every byte of the variance is
+   `active_constraints`**". Over **n=122 fully-schema'd checkpoints (2026-08-10 onward — the
+   window in which every field exists, so no field is scored as 2 bytes for being absent)**:
+
+   | field | min | median | max | swing |
+   |---|---:|---:|---:|---:|
+   | `active_constraints` | 989 | 1,972 | 5,397 | **4,408** |
+   | `decisions` | 2 | 1,664 | 1,863 | 1,861 |
+   | `recent_files` | 2 | 344 | 1,719 | 1,717 |
+   | `active_results` | 1,434 | 1,573 | 1,824 | 390 |
+   | `task_narrative` | 23 | 174 | 379 | 356 |
+   | `goal` | 1,088 | 1,253 | 1,255 | **167** |
+
+   TOTAL 4,859 / 7,666 / 11,419, and **53 of 122 (43%) over the 8,000b budget** — not 8 of 30.
+   **`active_constraints` is the largest single driver at ~45% of the swing, NOT "every byte"**:
+   `decisions` and `recent_files` contribute ~3.6KB between them. The 989 ↔ 5,397 range and the
+   goal figure both reproduce exactly, so the *direction* of item 7 stands and its magnitude was
+   overstated. Beware the window: measuring from 2026-07-28 instead gives constraints a max of
+   8,654, because that span mixes in checkpoints written before the `decisions` field existed.
+   At the spike: 34 constraints, 32 of them ~160b `INV:` prose from PAST intents, exactly 1
+   `file_exists` — so the 2026-08-10 static-fact filter is working and is not the gap.
+
+   **And `MAX_CHECKPOINT_GOALS = 8` alone did not flatten the goal field**, which matters because
+   this item's "goals have been capped and flat since 2026-07-26" is the sentence that stopped
+   anyone re-examining goals. The cap landed 07-26; the field stayed at **11,245b for two more
+   days**, because the cap bounds the COUNT while each bridged iCPG goal ran ~1,400b. The
+   2026-07-27 `_select_goals` fix excluding `origin='loaded'` imports is what flattened it — max
+   goal bytes per day is 11,245 on 07-26 and 07-27, then ≤1,255 from **07-28**. The conclusion
+   (do not cap goals) is unchanged; the reason given for it was incomplete.
 
    **The driver is SCOPE-MATCH BREADTH.** `_select_constraints` keeps an invariant when its iCPG
    scope touches the session's recent paths, so a session touching many directories pulls in many
@@ -149,16 +175,45 @@ handoff block only; a blockquoted list is invisible to it.
     to build if a page starts being re-published repeatedly.**
     **Governs:** ADR-0029 · `docs/adr/snapshots/README.md`.
 
-13. **T2 IS READABLE AND NOBODY HAS READ IT — measured 2026-08-18, previously unrecorded.**
-    The restore-receipt bars are **met**: 24 receipts across 3 projects (tessera 17, conclave 4,
-    arbiter 3) against bars of 10 and 3. P16 is therefore not "waiting for data" — it is waiting
-    for an adjudication that has never happened. **This is the only question that can produce a
-    verdict on Mnemos's recovery half (ADR-0015), and it has been answerable for a while.**
-    Caveat that must not be skipped: **16 of tessera's 17 receipts are `insufficient`, and the
-    missing fields (decisions 5, goal 5, progress 4, files 3) are what a SPILL truncates** — so
-    much of this corpus is measuring the P3 payload problem, not restore sufficiency. Read the
-    two apart before drawing anything, or the verdict will be about item 7 wearing T2's clothes.
-    **Governs:** ADR-0015 · `docs/contracts/restore-receipt.md` · item 7 (the confound).
+13. **T2 IS NOT YET READABLE — this item said the opposite, and the correction is the item
+    (2026-08-19).** It read *"the restore-receipt bars are MET: 24 receipts across 3 projects
+    (tessera 17, conclave 4, arbiter 3) against bars of 10 and 3. P16 is therefore not waiting
+    for data."* **P16 was, and says so in words.** Run live:
+    `T2 accruing: 7/10 receipts across 2/3 projects (arbiter 3, conclave 4), day 21/30 — too
+    early to read, by design`. The 24 counted **tessera's own 17**, which P16's docstring and
+    the observatory stopping rule both exclude in the same words — *"tessera's own receipts do
+    not count toward it. That is the whole point."* Both arms are short. **Adjudicating on this
+    item as written would have been the exact move the stopping rule was written to prevent, on
+    the strength of a handoff that miscounted** — and note the shape: the tessera receipts are
+    excluded *because* they are confounded, and this item quoted their confound in its own next
+    sentence while counting them toward the bar.
+    **What IS established, and it is real progress — measured 2026-08-19, no verdict implied:**
+    **the two downstreams that have FILED receipts** measure 2,515b (arbiter) and 4,524b
+    (conclave) against a ~10,000-character spill boundary, so *their* `insufficient` verdicts
+    are **not** the P3 confound; the two halves are separable for the corpus that counts.
+    Scoped to those two rather than to "downstream", because the fleet spread is 534 to
+    **8,414** — settempo is over the 8,000b budget and is the one project where truncation
+    would be live, and it has filed zero receipts. *(This sentence generalised over all six
+    until 2026-08-19; the observatory entry it points at had already caught and fixed the same
+    overclaim in its own draft, and the correction did not reach here — the loud copy stayed
+    wrong while the quiet one was right, which is this item's own subject.)* Downstream names `decisions` in
+    **6 of 7** receipts (conclave 4/4, arbiter 2/3). conclave's checkpoint now *carries*
+    `decisions` and its 08-14 and 08-15 receipts still name it missing. And **4 of the 6 downstreams have no
+    `decisions` key at all** — they have not checkpointed since the field
+    shipped — their checkpoints date 07-08 to 07-23, so only two downstreams are worked (arbiter
+    08-10, conclave 08-15) and **the 3-project arm may not be reachable by accrual.** The realistic path is P16's 30-day arm on **2026-08-28**, whose own message says
+    THE FINDING IS THE RATE, NOT MNEMOS. Do not pre-empt it.
+    **OWED ON MERGE, and P12 is firing until it happens:** `bin/tessera-sync-skills`. The
+    "T2's instrument is UNBUILT" correction landed in `skills/mnemos/SKILL.md`, and
+    `~/.claude/skills/mnemos/SKILL.md` — the mirror ADR-0010 feeds from the repo, and **the
+    copy conclave and arbiter actually load** — still carries the retracted sentence. Deferred
+    rather than run because propagating an unmerged branch into machine-global state is the
+    wrong order, not because the gap is acceptable: this change's own thesis is that a
+    correction has to reach the loud copy, and it currently stops one command short of the six
+    downstreams. Raised by review, 2026-08-19.
+    **Governs:** ADR-0015 · `docs/contracts/restore-receipt.md` · `bin/tessera-watch` (P16 owns
+    the bar) · `docs/observatory.md` → "T2 downstream" (the stopping rule) · ADR-0010 (repo is
+    truth, global is a managed mirror) · item 7.
 
 **Published copies (off-repo, and therefore drift-prone):**
 - ADR-0029 (spend guard retired) — https://claude.ai/code/artifact/9ae5bdbd-56fb-45f9-971a-6458ff6de738

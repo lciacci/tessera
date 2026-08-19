@@ -142,8 +142,13 @@ SessionStart output limit → the harness delivered a 2KB preview) was degrading
 So when reading this file's compaction sections: they describe **one trigger**, not the
 mechanism. Three questions now, with different evidence and venues —
 **T1** deliverability (guarded by P3, mechanical, green today);
-**T2** sufficiency, *does the agent resume without re-deriving* — **the real question,
-instrument UNBUILT, so no verdict on Mnemos is available**;
+**T2** sufficiency, *does the agent resume without re-deriving* — **the real question. Its
+instrument SHIPPED 2026-07-26** (`scripts/restore/`, `docs/contracts/restore-receipt.md`);
+this line said UNBUILT until 2026-08-19, which was false for three weeks in the one copy
+loaded into EVERY session. **No verdict is available yet, and the reason is now DATA, not a
+missing instrument** — `tessera-watch` P16 owns that bar and reads 7/10 receipts across 2/3
+downstream projects today. Do not adjudicate before P16 fires; tessera's own receipts do not
+count toward it;
 **T3** compaction frequency (blocked by the empty PreCompact payload, demoted to
 informational). And note `restore_injected` is **a log line the hook writes about
 itself** — the log shows four, the model received nothing on all four. Volume of

@@ -131,10 +131,52 @@ def p3_restore_integrity(root: Path) -> tuple[bool, str]:
     ── WHAT THIS DOES AND DOES NOT CLAIM ─────────────────────────────────────────────────
 
     GREEN HERE MEANS "THE PAYLOAD SURVIVES DELIVERY". It does NOT mean restore works. That
-    question is T2 in ADR-0015 (does the agent resume without re-deriving?), only the model
-    can answer it, and its instrument IS NOT BUILT. Reading this predicate as a verdict on
-    Mnemos would mint proxy #5 after P2 (verb count), old-P4 (project count), and sqlfluff
-    (file existence). It is a REGRESSION GUARD on an observed failure, nothing more.
+    question is T2 in ADR-0015 (does the agent resume without re-deriving?) and only the model
+    can answer it. Reading this predicate as a verdict on Mnemos would mint proxy #5 after P2
+    (verb count), old-P4 (project count), and sqlfluff (file existence). It is a REGRESSION
+    GUARD on an observed failure, nothing more.
+
+    (This paragraph said "its instrument IS NOT BUILT" until 2026-08-19. T2's instrument
+    shipped 2026-07-26 — `scripts/restore/` + `docs/contracts/restore-receipt.md` — so the
+    sentence was false for three weeks. Whether there is enough DATA to read is a separate
+    question and P16 owns it; conflating "unbuilt" with "unread" is what let this sit.)
+
+    ── THE REMEDIATION HINT IS PART OF THE INSTRUMENT, AND THIS ONE WAS WRONG FOR 24 DAYS ──
+
+    Until 2026-08-19 the over-budget branch ended *"Check the goal field first — goals are
+    never-evict and one is minted per ingested session."* True when written, and **two sessions
+    were aimed at the wrong field by this alarm's own advice.** The hint was not stale; it was
+    actively misleading, inside the sentence a reader trusts most.
+
+    THE CAP ALONE DID NOT FLATTEN THE GOAL FIELD, and getting this right took two attempts.
+    `MAX_CHECKPOINT_GOALS = 8` landed 2026-07-26 — and the goal field stayed at **11,245b for
+    two more days**, because the cap bounds the COUNT while each bridged iCPG goal ran ~1,400b.
+    What flattened it was the 2026-07-27 `_select_goals` fix excluding `origin='loaded'` bridge
+    imports. Measured over the archive: max goal bytes per day is 11,245 on 07-26 and 07-27,
+    then ≤1,255 from **07-28** onward. So the cap was necessary and not sufficient, and the
+    first version of this docstring credited it alone.
+
+    THE REPLACEMENT HINT WAS ALSO WRONG, AND THAT IS THE MORE USEFUL LESSON. It asserted a
+    population-level cause ("the driver is active_constraints, every other field stays flat")
+    and an unconditional claim ("deleting goal does not get under budget"). Review measured
+    both false: roughly two in five over-budget checkpoints clear on goal removal alone (22 of
+    54 across 124 fully-schema'd, 2026-08-19), and `decisions` and `recent_files` each swing
+    ~1.7KB. **This sentence carried "34 of the 75 over 175" for one commit** — the unfiltered
+    population wearing the filtered one's label — while the comment ~100 lines below already
+    retracted it, so the file shipped a retracted figure and its retraction side by side and
+    the docstring is the copy a reader hits first. Third instance in this branch of correcting
+    one copy. Both were true of one 12,364b checkpoint
+    measured 2026-08-06 and generalised without the generalisation being stated — the
+    "three environments are not a machine" error, committed while fixing a stale-reasoning bug.
+
+    **So the branch now COMPUTES.** It reports the three largest fields of the payload in front
+    of it and whether dropping goal would clear the budget, rather than telling a reader what
+    is usually true. A hint that must stay correct as a distribution moves is a hint that will
+    rot; one that measures its own instance cannot. The one asserted number left is the cap
+    itself, cited so the reader can see what bounds the field being ruled out — the convention
+    `docs/observatory.md` → "The figures are guarded; the REASONING attached to them is not"
+    proposes — and a test binds that literal to the real constant so a changed cap fails loudly
+    instead of leaving the message quietly wrong.
 
     Size is a direct measure, not a stand-in: checkpoint JSON tracks delivered bytes ~1:1
     (8,508 → 8,206 rendered; pre-fix ≈18,755 → 18,248, which SPILLED to a file and handed
@@ -214,13 +256,78 @@ def p3_restore_integrity(root: Path) -> tuple[bool, str]:
             f"those sections silently vanish from every restore. {tally}")
 
     if size > RESTORE_BUDGET_BYTES:
+        # MEASURED PER FIRING, NOT ASSERTED ONCE. The first version of this branch replaced a
+        # misleading hint with a fleet-wide diagnosis -- "the driver is active_constraints,
+        # every other field stays flat", and "deleting goal does not get under budget" -- and
+        # review measured both false. Roughly two in five over-budget checkpoints clear on GOAL
+        # REMOVAL ALONE, and `decisions` and `recent_files` each swing ~1.7KB, so "every other
+        # field" was wrong twice. Both claims were true of ONE 12,364b checkpoint measured
+        # 2026-08-06 and generalised without saying so -- the "three environments are not a
+        # machine" error, in the fix for a stale-reasoning bug.
+        #
+        # THE COUNTS BEHIND "TWO IN FIVE" ARE A DATED SNAPSHOT: 22 of 54, over the 124
+        # checkpoints carrying the full field set, 2026-08-19. Stated as a ratio in prose and as
+        # counts here because the archive is append-only and this session alone moved the
+        # denominator 122 -> 124. **The first version of this comment said "34 of 75 over 175
+        # fully-schema'd" -- real numbers for the UNFILTERED population (176 post-08-10, 76
+        # over), labelled as the filtered one, and therefore disagreeing with item 7's 53-of-122
+        # in the same change.** Review caught it. A wrong denominator survives re-measurement,
+        # because re-measuring inherits the definition; only re-deriving what to measure finds it.
+        #
+        # A spot alarm must not carry a distribution-level cause: it fires on ONE payload and
+        # the population's driver need not be that payload's. That is item 7's own option-2
+        # concern one level up. So this reports what THIS checkpoint is made of and leaves the
+        # population question where it is adjudicated.
+        #
+        # `indent=2` MATCHES HOW THE FILE IS WRITTEN (checkpoint.py writes the archive and the
+        # latest copy indented), which is much closer than compact dumps but is NOT exact, and
+        # the inexactness runs one way. Compact under-counts by ~180b here and can reorder the
+        # ranking when a long LIST of short strings -- every element gaining indentation --
+        # competes with a single long STRING that gains none. `indent=2` still under-counts,
+        # because each value sits one nesting level DEEPER in the file than in a standalone
+        # dump: ~2b per rendered line of any nested container, ~68b on a 34-element constraint
+        # list. So `without_big` is a slight OVER-estimate of what removal saves and can say
+        # "would clear it" for a payload landing a few tens of bytes above the budget. Named
+        # rather than corrected: the exact answer is re-serialising the whole dict without the
+        # field, and this is an advisory line, not an accounting. The residual reported as
+        # "keys, braces and separators" is that overhead MINUS this under-count.
+        ranked = sorted(((len(json.dumps(v, indent=2)), k) for k, v in data.items()),
+                        reverse=True)
+        largest = ranked[:3]
+        top = " · ".join(f"{k} {n:,}b" for n, k in largest)
+        # ASK THE QUESTION OF THE DRIVER, NOT OF `goal`. v3 computed whether dropping GOAL would
+        # clear the budget -- per payload, so not a population claim, and still misdirecting:
+        # measured over the archive, goal is the largest field in **0 of 55** over-budget
+        # checkpoints (rank 3 or 4 in every one) while the clause printed "WOULD clear it" in 22
+        # of them. The alarm's longest advisory was still about the field that is never the
+        # overflow, and it recommended an action the next clause forbids. v1's misdirection in a
+        # new suit, and the third time this branch has aimed a reader at `goal`.
+        #
+        # `goal`'s RANK is still reported, because "not this field" is exactly what the two
+        # misdirected sessions needed -- but computed, so it cannot rot the way a "goal is never
+        # the driver" sentence would. Same rule as everything else here: measure the instance.
+        big_bytes, big_field = ranked[0]
+        without_big = size - big_bytes
+        shape = (f"dropping {big_field} alone would clear it ({without_big:,}b would remain)"
+                 if without_big <= RESTORE_BUDGET_BYTES
+                 else f"even dropping {big_field} leaves {without_big:,}b — this overflow is "
+                      f"diffuse, no single field carries it")
+        names = [k for _, k in ranked]
+        goal_rank = (f"goal ranks #{names.index('goal') + 1} of {len(names)} here"
+                     if "goal" in names else "no goal field present")
         return True, (
             f"checkpoint-latest.json is {size:,}b, over the {RESTORE_BUDGET_BYTES:,}b delivery "
             f"budget. Checkpoint bytes track delivered bytes ~1:1, and ≈18,755b was observed to "
             f"SPILL: the harness wrote the block to a file and handed the model a 2KB preview, "
             f"so Constraints/Progress/Files never arrived. This degrades EVERY session start, "
-            f"not just compaction. Check the goal field first — goals are never-evict and one "
-            f"is minted per ingested session. {tally}")
+            f"not just compaction. Largest fields in THIS checkpoint (indent=2, as written): "
+            f"{top}; {shape}. For the record — {goal_rank} — goals are bounded TWICE and only "
+            f"one of the two bounds bytes: MAX_CHECKPOINT_GOALS = 8 caps the COUNT, and "
+            f"_select_goals' exclusion of bridge imports (origin='loaded') caps the SIZE. The "
+            f"count cap alone left the field at 11,245b for two days in July, so if goal is "
+            f"ranked high HERE the suspect is that filter, not the cap. Options are weighed in "
+            f"_project_specs/todos/active.md item 7; do not re-propose capping goals or "
+            f"capping constraints by recency, both are decided. {tally}")
 
     if probe_keys:
         return True, (
@@ -228,10 +335,15 @@ def p3_restore_integrity(root: Path) -> tuple[bool, str]:
             f"has started sending a payload, so T3 (compaction frequency) may be answerable "
             f"HERE for the first time. Re-read ADR-0015's re-evaluate triggers. {tally}")
 
+    # THE QUIET PATH IS THE ONE A READER ACTUALLY SEES, and it carried the retracted claim for
+    # one commit while the docstring above carried the correction. Standing pattern #9 inside
+    # the fix for a stale-claim bug: the corrected copy is a docstring nothing prints; this
+    # string reaches the model at every green session start. Found by review, not by me.
     return False, (
         f"restore payload deliverable: {size:,}b / {RESTORE_BUDGET_BYTES:,}b, required fields "
-        f"present. NOT a verdict on restore WORKING — that is T2, and its instrument is "
-        f"unbuilt (ADR-0015). {tally}")
+        f"present. NOT a verdict on restore WORKING — that is T2 (ADR-0015). Its instrument "
+        f"SHIPPED 2026-07-26 (scripts/restore/); whether it has enough downstream data to read "
+        f"is P16's question, and P16 answers it. {tally}")
 
 
 def p4_downstream(root: Path) -> tuple[bool, str]:

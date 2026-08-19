@@ -302,13 +302,24 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   (T1 deliverability / T2 sufficiency / T3 frequency) and the retirement of `COMPACTION_MIN`.
 - **Status:** Trial **re-scoped, not concluded** (ADR-0015). `tessera-watch` P3 is now
   `p3_restore_integrity` — a mechanical guard on payload deliverability, explicitly **not** a
-  verdict. **T2 (does the agent resume without re-deriving?) is the sole blocker on a real verdict,
-  and its instrument is unbuilt.** Until then no verdict is available — not keep, not kill.
+  verdict. **T2 (does the agent resume without re-deriving?) is the sole blocker on a real
+  verdict.** ~~and its instrument is unbuilt~~ — **corrected 2026-08-19: the instrument shipped
+  2026-07-26** (`scripts/restore/`). What is missing is DATA, and P16 owns that bar: 7/10
+  receipts across 2/3 downstream projects as of 2026-08-19. No verdict is available — not keep,
+  not kill — but the reason changed three weeks ago and three LIVE copies of this sentence did
+  not. A **fourth** survives in `_project_specs/todos/active.md`, inside a dated blockquoted
+  2026-07-26 handoff record, and it STAYS: this repo does not rewrite history, and a record of
+  what was believed then is not a claim about now. Counted here because "three copies" read as
+  an exhaustive sweep and was not one (review, 2026-08-19).
+  See the 2026-08-19 entry at the end of this file.
 - **Historical status (pre-ADR-0015):** Trial **re-armed on an event trigger** (calendar trigger retired). Recovery path **exercised once (manual)**; awaiting a real `auto` event.
-- **When to revisit (CURRENT, per ADR-0015):** when **T2's instrument ships** — a model-emitted
-  receipt, gate-event shaped, recording whether the agent resumed without re-deriving. That is the
-  only thing that can produce a verdict, because `restore_injected` is **a log line the hook writes
-  about itself**, not evidence the model received anything. The log shows four; the model got
+- **When to revisit (CURRENT, per ADR-0015):** ~~when **T2's instrument ships**~~ — **that fired
+  2026-07-26 and this line went on describing it as pending until 2026-08-19.** The live trigger
+  is **P16's arms: ≥10 receipts across ≥3 DOWNSTREAM projects, or 30 days (2026-08-28)**; today
+  7/10 across 2/3. The instrument is a model-emitted receipt, gate-event shaped, recording whether
+  the agent resumed without re-deriving. It is the only thing that can produce a verdict, because
+  `restore_injected` is **a log line the hook writes about itself**, not evidence the model
+  received anything. The log shows four; the model got
   nothing on all four. Re-scoping from 3 events to 121 gives 121 self-reports — **volume does not
   fix provenance.** Also revisit if Layer 3 ever delivers to a model even once (it never has), or
   if a restore is observed failing while P3 is green (that would make T1 a proxy too).
@@ -2744,10 +2755,21 @@ marker — is worth more than the 29%.
 standing patterns) ~2,790 — **~15,600 tokens**, plus the Mnemos checkpoint (~2,600) for ~18k in
 practice. (Estimated at chars/4; `count_tokens` if a decision ever rests on it.)
 
-**METERED 2026-08-18: 17,462 tokens tracked** *(16,978 on 08-17 — third measurement that day, after 16,799 and 16,473; 15,837 on 08-10, 15,497 on 08-09)* — re-metered
-because `CLAUDE.md` gained ADR-0029's retirement clause, per its own rule; `CLAUDE.md` is now
-**9,026 of the 17,462** (51.69%), and the growth is again **entirely `CLAUDE.md` (+78 on top of the +406)** —
-`mnemos` 4,354, standing patterns as emitted 2,628, `base` 1,454, all three unmoved across all five.
+**METERED 2026-08-19: 17,566 tokens tracked** *(17,462 on 08-18; 16,978 on 08-17 — third measurement that day, after 16,799 and 16,473; 15,837 on 08-10, 15,497 on 08-09)* — re-metered
+because `.claude/skills/mnemos/SKILL.md` gained the correction that T2's instrument SHIPPED
+(it had said UNBUILT since 2026-07-26, in the copy loaded into every session). **This is the
+first re-anchor in the series driven by something OTHER than `CLAUDE.md`:** `mnemos` moved
+4,354 → **4,458** for the first time across six measurements, `CLAUDE.md` held at 9,026,
+standing patterns 2,628 and `base` 1,454 unmoved. `CLAUDE.md` is now 51.38% — it fell as a
+share without shrinking, which is worth noting only because every prior entry in this series
+read the share as a proxy for CLAUDE.md's growth and here it moved for the opposite reason.
++104 is +0.6%, well inside the 5% band, so `eager-prefix-figure-is-current` was green
+throughout and nothing would have surfaced it — the failure this entry names, obeyed rather
+than re-learned.
+
+*(Prior reading, kept for the series:)* 17,462 on 2026-08-18, re-metered because `CLAUDE.md`
+gained ADR-0029's retirement clause; `CLAUDE.md` was **9,026 of the 17,462** (51.69%), growth
+**entirely `CLAUDE.md` (+78 on top of the +406)**.
 
 > **This figure was stale for the length of one PR, INSIDE the 5% band, which is the failure
 > this entry names.** ADR-0029's edits grew `CLAUDE.md` by ~406 tokens and I did not re-run
@@ -3423,7 +3445,21 @@ minted per ingested session."* Measured against `.mnemos/checkpoint-latest.json`
      2b   0%  working_memory       (empty)
 ```
 
-Deleting `goal` **entirely** does not get under budget. `active_constraints` is 77 entries, **61 of
+Deleting `goal` **entirely** does not get under budget.
+
+> **CORRECTED 2026-08-19 — this sentence is the source of a generalisation that then rotted into
+> `tessera-watch` itself, and it is false as an unconditional claim.** It is true of the ONE
+> 12,364b checkpoint measured here, where `goal` was 671b (5%). Measured across the archive:
+> **22 of 55 over-budget checkpoints DO clear on goal removal alone** (~2 in 5). The heading's
+> "the field it names is 5% of the overflow" is likewise a property of this payload, not of the
+> population. **The generalisation was carried verbatim into P3's own remediation text on
+> 2026-08-19 and had to be retracted there twice** — first as a wrong unconditional claim, then
+> as a per-payload computation that still pointed at `goal`, which is the largest field in
+> **0 of 55** over-budget checkpoints. Heading left unedited on purpose: `decision_surface`
+> indexes headings, and the 2026-08-07 entry records that renaming one silently breaks a
+> citation. What is durable here is the ORDERING of the fields, not the arithmetic.
+
+`active_constraints` is 77 entries, **61 of
 them `file_exists("path")`** invariants bridged from iCPG intents — e.g.
 `INV: file_exists("scripts/override/")`. Those are static repo facts, not session constraints, and
 `scripts/doccheck.py` already asserts every one of those paths with a pre-commit hook behind it.
@@ -4703,3 +4739,88 @@ If an entry sits in "Investigating" for >6 months without being touched, that it
 
 - **Cross-refs:** `_project_specs/todos/active.md` item 7 (P3's options, and the explicit warning
   not to start from P3's own message) · ADR-0026 (the corrected figure) · ADR-0022.
+
+---
+
+### T2's bar was reported MET by counting the receipts it exists to exclude — and the predicate that knew better was silent *(2026-08-19)*
+
+- **Status:** Investigating. **No verdict on Mnemos's recovery half is issued here, and that is
+  the point of the entry.**
+- **Source:** picking up `_project_specs/todos/active.md` item 13, which instructed exactly that
+  adjudication. The premise did not survive running P16.
+
+**The claim and the measurement, side by side.** Item 13 read: *"The restore-receipt bars are
+**met**: 24 receipts across 3 projects (tessera 17, conclave 4, arbiter 3) against bars of 10 and
+3. P16 is therefore not 'waiting for data' — it is waiting for an adjudication that has never
+happened."* P16, run:
+
+```
+T2 accruing: 7/10 receipts across 2/3 projects (arbiter 3, conclave 4),
+day 21/30 — too early to read, by design
+```
+
+**Both arms are short.** The 24 counted **tessera's own 17**, which `p16_t2_receipts`' docstring
+and the stopping rule three entries up exclude in the same words — *"tessera's own receipts do not
+count toward it. That is the whole point."*
+
+**The shape is sharper than an arithmetic slip, and it is why this is an entry.** Item 13 quoted
+the confound in its own next sentence — *"16 of tessera's 17 receipts are insufficient, and the
+missing fields are what a SPILL truncates… read the two apart"* — while counting those same 17
+toward the bar. The caveat and the inclusion sat adjacent and contradicted each other. **The
+tessera receipts are excluded BECAUSE they are confounded; a note warning about the confound is
+not a licence to count them.**
+
+**THE CHANNEL ASYMMETRY IS THE REUSABLE HALF, and it is principle #17 pointing the wrong way.**
+P16 computes the correct state on every run and **says nothing**, because it has not fired —
+`render()` prints fired predicates, and `T2 accruing: 7/10 … too early to read` is a `False`
+return. It is recoverable from `--json`, which nobody reads at session start. Meanwhile the false
+premise rode `tessera-watch-surface.sh` into **every** SessionStart, in the file `CLAUDE.md` tells
+you to read first. **The correct fact was on the quietest channel in the repo and the wrong one on
+the loudest.** No remedy is proposed: making every non-fired predicate print is the noise that
+teaches a reader to skip the board, and asserting handoff prose against predicate output is a
+judgement wearing a regex (#3's A6 corollary — the handoff is authored prose in an unenforced
+format). What was done instead is the cheapest honest thing: item 13 now **names P16 as the owner
+of the bar** in its `Governs:` line, the same hint-cites-its-bound convention applied to P3's
+remediation text the same day.
+
+#### What IS established — measured 2026-08-19, and it is genuine progress toward the eventual read
+
+None of this is a verdict. It is the deconfounding item 13 correctly said had to happen *first*.
+
+- **The downstream half is separable from P3, mechanically.** The two downstreams that have
+  produced receipts measure **2,515b (arbiter) and 4,524b (conclave)** — a quarter to under a
+  half of the documented ~10,000-character spill boundary, so **their `insufficient` verdicts
+  cannot be truncation**. That is exactly the "read the two apart" item 13 asked for, and for the
+  corpus that counts it comes out clean.
+  Stated for the whole fleet rather than the convenient half, because the first draft of this
+  bullet gave a range of "2,515–4,524" and then listed six numbers, two of them outside it —
+  a claim contradicting its own parenthetical, in the entry about claims that stay green beside
+  a correct number. Full spread: tess-dashboard 534 · arbiter 2,515 · heaviside 2,720 · howler
+  4,157 · conclave 4,524 · **settempo 8,414**. Settempo is over the 8,000b budget and is the one
+  downstream where truncation would be a live question — and it has produced **zero** receipts,
+  so it neither supports nor threatens the deconfounding. It is the project to watch if it starts
+  filing them.
+- **Downstream converges on ONE field: `decisions`, 6 of 7 receipts** (conclave 4/4; arbiter 2/3
+  plus one `progress`). Tessera's 17 spread across four (`decisions` 5, `goal` 5, `progress` 4,
+  `files` 2, one `sufficient`). Per this file's own signal 3, convergence on the *same* field is
+  the **stronger** outcome, not the null one: it points at `write_checkpoint` rather than at a
+  venue effect.
+- **And the field exists now, which makes the convergence louder rather than quieter.** conclave's
+  checkpoint carries `decisions` (2 entries) and its **08-14 and 08-15** receipts still name it
+  missing. Adding the field did not discharge the finding — so whatever is missing is not the
+  field's absence but its content. That is a live thread and it is *not* read here.
+- **The 3-project arm may not be reachable by accrual — and "not being worked" is measured, not
+  inferred.** There are six downstreams. **Four of the six carry no `decisions` key at all**
+  — tess-dashboard 2026-07-08, heaviside 07-12, howler 07-19, settempo 07-23, each paired with
+  its own date because the first version of this line listed the four names in one order and the
+  four dates in another, mis-pairing three of the four **in the entry about figures that stay
+  green beside a wrong reading.** All four predate the field and are a month or more old. The only
+  two with recent checkpoints are the only two that have ever filed a receipt: arbiter (08-10)
+  and conclave (08-15). *(First draft of this bullet said "four of seven", counting tessera as a
+  downstream in the one paragraph whose subject is that tessera is not one.)*
+  So the realistic completion is P16's **30-day arm on 2026-08-28**, whose message already says
+  *THE FINDING IS THE RATE, NOT MNEMOS* — signal 1, not a Mnemos verdict.
+
+**Revisit when:** P16 fires — either arm. **Do not adjudicate before it**, and note that this entry
+is now the second record saying so; the first was ignored because a handoff item said the bar was
+met and the handoff is what gets read.
