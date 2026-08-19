@@ -4718,3 +4718,86 @@ If an entry sits in "Investigating" for >6 months without being touched, that it
 
 - **Cross-refs:** `_project_specs/todos/active.md` item 7 (P3's options, and the explicit warning
   not to start from P3's own message) · ADR-0026 (the corrected figure) · ADR-0022.
+
+---
+
+### T2's bar was reported MET by counting the receipts it exists to exclude — and the predicate that knew better was silent *(2026-08-19)*
+
+- **Status:** Investigating. **No verdict on Mnemos's recovery half is issued here, and that is
+  the point of the entry.**
+- **Source:** picking up `_project_specs/todos/active.md` item 13, which instructed exactly that
+  adjudication. The premise did not survive running P16.
+
+**The claim and the measurement, side by side.** Item 13 read: *"The restore-receipt bars are
+**met**: 24 receipts across 3 projects (tessera 17, conclave 4, arbiter 3) against bars of 10 and
+3. P16 is therefore not 'waiting for data' — it is waiting for an adjudication that has never
+happened."* P16, run:
+
+```
+T2 accruing: 7/10 receipts across 2/3 projects (arbiter 3, conclave 4),
+day 21/30 — too early to read, by design
+```
+
+**Both arms are short.** The 24 counted **tessera's own 17**, which `p16_t2_receipts`' docstring
+and the stopping rule three entries up exclude in the same words — *"tessera's own receipts do not
+count toward it. That is the whole point."*
+
+**The shape is sharper than an arithmetic slip, and it is why this is an entry.** Item 13 quoted
+the confound in its own next sentence — *"16 of tessera's 17 receipts are insufficient, and the
+missing fields are what a SPILL truncates… read the two apart"* — while counting those same 17
+toward the bar. The caveat and the inclusion sat adjacent and contradicted each other. **The
+tessera receipts are excluded BECAUSE they are confounded; a note warning about the confound is
+not a licence to count them.**
+
+**THE CHANNEL ASYMMETRY IS THE REUSABLE HALF, and it is principle #17 pointing the wrong way.**
+P16 computes the correct state on every run and **says nothing**, because it has not fired —
+`render()` prints fired predicates, and `T2 accruing: 7/10 … too early to read` is a `False`
+return. It is recoverable from `--json`, which nobody reads at session start. Meanwhile the false
+premise rode `tessera-watch-surface.sh` into **every** SessionStart, in the file `CLAUDE.md` tells
+you to read first. **The correct fact was on the quietest channel in the repo and the wrong one on
+the loudest.** No remedy is proposed: making every non-fired predicate print is the noise that
+teaches a reader to skip the board, and asserting handoff prose against predicate output is a
+judgement wearing a regex (#3's A6 corollary — the handoff is authored prose in an unenforced
+format). What was done instead is the cheapest honest thing: item 13 now **names P16 as the owner
+of the bar** in its `Governs:` line, the same hint-cites-its-bound convention applied to P3's
+remediation text the same day.
+
+#### What IS established — measured 2026-08-19, and it is genuine progress toward the eventual read
+
+None of this is a verdict. It is the deconfounding item 13 correctly said had to happen *first*.
+
+- **The downstream half is separable from P3, mechanically.** The two downstreams that have
+  produced receipts measure **2,515b (arbiter) and 4,524b (conclave)** — a quarter to under a
+  half of the documented ~10,000-character spill boundary, so **their `insufficient` verdicts
+  cannot be truncation**. That is exactly the "read the two apart" item 13 asked for, and for the
+  corpus that counts it comes out clean.
+  Stated for the whole fleet rather than the convenient half, because the first draft of this
+  bullet gave a range of "2,515–4,524" and then listed six numbers, two of them outside it —
+  a claim contradicting its own parenthetical, in the entry about claims that stay green beside
+  a correct number. Full spread: tess-dashboard 534 · arbiter 2,515 · heaviside 2,720 · howler
+  4,157 · conclave 4,524 · **settempo 8,414**. Settempo is over the 8,000b budget and is the one
+  downstream where truncation would be a live question — and it has produced **zero** receipts,
+  so it neither supports nor threatens the deconfounding. It is the project to watch if it starts
+  filing them.
+- **Downstream converges on ONE field: `decisions`, 6 of 7 receipts** (conclave 4/4; arbiter 2/3
+  plus one `progress`). Tessera's 17 spread across four (`decisions` 5, `goal` 5, `progress` 4,
+  `files` 2, one `sufficient`). Per this file's own signal 3, convergence on the *same* field is
+  the **stronger** outcome, not the null one: it points at `write_checkpoint` rather than at a
+  venue effect.
+- **And the field exists now, which makes the convergence louder rather than quieter.** conclave's
+  checkpoint carries `decisions` (2 entries) and its **08-14 and 08-15** receipts still name it
+  missing. Adding the field did not discharge the finding — so whatever is missing is not the
+  field's absence but its content. That is a live thread and it is *not* read here.
+- **The 3-project arm may not be reachable by accrual — and "not being worked" is measured, not
+  inferred.** There are six downstreams. **Four of the six carry no `decisions` key at all**
+  (howler, heaviside, settempo, tess-dashboard), and their checkpoints were last written
+  2026-07-08, 07-12, 07-19 and 07-23 — before the field existed and a month or more ago. The only
+  two with recent checkpoints are the only two that have ever filed a receipt: arbiter (08-10)
+  and conclave (08-15). *(First draft of this bullet said "four of seven", counting tessera as a
+  downstream in the one paragraph whose subject is that tessera is not one.)*
+  So the realistic completion is P16's **30-day arm on 2026-08-28**, whose message already says
+  *THE FINDING IS THE RATE, NOT MNEMOS* — signal 1, not a Mnemos verdict.
+
+**Revisit when:** P16 fires — either arm. **Do not adjudicate before it**, and note that this entry
+is now the second record saying so; the first was ignored because a handoff item said the bar was
+met and the handoff is what gets read.

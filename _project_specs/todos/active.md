@@ -149,16 +149,29 @@ handoff block only; a blockquoted list is invisible to it.
     to build if a page starts being re-published repeatedly.**
     **Governs:** ADR-0029 · `docs/adr/snapshots/README.md`.
 
-13. **T2 IS READABLE AND NOBODY HAS READ IT — measured 2026-08-18, previously unrecorded.**
-    The restore-receipt bars are **met**: 24 receipts across 3 projects (tessera 17, conclave 4,
-    arbiter 3) against bars of 10 and 3. P16 is therefore not "waiting for data" — it is waiting
-    for an adjudication that has never happened. **This is the only question that can produce a
-    verdict on Mnemos's recovery half (ADR-0015), and it has been answerable for a while.**
-    Caveat that must not be skipped: **16 of tessera's 17 receipts are `insufficient`, and the
-    missing fields (decisions 5, goal 5, progress 4, files 3) are what a SPILL truncates** — so
-    much of this corpus is measuring the P3 payload problem, not restore sufficiency. Read the
-    two apart before drawing anything, or the verdict will be about item 7 wearing T2's clothes.
-    **Governs:** ADR-0015 · `docs/contracts/restore-receipt.md` · item 7 (the confound).
+13. **T2 IS NOT YET READABLE — this item said the opposite, and the correction is the item
+    (2026-08-19).** It read *"the restore-receipt bars are MET: 24 receipts across 3 projects
+    (tessera 17, conclave 4, arbiter 3) against bars of 10 and 3. P16 is therefore not waiting
+    for data."* **P16 was, and says so in words.** Run live:
+    `T2 accruing: 7/10 receipts across 2/3 projects (arbiter 3, conclave 4), day 21/30 — too
+    early to read, by design`. The 24 counted **tessera's own 17**, which P16's docstring and
+    the observatory stopping rule both exclude in the same words — *"tessera's own receipts do
+    not count toward it. That is the whole point."* Both arms are short. **Adjudicating on this
+    item as written would have been the exact move the stopping rule was written to prevent, on
+    the strength of a handoff that miscounted** — and note the shape: the tessera receipts are
+    excluded *because* they are confounded, and this item quoted their confound in its own next
+    sentence while counting them toward the bar.
+    **What IS established, and it is real progress — measured 2026-08-19, no verdict implied:**
+    downstream checkpoints are **2,515–4,524b** and cannot spill, so downstream `insufficient`
+    is **not** the P3 confound; the two halves are separable. Downstream names `decisions` in
+    **6 of 7** receipts (conclave 4/4, arbiter 2/3). conclave's checkpoint now *carries*
+    `decisions` and its 08-14 and 08-15 receipts still name it missing. And **4 of the 6 downstreams have no
+    `decisions` key at all** — they have not checkpointed since the field
+    shipped — their checkpoints date 07-08 to 07-23, so only two downstreams are worked (arbiter
+    08-10, conclave 08-15) and **the 3-project arm may not be reachable by accrual.** The realistic path is P16's 30-day arm on **2026-08-28**, whose own message says
+    THE FINDING IS THE RATE, NOT MNEMOS. Do not pre-empt it.
+    **Governs:** ADR-0015 · `docs/contracts/restore-receipt.md` · `bin/tessera-watch` (P16 owns
+    the bar) · `docs/observatory.md` → "T2 downstream" (the stopping rule) · item 7.
 
 **Published copies (off-repo, and therefore drift-prone):**
 - ADR-0029 (spend guard retired) — https://claude.ai/code/artifact/9ae5bdbd-56fb-45f9-971a-6458ff6de738
