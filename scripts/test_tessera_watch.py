@@ -1,6 +1,7 @@
 """Predicate checks for bin/tessera-watch. Run: pytest scripts/test_tessera_watch.py"""
 import datetime as _dt
 import json
+import os
 from importlib.util import module_from_spec, spec_from_loader
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
@@ -424,6 +425,21 @@ def _checkpoint(tmp_path, *, pad=0, drop=(), pad_field="goal"):
     return tmp_path
 
 
+def _archive(tmp_path, sizes):
+    """Write archived checkpoints of the given byte sizes, oldest first.
+
+    mtime is set explicitly rather than relied on: files written in the same second sort
+    arbitrarily, and the window is "the most recent N", so a test whose ordering depends on
+    filesystem timestamp resolution would pass or fail by accident."""
+    d = _mnemos(tmp_path) / "checkpoints"
+    d.mkdir(exist_ok=True)
+    for i, n in enumerate(sizes):
+        f = d / f"cp{i:03d}.json"
+        f.write_text("x" * n)
+        os.utime(f, (1_000_000 + i, 1_000_000 + i))
+    return tmp_path
+
+
 def _compaction(trigger=None, probe=None):
     e = {"ts": 1.0, "event": "compaction_fired"}
     if trigger:
@@ -577,6 +593,83 @@ def test_p3_quiet_on_a_deliverable_checkpoint_but_claims_no_verdict(tmp_path):
         "T2's instrument shipped 2026-07-26; the reason there is no verdict is DATA, and P16 "
         "owns that bar")
     assert "P16" in detail, "the quiet path must point at who actually answers the question"
+
+
+def test_p3_fires_on_the_DISTRIBUTION_when_the_spot_reading_is_fine(tmp_path, monkeypatch):
+    """THE POINT OF THE 2026-08-19 CHANGE, and it is a firing change rather than a wording one.
+
+    P3 reported whichever checkpoint happened to be written last. Measured: 53 of 122 recent
+    checkpoints over budget, and this predicate read 8,542b then 7,260b then 10,339b across ONE
+    session — three stories from one unchanged problem. Item 1: "a spot reading on a fluctuating
+    quantity is why this read as a goal problem for weeks."
+
+    Reporting it on the QUIET path would have reached nobody: `render()` prints only FIRED
+    predicates. That is the same channel asymmetry recorded the same day, where P16 held the
+    correct T2 count and said nothing because it had not fired. So the distribution has to be
+    able to fire, and this asserts exactly that — a healthy newest checkpoint, an unhealthy
+    recent history, and P3 red.
+
+    Falsify by dropping the `if n_over:` branch."""
+    root = _checkpoint(tmp_path)                       # newest is tiny and fine
+    _archive(tmp_path, [200, tw.RESTORE_BUDGET_BYTES + 500, 300])
+    fired, detail = tw.p3_restore_integrity(root)
+    assert fired is True
+    assert "last-written checkpoint is fine" in detail
+    assert "1 over budget" in detail
+
+
+def test_p3_stays_quiet_when_the_whole_recent_history_is_clean(tmp_path, monkeypatch):
+    """The other half, and without it the branch above could be an unconditional alarm. A
+    predicate that cannot go green teaches you to ignore the watcher — P9's docstring."""
+    root = _checkpoint(tmp_path)
+    _archive(tmp_path, [200, 300, 400])
+    fired, detail = tw.p3_restore_integrity(root)
+    assert fired is False
+    assert "0 over budget" in detail, "the distribution rides the quiet path too, for --json"
+
+
+def test_p3_reports_the_distribution_alongside_an_over_budget_reading(tmp_path, monkeypatch):
+    """A spot reading over budget does not say whether it is chronic or a one-off, and those
+    call for different responses. Both branches carry the same measurement."""
+    root = _checkpoint(tmp_path, pad=tw.RESTORE_BUDGET_BYTES)
+    _archive(tmp_path, [tw.RESTORE_BUDGET_BYTES + 1] * 3)
+    fired, detail = tw.p3_restore_integrity(root)
+    assert fired is True
+    assert "NOT A ONE-OFF" in detail and "3 over budget" in detail
+
+
+def test_p3_treats_an_absent_archive_as_a_real_answer_not_an_unknown(tmp_path, monkeypatch):
+    """A fresh clone has no `.mnemos/checkpoints/`. Calling that "UNREADABLE" would put an
+    alarm-shaped phrase in front of every new checkout, and this repo has a name for a predicate
+    that fires on a state nobody can resolve. Only a directory that EXISTS and cannot be scanned
+    is the unknown — the distinction `_git_lines` exists for one repo over."""
+    root = _checkpoint(tmp_path)                       # no archive dir at all
+    fired, detail = tw.p3_restore_integrity(root)
+    assert fired is False
+    assert "no archived checkpoints yet" in detail
+    assert "UNREADABLE" not in detail
+
+
+def test_p3_says_so_when_the_archive_cannot_be_read(tmp_path, monkeypatch):
+    """Unreadable must not read as clean. `_recent_checkpoint_sizes` returns None, the note says
+    the reading has nothing behind it, and the predicate does NOT fire on it — an unscannable
+    directory is not evidence of a spill, and inventing one would be the inverse fail-open."""
+    root = _checkpoint(tmp_path)
+    (_mnemos(tmp_path) / "checkpoints").write_text("not a directory")
+    fired, detail = tw.p3_restore_integrity(root)
+    assert "UNREADABLE" in detail
+    assert fired is False
+
+
+def test_p3_distribution_window_takes_the_NEWEST_not_the_first_on_disk(tmp_path, monkeypatch):
+    """`os.scandir` yields in arbitrary order, so the window has to sort. An old spill that has
+    since been fixed must age out, or the predicate never goes green again and becomes the
+    permanently-red board it is meant to replace."""
+    root = _checkpoint(tmp_path)
+    _archive(tmp_path, [tw.RESTORE_BUDGET_BYTES + 1] + [100] * tw.DISTRIBUTION_WINDOW)
+    fired, detail = tw.p3_restore_integrity(root)
+    assert fired is False, "the single old spill is outside the window and must age out"
+    assert f"last {tw.DISTRIBUTION_WINDOW} archived checkpoints" in detail
 
 
 def test_p3_fires_when_a_required_field_is_missing(tmp_path):

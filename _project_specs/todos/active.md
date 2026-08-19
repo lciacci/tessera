@@ -26,8 +26,19 @@ sessions.**
 **TOP-LEVEL and unindented on purpose** — the surfacer extracts `/^[0-9]+\. /` from the first
 handoff block only; a blockquoted list is invisible to it.
 
-1. **P3 — the live one. The misdirecting hint is FIXED; the PREDICATE is not.** It still reports
-   a SPOT reading of the last-written checkpoint. Measured over n=122 fully-schema'd checkpoints
+1. **P3 — the live one. OPTION 2 IS DONE (2026-08-19); the fork between 1 and 3 is open.**
+   P3 now reads the last 30 archived checkpoints and reports how many exceeded budget, in every
+   branch — **and FIRES on that distribution even when the newest checkpoint is fine.** That
+   second half is not a side effect: `render()` prints only FIRED predicates, so a distribution
+   reported on the quiet path would have reached nobody, which is the channel asymmetry recorded
+   the same day about P16. The trigger is *"did the payload spill recently"*, never a rate — a
+   rate threshold would be an invented number, and the rate is reported as severity only.
+   **CONSEQUENCE, EXPECTED AND NOT A DEFECT: P3 is now steadily red rather than flickering, and
+   G-a fires on its streak.** The condition is genuinely present in ~2 of 5 recent checkpoints;
+   the flicker was the spot reading, not the problem going away. G-a's demand — build a remedy or
+   snooze — is answered by the fork below, and **snoozing would blind the predicate to a real
+   spill**, so it is the wrong half of that choice here.
+   Measured over n=122 fully-schema'd checkpoints
    (2026-08-10 onward, the window in which every field exists): **53 of 122 (43%) are over the
    8,000b budget**; total min/median/max 4,859 / 7,666 / 11,419. Swing by field —
    `active_constraints` 4,408 · `decisions` 1,861 · `recent_files` 1,717 · `active_results` 390 ·
@@ -38,9 +49,9 @@ handoff block only; a blockquoted list is invisible to it.
    1. **Tighten the scope discriminator** in `_select_constraints` — 668 of 719 reachable files
       arrive via bare DIRECTORY-prefix scope entries. Most likely the real fix, and it changes
       what the pre-edit channel delivers, so it needs its own before/after measurement.
-   2. **Make P3 report the DISTRIBUTION, not a spot reading.** Cheapest, and it now has real
-      numbers to be judged against. **Start here** — it makes the signal honest without claiming
-      to fix the cause.
+   2. ~~**Make P3 report the DISTRIBUTION, not a spot reading.**~~ **DONE 2026-08-19.** It made
+      the signal honest and, as its own description said, claims nothing about the cause — which
+      is why 1 and 3 are still open and now have an instrument to be judged against.
    3. **Shrink the constraint TEXT.** ~160b of prose each; nothing has tried summarising rather
       than dropping wholesale. Untested.
    **Do NOT re-propose capping goals or capping constraints by recency — both are decided.** And
