@@ -68,14 +68,32 @@ handoff block only; a blockquoted list is invisible to it.
    axis (ADR-0016) — the note IS the record — and an agent closing the packet it raised is the
    shape that axis exists to refuse. Retiring the mechanism does not transfer the verb.
    **Governs:** ADR-0029 · ADR-0016 · `docs/contracts/escalation.md`.
-7. **The checkpoint's goal SELECTION is still parked** — Mnemos records no signal for *use within
-   a session*, so building that signal is the first task, not changing the filter. **P3 is live,
-   not theoretical: it spilled on me this session** (checkpoint 9,458b vs an 8,000b budget) and
-   the T2 receipt was filed `insufficient` — Progress and Files never arrived.
-   **Second instance 2026-08-18:** spilled again at 9,973b; receipt filed `insufficient`, missing
-   progress + files. The `goal` field carried a PRIOR session's goal with 95 older goals elided —
-   the predicate's own "check the goal field first" is confirmed.
-   **Governs:** ADR-0015 · `docs/contracts/restore-receipt.md`.
+7. **P3 — MEASURED 2026-08-19, and the field everyone reaches for is the wrong one.**
+   **Do not cap goals.** `MAX_CHECKPOINT_GOALS = 8` has existed since 2026-07-26 and works:
+   goal payload is FLAT at 1,214b across every recent checkpoint, 18.7% of the total.
+   **Do not cap constraints by recency either** — `_select_constraints`' docstring (2026-08-10)
+   considered exactly that and rejected it on measurement: *"23 distinct bodies out of 24, every
+   one a standing property, so a cap would pick winners by age on the payload's most valuable
+   field."* Proposing it again is re-doing a decided question.
+
+   **What the numbers actually say.** Last 30 checkpoints: min 4,141b, median 5,270b, max 8,598b,
+   and **8 of 30 over the 8,000b budget**. Every byte of the variance is `active_constraints`,
+   which swings 989 ↔ 5,397 while goals and results stay flat. At the spike: 34 constraints,
+   32 of them ~160b `INV:` prose from PAST intents, exactly 1 `file_exists` — so the 2026-08-10
+   static-fact filter is working and is not the gap.
+
+   **The driver is SCOPE-MATCH BREADTH.** `_select_constraints` keeps an invariant when its iCPG
+   scope touches the session's recent paths, so a session touching many directories pulls in many
+   standing invariants. A wide session (a refactor, a retirement) spills; a narrow one does not.
+   **That makes P3 INTERMITTENT, which is worse than steadily red** — an intermittent alarm cannot
+   be told from noise, and it is why this looked like a goal problem for weeks.
+
+   **So the open question is not "which cap" but "is scope the right discriminator at all",** and
+   it must start from that docstring — including the measured table showing why a scope UNION was
+   also declined (668 of 719 reachable files come from bare directory prefixes, taking a typical
+   file from 0–2 predicates to a median of 15).
+   **Governs:** ADR-0015 · `scripts/mnemos/checkpoint.py` (`_select_constraints`) · `docs/contracts/restore-receipt.md`.
+
 8. **The review anchor — (a) CLOSED; (b), (c) open; (d) NEW and worse.**
    (b) **The re-review rule names `stamp.py` and gives no command**, and there is no
    `docs/contracts/review-stamp.md` where all ten sibling mechanisms have one.
