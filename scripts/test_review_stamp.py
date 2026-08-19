@@ -40,6 +40,12 @@ def _repo(tmp_path, monkeypatch):
     for cmd in (("init", "-q", "-b", "main"), ("config", "user.email", "t@t"),
                 ("config", "user.name", "t")):
         _run(repo, *cmd)
+    # `.tessera/` IS GITIGNORED HERE BECAUSE IT IS GITIGNORED IN THE REAL REPO. `record()`
+    # writes its log under ROOT, which is this scratch repo, so without this every `git add -A`
+    # commits the stamp log and it shows up in `changed_since_review` as a phantom finding.
+    # A fixture that does not mirror the ignore rules of the thing it stands in for produces
+    # failures that look like defects — two of these tests failed that way first.
+    (repo / ".gitignore").write_text(".tessera/\n")
     (repo / "seed.txt").write_text("seed\n")
     _run(repo, "add", "-A")
     _run(repo, "commit", "-qm", "seed")
@@ -249,6 +255,103 @@ def test_changed_since_review_subtracts_what_the_stamp_already_saw(tmp_path, mon
 
     _, changed = stamp.changed_since_review()
     assert changed == [], "committing exactly what was reviewed leaves nothing outstanding"
+
+
+def test_a_fix_that_RE_EDITS_a_reviewed_file_is_reported(tmp_path, monkeypatch):
+    """THE DOMINANT CASE, and `--head` was inert for it until 2026-08-19.
+
+    A fix made in response to review findings almost always re-edits a file the review looked
+    at — that IS the terminal fix this mechanism exists to catch. `changed_since_review`
+    subtracted the WHOLE stamped file list, and every such file is in `base...reviewed`, so it
+    was filtered out and `pre-push` said nothing.
+
+    The suite missed it because `test_record_stamps_the_commit_a_review_actually_saw` fixes a
+    NEW file (`b.py`), which is the one shape that survives the wide subtraction. Guard written
+    for the shape that does not.
+
+    Falsify by widening `seen` back to `data["files"]`."""
+    repo = _repo(tmp_path, monkeypatch)
+    _commit(repo, "a.py", "v1 — what the review read\n")
+    reviewed = _run(repo, "rev-parse", "HEAD")
+    assert stamp.record(head=reviewed) == 0
+
+    _commit(repo, "a.py", "v2 — the fix nobody has reviewed\n")
+    _, changed = stamp.changed_since_review()
+    assert changed == ["a.py"], (
+        "re-editing a reviewed file is the terminal fix, not something the review covered")
+
+
+def test_a_pre_uncommitted_field_stamp_still_subtracts_its_whole_file_list(tmp_path, monkeypatch):
+    """Backward compatibility, and it is not decoration: every stamp written before 2026-08-19
+    lacks `uncommitted` and was recorded under the wide subtraction. Reading those rows under
+    the new narrow rule would surface files their review genuinely saw."""
+    repo = _repo(tmp_path, monkeypatch)
+    _commit(repo, "a.py")
+    assert stamp.record() == 0
+
+    logs = repo / ".tessera" / "logs"
+    log = next(iter(logs.glob("*.jsonl")))
+    ev = json.loads(log.read_text().splitlines()[-1])
+    del ev["data"]["uncommitted"]                      # a stamp from before the field existed
+    ev["data"]["files"] = ["a.py"]
+    log.write_text(json.dumps(ev) + "\n")
+
+    _commit(repo, "a.py", "changed later\n")
+    _, changed = stamp.changed_since_review()
+    assert changed == [], "legacy rows keep the semantics they were written under"
+
+
+def test_an_empty_outgoing_range_reports_nothing(tmp_path, monkeypatch):
+    """`if outgoing:` conflated "nothing is outgoing" with "git could not answer", so an empty
+    range SKIPPED the filter and fell back to the un-narrowed `head..HEAD` — re-reporting
+    commits that were already public. Empty is a real answer and its report is empty.
+
+    Falsify by changing `if outgoing is not None:` back to `if outgoing:`."""
+    repo = _repo(tmp_path, monkeypatch)
+    reviewed = _commit(repo, "a.py")
+    assert stamp.record(head=reviewed) == 0
+    pushed = _commit(repo, "b.py")
+    _run(repo, "update-ref", "refs/remotes/origin/main", pushed)   # it is now public
+
+    _, changed = stamp.changed_since_review()
+    assert changed == [], "nothing is outgoing, so nothing is owed a review"
+
+
+def test_a_base_git_cannot_resolve_keeps_the_WIDER_report(tmp_path, monkeypatch):
+    """`_git_lines` exists only to tell "git failed" from "the answer is empty", and nothing
+    exercised the failure branch — re-planting `returncode != 0` away left all 22 green.
+
+    The direction matters and is the point of the helper: a filter that CANNOT be computed must
+    not silently narrow the report. Swallowing the failure as an empty list would make the
+    intersection drop everything, and this hook going quiet is indistinguishable from it having
+    nothing to say.
+
+    Falsify by making `_git_lines` return `[]` instead of `None` on a non-zero exit."""
+    repo = _repo(tmp_path, monkeypatch)
+    reviewed = _commit(repo, "a.py")
+    assert stamp.record(head=reviewed) == 0
+    _commit(repo, "b.py")
+
+    _, changed = stamp.changed_since_review(base="no-such-base-ref")
+    assert changed == ["b.py"], (
+        "git could not compute the outgoing range, so the report must stay wide rather than "
+        "quietly empty")
+
+
+def test_record_refuses_a_head_that_is_not_an_ancestor_of_HEAD(tmp_path, monkeypatch):
+    """A resolvable-but-unreachable sha — pasted from another branch's review round, which the
+    documented "copy the sha the review saw" workflow makes easy — used to be accepted. Then
+    `changed_since_review` hit its ancestor guard and returned nothing, and `latest()` kept
+    serving that stamp by timestamp, so EVERY later push was silent. Silent is
+    indistinguishable from "nothing changed since the review"."""
+    repo = _repo(tmp_path, monkeypatch)
+    _run(repo, "checkout", "-q", "-b", "other")
+    elsewhere = _commit(repo, "other.py")
+    _run(repo, "checkout", "-q", "main")
+    _commit(repo, "main.py")
+
+    assert stamp.record(head=elsewhere) == 2
+    assert _events(repo) == [], "a stamp that cannot be reported against must not be written"
 
 
 def test_changed_since_review_is_silent_when_no_review_is_on_record(tmp_path, monkeypatch):

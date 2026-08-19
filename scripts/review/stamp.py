@@ -82,6 +82,23 @@ def _git(*args: str) -> str:
     return out.stdout.strip()
 
 
+def _git_lines(*args: str) -> "list[str] | None":
+    """Lines of stdout, or None when git FAILED — the distinction `_git` throws away.
+
+    `_git` returns "" for both an empty answer and a broken command, and a caller that tests
+    truthiness silently treats "git could not tell me" as "there is nothing". That is the
+    fail-open shape this repo keeps paying for, and it bit the base-intersection below within a
+    day of it being written (review, 2026-08-19)."""
+    try:
+        out = subprocess.run(["git", *args], cwd=ROOT, capture_output=True,
+                             text=True, timeout=15)
+    except Exception:
+        return None
+    if out.returncode != 0:
+        return None
+    return [line for line in out.stdout.strip().splitlines() if line]
+
+
 def _git_ok(*args: str) -> bool:
     """True when the git command exits 0. `_git` returns stdout, which is empty for the
     predicates (`merge-base --is-ancestor`) whose whole answer is the exit code."""
@@ -123,7 +140,20 @@ def record(base: str = "origin/main", head: "str | None" = None) -> int:
     else:
         resolved = _git("rev-parse", "--verify", "--quiet", f"{head}^{{commit}}")
         if not resolved:
-            print(f"head ref {head!r} does not resolve — refusing to stamp", file=sys.stderr)
+            print(f"head ref {head!r} does not resolve to a commit — refusing to stamp",
+                  file=sys.stderr)
+            return 2
+        # AND IT MUST BE REACHABLE FROM HERE. A resolvable-but-unreachable sha — pasted from
+        # another branch's review round, which the documented workflow ("copy the sha the review
+        # saw") makes easy — is accepted by the check above, and then `changed_since_review`
+        # hits its own ancestor guard and returns nothing. `latest()` keeps serving that stamp
+        # by timestamp, so EVERY subsequent push is silent, and silent is indistinguishable from
+        # "nothing changed since the review". Refused here for the same reason a phantom head is:
+        # a stamp that cannot be reported against is worse than no stamp, and the failure is
+        # quiet rather than loud. (Review, 2026-08-19.)
+        if not _git_ok("merge-base", "--is-ancestor", resolved, "HEAD"):
+            print(f"head {resolved[:12]} is not an ancestor of HEAD — refusing to stamp. "
+                  f"A stamp off this line of history mutes pre-push silently.", file=sys.stderr)
             return 2
         head, explicit = resolved, True
     if not head:
@@ -157,7 +187,8 @@ def record(base: str = "origin/main", head: "str | None" = None) -> int:
         "session_id": os.environ.get("CLAUDE_CODE_SESSION_ID", "manual"),
         "source": "review-stamp",
         "data": {"base": base, "head": head, "files": sorted(set(files + dirty)),
-                 "had_uncommitted": bool(dirty), "explicit_head": explicit},
+                 "uncommitted": dirty, "had_uncommitted": bool(dirty),
+                 "explicit_head": explicit},
     }
     with _log_path().open("a") as fh:
         fh.write(json.dumps(event) + "\n")
@@ -209,17 +240,36 @@ def changed_since_review(base: str = "origin/main") -> "tuple[dict | None, list[
     # question this hook asks is narrower: what is about to become PUBLIC that no review saw.
     # So intersect with the outgoing range. When the stamp is at or ahead of base this is a
     # no-op, which is the common case and why the defect was invisible.
-    outgoing = {f for f in _git("diff", "--name-only", f"{base}...HEAD").splitlines() if f}
-    if outgoing:
-        changed = [f for f in changed if f in outgoing]
-    # SUBTRACT WHAT THE REVIEW ALREADY SAW. `record()` stores the working-tree diff too, because
-    # the review target is usually an UNCOMMITTED tree — so the normal workflow is: review the
-    # tree, stamp, commit those exact files, push. Diffing `head..HEAD` then names files the
-    # review did see and the stamp itself lists, which is a guaranteed false positive on the
-    # primary path. That is the always-fires noise the no-stamp branch was cut for, rebuilt one
-    # field over; the data to prevent it was already being recorded and simply not read.
-    # (Review, 2026-08-17.)
-    seen = set(stamp["data"].get("files", ()))
+    # `is not None`, NOT truthiness. An EMPTY outgoing range is a real answer — everything is
+    # already public, so nothing is owed a review — and the correct report is nothing. Testing
+    # truthiness skipped the filter in that case and fell back to the un-narrowed `head..HEAD`,
+    # re-reporting commits that had already been pushed. Failure is the other branch and keeps
+    # the wider report, because a filter that cannot be computed must not silently narrow.
+    outgoing = _git_lines("diff", "--name-only", f"{base}...HEAD")
+    if outgoing is not None:
+        changed = [f for f in changed if f in set(outgoing)]
+    # SUBTRACT ONLY THE UNCOMMITTED FILES, and this distinction is the whole feature.
+    #
+    # The subtraction exists for the primary path: review an UNCOMMITTED tree, stamp, commit
+    # those exact files, push. Those files are in `head..HEAD` afterwards and the review did see
+    # them, so reporting them is a guaranteed false positive. (Review, 2026-08-17.)
+    #
+    # But subtracting the WHOLE stamped list cancels `--head` for its dominant case. A fix made
+    # in response to review findings almost always re-edits a file the review looked at — that
+    # IS the terminal fix this mechanism exists to catch — and every such file is in
+    # `base...reviewed`, so the wide subtraction filtered it out and `pre-push` said nothing.
+    # Measured 2026-08-19: review touches a.py, stamp --head A, fix re-edits a.py, report is
+    # EMPTY. The suite missed it because its fixture added a NEW file, which is the one shape
+    # that survives. (Review round 1 on this branch.)
+    #
+    # Files already COMMITTED at stamp time cannot reappear in `head..HEAD` unless they were
+    # edited again, which is precisely what is worth reporting. Only the dirty set can produce
+    # the false positive, so only the dirty set is subtracted.
+    #
+    # `files` is the fallback for stamps written before `uncommitted` existed: those are all
+    # defaulted-head rows, and the wide subtraction is what they were recorded under.
+    data = stamp["data"]
+    seen = set(data["uncommitted"]) if "uncommitted" in data else set(data.get("files", ()))
     return stamp, [f for f in changed if f not in seen]
 
 
