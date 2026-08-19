@@ -32,9 +32,9 @@ copy — was written from scratch:
 - `docs/design-principles.md` — the compounding-principles design doc
 - `docs/adr/` — the Architecture Decision Records
 - `docs/observatory.md`, `docs/contracts/` — the watch list and the contracts
-- `scripts/gate/`, `scripts/doccheck.py`, `scripts/spend/`, `scripts/override/`,
+- `scripts/gate/`, `scripts/doccheck.py`, `scripts/override/`,
   `scripts/restore/` and `bin/tessera-escalate` — the gate, doc-honesty,
-  spend-authorization, escalation, and restore-receipt machinery
+  escalation, and restore-receipt machinery
 - `.claude/scripts/` — every hook wired into a Tessera session
 - `bin/tessera-*` — the command line, including `tessera-verify` (the adversarial
   falsifier) and `tessera-watch` (the observatory's machine-checkable triggers)

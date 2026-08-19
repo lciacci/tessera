@@ -1687,10 +1687,17 @@ evidence is now here; the decision is not made.
      writes at all; a new session starts at zero because its key is absent. Unreadable or
      legacy state reads as EMPTY, i.e. fails toward the backstop being **alive** — failing the
      other way is how a corrupt file becomes a silent kill switch.
-  2. `tessera-watch` **P15** fires on a legacy scalar file, or on the cap being reached in 2+
-     recorded sessions (chronically undispositioned denials, or a wedging backstop). It stays
-     quiet for ONE capped session, which is the loop-safety working. It reads `MAX_FIRES` out
-     of `backstop.py` rather than restating it, so tuning the cap moves the predicate with it.
+  2. ~~`tessera-watch` **P15** fires on a legacy scalar file, or on the cap being reached in 2+
+     recorded sessions (chronically undispositioned denials, or a wedging backstop).~~
+     **P15 AND ITS SUBJECT ARE BOTH GONE (ADR-0029, 2026-08-18)** — the whole in-band spend
+     guard was retired, so the predicate, its eleven tests and the backstop it watched no
+     longer exist. Struck rather than deleted because the *lesson* is the entry's point and is
+     entirely portable: **a limit written for one session, stored for all time, is a kill
+     switch** — and a fix is not a signal, so a mechanism whose failure is *being off* needs a
+     paired detector that announces what it cannot. Nothing in this repo ties an
+     observatory-named predicate to `bin/tessera-watch`'s `PREDICATES` dict, so this entry
+     claimed a live predicate for the length of one PR and stayed green; that is a finding
+     about the checker, not only about the doc.
   3. Five backstop tests + six P15 tests, including that a prior session at the cap cannot
      silence the next one.
 
@@ -2737,10 +2744,17 @@ marker — is worth more than the 29%.
 standing patterns) ~2,790 — **~15,600 tokens**, plus the Mnemos checkpoint (~2,600) for ~18k in
 practice. (Estimated at chars/4; `count_tokens` if a decision ever rests on it.)
 
-**METERED 2026-08-17: 16,978 tokens tracked** *(third measurement that day: 16,799, and 16,473 before it; 15,837 on 08-10, 15,497 on 08-09)* — re-metered
-because `CLAUDE.md` gained ADR-0026's warn-tier clause, per its own rule; `CLAUDE.md` is now
-**8,542 of the 16,978**, and the growth is **entirely `CLAUDE.md` (+179)** — `mnemos` 4,354,
-standing patterns as emitted 2,628, `base` 1,454, all three unmoved across all three. In practice
+**METERED 2026-08-18: 17,384 tokens tracked** *(16,978 on 08-17 — third measurement that day, after 16,799 and 16,473; 15,837 on 08-10, 15,497 on 08-09)* — re-metered
+because `CLAUDE.md` gained ADR-0029's retirement clause, per its own rule; `CLAUDE.md` is now
+**8,948 of the 17,384** (51.47%), and the growth is again **entirely `CLAUDE.md` (+406)** —
+`mnemos` 4,354, standing patterns as emitted 2,628, `base` 1,454, all three unmoved across all five.
+
+> **This figure was stale for the length of one PR, INSIDE the 5% band, which is the failure
+> this entry names.** ADR-0029's edits grew `CLAUDE.md` by ~406 tokens and I did not re-run
+> `prefix_meter.py` — a rule `CLAUDE.md` itself states, in the file I was editing. At +2.4%
+> `eager-prefix-figure-is-current` stayed green throughout, so nothing surfaced it; a reviewer
+> did. **The band that keeps the check from being noise is the same band a real drift hides in**,
+> and the only thing closing that gap is a human running the meter after touching the prefix. In practice
 21,287, the extra being a 2,759-byte checkpoint and a 1,550-byte handoff surfacer, neither
 asserted. *(The measurement this replaces said "just under half"; see the blockquote below —
 that share has now actually crossed, later the same day.)* The prior figure was recomputed by

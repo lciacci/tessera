@@ -58,8 +58,8 @@ def logs(tmp_path, monkeypatch):
 # --- safety-path detection -------------------------------------------------
 
 def test_edit_on_safety_path_detected(tmp_path, logs):
-    t = _write_transcript(tmp_path / "t.jsonl", [_edit("/repo/scripts/spend/guard.py")])
-    assert scan.touched_safety_paths(t) == ["scripts/spend/"]
+    t = _write_transcript(tmp_path / "t.jsonl", [_edit("/repo/.claude/scripts/tessera-gate-scan.sh")])
+    assert scan.touched_safety_paths(t) == [".claude/scripts/"]
 
 
 def test_bash_touching_safety_path_detected(tmp_path, logs):
@@ -73,7 +73,7 @@ def test_non_safety_edit_not_detected(tmp_path, logs):
 
 
 def test_sidechain_entries_ignored(tmp_path, logs):
-    entry = _edit("/repo/scripts/spend/guard.py")
+    entry = _edit("/repo/.claude/scripts/tessera-gate-scan.sh")
     entry["isSidechain"] = True
     t = _write_transcript(tmp_path / "t.jsonl", [entry])
     assert scan.touched_safety_paths(t) == []
@@ -118,7 +118,7 @@ def test_missing_log_is_not_logged(logs):
 def _full_transcript(tmp_path):
     return _write_transcript(
         tmp_path / "t.jsonl",
-        [_edit("/repo/scripts/spend/guard.py"), _assistant_text("Fixed. Suite green.")],
+        [_edit("/repo/.claude/scripts/tessera-gate-scan.sh"), _assistant_text("Fixed. Suite green.")],
     )
 
 
@@ -135,7 +135,7 @@ def test_quiet_when_verification_logged(tmp_path, logs):
 
 
 def test_quiet_without_done_claim(tmp_path, logs):
-    t = _write_transcript(tmp_path / "t.jsonl", [_edit("/repo/scripts/spend/guard.py")])
+    t = _write_transcript(tmp_path / "t.jsonl", [_edit("/repo/.claude/scripts/tessera-gate-scan.sh")])
     assert scan.main([t, "s1"]) == 0
 
 

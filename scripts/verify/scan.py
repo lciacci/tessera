@@ -28,7 +28,6 @@ MAX_FIRES_PER_SESSION = 3
 # Spec 12's five safety paths, plus the verifier itself — machinery that guards
 # the machinery is a safety path by definition.
 SAFETY_PATHS = (
-    "scripts/spend/",
     ".claude/scripts/",
     "hooks/",
     "install.sh",

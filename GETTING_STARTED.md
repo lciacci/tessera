@@ -45,7 +45,6 @@ If you are developing the framework rather than using it, read
 | `tessera-test` | Run the full suite. Reads `test:` from `.tessera/config.yml` — never guess the test command. |
 | `tessera-watch` | Evaluate the observatory's machine-checkable triggers. Also runs at SessionStart. |
 | `python3 scripts/doccheck.py` | Assert the docs' checkable claims. Enforced by `.githooks/pre-commit`. |
-| `tessera-authorize` | Grant a run-scoped external-spend envelope. Required before any spend-committing command. |
 | `tessera-escalate` | Raise an escalation packet when blocked and no human is available. |
 
 Note: bare `python3` here is Homebrew 3.14, which has no pytest — the toolchain

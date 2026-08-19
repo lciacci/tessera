@@ -714,63 +714,6 @@ def test_p9_icpg_branch_is_reachable_when_the_db_is_present(tmp_path, monkeypatc
     assert "silently dead" not in quiet, quiet
 
 
-# ── P15: the spend backstop's own cap had become a permanent kill switch ───────────────
-#
-# `.spend-backstop-fires` was a global integer nothing reset; backstop.main() returns 0 once
-# it exceeds MAX_FIRES. Found 2026-07-27 at 47 — the backstop that catches a vanished spend
-# denial had been silently dead, and rc=0 reads exactly like "nothing to report". The counter
-# is per-session now, but a fix is not a signal: this is the paired detector, because the
-# failure it guards is the guard being off, which announces nothing by construction.
-
-def _fires_file(root, content: str):
-    (root / ".tessera").mkdir(parents=True, exist_ok=True)
-    (root / ".tessera" / ".spend-backstop-fires").write_text(content)
-
-
-def test_p15_quiet_when_the_counter_has_never_been_written(tmp_path):
-    assert tw.p15_spend_backstop_suppressed(tmp_path)[0] is False
-
-
-def test_p15_fires_on_the_legacy_global_counter(tmp_path):
-    """A bare `47` is VALID json and arrives as an int, not a parse error — the first
-    version of this predicate keyed on ValueError and reported the wrong branch."""
-    _fires_file(tmp_path, "47")
-    fired, detail = tw.p15_spend_backstop_suppressed(tmp_path)
-    assert fired is True
-    assert "legacy global counter" in detail
-
-
-def test_p15_fires_on_unparseable_state(tmp_path):
-    _fires_file(tmp_path, "{ not json")
-    assert tw.p15_spend_backstop_suppressed(tmp_path)[0] is True
-
-
-def test_p15_is_quiet_for_a_single_capped_session(tmp_path):
-    """One session at the cap is the loop-safety doing its job, not a suppressed backstop.
-    Firing here would make the predicate noise on correct behaviour."""
-    _fires_file(tmp_path, json.dumps({"s1": 9, "s2": 1}))
-    assert tw.p15_spend_backstop_suppressed(tmp_path)[0] is False
-
-
-def test_p15_fires_when_the_cap_is_hit_across_sessions(tmp_path):
-    """Chronic capping means denials are routinely undispositioned, or it is wedging."""
-    _fires_file(tmp_path, json.dumps({"s1": 9, "s2": 9, "s3": 1}))
-    fired, detail = tw.p15_spend_backstop_suppressed(tmp_path)
-    assert fired is True
-    assert "2 sessions" in detail
-
-
-def test_p15_reads_the_cap_from_the_backstop_not_a_copy(tmp_path):
-    """A mirrored constant is a second definition. If MAX_FIRES is tuned, P15 must move."""
-    spend = tmp_path / "scripts" / "spend"
-    spend.mkdir(parents=True)
-    (spend / "backstop.py").write_text("MAX_FIRES = 50\n")
-    _fires_file(tmp_path, json.dumps({"s1": 9, "s2": 9}))
-    assert tw.p15_spend_backstop_suppressed(tmp_path)[0] is False, (
-        "P15 used its own copy of the cap instead of the backstop's"
-    )
-
-
 # ── P16: the T2 read-trigger. Guards against reading EARLY, so the tests must drive it
 # to the state where it SHOULD fire — asserting only that it is quiet today would pass
 # against a predicate that can never fire at all (standing pattern #1, aimed at P16).
@@ -1170,29 +1113,6 @@ def test_p3_reports_an_unreadable_checkpoint_instead_of_crashing(tmp_path, monke
     assert "cannot be read" in detail
 
 
-def test_p15_treats_an_empty_counter_file_as_no_counter(tmp_path):
-    """F5. `touch` or a truncated write left this empty, and empty fell into the non-dict
-    branch: "holds a legacy global counter ('')" — a report that the spend backstop had been
-    permanently silenced. Inverted, not merely mis-worded: backstop._read_fires() returns {}
-    for an empty file ON PURPOSE, so the backstop is fully enabled in exactly this state.
-    """
-    root = _root(tmp_path)
-    (root / ".tessera").mkdir()
-    (root / ".tessera" / ".spend-backstop-fires").write_text("   \n")
-    fired, detail = tw.p15_spend_backstop_suppressed(root)
-    assert fired is False, detail
-    assert "legacy" not in detail
-
-
-def test_p15_still_fires_on_a_real_legacy_counter(tmp_path):
-    """The empty-file guard must not have swallowed the state P15 exists for."""
-    root = _root(tmp_path)
-    (root / ".tessera").mkdir()
-    (root / ".tessera" / ".spend-backstop-fires").write_text("47")
-    fired, detail = tw.p15_spend_backstop_suppressed(root)
-    assert fired is True and "legacy global counter" in detail
-
-
 def test_p12_compares_bytes_not_a_stat_signature(tmp_path):
     """M-2 (mine, not arbiter's). `filecmp.dircmp.diff_files` is a SHALLOW compare: same
     size + same mtime is declared identical without reading either file. Measured — this
@@ -1337,21 +1257,6 @@ def test_p11_skips_a_transcript_that_cannot_be_statted(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "stat", boom)
     fired, detail = tw.p11_ingest_pipe(root, tdir)
     assert fired is False, detail                       # skipped, not crashed
-
-
-def test_p15_legacy_message_states_the_shape_not_a_suppression(tmp_path):
-    """A bare `0` is the same pre-fix SHAPE with nothing suppressed yet, and the message
-    asserted a suppression had occurred. Over-claiming turns a correct alarm into a false
-    report — which is P15's own subject (#12)."""
-    root = _root(tmp_path)
-    (root / ".tessera").mkdir()
-    for raw in ("0", "not json", "47"):
-        (root / ".tessera" / ".spend-backstop-fires").write_text(raw)
-        fired, detail = tw.p15_spend_backstop_suppressed(root)
-        assert fired is True, raw
-        assert "legacy global counter" in detail
-        assert "silences the spend backstop" in detail          # conditional...
-        assert "silenced the spend backstop in EVERY" not in detail  # ...not asserted
 
 
 def test_p14_owner_check_compares_the_directory_not_its_spelling(tmp_path, monkeypatch):

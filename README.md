@@ -9,7 +9,7 @@ skill library is still substantially Maggy's.
 What has changed since is most of the operating surface. Every wired hook, the
 entire `tessera-*` command line, and the mechanisms that hold the framework honest
 — a suggestion-gate recorder, a doc-honesty checker, an escalation protocol,
-fail-open probes, restore receipts, and run-scoped external-spend authorization —
+fail-open probes, and restore receipts —
 are Tessera's, alongside the governing layer of compounding design principles,
 Architecture Decision Records, project profiles, and an observatory of undecided
 questions. The memory and intent-graph subsystems were inherited and then largely

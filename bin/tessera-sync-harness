@@ -430,7 +430,7 @@ def main(argv: list[str] | None = None) -> int:
                          "version (provably not customized); never touches anything else")
     ap.add_argument("--exclude", action="append", default=[], metavar="SUBSTR",
                     help="skip components whose path contains SUBSTR (repeatable), "
-                         "e.g. --exclude spend")
+                         "e.g. --exclude restore")
     ap.add_argument("--patch-settings", action="store_true",
                     help="anchor EXISTING cwd-relative hook commands in the project's "
                          ".claude/settings.json to ${CLAUDE_PROJECT_DIR:-.}. Anchor-ONLY: does "

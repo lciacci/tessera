@@ -25,7 +25,7 @@ their own homework.
 ## The three events
 
 All on the existing `.tessera/logs/<session>.jsonl` channel, alongside `suggestion_gate`,
-`spend_denied`, `degraded`, `verification`.
+`degraded`, `verification`. *(`spend_denied` was here until ADR-0029 retired the spend guard.)*
 
 | Event | Written by | Claims |
 |---|---|---|

@@ -864,7 +864,7 @@ def _event_time(event: dict, mtime: datetime) -> datetime:
     A NAIVE stamp PARSES and then explodes on any later subtraction ("can't subtract
     offset-naive and offset-aware datetimes"), so the except below never sees it.
     `tessera-degraded` always writes Z — but P13 scans EVERY .jsonl in .tessera/logs,
-    written by six producers (gate, spend, override, restore, degraded, degraded_ack) and
+    written by five producers (gate, override, restore, degraded, degraded_ack) and
     by whatever a downstream adds next. One producer omitting an offset would crash the
     spec-11 channel: the one predicate whose job is to report that something else broke.
     Treated as UTC, which is what every current writer means.
@@ -1004,23 +1004,6 @@ def _resolve_label(query: str) -> str | None:
     return matches[0] if len(matches) == 1 else None
 
 
-def _max_spend_fires(root: Path) -> int:
-    """Read the cap FROM the backstop rather than restating it here.
-
-    A mirrored constant is a second definition, and this repo has paid for those: doccheck's
-    reporting check imports the fixer's predicate instead of copying its regex, for exactly
-    this reason. If someone tunes MAX_FIRES, this predicate must move with it.
-    """
-    src = root / "scripts" / "spend" / "backstop.py"
-    try:
-        for line in src.read_text().splitlines():
-            if line.startswith("MAX_FIRES"):
-                return int(line.split("=", 1)[1].strip())
-    except (OSError, ValueError):
-        pass
-    return 3
-
-
 # T2's read-trigger (ADR-0015, observatory "T2 downstream"). A DATE, not a derived anchor:
 # the 30-day arm is load-bearing precisely when there are zero receipts, so anchoring it on
 # the receipts themselves would make it unreachable in the only state that needs it.
@@ -1132,71 +1115,6 @@ def p16_t2_receipts(root: Path, now: datetime | None = None) -> tuple[bool, str]
                    f"{elapsed}/{T2_PATIENCE_DAYS} — too early to read, by design")
 
 
-def p15_spend_backstop_suppressed(root: Path) -> tuple[bool, str]:
-    """Can the spend backstop still fire, or has its own cap silenced it?
-
-    ── WHY THIS EXISTS ───────────────────────────────────────────────────────────────────
-
-    `.tessera/.spend-backstop-fires` was a single global integer that nothing ever reset, and
-    `backstop.main()` returns 0 once it exceeds `MAX_FIRES` (3). Found on 2026-07-27 holding
-    **47**: the backstop that catches a vanished spend denial had been silently dead, and its
-    `rc=0` is indistinguishable from "nothing to report". The cap was written as loop-safety
-    for ONE session; against a monotonic counter it outlived every session it protected.
-
-    Fixed by keying the counter per session — but a fix is not a signal. This is the paired
-    detector, because the failure it guards is *the guard being off*, which by construction
-    announces nothing (standing patterns #1 and #2).
-
-    Fires on two states, both meaning "suppressed or heading there":
-      · a LEGACY scalar file — pre-fix state, or a downstream that has not taken the fix
-      · the cap reached in 2+ of the recorded sessions — either denials are chronically
-        undispositioned, or the backstop is wedging and about to be ripped out
-
-    Deliberately NOT firing on one capped session: that is the loop-safety doing its job.
-    """
-    path = root / ".tessera" / ".spend-backstop-fires"
-    if not path.exists():
-        return False, "spend backstop has never capped — it can fire"
-
-    raw = path.read_text().strip()
-    # AN EMPTY FILE IS NOT A LEGACY COUNTER (arbiter, 2026-08-09). `touch`, a truncated
-    # write, or a half-finished `write_text` leaves this empty — and empty fell through to
-    # the non-dict branch below, which announced "holds a legacy global counter ('')" and
-    # told the operator a suppression had occurred. Measured against the mechanism it
-    # reports on: `backstop._read_fires()` returns `{}` for an unreadable or empty file
-    # ON PURPOSE, so the backstop is fully ENABLED in this state. The alarm was not just
-    # mis-worded, it was inverted — a false report of a dead guard from the predicate whose
-    # only job is to say whether the guard is dead.
-    if not raw:
-        return False, "spend backstop counter file is empty — no fires recorded, it can fire"
-    try:
-        fires = json.loads(raw)
-    except ValueError:
-        fires = None
-    # A bare `47` is VALID json, so the legacy shape arrives as an int, not a parse error.
-    # Both non-dict shapes mean the same thing and get the same message.
-    if not isinstance(fires, dict):
-        # THE SHAPE IS THE FINDING, AND THE WORDING NOW SAYS SO. This asserted that a
-        # suppression HAD occurred — true of the 47 it was written for, false of `0` or of
-        # `not json`, which are the same pre-fix shape with nothing suppressed yet. The
-        # verifier flagged it (2026-08-09) while confirming the empty-file fix: a message
-        # that over-claims turns a correct alarm into a false report, which is what P15's
-        # own subject taught (#12).
-        return True, (f".spend-backstop-fires holds a legacy global counter ({raw[:20]!r}) "
-                      f"instead of the per-session map. In that shape a value over MAX_FIRES "
-                      f"silences the spend backstop in EVERY session, permanently — it was "
-                      f"found at 47. Delete the file to take the per-session fix; it is "
-                      f"untracked runtime state and rebuilds itself.")
-
-    cap = _max_spend_fires(root)
-    capped = [s for s, n in fires.items() if isinstance(n, int) and n > cap]
-    if len(capped) >= 2:
-        return True, (f"the spend backstop hit its cap in {len(capped)} sessions "
-                      f"({', '.join(s[:8] for s in capped[:3])}…) — either spend denials are "
-                      f"chronically undispositioned, or the backstop is wedging sessions")
-    return False, f"spend backstop live ({len(fires)} session(s) tracked, {len(capped)} capped)"
-
-
 def p14_global_tier_drift(root: Path) -> tuple[bool, str]:
     """Does the GLOBAL fallback tier match this repo's live hooks? (ADR-0004 tier 3.)
 
@@ -1288,7 +1206,6 @@ PREDICATES = {
     "P12 skill-registry-drift": p12_skill_registry_drift,
     "P13 degraded": p13_degraded,
     "P14 global-tier-drift": p14_global_tier_drift,
-    "P15 spend-backstop-suppressed": p15_spend_backstop_suppressed,
     "P16 t2-receipts": p16_t2_receipts,
     "G-a graduation:snooze": g_a_consecutive,
 }

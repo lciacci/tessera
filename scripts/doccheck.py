@@ -150,7 +150,14 @@ PATH_ALLOWLIST = {
 # (.tessera/config.yml graduated OUT of this set on 2026-07-11 — it was built, with one live
 # consumer in bin/tessera-test. That is what a PLANNED_PATHS entry is supposed to do: get
 # built, or get reworded. It should never just sit here.)
-HISTORY_DOCS = frozenset({"docs/observatory.md"})
+HISTORY_DOCS = frozenset({
+    "docs/observatory.md",
+    # ADDED 2026-08-18. The spend contract became a RETIRED DESIGN RECORD when ADR-0029
+    # removed the mechanism it describes. It is kept, rather than deleted, because whoever
+    # builds the tier-1 replacement wants the full design and not the ADR's summary of it —
+    # so it now names deleted paths on purpose, which is exactly what this set is for.
+    "docs/contracts/spend-authorization.md",
+})
 
 PLANNED_PATHS = {
     ".tessera/third-party-scope.yml",  # design-principles.md:726, 763 — build its CONSUMER first
@@ -452,33 +459,6 @@ def check_ignored_test_suites_are_run() -> list[str]:
     return bad
 
 
-def check_spend_guard_is_wired() -> list[str]:
-    """The spend contract claims a PreToolUse Bash hook blocks unauthorized spend. Is it wired?
-
-    `docs/contracts/spend-authorization.md` asserts the guard is reachable from Claude Code.
-    An unwired guard is worse than none: the doc says an agent cannot boot a GPU unauthorized,
-    and it can. Existence is a local fact; *wired into settings.json* is the shared one — the
-    same lesson as the PATH export that lived in ~/.zshrc and was invisible to the agent.
-    """
-    contract = ROOT / "docs" / "contracts" / "spend-authorization.md"
-    if not contract.exists():
-        return []  # no claim, nothing to check
-    settings = ROOT / ".claude" / "settings.json"
-    if not settings.exists():
-        return ["docs/contracts/spend-authorization.md claims a PreToolUse hook, but "
-                ".claude/settings.json does not exist"]
-    try:
-        hooks = json.loads(settings.read_text()).get("hooks", {}).get("PreToolUse", [])
-    except json.JSONDecodeError:
-        return [".claude/settings.json is not valid JSON — cannot verify the spend guard"]
-    wired = any(h.get("matcher") == "Bash"
-                and "tessera-spend-guard" in json.dumps(h.get("hooks", []))
-                for h in hooks)
-    if not wired:
-        return ["docs/contracts/spend-authorization.md claims the spend guard runs on "
-                "PreToolUse(Bash), but no such hook is wired in .claude/settings.json — "
-                "an agent could boot a GPU with no authorization"]
-    return []
 
 
 # Modules that only exist in the toolchain venv. A script that imports one of these AND is
@@ -941,8 +921,9 @@ def _bare_python_target(line: str, script: Path) -> str:
 # The safety machinery, which hooks run on BARE `python3` on purpose so it survives a broken
 # venv. That only holds if it survives whatever `python3` turns out to BE.
 SAFETY_SCRIPTS = (
-    "scripts/spend/guard.py", "scripts/spend/backstop.py", "scripts/spend/authorize.py",
-    "scripts/spend/event.py", "scripts/gate/scan.py", "scripts/gate/emit.py",
+    # guard/backstop/authorize/event were members until 2026-08-18, when ADR-0029
+    # retired the in-band spend guard entirely.
+    "scripts/gate/scan.py", "scripts/gate/emit.py",
     "scripts/doccheck.py",
     # ADDED 2026-08-10, and the omission is the lesson. The membership rule is "a hook
     # invokes it via bare python3" — `.claude/scripts/tessera-decision-surface.sh:55` does
@@ -1365,27 +1346,6 @@ def check_bare_python3_hook_scripts_are_probed() -> list[str]:
     return sorted(set(bad))
 
 
-def check_spend_backstop_is_wired() -> list[str]:
-    """The escalation contract claims a Stop hook catches undispositioned spend denials.
-
-    The guard's deny path ends in a PROSE instruction ("raise a packet"), i.e. model recall —
-    the trigger that missed ~85% of gates. The backstop is what makes it a channel. An unwired
-    backstop means the docs promise a guarantee that rides recall, which is the #17 failure
-    wearing the label of its own fix.
-    """
-    contract = ROOT / "docs" / "contracts" / "escalation.md"
-    if not contract.exists() or "tessera-spend-backstop" not in contract.read_text():
-        return []  # no claim, nothing to check
-    settings = ROOT / ".claude" / "settings.json"
-    try:
-        stop = json.loads(settings.read_text()).get("hooks", {}).get("Stop", [])
-    except (OSError, json.JSONDecodeError):
-        return [".claude/settings.json unreadable — cannot verify the spend backstop"]
-    if "tessera-spend-backstop" not in json.dumps(stop):
-        return ["docs/contracts/escalation.md claims a Stop-hook backstop catches "
-                "undispositioned spend denials, but no such hook is wired in "
-                ".claude/settings.json — the deny path is back to riding model recall"]
-    return []
 
 
 def check_verdict_channel_literals_match_contract() -> list[str]:
@@ -1463,7 +1423,28 @@ def check_verify_scan_is_wired() -> list[str]:
 # Per-session runtime state. Tracking any of these ships one machine's live state to every
 # clone. `tessera-yml-is-tracked` asserts config MUST be tracked; this asserts the opposite,
 # for the opposite reason. Both directions of "tracked" are claims about every clone.
-RUNTIME_STATE = (".tessera/spend-auth.json", ".tessera/.spend-backstop-fires")
+# `git ls-files` PATHSPECS, so globs are allowed and used — session logs have dynamic names.
+#
+# REPOPULATED 2026-08-18. Both original entries were spend-guard artifacts, and ADR-0029 made
+# them unproducible — so this check could no longer fail at all, while still counting among the
+# green ones and still passing its own test. A check that CANNOT fail is worse than no check:
+# it reports coverage it does not have. The two real bugs it was written for are recorded in the
+# docstring below and stay there; what changed is that it now guards runtime state that EXISTS.
+#
+# `.tessera/` is deliberately NOT blanket-matched: `config.yml`, `escalations/` and
+# `logs/README.md` are legitimately tracked. The globs pick the per-session artifacts only.
+RUNTIME_STATE = (
+    ".mnemos/mnemo.db", ".mnemos/mnemo.db-shm", ".mnemos/mnemo.db-wal",
+    ".mnemos/fatigue.json", ".mnemos/checkpoint-latest.json", ".mnemos/signals.jsonl",
+    ".tessera/logs/*.jsonl",
+    ".icpg/reason.db",
+)
+# NOT `.tessera/watch-snooze.json`, and the exclusion is the definition. Adding it fired
+# immediately — and the fire was wrong. A snooze entry carries a `reason` and is committed
+# deliberately (b78f941, 2680542); it is a DECISION someone made, the same shape as an
+# escalation packet, which is also tracked on purpose. The line this check draws is not
+# "lives under .tessera/" but **transient state of one machine vs a reasoned decision meant to
+# be shared**. Written down because the first repopulation got it wrong within a minute.
 
 
 def check_runtime_state_is_not_tracked() -> list[str]:
@@ -2702,8 +2683,10 @@ def check_chaos_probe_count_is_current() -> list[str]:
     `tessera-test`, because a hardcoded number drifts on every test added. The difference is
     ownership: this is not a number restated in a second place, it is a CONSISTENCY
     ASSERTION between two live sources — the banner and the probe file. Same shape as
-    `tessera-watch`'s `_max_spend_fires`, which reads MAX_FIRES out of the backstop rather
-    than copying it, and for the same reason: whoever adds probe 12 gets told.
+    `bin/tessera-watch`'s P8, which reads doccheck's own `WARN_ONLY` through `getattr` rather
+    than restating the membership, and for the same reason: whoever adds probe 8 gets told.
+    (The previous exemplar here was `_max_spend_fires`, deleted with the spend guard by
+    ADR-0029 — a docstring citing a live example is itself a claim that can go stale.)
 
     Deliberately does NOT check the date beside it. "As of <date>" is a claim about when a
     human last ran them, which no file can verify — asserting it would be a mechanical check
@@ -3158,6 +3141,26 @@ def _looks_like_path(token: str) -> bool:
     return "/" in token or token.endswith(_PATH_EXT)
 
 
+def _adr_number(adr: Path) -> int:
+    """The ADR's own number, from its filename.
+
+    UNPARSEABLE RETURNS 9999, NOT 0, and the difference is the whole safety property. The
+    call site is `any(remover > _adr_number(adr))`, so a low number EXEMPTS: with 0, every
+    remover (>= 0001) compares greater and the finding is suppressed — an ADR whose filename
+    did not match would silently excuse any declared-absent path in its Executed line, which
+    is the broad-exemption hole the narrowing was written to close, reopened one line down.
+    This docstring claimed "fail closed" while the code failed OPEN (found in review,
+    2026-08-18); 9999 makes the claim true.
+
+    Defence-in-depth rather than a live path: the caller globs `[0-9][0-9][0-9][0-9]-*.md`,
+    so an unparseable name cannot reach here today. Kept correct anyway — the glob is one
+    edit away from widening, and a sentinel that silently inverts is not the thing to leave
+    behind for that edit.
+    """
+    m = re.match(r"(\d{4})-", adr.name)
+    return int(m.group(1)) if m else 9999
+
+
 def check_adr_execution_recorded() -> list[str]:
     """Every Accepted ADR must say whether it was actually BUILT — and name artifacts
     that exist.
@@ -3216,8 +3219,35 @@ def check_adr_execution_recorded() -> list[str]:
             bad.append(f"{_rel(adr)}: Executed claims completion but names no artifact in "
                        f"backticks — nothing to verify, so nothing is proven")
         for p in created:
-            if not (ROOT / p.rstrip("/")).exists():
-                bad.append(f"{_rel(adr)}: Executed names `{p}`, which does not exist")
+            if (ROOT / p.rstrip("/")).exists():
+                continue
+            # A LATER DECISION MAY HAVE REMOVED IT, and that is not this ADR lying about its
+            # own execution. ADR-0029 retired the spend guard, which deleted artifacts
+            # ADR-0016 and ADR-0028 had correctly recorded creating years-of-sessions
+            # earlier. Read literally the check called those two ADRs false, and the only
+            # remedies were editing an accepted decision or carrying a permanent red — the
+            # first forbidden, the second the thing this checker exists to prevent.
+            #
+            # The exemption is DECLARED absence, not mere absence: the path has to be in
+            # `repo_paths.ABSENT_TESSERA_PATHS`, which requires a reason string naming the
+            # decision that removed it. An undeclared missing path is still a finding, so a
+            # genuine typo or an unexecuted claim reads exactly as before. Added 2026-08-18,
+            # the first time this repo superseded a decision BY DELETION.
+            # NARROWED after review, 2026-08-18. The first version exempted ANY
+            # declared-absent path in ANY ADR's Executed line — so a future ADR that claimed
+            # to have CREATED `scripts/spend/guard.py` (typo, copy-paste, or a plain
+            # unexecuted claim) would pass silently where the old check caught it. The
+            # comment argued the narrow case while the code implemented the broad one, which
+            # is the gap this checker exists to close, in this checker.
+            #
+            # The exemption now requires the declaring reason to name a LATER ADR than the
+            # one being checked — i.e. the removal genuinely postdates the creation. An ADR
+            # cannot be excused by a decision that had already happened when it was written.
+            reason = ABSENT_TESSERA_PATHS.get(p.rstrip("/"), "")
+            removers = [int(n) for n in re.findall(r"ADR-(\d{4})", reason)]
+            if any(n > _adr_number(adr) for n in removers):
+                continue
+            bad.append(f"{_rel(adr)}: Executed names `{p}`, which does not exist")
         for p in removed:
             if (ROOT / p.rstrip("/")).exists():
                 bad.append(f"{_rel(adr)}: Executed says it removed `{p}`, but it is still "
@@ -3549,8 +3579,6 @@ CHECKS = {
     "gate-recording-not-recall": check_gate_recording_not_claimed_as_recall,
     "tessera-yml-is-tracked": check_tessera_yml_is_tracked,
     "ignored-test-suites-are-run": check_ignored_test_suites_are_run,
-    "spend-guard-is-wired": check_spend_guard_is_wired,
-    "spend-backstop-is-wired": check_spend_backstop_is_wired,
     "verify-scan-is-wired": check_verify_scan_is_wired,
     "verdict-channel-literals-match-contract": check_verdict_channel_literals_match_contract,
     "runtime-state-is-not-tracked": check_runtime_state_is_not_tracked,
