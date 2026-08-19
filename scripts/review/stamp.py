@@ -156,6 +156,17 @@ def record(base: str = "origin/main", head: "str | None" = None) -> int:
         print(f"base {base!r} is HEAD-anchored — refusing to stamp. It resolves to something "
               f"different at push time; name a branch, tag or sha.", file=sys.stderr)
         return 2
+    # AND TEST THE EFFECT, NOT ONLY THE SPELLING. The check above rejects `HEAD`/`@`/`HEAD~1`
+    # and nothing else, so the failure it exists to prevent was one keystroke away: on branch
+    # `main`, `stamp.py main --head <sha>` gives an outgoing range of `main...HEAD` — empty
+    # forever, so the report is filtered to nothing on every push while nothing reports it
+    # stale. Same for `@{-1}` and `HEAD@{1}`. Not exotic: `bin/tessera-new-project` scaffolds
+    # into a repo made by bare `git init` with NO remote, so `origin/main` does not resolve
+    # there and naming the current branch is the obvious workaround. (Review round 4.)
+    if _git("rev-parse", base) == _git("rev-parse", "HEAD"):
+        print(f"base {base!r} resolves to HEAD — refusing to stamp. The outgoing range would "
+              f"be empty forever and this check would go silent.", file=sys.stderr)
+        return 2
     if head is None:
         head = _git("rev-parse", "HEAD")
         explicit = False
@@ -224,7 +235,16 @@ def record(base: str = "origin/main", head: "str | None" = None) -> int:
     blobs = {}
     if at_head:
         for args in (("diff", "--name-only"), ("diff", "--cached", "--name-only")):
-            dirty += [f for f in _git(*args).splitlines() if f]
+            got = _git_lines(*args)
+            if got is None:
+                # THE THIRD SITE OF THE SAME SHAPE. `_git` cannot tell "the tree is clean" from
+                # "git could not answer" (index.lock contention, a corrupt index), and the stamp
+                # would be written claiming `uncommitted: []` about a tree nothing read — the
+                # `restore_injected` shape this module cites as its founding lesson. Two other
+                # call sites were moved off `_git` in rounds 2 and 3; this one was missed twice.
+                print("cannot read the working tree — refusing to stamp", file=sys.stderr)
+                return 2
+            dirty += got
         dirty = sorted(set(dirty))
         # PIN EACH DIRTY FILE TO ITS CONTENT, or the subtraction becomes permanent. The dirty
         # set is subtracted from every later report so that committing the reviewed tree
@@ -276,14 +296,57 @@ def latest() -> "dict | None":
                 e = json.loads(line)
             except ValueError:
                 continue
-            if e.get("type") == EVENT and (best is None or e.get("ts", "") > best.get("ts", "")):
+            # `>=`, NOT `>`. `ts` has one-second resolution, so two stamps in the same second
+            # resolved to the FIRST — and re-stamping is the documented remedy for a blind or
+            # wrong stamp ("until you re-stamp"), which therefore silently no-op'd. Logs are
+            # read in filename order and appended in time order, so the last writer wins.
+            # (Review round 4.)
+            if e.get("type") == EVENT and (best is None or e.get("ts", "") >= best.get("ts", "")):
+                best = e
+    return best
+
+
+def latest_usable() -> "dict | None":
+    """The newest stamp that can actually be reported against — an ancestor of HEAD.
+
+    `latest()` returns the newest stamp ANYWHERE, and a stamp taken on another branch then
+    shadows a perfectly good one. Reproduced: stamp `feature-a`, later stamp `feature-b`, return
+    to `feature-a`, commit the terminal fix, push — the report is empty and the hook says it is
+    blind, when a usable stamp for this line of history was sitting right there.
+
+    The same defect produced the inverse noise: after a squash-merge, or on any unrelated branch,
+    every push printed a blind note with no action available — the always-true signal this
+    module's header rejects. Picking the newest ANCESTOR fixes both, and when there is none the
+    fall-through is the deliberate `st is None` silence. (Review round 4.)
+    """
+    best = None
+    logs = ROOT / ".tessera" / "logs"
+    if not logs.is_dir():
+        return None
+    for f in sorted(logs.glob("*.jsonl")):
+        try:
+            lines = f.read_text().splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            if e.get("type") != EVENT:
+                continue
+            if best is not None and e.get("ts", "") < best.get("ts", ""):
+                continue
+            head = e["data"]["head"]
+            if _git("cat-file", "-t", head) and _git_ok("merge-base", "--is-ancestor",
+                                                        head, "HEAD"):
                 best = e
     return best
 
 
 def changed_since_review(base: str = "origin/main") -> "tuple[dict | None, list[str]]":
     """(stamp, files in the outgoing range that changed after the stamp's HEAD)."""
-    stamp = latest()
+    stamp = latest_usable()
     if stamp is None:
         return None, []
     head = stamp["data"]["head"]
@@ -353,13 +416,23 @@ def changed_since_review(base: str = "origin/main") -> "tuple[dict | None, list[
         # BLOB-PINNED. A dirty file is subtracted only while HEAD still holds the content the
         # reviewer saw; once it changes again it is a new edit and the whole point is to report
         # it. Without the pin the subtraction was permanent — see `record()`.
+        # LEGACY IS DECIDED BY THE FIELD'S PRESENCE, NOT BY A MISSING ENTRY. The first version
+        # read `pinned is None` as "this stamp predates pinning" and subtracted unconditionally
+        # — which is the over-claim the pin was added to stop, reachable whenever `hash-object`
+        # cannot read a path. A DELETED file is the common case: `git rm a.py` puts `a.py` in
+        # `diff --cached --name-only`, `hash-object` exits 128, no entry is written. Reproduced:
+        # review a tree deleting a.py, stamp, commit, then re-add a.py with entirely unreviewed
+        # content — never reported, on any push, forever. Non-ASCII paths do the same, since
+        # `diff --name-only` emits them C-quoted.
+        # Inside a pinned stamp, no pin means "we could not establish what was reviewed", and
+        # the module's own rule for that is prefer the noise. (Review round 4.)
+        pinned_stamp = "uncommitted_blobs" in data
         blobs = data.get("uncommitted_blobs") or {}
         seen = set()
         for f in data["uncommitted"]:
-            pinned = blobs.get(f)
-            if pinned is None:                    # stamp written before the pin existed
+            if not pinned_stamp:                  # written before pinning existed
                 seen.add(f)
-            elif _git("rev-parse", f"HEAD:{f}") == pinned:
+            elif f in blobs and _git("rev-parse", f"HEAD:{f}") == blobs[f]:
                 seen.add(f)
     else:
         seen = set(data.get("files", ()))         # rows from before `uncommitted` existed
@@ -385,6 +458,12 @@ def staleness_note(stamp: "dict | None") -> "str | None":
     an empty list mean two things, which is the defect.
     """
     if stamp is None:
+        return None
+    # ONLY WHEN NOTHING USABLE EXISTS. `changed_since_review` now selects the newest ANCESTOR
+    # stamp, so a stamp on another branch no longer shadows a good one — and this note must not
+    # fire while a usable stamp is being reported against. Callers pass `latest()`; the note is
+    # the difference between "a stamp exists" and "a stamp I can use exists". (Review round 4.)
+    if latest_usable() is not None:
         return None
     # BOUNDED IN TIME, because an unbounded version is the signal this hook exists to avoid.
     # A stale stamp is never replaced on its own — stamping rides model recall (3 stamps / 47

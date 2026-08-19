@@ -393,8 +393,12 @@ def test_changed_since_review_says_nothing_when_the_stamped_commit_is_not_an_anc
     _run(repo, "checkout", "-q", "main")
     _commit(repo, "main.py")
 
+    # `latest_usable()` skips it entirely now, so the report falls through to the deliberate
+    # no-stamp silence rather than returning a stamp it cannot use. `latest()` still sees it,
+    # which is what `staleness_note` reads. (Round 4.)
     st, changed = stamp.changed_since_review()
-    assert st is not None and changed == []
+    assert st is None and changed == []
+    assert stamp.latest() is not None
 
 
 def test_pre_push_is_told_when_the_stamp_is_off_this_line_of_history(tmp_path, monkeypatch):
@@ -410,14 +414,13 @@ def test_pre_push_is_told_when_the_stamp_is_off_this_line_of_history(tmp_path, m
     repo = _repo(tmp_path, monkeypatch)
     reviewed = _commit(repo, "a.py")
     assert stamp.record(head=reviewed) == 0
-    st, changed = stamp.changed_since_review()
-    assert stamp.staleness_note(st) is None, "a healthy stamp is not stale"
+    assert stamp.staleness_note(stamp.latest()) is None, "a healthy stamp is not stale"
 
     _run(repo, "commit", "-q", "--amend", "-m", "amended out from under the stamp")
     _commit(repo, "c.py")
-    st, changed = stamp.changed_since_review()
+    _, changed = stamp.changed_since_review()
     assert changed == []
-    note = stamp.staleness_note(st)
+    note = stamp.staleness_note(stamp.latest())
     assert note is not None and "BLIND" in note, (
         "silence here is indistinguishable from 'nothing changed since the review'")
 
@@ -552,13 +555,133 @@ def test_the_blind_note_stops_after_a_week(tmp_path, monkeypatch):
         "past the window it is old news and reads as 'no review on record'")
 
 
+def test_a_deleted_file_is_not_subtracted_just_because_it_has_no_blob_pin(tmp_path, monkeypatch):
+    """ROUND 3'S PIN INTRODUCED THIS. A missing pin was read as "the stamp predates pinning" and
+    subtracted unconditionally — the exact over-claim the pin was added to stop.
+
+    A DELETED file is the common trigger: `git rm a.py` puts it in `diff --cached --name-only`,
+    `hash-object` exits 128, and no entry is written. Reproduced: review a tree deleting a.py,
+    stamp, commit, then re-add a.py with entirely unreviewed content — never reported, on any
+    push, forever.
+
+    Legacy is now decided by the FIELD's presence. Inside a pinned stamp a missing pin means
+    "we could not establish what was reviewed", and this module's rule for that is prefer the
+    noise. Falsify by reading `pinned is None` as legacy again."""
+    repo = _repo(tmp_path, monkeypatch)
+    _commit(repo, "a.py", "v0\n")
+    _run(repo, "rm", "-q", "a.py")
+    assert stamp.record() == 0
+    ev = _events(repo)[-1]
+    assert "a.py" in ev["data"]["uncommitted"]
+    assert "a.py" not in ev["data"]["uncommitted_blobs"], "hash-object cannot pin a deletion"
+
+    _run(repo, "commit", "-qm", "the reviewed deletion")
+    _commit(repo, "a.py", "brand new, unreviewed content\n")
+    _, changed = stamp.changed_since_review()
+    assert changed == ["a.py"], "an unpinnable entry must not buy permanent silence"
+
+
+def test_an_unreadable_working_tree_refuses_the_stamp(tmp_path, monkeypatch):
+    """THE THIRD SITE OF ONE SHAPE, and the third time a fail-open branch shipped unguarded
+    because a git failure is not constructible in a fixture. `_git` cannot tell "the tree is
+    clean" from "git could not answer" — index.lock contention, a corrupt index — and the stamp
+    would be written asserting `uncommitted: []` about a tree nothing read. That is the
+    `restore_injected` shape this module cites as its founding lesson.
+
+    Two sibling call sites were moved off `_git` in rounds 2 and 3; this one was missed twice.
+    Stubbed at the module's own seam, like the primary-diff guard, because what is under test is
+    this module's RESPONSE to a failure, not git's behaviour."""
+    repo = _repo(tmp_path, monkeypatch)
+    _commit(repo, "a.py")
+    # BOTH HELPERS ARE STUBBED, and that is the point. The first version patched `_git_lines`
+    # only — so re-planting the fail-open (which calls `_git`) left the test GREEN, because the
+    # guard shared its seam with the implementation instead of asserting the property. The
+    # property is "if the working-tree read fails, refuse", whichever helper does the reading.
+    # EXACT arg tuples, not a prefix match. `args[:2] == ("diff", "--name-only")` also catches
+    # the THREE-argument `files` diff (`diff --name-only base...head`), so `record()` returned 2
+    # through that guard instead and the test passed for the wrong reason — green against the
+    # re-plant. Found by running the stub by hand and reading which message printed.
+    TREE = (("diff", "--name-only"), ("diff", "--cached", "--name-only"))
+    real_lines, real_git = stamp._git_lines, stamp._git
+    def lines(*args):
+        return None if args in TREE else real_lines(*args)
+    def plain(*args):
+        return "" if args in TREE else real_git(*args)
+    monkeypatch.setattr(stamp, "_git_lines", lines)
+    monkeypatch.setattr(stamp, "_git", plain)
+
+    assert stamp.record() == 2
+    assert _events(repo) == [], "a stamp claiming a tree it could not read must not be written"
+
+
+def test_a_stamp_from_another_branch_does_not_shadow_a_usable_one(tmp_path, monkeypatch):
+    """`latest()` returned the newest stamp ANYWHERE. Reproduced: stamp feature-a, later stamp
+    feature-b, return to feature-a, commit the terminal fix — the report was empty and the hook
+    claimed to be blind, while a perfectly usable stamp for this line of history sat right
+    there. The same defect produced the inverse noise: on any unrelated branch every push
+    printed a blind note with no action available.
+
+    `latest_usable()` picks the newest ANCESTOR. Falsify by pointing `changed_since_review` back
+    at `latest()`."""
+    repo = _repo(tmp_path, monkeypatch)
+    _run(repo, "checkout", "-q", "-b", "feature-a")
+    reviewed_a = _commit(repo, "fa.py", "v1\n")
+    assert stamp.record(head=reviewed_a) == 0
+
+    _run(repo, "checkout", "-q", "main")
+    _run(repo, "checkout", "-q", "-b", "feature-b")
+    reviewed_b = _commit(repo, "fb.py")
+    assert stamp.record(head=reviewed_b) == 0          # newer, but on another line
+
+    _run(repo, "checkout", "-q", "feature-a")
+    _commit(repo, "fa.py", "v2 — the terminal fix\n")
+    st, changed = stamp.changed_since_review()
+    assert st["data"]["head"] == reviewed_a, "the usable stamp for THIS branch must win"
+    assert changed == ["fa.py"]
+    assert stamp.staleness_note(stamp.latest()) is None, (
+        "a usable stamp exists, so the blind note must stay quiet")
+
+
+def test_a_base_that_resolves_to_HEAD_is_refused_however_it_is_spelled(tmp_path, monkeypatch):
+    """The HEAD-anchored guard tested SPELLING, so the failure it prevents was one keystroke
+    away: on branch `main`, `stamp.py main --head <sha>` makes the outgoing range `main...HEAD`
+    — empty forever, report silent on every push, nothing reporting it stale.
+
+    Not exotic. `bin/tessera-new-project` scaffolds into a repo made by bare `git init` with no
+    remote, so `origin/main` does not resolve there and naming the current branch is the obvious
+    workaround. The suite previously asserted `["main", "--head", sha]` as VALID usage, which is
+    why nothing had noticed."""
+    repo = _repo(tmp_path, monkeypatch)
+    sha = _commit(repo, "a.py")
+    branch = _run(repo, "rev-parse", "--abbrev-ref", "HEAD")
+    assert stamp.record(base=branch, head=sha) == 2
+    assert _events(repo) == []
+
+
+def test_restamping_within_the_same_second_wins(tmp_path, monkeypatch):
+    """`ts` has one-second resolution and the tie-break was strict `>`, so two stamps in the
+    same second resolved to the FIRST. Re-stamping is the documented remedy for a blind or wrong
+    stamp, and it silently no-op'd."""
+    repo = _repo(tmp_path, monkeypatch)
+    a = _commit(repo, "a.py")
+    b = _commit(repo, "b.py")
+    assert stamp.record(head=a) == 0
+    assert stamp.record(head=b) == 0
+    assert stamp.latest()["data"]["head"] == b, "the correction must win"
+
+
 # ── the CLI surface ────────────────────────────────────────────────────────────────────────
 
 def test_cli_accepts_both_head_spellings_and_a_positional_base(tmp_path, monkeypatch):
     repo = _repo(tmp_path, monkeypatch)
     reviewed = _commit(repo, "a.py")
     _commit(repo, "b.py")
-    for argv in (["--head", reviewed], [f"--head={reviewed}"], ["main", "--head", reviewed]):
+    # `origin/main`, NOT `main`. The suite used to assert `["main", "--head", reviewed]` as
+    # valid usage — certifying the degenerate case, since on branch `main` that makes the
+    # outgoing range `main...HEAD`, empty forever, and the report silent on every push. Caught
+    # by review round 4; the guard that now refuses it is the fix, and this line was the reason
+    # nothing had noticed.
+    for argv in (["--head", reviewed], [f"--head={reviewed}"], ["origin/main", "--head", reviewed]):
         assert stamp._main(argv) == 0
         assert _events(repo)[-1]["data"]["head"] == reviewed
 

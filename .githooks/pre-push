@@ -24,7 +24,7 @@ sys.path.insert(0, str(root / "scripts" / "review"))
 try:
     import stamp
     st, changed = stamp.changed_since_review()
-    stale = stamp.staleness_note(st)
+    stale = stamp.staleness_note(stamp.latest())
 except Exception as exc:                      # never block a push on this hook's own failure
     print("pre-push: review-anchor check unavailable (%s)" % exc, file=sys.stderr)
     sys.exit(0)

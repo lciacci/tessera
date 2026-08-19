@@ -90,6 +90,13 @@ bare-hex base with no `--head` gets a loud note rather than a refusal: `stamp.py
 "base = that sha, head = HEAD", which is the fix stamped as reviewed, and the two intentions are
 indistinguishable from argv alone.
 
+**A base that RESOLVES to HEAD is refused, however it is spelled** — the spelling check below
+was one keystroke from useless. On branch `main`, `stamp.py main --head <sha>` makes the outgoing
+range `main...HEAD`, empty forever, so the report is filtered to nothing on every push and
+nothing reports it stale. Not exotic: `bin/tessera-new-project` scaffolds into a repo made by
+bare `git init` with no remote, so `origin/main` does not resolve there and naming the current
+branch is the obvious workaround.
+
 **A HEAD-anchored base is refused.** `head` is resolved to a sha because a stamp records history;
 `base` is deliberately kept as a *ref* so `origin/main` keeps tracking as others push. That is
 right for symbolic refs and wrong for HEAD-relative ones. Measured: `--head <R>` with
@@ -105,6 +112,13 @@ means *"whatever HEAD was when someone remembered"*, an explicit one means someo
 commit under review. Without the field the log rows are identical.
 
 ## Reading the report
+
+**The stamp used is the newest one that is an ANCESTOR of HEAD**, not the newest one written.
+`latest()` returned the newest anywhere, so a stamp taken on another branch shadowed a usable
+one: stamp `feature-a`, later stamp `feature-b`, return to `feature-a`, commit the terminal fix —
+empty report, and the hook claiming to be blind while a good stamp for that line sat right there.
+The same defect produced the inverse noise on any unrelated branch. `latest_usable()` picks the
+newest ancestor, and when there is none the fall-through is the deliberate no-stamp silence.
 
 `pre-push` speaks only when it has something specific: **a review is on record AND HEAD has moved
 past it.** Absence of a stamp is absence of evidence, and it does not report that — measured
@@ -122,7 +136,12 @@ on the majority of pushes and taken the useful branch down with it.
    review looked at, every such file is in `base...reviewed`, so the terminal fix was filtered
    out and the report went silent. Files already *committed* at stamp time cannot reappear in
    `head..HEAD` unless edited again — which is exactly what is worth reporting. Legacy rows
-   written before the `uncommitted` field keep the wide subtraction they were recorded under.
+   written before the `uncommitted` field keep the wide subtraction they were recorded under —
+   decided by the FIELD's presence, never by a missing entry. Inside a pinned stamp an entry
+   with no pin means "we could not establish what was reviewed", and the rule for that is prefer
+   the noise. A **deleted** file is the common case (`hash-object` cannot pin one), and reading
+   it as legacy bought permanent silence: reviewed deletion, committed, then re-added with
+   entirely unreviewed content, never reported on any push.
    **The subtraction is BLOB-PINNED**, and unpinned it was permanent: each dirty file's content
    hash is recorded, and the file is subtracted only while HEAD still holds what the reviewer
    saw. Measured 2026-08-19 — a file dirty at stamp time stayed subtracted after being re-edited
