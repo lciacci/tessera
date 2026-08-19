@@ -159,8 +159,13 @@ def p3_restore_integrity(root: Path) -> tuple[bool, str]:
     THE REPLACEMENT HINT WAS ALSO WRONG, AND THAT IS THE MORE USEFUL LESSON. It asserted a
     population-level cause ("the driver is active_constraints, every other field stays flat")
     and an unconditional claim ("deleting goal does not get under budget"). Review measured
-    both false: 34 of the 75 over-budget checkpoints clear on goal removal ALONE, and
-    `decisions` and `recent_files` each swing ~1.7KB. Both were true of one 12,364b checkpoint
+    both false: roughly two in five over-budget checkpoints clear on goal removal alone (22 of
+    54 across 124 fully-schema'd, 2026-08-19), and `decisions` and `recent_files` each swing
+    ~1.7KB. **This sentence carried "34 of the 75 over 175" for one commit** — the unfiltered
+    population wearing the filtered one's label — while the comment ~100 lines below already
+    retracted it, so the file shipped a retracted figure and its retraction side by side and
+    the docstring is the copy a reader hits first. Third instance in this branch of correcting
+    one copy. Both were true of one 12,364b checkpoint
     measured 2026-08-06 and generalised without the generalisation being stated — the
     "three environments are not a machine" error, committed while fixing a stale-reasoning bug.
 
@@ -274,32 +279,53 @@ def p3_restore_integrity(root: Path) -> tuple[bool, str]:
         # concern one level up. So this reports what THIS checkpoint is made of and leaves the
         # population question where it is adjudicated.
         #
-        # `indent=2` MATCHES HOW THE FILE IS WRITTEN (checkpoint.py writes the archive and
-        # latest copy indented), so field sizes and `size` are in the same unit. Compact dumps
-        # under-count by ~180b here and can reorder the ranking when a field is a long LIST of
-        # short strings -- many elements each gaining indentation -- against a single long
-        # STRING that gains none. The parts still do not sum to the whole: keys, braces and
-        # separators are ~450b that belong to no field.
-        largest = sorted(((len(json.dumps(v, indent=2)), k) for k, v in data.items()),
-                         reverse=True)[:3]
+        # `indent=2` MATCHES HOW THE FILE IS WRITTEN (checkpoint.py writes the archive and the
+        # latest copy indented), which is much closer than compact dumps but is NOT exact, and
+        # the inexactness runs one way. Compact under-counts by ~180b here and can reorder the
+        # ranking when a long LIST of short strings -- every element gaining indentation --
+        # competes with a single long STRING that gains none. `indent=2` still under-counts,
+        # because each value sits one nesting level DEEPER in the file than in a standalone
+        # dump: ~2b per rendered line of any nested container, ~68b on a 34-element constraint
+        # list. So `without_big` is a slight OVER-estimate of what removal saves and can say
+        # "would clear it" for a payload landing a few tens of bytes above the budget. Named
+        # rather than corrected: the exact answer is re-serialising the whole dict without the
+        # field, and this is an advisory line, not an accounting. The residual reported as
+        # "keys, braces and separators" is that overhead MINUS this under-count.
+        ranked = sorted(((len(json.dumps(v, indent=2)), k) for k, v in data.items()),
+                        reverse=True)
+        largest = ranked[:3]
         top = " · ".join(f"{k} {n:,}b" for n, k in largest)
-        goal_bytes = len(json.dumps(data.get("goal", ""), indent=2))
-        without_goal = size - goal_bytes
-        goal_note = (
-            f"dropping goal ({goal_bytes:,}b) WOULD clear it, leaving {without_goal:,}b"
-            if without_goal <= RESTORE_BUDGET_BYTES
-            else f"dropping goal ({goal_bytes:,}b) would NOT clear it, {without_goal:,}b remains")
+        # ASK THE QUESTION OF THE DRIVER, NOT OF `goal`. v3 computed whether dropping GOAL would
+        # clear the budget -- per payload, so not a population claim, and still misdirecting:
+        # measured over the archive, goal is the largest field in **0 of 55** over-budget
+        # checkpoints (rank 3 or 4 in every one) while the clause printed "WOULD clear it" in 22
+        # of them. The alarm's longest advisory was still about the field that is never the
+        # overflow, and it recommended an action the next clause forbids. v1's misdirection in a
+        # new suit, and the third time this branch has aimed a reader at `goal`.
+        #
+        # `goal`'s RANK is still reported, because "not this field" is exactly what the two
+        # misdirected sessions needed -- but computed, so it cannot rot the way a "goal is never
+        # the driver" sentence would. Same rule as everything else here: measure the instance.
+        big_bytes, big_field = ranked[0]
+        without_big = size - big_bytes
+        shape = (f"dropping {big_field} alone would clear it ({without_big:,}b would remain)"
+                 if without_big <= RESTORE_BUDGET_BYTES
+                 else f"even dropping {big_field} leaves {without_big:,}b — this overflow is "
+                      f"diffuse, no single field carries it")
+        names = [k for _, k in ranked]
+        goal_rank = (f"goal ranks #{names.index('goal') + 1} of {len(names)} here"
+                     if "goal" in names else "no goal field present")
         return True, (
             f"checkpoint-latest.json is {size:,}b, over the {RESTORE_BUDGET_BYTES:,}b delivery "
             f"budget. Checkpoint bytes track delivered bytes ~1:1, and ≈18,755b was observed to "
             f"SPILL: the harness wrote the block to a file and handed the model a 2KB preview, "
             f"so Constraints/Progress/Files never arrived. This degrades EVERY session start, "
             f"not just compaction. Largest fields in THIS checkpoint (indent=2, as written): "
-            f"{top}. {goal_note} — but goals are bounded TWICE and only one of the two bounds "
-            f"bytes: MAX_CHECKPOINT_GOALS = 8 caps the COUNT, and _select_goals' exclusion of "
-            f"bridge imports (origin='loaded') is what caps the SIZE. The count cap alone left "
-            f"the field at 11,245b for two days in July, so if goal bytes are large HERE the "
-            f"suspect is that filter, not the cap. Options are weighed in "
+            f"{top}; {shape}. For the record — {goal_rank} — goals are bounded TWICE and only "
+            f"one of the two bounds bytes: MAX_CHECKPOINT_GOALS = 8 caps the COUNT, and "
+            f"_select_goals' exclusion of bridge imports (origin='loaded') caps the SIZE. The "
+            f"count cap alone left the field at 11,245b for two days in July, so if goal is "
+            f"ranked high HERE the suspect is that filter, not the cap. Options are weighed in "
             f"_project_specs/todos/active.md item 7; do not re-propose capping goals or "
             f"capping constraints by recency, both are decided. {tally}")
 

@@ -203,8 +203,17 @@ handoff block only; a blockquoted list is invisible to it.
     shipped — their checkpoints date 07-08 to 07-23, so only two downstreams are worked (arbiter
     08-10, conclave 08-15) and **the 3-project arm may not be reachable by accrual.** The realistic path is P16's 30-day arm on **2026-08-28**, whose own message says
     THE FINDING IS THE RATE, NOT MNEMOS. Do not pre-empt it.
+    **OWED ON MERGE, and P12 is firing until it happens:** `bin/tessera-sync-skills`. The
+    "T2's instrument is UNBUILT" correction landed in `skills/mnemos/SKILL.md`, and
+    `~/.claude/skills/mnemos/SKILL.md` — the mirror ADR-0010 feeds from the repo, and **the
+    copy conclave and arbiter actually load** — still carries the retracted sentence. Deferred
+    rather than run because propagating an unmerged branch into machine-global state is the
+    wrong order, not because the gap is acceptable: this change's own thesis is that a
+    correction has to reach the loud copy, and it currently stops one command short of the six
+    downstreams. Raised by review, 2026-08-19.
     **Governs:** ADR-0015 · `docs/contracts/restore-receipt.md` · `bin/tessera-watch` (P16 owns
-    the bar) · `docs/observatory.md` → "T2 downstream" (the stopping rule) · item 7.
+    the bar) · `docs/observatory.md` → "T2 downstream" (the stopping rule) · ADR-0010 (repo is
+    truth, global is a managed mirror) · item 7.
 
 **Published copies (off-repo, and therefore drift-prone):**
 - ADR-0029 (spend guard retired) — https://claude.ai/code/artifact/9ae5bdbd-56fb-45f9-971a-6458ff6de738

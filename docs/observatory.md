@@ -306,7 +306,11 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   verdict.** ~~and its instrument is unbuilt~~ — **corrected 2026-08-19: the instrument shipped
   2026-07-26** (`scripts/restore/`). What is missing is DATA, and P16 owns that bar: 7/10
   receipts across 2/3 downstream projects as of 2026-08-19. No verdict is available — not keep,
-  not kill — but the reason changed three weeks ago and three copies of this sentence did not.
+  not kill — but the reason changed three weeks ago and three LIVE copies of this sentence did
+  not. A **fourth** survives in `_project_specs/todos/active.md`, inside a dated blockquoted
+  2026-07-26 handoff record, and it STAYS: this repo does not rewrite history, and a record of
+  what was believed then is not a claim about now. Counted here because "three copies" read as
+  an exhaustive sweep and was not one (review, 2026-08-19).
   See the 2026-08-19 entry at the end of this file.
 - **Historical status (pre-ADR-0015):** Trial **re-armed on an event trigger** (calendar trigger retired). Recovery path **exercised once (manual)**; awaiting a real `auto` event.
 - **When to revisit (CURRENT, per ADR-0015):** ~~when **T2's instrument ships**~~ — **that fired
@@ -3441,7 +3445,21 @@ minted per ingested session."* Measured against `.mnemos/checkpoint-latest.json`
      2b   0%  working_memory       (empty)
 ```
 
-Deleting `goal` **entirely** does not get under budget. `active_constraints` is 77 entries, **61 of
+Deleting `goal` **entirely** does not get under budget.
+
+> **CORRECTED 2026-08-19 — this sentence is the source of a generalisation that then rotted into
+> `tessera-watch` itself, and it is false as an unconditional claim.** It is true of the ONE
+> 12,364b checkpoint measured here, where `goal` was 671b (5%). Measured across the archive:
+> **22 of 55 over-budget checkpoints DO clear on goal removal alone** (~2 in 5). The heading's
+> "the field it names is 5% of the overflow" is likewise a property of this payload, not of the
+> population. **The generalisation was carried verbatim into P3's own remediation text on
+> 2026-08-19 and had to be retracted there twice** — first as a wrong unconditional claim, then
+> as a per-payload computation that still pointed at `goal`, which is the largest field in
+> **0 of 55** over-budget checkpoints. Heading left unedited on purpose: `decision_surface`
+> indexes headings, and the 2026-08-07 entry records that renaming one silently breaks a
+> citation. What is durable here is the ORDERING of the fields, not the arithmetic.
+
+`active_constraints` is 77 entries, **61 of
 them `file_exists("path")`** invariants bridged from iCPG intents — e.g.
 `INV: file_exists("scripts/override/")`. Those are static repo facts, not session constraints, and
 `scripts/doccheck.py` already asserts every one of those paths with a pre-commit hook behind it.
@@ -4793,8 +4811,10 @@ None of this is a verdict. It is the deconfounding item 13 correctly said had to
   field's absence but its content. That is a live thread and it is *not* read here.
 - **The 3-project arm may not be reachable by accrual — and "not being worked" is measured, not
   inferred.** There are six downstreams. **Four of the six carry no `decisions` key at all**
-  (howler, heaviside, settempo, tess-dashboard), and their checkpoints were last written
-  2026-07-08, 07-12, 07-19 and 07-23 — before the field existed and a month or more ago. The only
+  — tess-dashboard 2026-07-08, heaviside 07-12, howler 07-19, settempo 07-23, each paired with
+  its own date because the first version of this line listed the four names in one order and the
+  four dates in another, mis-pairing three of the four **in the entry about figures that stay
+  green beside a wrong reading.** All four predate the field and are a month or more old. The only
   two with recent checkpoints are the only two that have ever filed a receipt: arbiter (08-10)
   and conclave (08-15). *(First draft of this bullet said "four of seven", counting tessera as a
   downstream in the one paragraph whose subject is that tessera is not one.)*

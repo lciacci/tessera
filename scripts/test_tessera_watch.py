@@ -478,16 +478,18 @@ def test_p3_over_budget_message_measures_THIS_payload_not_the_population(tmp_pat
     fired, detail = tw.p3_restore_integrity(goal_heavy)
     assert fired is True
     assert _first_named_field(detail) == "goal"
-    assert "WOULD clear it" in detail, "a goal-dominated payload clears on goal removal"
+    assert "dropping goal alone would clear it" in detail
+    assert "goal ranks #1 of 5 here" in detail, "the rank is computed, never asserted"
 
     con_heavy = _checkpoint(tmp_path, pad=tw.RESTORE_BUDGET_BYTES,
                             pad_field="active_constraints")
     fired, detail = tw.p3_restore_integrity(con_heavy)
     assert fired is True
     assert _first_named_field(detail) == "active_constraints"
-    assert "would NOT clear it" in detail, (
-        "the old unconditional claim ran the other way and was false ~2 times in 5; this "
-        "branch must answer for the payload it is looking at")
+    assert "dropping active_constraints alone would clear it" in detail, (
+        "the removal question must be asked of the DRIVER; v3 asked it of `goal`, which is "
+        "the largest field in 0 of 55 over-budget checkpoints and printed WOULD-clear in 22")
+    assert "dropping goal" not in detail, "v3's goal-specific arithmetic is back"
     assert "Check the goal field first" not in detail, "v1's misdirecting imperative is back"
 
 
