@@ -4824,3 +4824,98 @@ None of this is a verdict. It is the deconfounding item 13 correctly said had to
 **Revisit when:** P16 fires — either arm. **Do not adjudicate before it**, and note that this entry
 is now the second record saying so; the first was ignored because a handoff item said the bar was
 met and the handoff is what gets read.
+
+---
+
+### F-004 scored against the mechanism built for F-004 — five review rounds, and the worst finding was in the previous round's fix three times *(2026-08-19)*
+
+- **Status:** Investigating. **The mechanism shipped; this entry is about what building it cost
+  and what that says about fix-rounds generally.**
+- **Source:** `scripts/review/stamp.py`, queue item 8(b)(c)(d). conclave F-004 is the finding that
+  *the review gate covers the draft and never the fix*; this is that finding, measured on the
+  review anchor written to report it.
+
+**The rounds.** One change, ~400 lines of module plus a hook and a contract:
+
+| round | findings | HIGH | of the findings, how many were the PREVIOUS round's fixes |
+|---|---:|---:|---:|
+| 1 | 3 | 1 | — |
+| 2 | 6 | 1 | 0 |
+| 3 | 6 | 0 | 0 |
+| 4 | 5 | **2** | **2** |
+| 5 | 4 | **1** | **3** |
+
+**Severity did not fall monotonically and the count did not converge.** The 2026-08-17 session's
+stopping rule — *"severity fell with the count, and round 4 caught nothing live; that, not a clean
+report, was the stop signal"* — never fired here. Five rounds was a **decision**, taken with the
+regress visible, not a signal.
+
+#### The three findings worth carrying, all of them the same shape
+
+1. **A fix that is correct in isolation can cancel a feature when combined with another.**
+   Round 4 made the report select the newest *ancestor* stamp, and separately gave the
+   staleness note an early return when a usable stamp exists. Each was right. Together they made
+   the note **unreachable**: it can only be truthy when no usable stamp exists, and the hook
+   tested that case first and fell through to silence. **Two correct fixes restored the exact
+   defect they were built from** — "you are clear" and "I am blind" printing identically.
+2. **A guard narrowed to fix an over-fire can block the path it protects.** Round 4 refused a
+   base whose sha equals HEAD's, to stop `stamp.py main` on branch `main` making the outgoing
+   range empty forever. That premise holds only for refs that advance with the local branch —
+   `origin/main` does not — so it refused the contract's own **primary path**: branch off a
+   synced main, review the uncommitted tree, run bare `stamp.py`. The fixture never caught it
+   because every test committed past `origin/main` before stamping.
+3. **A comment claiming a guard's coverage is a doc claim, and it goes false the same way.**
+   Round 4's comment said `@{-1}` and `HEAD@{1}` were covered by the HEAD-anchored pattern. They
+   were not; it has no `@{` case. Nothing checks a comment about what a regex catches.
+
+#### Six guards were decoration, and the ways they failed are distinguishable
+
+Standing pattern #10 says re-plant **in** the code, not beside it. This session found **six**
+ways to believe you did:
+
+- **Vacuous by construction** — three-field fixtures against a top-three list, so membership held
+  under any ordering. Proven by deleting `reverse=True` and watching the test pass.
+- **The fixture exercised the variant that works** — the wide-subtraction test added a NEW file,
+  the one shape that survives; the identical defect stayed live on the primary path for two more
+  rounds.
+- **The guard shared its seam with the implementation** — stubbing `_git_lines` while the
+  re-planted code calls `_git`.
+- **Green through the WRONG guard** — a stub matching `args[:2]` also caught the three-argument
+  diff, so `record()` returned the expected code via an unrelated branch.
+- **The re-plant never applied** — a `str.replace` with no assertion, twice; once on an escape
+  (`·` vs a literal `·`), once on a wrapped line.
+- **The test called the unit, never the wire** — every staleness test called `staleness_note`
+  directly, so the hook's branch ORDER, where the defect lived, was untested. Fixed by a test
+  that runs `.githooks/pre-push` itself.
+
+**One guard took four attempts**, failing three of those ways in sequence. That is the number to
+remember, not the finding count.
+
+#### What this does and does not say
+
+- **It does NOT say reviewing was wasted.** Every round found real defects, two rounds found
+  HIGHs, and the mechanism would have shipped silently broken after any of rounds 1–4. Round 5's
+  HIGH was a feature that did not exist in a branch that claimed it did.
+- **It does NOT say five rounds is the right number.** Rounds 4 and 5 were majority self-inflicted:
+  2 of 5, then 3 of 4. A sixth round would review round 5's fixes, which are themselves unreviewed
+  — the recursion F-004's own analysis says has no fixed point.
+- **It DOES say the fix-round deserves the scrutiny of the original change**, which is F-004's
+  claim, now with a number: **5 of the 24 findings across five rounds were in the immediately
+  preceding round's fixes, and 2 of the last two rounds' 3 HIGHs were.** *(The first draft of
+  this bullet said "both", counting round 4's two HIGHs as mine. One was — the blob pin from
+  round 3 — and the other was original, `latest()` returning the newest stamp anywhere. Caught
+  by re-reading, in the entry about claims that go false. The corrected ratio is still the
+  point: the single largest source of HIGH findings in this branch was the previous round's
+  fixes.)*
+- **And it says a warn-only mechanism can absorb unbounded review.** Nothing here blocks anything;
+  the failure modes are noise or silence. Five rounds on that is a poor ratio, and the reason it
+  happened is that each round found something real — which is precisely how a regress sustains
+  itself.
+
+**Not promoted to a standing pattern**, deliberately. It is one session and one mechanism, and
+conclave's F-004 standard says n=3 in one sitting reads as n=1. **Promote it if a fix-round's
+own defects are the worst finding in a DIFFERENT session on DIFFERENT work** — the trigger
+conclave set for exactly this, and the one that promoted the claims-are-the-expensive-part lesson.
+
+**Revisit when:** that trigger fires, or when anyone proposes a review-round budget. The honest
+input to that decision is this table, not a feeling about diminishing returns.
