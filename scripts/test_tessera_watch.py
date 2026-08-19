@@ -1,6 +1,7 @@
 """Predicate checks for bin/tessera-watch. Run: pytest scripts/test_tessera_watch.py"""
 import datetime as _dt
 import json
+import os
 from importlib.util import module_from_spec, spec_from_loader
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
@@ -424,6 +425,22 @@ def _checkpoint(tmp_path, *, pad=0, drop=(), pad_field="goal"):
     return tmp_path
 
 
+def _archive(tmp_path, sizes, mtime=None):
+    """Write archived checkpoints of the given byte sizes, oldest first.
+
+    mtime is set explicitly rather than relied on: files written in the same second sort
+    arbitrarily, and the window is "the most recent N", so a test whose ordering depends on
+    filesystem timestamp resolution would pass or fail by accident."""
+    d = _mnemos(tmp_path) / "checkpoints"
+    d.mkdir(exist_ok=True)
+    for i, n in enumerate(sizes):
+        f = d / f"cp{i:03d}.json"
+        f.write_text("x" * n)
+        t = mtime if mtime is not None else 1_000_000 + i
+        os.utime(f, (t, t))
+    return tmp_path
+
+
 def _compaction(trigger=None, probe=None):
     e = {"ts": 1.0, "event": "compaction_fired"}
     if trigger:
@@ -577,6 +594,247 @@ def test_p3_quiet_on_a_deliverable_checkpoint_but_claims_no_verdict(tmp_path):
         "T2's instrument shipped 2026-07-26; the reason there is no verdict is DATA, and P16 "
         "owns that bar")
     assert "P16" in detail, "the quiet path must point at who actually answers the question"
+
+
+def test_p3_fires_on_the_DISTRIBUTION_when_the_spot_reading_is_fine(tmp_path, monkeypatch):
+    """THE POINT OF THE 2026-08-19 CHANGE, and it is a firing change rather than a wording one.
+
+    P3 reported whichever checkpoint happened to be written last. Measured: 53 of 122 recent
+    checkpoints over budget, and this predicate read 8,542b then 7,260b then 10,339b across ONE
+    session — three stories from one unchanged problem. Item 1: "a spot reading on a fluctuating
+    quantity is why this read as a goal problem for weeks."
+
+    Reporting it on the QUIET path would have reached nobody: `render()` prints only FIRED
+    predicates. That is the same channel asymmetry recorded the same day, where P16 held the
+    correct T2 count and said nothing because it had not fired. So the distribution has to be
+    able to fire, and this asserts exactly that — a healthy newest checkpoint, an unhealthy
+    recent history, and P3 red.
+
+    Falsify by dropping the `if n_over:` branch."""
+    root = _checkpoint(tmp_path)                       # newest is tiny and fine
+    _archive(tmp_path, [200, tw.RESTORE_BUDGET_BYTES + 500, 300])
+    fired, detail = tw.p3_restore_integrity(root)
+    assert fired is True
+    assert "last-written checkpoint is fine" in detail
+    assert "1 over budget" in detail
+
+
+def test_p3_calls_a_first_spill_a_FIRST_SPILL(tmp_path, monkeypatch):
+    """The recurrence lead-in was unconditional and read "AND THIS IS NOT A ONE-OFF — 0 over
+    budget" against a clean archive: a flat self-contradiction inside the sentence a reader
+    trusts most, which is the same failure the two earlier hints in this function were rewritten
+    for — committed in the sentence written to replace them.
+
+    **The archive always holds the current checkpoint as its newest entry**, so an over-budget
+    reading contributes 1 to the count and cannot corroborate itself. Recurrence means > 1. And
+    the first spill after a clean run is exactly when a reader needs to be told it IS one.
+
+    Falsify by making `recurrence` unconditional again."""
+    root = _checkpoint(tmp_path, pad=tw.RESTORE_BUDGET_BYTES)
+    _archive(tmp_path, [200, 300, tw.RESTORE_BUDGET_BYTES + 900])   # only today's is over
+    fired, detail = tw.p3_restore_integrity(root)
+    assert fired is True
+    assert "FIRST occurrence" in detail
+    assert "NOT A ONE-OFF" not in detail
+
+
+def test_p3_calls_a_repeated_spill_a_pattern(tmp_path, monkeypatch):
+    """The other half — without it the branch above could be unconditional the other way."""
+    root = _checkpoint(tmp_path, pad=tw.RESTORE_BUDGET_BYTES)
+    _archive(tmp_path, [tw.RESTORE_BUDGET_BYTES + 1] * 3)
+    fired, detail = tw.p3_restore_integrity(root)
+    assert fired is True
+    assert "NOT A ONE-OFF" in detail
+    assert "FIRST occurrence" not in detail
+
+
+def test_p3_does_not_restate_a_population_cause_it_could_measure(tmp_path, monkeypatch):
+    """The distribution branch hard-asserted "the largest single driver is active_constraints
+    (~45% of the swing)". The adjacent over-budget branch was rewritten earlier the same day to
+    stop doing exactly that, after review measured an equivalent claim false — and the figure
+    did not even reconcile with its own source (measured: 48.8% of the summed per-field swing,
+    over n=140). A branch holding 30 live measurements should not quote a static one."""
+    root = _checkpoint(tmp_path)
+    _archive(tmp_path, [200, tw.RESTORE_BUDGET_BYTES + 500, 300])
+    _, detail = tw.p3_restore_integrity(root)
+    assert "% of the swing" not in detail
+    assert "item 1" in detail, "it must still point at where the breakdown lives"
+
+
+def test_p3_distribution_survives_one_unreadable_entry(tmp_path, monkeypatch):
+    """`e.stat()` inside a bare comprehension meant ONE entry removed by a concurrent Stop hook
+    discarded the whole reading — and per the reversal above that outcome now FIRES, so a routine
+    race would have produced a spurious "instrument is dead". A sample is not a reading."""
+    root = _checkpoint(tmp_path)
+    _archive(tmp_path, [200, tw.RESTORE_BUDGET_BYTES + 400, 300])
+    # PATCHES `os.scandir`, NOT `os.stat`. The first version patched `os.stat` — but the code
+    # calls `DirEntry.stat()`, which does not route through it, so the test passed without ever
+    # triggering the failure it names, and the re-plant confirmed it: removing the per-entry
+    # guard left it green. Stub what the code actually calls.
+    real_scandir = os.scandir
+    class _Exploding:
+        def __init__(self, e): self.name = e.name
+        def stat(self): raise OSError("vanished mid-scan")
+    class _Scan:
+        # Targets a NAMED entry, not `entries[0]`. `os.scandir` order is arbitrary, so exploding
+        # position 0 sometimes removed the over-budget sample instead of a harmless one and the
+        # test failed for a reason unrelated to its subject. The victim is the 200b file.
+        def __init__(self, path): self._path = path
+        def __enter__(self):
+            return iter([_Exploding(e) if e.name == "cp000.json" else e
+                         for e in real_scandir(self._path)])
+        def __exit__(self, *a): return False
+    monkeypatch.setattr(os, "scandir", lambda path: _Scan(path))
+    fired, detail = tw.p3_restore_integrity(root)
+    assert "UNREADABLE" not in detail, "one lost sample must not kill the distribution"
+    assert fired is True and "1 over budget" in detail
+
+
+def test_p3_does_not_call_an_unreadable_archive_a_FIRST_OCCURRENCE(tmp_path, monkeypatch):
+    """`n_over` is 0 for an unreadable archive AND for an empty one, so a two-arm `recurrence`
+    printed "This looks like a FIRST occurrence rather than a pattern — distribution UNREADABLE".
+    An unsupported conclusion in the sentence a reader trusts most: the defect this whole change
+    was written to remove, recreated one branch over via the same None/0 collapse.
+
+    It matters here specifically because the over-budget branch RETURNS before the `sizes is
+    None` branch, so the "instrument is dead" notice is unreachable exactly when the payload is
+    also spilling.
+
+    Falsify by collapsing `recurrence` back to two arms."""
+    root = _checkpoint(tmp_path, pad=tw.RESTORE_BUDGET_BYTES)
+    (_mnemos(tmp_path) / "checkpoints").write_text("not a directory")
+    fired, detail = tw.p3_restore_integrity(root)
+    assert fired is True
+    assert "CANNOT BE TOLD" in detail and "instrument" in detail
+    assert "FIRST occurrence" not in detail
+
+
+def test_p3_reports_the_distribution_alongside_a_payload_probe(tmp_path, monkeypatch):
+    """The T3 branch returns before both distribution branches, so on the day the harness starts
+    sending a PreCompact payload — the ADR-0015 re-evaluate trigger it exists to catch — a
+    recent-spill pattern would have been silently dropped in favour of the T3 message. They are
+    independent facts about different questions."""
+    root = _checkpoint(tmp_path)
+    _archive(tmp_path, [tw.RESTORE_BUDGET_BYTES + 1] * 3)
+    (_mnemos(tmp_path) / "compaction-log.jsonl").write_text(
+        _compaction("unknown", probe={"len": 3, "keys": ["trigger"]}))
+    fired, detail = tw.p3_restore_integrity(root)
+    assert fired is True
+    assert "ADR-0015" in detail, "the T3 event still leads"
+    assert "3 over budget" in detail, "and the distribution is not swallowed by it"
+
+
+def test_p3_archive_vanishing_mid_scan_is_unknown_not_empty(tmp_path, monkeypatch):
+    """The absent-catch wrapped the whole iteration, so a FileNotFoundError raised DURING the
+    scan — the directory removed by a concurrent reset — collapsed to "no archived checkpoints
+    yet" and returned GREEN on a repo with a thousand of them. Absent is a real answer; vanishing
+    underneath you is not. Scoped to the `scandir()` call now."""
+    root = _checkpoint(tmp_path)
+    _archive(tmp_path, [200, 300])
+    real = os.scandir
+    class _Vanishing:
+        def __init__(self, path): self._path = path
+        def __enter__(self):
+            def gen():
+                for e in real(self._path):
+                    yield e
+                    raise FileNotFoundError("removed mid-scan")
+            return gen()
+        def __exit__(self, *a): return False
+    monkeypatch.setattr(os, "scandir", lambda path: _Vanishing(path))
+    fired, detail = tw.p3_restore_integrity(root)
+    assert "UNREADABLE" in detail
+    assert "no archived checkpoints yet" not in detail
+
+
+def test_p3_window_tie_breaks_on_NAME_not_size(tmp_path, monkeypatch):
+    """`rows.sort()` on bare `(mtime, size)` tuples ordered equal mtimes by BYTES, so any
+    operation stamping archive files alike — a `cp -r`, a restore from a copy, a coarse-mtime
+    filesystem — made the "most recent N" slice select the LARGEST files. That biases the
+    over-budget count upward, i.e. exactly in the direction that makes this predicate fire.
+
+    Here every file shares one mtime and the OLDEST BY NAME is the only over-budget one, so a
+    size tie-break keeps it and a name tie-break drops it out of the window."""
+    root = _checkpoint(tmp_path)
+    sizes = [tw.RESTORE_BUDGET_BYTES + 5_000] + [100] * tw.DISTRIBUTION_WINDOW
+    _archive(tmp_path, sizes, mtime=1_000_000)
+    fired, detail = tw.p3_restore_integrity(root)
+    assert "0 over budget" in detail, "a size tie-break would have kept the huge outlier"
+    assert fired is False
+
+
+def test_p3_says_how_old_the_newest_archived_checkpoint_is(tmp_path, monkeypatch):
+    """A window is a COUNT with no time bound. If checkpoint writing dies — the F-001 class,
+    where the toolchain silently stops being reachable — the archive freezes and this reports
+    "across the last 30: 14 over budget" forever, as a statement about CURRENT behaviour, while
+    the real finding is that nothing has been written in weeks."""
+    root = _checkpoint(tmp_path)
+    _archive(tmp_path, [tw.RESTORE_BUDGET_BYTES + 1] * 3, mtime=1_000_000)
+    _, detail = tw.p3_restore_integrity(root)
+    assert "d old" in detail, "a frozen archive must not read as current behaviour"
+
+
+def test_p3_stays_quiet_when_the_whole_recent_history_is_clean(tmp_path, monkeypatch):
+    """The other half, and without it the branch above could be an unconditional alarm. A
+    predicate that cannot go green teaches you to ignore the watcher — P9's docstring."""
+    root = _checkpoint(tmp_path)
+    _archive(tmp_path, [200, 300, 400])
+    fired, detail = tw.p3_restore_integrity(root)
+    assert fired is False
+    assert "0 over budget" in detail, "the distribution rides the quiet path too, for --json"
+
+
+def test_p3_reports_the_distribution_alongside_an_over_budget_reading(tmp_path, monkeypatch):
+    """A spot reading over budget does not say whether it is chronic or a one-off, and those
+    call for different responses. Both branches carry the same measurement."""
+    root = _checkpoint(tmp_path, pad=tw.RESTORE_BUDGET_BYTES)
+    _archive(tmp_path, [tw.RESTORE_BUDGET_BYTES + 1] * 3)
+    fired, detail = tw.p3_restore_integrity(root)
+    assert fired is True
+    assert "NOT A ONE-OFF" in detail and "3 over budget" in detail
+
+
+def test_p3_treats_an_absent_archive_as_a_real_answer_not_an_unknown(tmp_path, monkeypatch):
+    """A fresh clone has no `.mnemos/checkpoints/`. Calling that "UNREADABLE" would put an
+    alarm-shaped phrase in front of every new checkout, and this repo has a name for a predicate
+    that fires on a state nobody can resolve. Only a directory that EXISTS and cannot be scanned
+    is the unknown — the distinction `_git_lines` exists for one repo over."""
+    root = _checkpoint(tmp_path)                       # no archive dir at all
+    fired, detail = tw.p3_restore_integrity(root)
+    assert fired is False
+    assert "no archived checkpoints yet" in detail
+    assert "UNREADABLE" not in detail
+
+
+def test_p3_FIRES_when_the_archive_cannot_be_read(tmp_path, monkeypatch):
+    """ASSERTION REVERSED 2026-08-19, and the original locked in the defect.
+
+    It asserted `fired is False` on the grounds that an unscannable directory is not evidence of
+    a spill. True, and beside the point: `render()` prints only FIRED predicates, so a green
+    return sent the UNREADABLE notice to `--json`, which nobody reads at session start. The
+    helper separates "no archive" from "cannot read it" with a docstring arguing the two must not
+    collapse — and `_distribution_note` mapped both to n_over=0 one function later.
+
+    The finding is not "the payload spilled", it is "the instrument that would tell you is
+    dead", and that reaches a reader only by firing.
+
+    Falsify by returning False on the `sizes is None` branch."""
+    root = _checkpoint(tmp_path)
+    (_mnemos(tmp_path) / "checkpoints").write_text("not a directory")
+    fired, detail = tw.p3_restore_integrity(root)
+    assert fired is True
+    assert "UNREADABLE" in detail and "instrument is dead" in detail
+
+
+def test_p3_distribution_window_takes_the_NEWEST_not_the_first_on_disk(tmp_path, monkeypatch):
+    """`os.scandir` yields in arbitrary order, so the window has to sort. An old spill that has
+    since been fixed must age out, or the predicate never goes green again and becomes the
+    permanently-red board it is meant to replace."""
+    root = _checkpoint(tmp_path)
+    _archive(tmp_path, [tw.RESTORE_BUDGET_BYTES + 1] + [100] * tw.DISTRIBUTION_WINDOW)
+    fired, detail = tw.p3_restore_integrity(root)
+    assert fired is False, "the single old spill is outside the window and must age out"
+    assert f"last {tw.DISTRIBUTION_WINDOW} archived checkpoints" in detail
 
 
 def test_p3_fires_when_a_required_field_is_missing(tmp_path):

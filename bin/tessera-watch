@@ -24,9 +24,11 @@ that also feeds the kill and graduate decisions. See _project_specs/todos/active
 from __future__ import annotations
 import argparse
 import json
+import os
 import shutil
 import sqlite3
 import subprocess
+import time
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -108,6 +110,101 @@ def p1_hook_drift(root: Path) -> tuple[bool, str]:
 # so it would add a layer, not consolidate. See observatory "Override mechanism".
 
 
+# How many recent archived checkpoints P3 reads for its distribution. Deliberately a COUNT of
+# writes, not a span of days: checkpoints are written per Stop, so ~30 is well under a day of
+# real activity and the window tracks "recent behaviour" rather than a calendar. The archive
+# holds 1,000+ files, and reading them all would make a SessionStart hook wait on the whole
+# history to say something about today.
+DISTRIBUTION_WINDOW = 30
+
+
+def _recent_checkpoint_sizes(mnemos: Path) -> "list[int] | None":
+    """Sizes of the most recent archived checkpoints, newest last. None if unreadable.
+
+    SIZES ONLY — no JSON parse. `size` is exactly what P3 measures, so `st_size` is the whole
+    answer, and `os.scandir` gives it without opening a file. Parsing 1,000 archived checkpoints
+    at every SessionStart to compute a median would be the predicate paying for its own report.
+
+    None, not [], when the directory cannot be read: an empty list is a real answer ("no archive
+    yet", which is a fresh clone) and a failed scan is not. The two must not collapse — that is
+    the fail-open shape this file keeps finding, and `_git_lines` in `scripts/review/stamp.py`
+    exists for the same reason one repo over.
+    """
+    archive = mnemos / "checkpoints"
+    # PER-ENTRY GUARD, and `with` so the fd closes when stat() raises mid-iteration. With the
+    # stat inside a bare comprehension, ONE entry removed by a concurrent Stop hook — or one
+    # unreadable file — discarded the entire distribution as unknown. A sample is not a reading:
+    # losing one of thirty costs nothing, losing thirty costs the instrument. (Review, 2026-08-19.)
+    # THE ABSENT-CATCH COVERS THE `scandir()` CALL ONLY. Wrapping the whole loop meant a
+    # FileNotFoundError raised DURING iteration — the directory removed mid-scan by a concurrent
+    # reset — collapsed to "no archived checkpoints yet" and returned GREEN on a repo with a
+    # thousand of them. That widened the absent arm past the one call it was reasoned about, in
+    # the helper whose docstring argues the two must not collapse. (Review round 2.)
+    try:
+        scan = os.scandir(archive)
+    except FileNotFoundError:
+        # ABSENT IS A REAL ANSWER: a fresh clone has no archive, and calling that "unreadable"
+        # would put an alarm-shaped phrase in front of every new checkout. Only a path that
+        # EXISTS and cannot be scanned is the unknown — and `NotADirectoryError` belongs on that
+        # side, not this one: something is there and it is the wrong shape, which is a broken
+        # `.mnemos/` rather than a young one. Lumping the two was the first version's error and
+        # a test caught it.
+        return []
+    except OSError:
+        return None
+
+    rows = []
+    try:
+        with scan as it:
+            for e in it:
+                if not e.name.endswith(".json"):
+                    continue
+                # PER-ENTRY GUARD: one entry removed by a concurrent Stop hook, or one
+                # unreadable file, must cost one SAMPLE and not the whole reading — which now
+                # fires, so a routine race would otherwise produce a spurious "instrument dead".
+                try:
+                    st = e.stat()
+                except OSError:
+                    continue
+                rows.append((st.st_mtime, e.name, st.st_size))
+    except OSError:
+        return None
+
+    # TIE-BREAK ON NAME, NOT SIZE. Sorting bare `(mtime, size)` tuples meant equal mtimes were
+    # ordered by BYTES, so any operation stamping many archive files alike — a `cp -r`, a restore
+    # from a copy, a coarse-granularity filesystem — made the "most recent N" slice select the
+    # LARGEST files. That biases the over-budget count upward, i.e. exactly in the direction that
+    # makes this predicate fire. (Review round 2.)
+    rows.sort(key=lambda r: (r[0], r[1]))
+    return [(mtime, size) for mtime, _, size in rows[-DISTRIBUTION_WINDOW:]]
+
+
+def _distribution_note(rows: "list | None", now: "float | None" = None) -> "tuple[int, str]":
+    """(over-budget count, prose). The count is what decides; the prose is what a reader gets.
+
+    THE AGE IS CARRIED because a window is a COUNT with no time bound. If checkpoint writing dies
+    — the F-001 class, where the toolchain silently stops being reachable — the archive freezes
+    and this reports "across the last 30: 14 over budget" forever, as a statement about current
+    behaviour, while the real finding is that nothing has been written in weeks. Reported rather
+    than fired: a stale archive is not itself a spill, and P3 already has a branch for a missing
+    checkpoint. **Known limit: a frozen-but-CLEAN archive is invisible, because the predicate
+    stays quiet and `render()` prints only what fires.** (Review round 2.)
+    """
+    if rows is None:
+        return 0, ("recent-checkpoint distribution UNREADABLE — .mnemos/checkpoints/ could not "
+                   "be scanned, so this reading is a spot check with nothing behind it")
+    if not rows:
+        return 0, "no archived checkpoints yet, so this is a spot reading"
+    sizes = [size for _, size in rows]
+    over = [n for n in sizes if n > RESTORE_BUDGET_BYTES]
+    mid = sorted(sizes)[len(sizes) // 2]
+    age_days = int(((now or time.time()) - max(m for m, _ in rows)) // 86400)
+    age = f", newest {age_days}d old" if age_days >= 1 else ""
+    return len(over), (
+        f"across the last {len(sizes)} archived checkpoints: {len(over)} over budget, "
+        f"median {mid:,}b, max {max(sizes):,}b{age}")
+
+
 def p3_restore_integrity(root: Path) -> tuple[bool, str]:
     """Is the restore payload DELIVERABLE? (ADR-0015. Was: count compaction events.)
 
@@ -130,7 +227,14 @@ def p3_restore_integrity(root: Path) -> tuple[bool, str]:
 
     ── WHAT THIS DOES AND DOES NOT CLAIM ─────────────────────────────────────────────────
 
-    GREEN HERE MEANS "THE PAYLOAD SURVIVES DELIVERY". It does NOT mean restore works. That
+    GREEN HERE MEANS "THE PAYLOAD SURVIVED DELIVERY, AND SO DID THE LAST 30". Since 2026-08-19
+    this reads the recent archive rather than only the newest checkpoint, and **fires on that
+    distribution even when the last-written payload is fine** — because `render()` prints only
+    FIRED predicates, so a distribution reported on the quiet path reaches nobody. The trigger is
+    "did the payload spill recently", never a rate: a rate threshold would be an invented number
+    and three predicates have been retired here for exactly that. The rate is severity.
+
+    It does NOT mean restore works. That
     question is T2 in ADR-0015 (does the agent resume without re-deriving?) and only the model
     can answer it. Reading this predicate as a verdict on Mnemos would mint proxy #5 after P2
     (verb count), old-P4 (project count), and sqlfluff (file existence). It is a REGRESSION
@@ -255,6 +359,46 @@ def p3_restore_integrity(root: Path) -> tuple[bool, str]:
             f"checkpoint is missing {', '.join(missing)} — the renderer reads these fields, so "
             f"those sections silently vanish from every restore. {tally}")
 
+    # THE DISTRIBUTION. Computed AFTER the required-fields branch above, which returns without
+    # using it — a full scandir+stat over an archive nothing prunes (1,000+ files and growing)
+    # should not be paid on a path that discards the result. An earlier version claimed "used by
+    # every branch below" and was wrong about its own placement.
+    #
+    # P3 reported whichever checkpoint happened to be written last. Measured 2026-08-19 over 122
+    # fully-schema'd checkpoints: 53 (43%) over budget, min/median/max 4,859 / 7,666 / 11,419 —
+    # and this predicate read 8,542b, then 7,260b, then 10,339b across ONE session. Three
+    # different stories from one unchanged problem. `_project_specs/todos/active.md` item 1 names
+    # it: "a spot reading on a fluctuating quantity is why this read as a goal problem for
+    # weeks", and an intermittent alarm cannot be told from noise.
+    sizes = _recent_checkpoint_sizes(root / ".mnemos")
+    n_over, dist = _distribution_note(sizes)
+
+
+    # IS THIS RECURRING, OR THE FIRST ONE? The lead-in was emitted unconditionally and read
+    # "AND THIS IS NOT A ONE-OFF — 0 over budget" against a clean archive — a flat
+    # self-contradiction in the sentence a reader trusts most, which is the same failure the two
+    # earlier hints in this function were rewritten for. **The archive always contains the
+    # current checkpoint as its newest entry**, so an over-budget reading contributes 1 to
+    # `n_over` and cannot corroborate itself; recurrence therefore means n_over > 1. And the
+    # FIRST spill after a clean run is exactly when a reader needs to be told it IS one.
+    # (Review, 2026-08-19.)
+    # THREE ARMS, NOT TWO. `n_over` is 0 for an unreadable archive AND for an empty one, so a
+    # two-arm version printed "This looks like a FIRST occurrence rather than a pattern —
+    # distribution UNREADABLE" — an unsupported conclusion in the sentence a reader trusts most,
+    # which is the defect this whole commit was written to remove, recreated one branch over via
+    # the same None/0 collapse. **And the over-budget branch RETURNS before the `sizes is None`
+    # branch below**, so the "instrument is dead" notice is unreachable exactly when the payload
+    # is also spilling — which is when it matters. (Review round 2.)
+    if sizes is None:
+        recurrence = (f"WHETHER THIS RECURS CANNOT BE TOLD — {dist}. The distribution instrument "
+                      f"is dead; check .mnemos/checkpoints/ permissions.")
+    elif not sizes:
+        recurrence = f"No history to compare against — {dist}."
+    elif n_over > 1:
+        recurrence = f"AND THIS IS NOT A ONE-OFF — {dist}."
+    else:
+        recurrence = f"This looks like a FIRST occurrence rather than a pattern — {dist}."
+
     if size > RESTORE_BUDGET_BYTES:
         # MEASURED PER FIRING, NOT ASSERTED ONCE. The first version of this branch replaced a
         # misleading hint with a fleet-wide diagnosis -- "the driver is active_constraints,
@@ -270,12 +414,12 @@ def p3_restore_integrity(root: Path) -> tuple[bool, str]:
         # counts here because the archive is append-only and this session alone moved the
         # denominator 122 -> 124. **The first version of this comment said "34 of 75 over 175
         # fully-schema'd" -- real numbers for the UNFILTERED population (176 post-08-10, 76
-        # over), labelled as the filtered one, and therefore disagreeing with item 7's 53-of-122
+        # over), labelled as the filtered one, and therefore disagreeing with item 1's 53-of-122
         # in the same change.** Review caught it. A wrong denominator survives re-measurement,
         # because re-measuring inherits the definition; only re-deriving what to measure finds it.
         #
         # A spot alarm must not carry a distribution-level cause: it fires on ONE payload and
-        # the population's driver need not be that payload's. That is item 7's own option-2
+        # the population's driver need not be that payload's. That is item 1's own option-2
         # concern one level up. So this reports what THIS checkpoint is made of and leaves the
         # population question where it is adjudicated.
         #
@@ -326,24 +470,70 @@ def p3_restore_integrity(root: Path) -> tuple[bool, str]:
             f"_select_goals' exclusion of bridge imports (origin='loaded') caps the SIZE. The "
             f"count cap alone left the field at 11,245b for two days in July, so if goal is "
             f"ranked high HERE the suspect is that filter, not the cap. Options are weighed in "
-            f"_project_specs/todos/active.md item 7; do not re-propose capping goals or "
-            f"capping constraints by recency, both are decided. {tally}")
+            f"_project_specs/todos/active.md item 1; do not re-propose capping goals or "
+            f"capping constraints by recency, both are decided. {recurrence} {tally}")
 
     if probe_keys:
         return True, (
             f"PreCompact payload_probe now reports keys {sorted(set(probe_keys))} — the harness "
             f"has started sending a payload, so T3 (compaction frequency) may be answerable "
-            f"HERE for the first time. Re-read ADR-0015's re-evaluate triggers. {tally}")
+            f"HERE for the first time. Re-read ADR-0015's re-evaluate triggers. "
+            # APPENDED, not short-circuited. This branch returns before both distribution
+            # branches, so on the day the harness starts sending a payload — the ADR-0015
+            # re-evaluate trigger this exists to catch — a recent-spill pattern or a dead
+            # instrument would be silently dropped in favour of the T3 message. They are
+            # independent facts. (Review round 2.)
+            f"Separately, {dist}. {tally}")
 
     # THE QUIET PATH IS THE ONE A READER ACTUALLY SEES, and it carried the retracted claim for
     # one commit while the docstring above carried the correction. Standing pattern #9 inside
     # the fix for a stale-claim bug: the corrected copy is a docstring nothing prints; this
     # string reaches the model at every green session start. Found by review, not by me.
+    if sizes is None:
+        # FIRES, because `render()` prints only fired predicates. `_recent_checkpoint_sizes`
+        # carefully separates "no archive" from "cannot read it" and then `_distribution_note`
+        # mapped BOTH to n_over=0, so the unreadable case returned green and the notice went to
+        # `--json`, which nobody reads at session start. The docstring argues at length that the
+        # two must not collapse, and they collapsed one function later — the same channel
+        # asymmetry this change's own comment cites about P16. (Review, 2026-08-19.)
+        #
+        # NOT routed to `tessera-degraded`, though that is spec 11's channel for "a component
+        # could not do its job": `bin/` is stdlib-only and shelling out to another binary from a
+        # predicate is a heavier dependency than this warrants. Firing reaches the same reader on
+        # the same channel.
+        return True, (
+            f"the last-written checkpoint is fine ({size:,}b / {RESTORE_BUDGET_BYTES:,}b) but "
+            f"{dist} — so this reading has nothing behind it and the distribution instrument is "
+            f"dead. Check .mnemos/checkpoints/ permissions. {tally}")
+
+    if n_over:
+        # FIRES ON THE DISTRIBUTION EVEN WHEN THE SPOT READING IS FINE, and that is the point of
+        # the change rather than a side effect. `render()` prints only FIRED predicates, so a
+        # distribution reported on the quiet path reaches nobody — the same channel asymmetry
+        # recorded 2026-08-19, where P16 held the correct T2 count and said nothing because it
+        # had not fired, while a false claim rode SessionStart into every session. A predicate
+        # that can speak only when it happens to catch the condition mid-swing is the flicker,
+        # not the fix.
+        #
+        # THE TRIGGER IS "DID THE PAYLOAD SPILL RECENTLY", NOT A RATE. A rate threshold would be
+        # an invented number and this repo has retired three predicates for exactly that (#3).
+        # The rate is reported as severity; it is never the cut.
+        #
+        # Expect this steadily red until item 1 is decided. That is the honest state — the
+        # condition is present in ~2 of 5 recent checkpoints — and it is said here so the next
+        # reader knows a permanent red is the FINDING, not a broken predicate.
+        return True, (
+            f"the last-written checkpoint is fine ({size:,}b / {RESTORE_BUDGET_BYTES:,}b) BUT "
+            f"{dist}. A spill degrades that session's restore, and reading only the newest "
+            f"checkpoint is why this looked like a goal problem for weeks. Options are weighed "
+            f"in _project_specs/todos/active.md item 1, which carries the per-field breakdown "
+            f"this branch deliberately does not restate. {tally}")
+
     return False, (
         f"restore payload deliverable: {size:,}b / {RESTORE_BUDGET_BYTES:,}b, required fields "
         f"present. NOT a verdict on restore WORKING — that is T2 (ADR-0015). Its instrument "
         f"SHIPPED 2026-07-26 (scripts/restore/); whether it has enough downstream data to read "
-        f"is P16's question, and P16 answers it. {tally}")
+        f"is P16's question, and P16 answers it. Also {dist}. {tally}")
 
 
 def p4_downstream(root: Path) -> tuple[bool, str]:
