@@ -112,24 +112,13 @@ handoff block only; a blockquoted list is invisible to it.
     Not fixed here because it is another repo's file and this branch should not reach into it.
     **Governs:** ADR-0029 · `bin/tessera-sync-harness`.
 
-12. **OWED: put a copy of the ADR-0029 page in the repo (Lorenzo asked, 2026-08-18, "when it's
-    time" — i.e. at merge).** Source: https://claude.ai/code/artifact/9ae5bdbd-56fb-45f9-971a-6458ff6de738
-    The rendered HTML currently lives ONLY in a session scratchpad, which is cleared — once it
-    goes, the page stays live at that URL and nobody can update it again. That is the actual
-    reason to commit it, and it is a good one.
-    **But it makes a FOURTH copy of one decision** (`docs/adr/0029-*.md`, the promo timeline row,
-    the artifact, and this) — and three of the four have already disagreed with each other in a
-    single day. So do not just `cp` it in. Decide first, because "a static HTML twin of a
-    markdown record" is a doc-drift generator with no check over it:
-      (a) commit it as a **dated snapshot** (`docs/promo/adr-0029-2026-08-18.html`), named so it
-          cannot read as current — cheapest, honest, and it stops pretending to track;
-      (b) commit it as live and add a doccheck assertion tying it to the ADR — the only option
-          that stays true, and the check is not obvious to write over prose;
-      (c) generate it from the markdown at publish time, so there is one source — most correct,
-          most work, and nothing else in this repo needs it yet.
-    **(a) unless the page is going to be re-published repeatedly.** Recorded here rather than
-    trusted to recall — that is principle #17 applied to a deferred instruction.
-    **Governs:** ADR-0026 (the warn tier, for the same off-repo class) · ADR-0029.
+12. **CLOSED 2026-08-18 — the ADR-0029 page is committed as a DATED SNAPSHOT.**
+    `docs/adr/snapshots/0029-spend-guard-retired-2026-08-18.html`, option (a) of the three
+    weighed below. Frozen by convention and by filename: the markdown in `docs/adr/` is
+    authoritative and the snapshot is never updated. `docs/adr/snapshots/README.md` records the
+    rule and why (b) and (c) were not taken — **(c), generating it from the markdown, is the one
+    to build if a page starts being re-published repeatedly.**
+    **Governs:** ADR-0029 · `docs/adr/snapshots/README.md`.
 
 **Published copies (off-repo, and therefore drift-prone):**
 - ADR-0029 (spend guard retired) — https://claude.ai/code/artifact/9ae5bdbd-56fb-45f9-971a-6458ff6de738

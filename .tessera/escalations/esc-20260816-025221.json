@@ -16,5 +16,6 @@
     "Leave both as-is and accept that agent-encountered false positives are recorded only in prose \u2014 cheapest, and defensible if false positives stay rare."
   ],
   "refs": [],
-  "status": "open"
+  "status": "resolved:moot \u2014 ADR-0029 retired the in-band spend guard; all three options concerned a mechanism that no longer exists",
+  "resolved_ts": "2026-08-18T23:59:43Z"
 }
