@@ -33,6 +33,25 @@ faithfully recorded the wrong scope. It is the same certified-at/changed-since g
 the certifier's own scope is unverified. Cheap partial remedy if it recurs: have the reviewer
 report the ref range it resolved, and compare that against the stamp.
 
+KNOWN LIMITS — stated here because a narrowing that lives only in the source is standing
+pattern #12, and this module's output is what anyone actually reads:
+
+1. **Untracked files are never claimed as reviewed.** `git diff` does not report them, and
+   sweeping them in with `ls-files --others` cannot tell a new module the reviewer read from a
+   scratch file in the tree. The two error directions are not symmetrical —
+   `changed_since_review` SUBTRACTS the stamped list, so over-claiming silently drops a real
+   finding while under-claiming only costs a false positive in a warn-only hook. Prefer noise.
+2. **A stamp records the range a review was TOLD to cover, not the range it actually read.**
+   On 2026-08-17 `/code-review high 0b27332` was invoked meaning "since that commit"; the skill
+   read it as "that commit". Nothing here would catch that — the stamp would faithfully record
+   the wrong scope. `--head` narrows the gap between what was reviewed and what is recorded; it
+   does not close the gap between what was asked for and what was read.
+3. **Stamping rides model recall.** Measured 2026-08-17: 3 stamps against 47 session logs. That
+   is why `pre-push` is silent when no stamp exists — absence of a stamp is absence of
+   evidence, and a branch that fires on the majority of pushes is one people learn to dismiss.
+
+Contract: `docs/contracts/review-stamp.md`.
+
 Stdlib-only: imported by a git hook that runs without the venv.
 """
 from __future__ import annotations
@@ -73,25 +92,78 @@ def _git_ok(*args: str) -> bool:
         return False
 
 
-def record(base: str = "origin/main") -> int:
-    """Stamp the review's coverage: the HEAD it saw and the files in that range."""
-    head = _git("rev-parse", "HEAD")
+def record(base: str = "origin/main", head: "str | None" = None) -> int:
+    """Stamp the review's coverage: the commit it saw and the files in that range.
+
+    `head` DEFAULTS TO HEAD AND MUST NOT BE FORCED TO IT. The documented workflow is "stamp
+    after each review", but the real order is review -> fix -> commit -> stamp, and by then
+    HEAD is the FIX. Hit live 2026-08-17: a review covering `cc5d2b3` was stamped as covering
+    `5fb4dcb`, which no reviewer had seen — the anchor whose job is "what has no review looked
+    at" recording the opposite, by default.
+
+    Then three times in one session on 2026-08-19, which is what got this built: three review
+    rounds on one branch, and not one of them could be stamped, because each round's fixes
+    moved HEAD before there was anything to record. The reviews happened and the record of
+    what they covered does not exist and cannot be reconstructed. `pre-push` on that branch
+    reported its files as unreviewed against a stamp from the PREVIOUS session.
+
+    An explicit head is a claim about the past, so it is verified: a ref that does not resolve
+    is refused rather than stamped, for the same reason `_main` refuses an unresolvable base —
+    `changed_since_review` will happily diff from whatever it is given, and a stamp against a
+    phantom is worse than no stamp.
+
+    `explicit` is recorded because the two cases are not equally trustworthy: a defaulted head
+    means "whatever HEAD was when someone remembered", an explicit one means someone named the
+    commit under review. A reader of the log can tell them apart; without the field they are
+    identical rows.
+    """
+    if head is None:
+        head = _git("rev-parse", "HEAD")
+        explicit = False
+    else:
+        resolved = _git("rev-parse", "--verify", "--quiet", f"{head}^{{commit}}")
+        if not resolved:
+            print(f"head ref {head!r} does not resolve — refusing to stamp", file=sys.stderr)
+            return 2
+        head, explicit = resolved, True
     if not head:
         print("not a git repo, or no HEAD", file=sys.stderr)
         return 1
-    files = [f for f in _git("diff", "--name-only", f"{base}...HEAD").splitlines() if f]
-    dirty = [f for f in _git("diff", "--name-only").splitlines() if f]
+    files = [f for f in _git("diff", "--name-only", f"{base}...{head}").splitlines() if f]
+    # THE WORKING TREE BELONGS TO *NOW*, NOT TO AN ARBITRARY PAST COMMIT. `record()` stores the
+    # dirty diff because the review target is usually an uncommitted tree — true when stamping
+    # HEAD, and false when stamping a commit from an hour ago, where today's uncommitted edits
+    # were not in front of any reviewer. Including them would inflate the stamp's coverage,
+    # which is the one direction that matters: `changed_since_review` SUBTRACTS the stamped
+    # file list, so an over-claiming stamp silences real findings.
+    # STAGED COUNTS AS UNCOMMITTED, and it did not until 2026-08-19. `git diff --name-only` is
+    # UNSTAGED ONLY, so reviewing a tree that had been `git add`-ed — which is most of them,
+    # since staging is how you decide what the review is about — recorded `had_uncommitted:
+    # false` and an empty dirty list. Those files then reappeared in `changed_since_review` the
+    # moment they were committed, as false positives, in the one branch whose whole job is
+    # saying what no review has seen. Found by writing this module's first test; nothing else
+    # would have, because the field it corrupts is only read one function away.
+    # `checkpoint.py:_get_git_state` already read both, which is the usual shape of this repo's
+    # defects: the correct version was next door.
+    at_head = (not explicit) or head == _git("rev-parse", "HEAD")
+    dirty = []
+    if at_head:
+        for args in (("diff", "--name-only"), ("diff", "--cached", "--name-only")):
+            dirty += [f for f in _git(*args).splitlines() if f]
+        dirty = sorted(set(dirty))
     event = {
         "type": EVENT,
         "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "session_id": os.environ.get("CLAUDE_CODE_SESSION_ID", "manual"),
         "source": "review-stamp",
         "data": {"base": base, "head": head, "files": sorted(set(files + dirty)),
-                 "had_uncommitted": bool(dirty)},
+                 "had_uncommitted": bool(dirty), "explicit_head": explicit},
     }
     with _log_path().open("a") as fh:
         fh.write(json.dumps(event) + "\n")
-    print(f"review stamped: {head[:12]} over {len(event['data']['files'])} file(s) vs {base}")
+    how = "explicit" if explicit else "HEAD"
+    print(f"review stamped: {head[:12]} ({how}) over "
+          f"{len(event['data']['files'])} file(s) vs {base}")
     return 0
 
 
@@ -130,6 +202,16 @@ def changed_since_review(base: str = "origin/main") -> "tuple[dict | None, list[
     if not _git_ok("merge-base", "--is-ancestor", head, "HEAD"):
         return stamp, []
     changed = [f for f in _git("diff", "--name-only", f"{head}..HEAD").splitlines() if f]
+    # `base` WAS AN UNUSED PARAMETER UNTIL 2026-08-19 (queue item 8c), and giving it a job is
+    # what the explicit-head fix makes possible. `head..HEAD` is "everything since the review",
+    # which over-reports the moment the stamped commit is behind the base ref — stamp, pull,
+    # push, and every commit someone else already pushed is listed as unreviewed by you. The
+    # question this hook asks is narrower: what is about to become PUBLIC that no review saw.
+    # So intersect with the outgoing range. When the stamp is at or ahead of base this is a
+    # no-op, which is the common case and why the defect was invisible.
+    outgoing = {f for f in _git("diff", "--name-only", f"{base}...HEAD").splitlines() if f}
+    if outgoing:
+        changed = [f for f in changed if f in outgoing]
     # SUBTRACT WHAT THE REVIEW ALREADY SAW. `record()` stores the working-tree diff too, because
     # the review target is usually an UNCOMMITTED tree — so the normal workflow is: review the
     # tree, stamp, commit those exact files, push. Diffing `head..HEAD` then names files the
@@ -143,11 +225,27 @@ def changed_since_review(base: str = "origin/main") -> "tuple[dict | None, list[
 
 def _main(argv: "list[str]") -> int:
     if any(a in ("-h", "--help") for a in argv):
-        print("usage: stamp.py [BASE_REF]   (default origin/main)\n\n"
+        print("usage: stamp.py [BASE_REF] [--head SHA]   (default origin/main, HEAD)\n\n"
               "Records what a code review covered. Run AFTER a review completes.\n"
+              "--head names the commit the review actually SAW. Use it whenever you have\n"
+              "already committed the fixes: the normal order is review -> fix -> commit ->\n"
+              "stamp, and by then HEAD is the fix, not what anyone reviewed.\n"
               "`.githooks/pre-push` reports what changed since.")
         return 0
-    args = [a for a in argv if not a.startswith("-")]
+    head = None
+    rest = []
+    it = iter(argv)
+    for a in it:
+        if a == "--head":
+            head = next(it, None)
+            if head is None:
+                print("--head needs a value", file=sys.stderr)
+                return 2
+        elif a.startswith("--head="):
+            head = a.split("=", 1)[1]
+        elif not a.startswith("-"):
+            rest.append(a)
+    args = rest
     base = args[0] if args else "origin/main"
     # A base that does not resolve produced a stamp claiming coverage vs `--help` on the first
     # run. A stamp is a claim about SCOPE; a claim against a ref that does not exist is worse
@@ -155,7 +253,7 @@ def _main(argv: "list[str]") -> int:
     if not _git("rev-parse", "--verify", "--quiet", base):
         print(f"base ref {base!r} does not resolve — refusing to stamp", file=sys.stderr)
         return 2
-    return record(base)
+    return record(base, head)
 
 
 if __name__ == "__main__":
