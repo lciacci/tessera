@@ -618,6 +618,77 @@ def test_p3_fires_on_the_DISTRIBUTION_when_the_spot_reading_is_fine(tmp_path, mo
     assert "1 over budget" in detail
 
 
+def test_p3_calls_a_first_spill_a_FIRST_SPILL(tmp_path, monkeypatch):
+    """The recurrence lead-in was unconditional and read "AND THIS IS NOT A ONE-OFF — 0 over
+    budget" against a clean archive: a flat self-contradiction inside the sentence a reader
+    trusts most, which is the same failure the two earlier hints in this function were rewritten
+    for — committed in the sentence written to replace them.
+
+    **The archive always holds the current checkpoint as its newest entry**, so an over-budget
+    reading contributes 1 to the count and cannot corroborate itself. Recurrence means > 1. And
+    the first spill after a clean run is exactly when a reader needs to be told it IS one.
+
+    Falsify by making `recurrence` unconditional again."""
+    root = _checkpoint(tmp_path, pad=tw.RESTORE_BUDGET_BYTES)
+    _archive(tmp_path, [200, 300, tw.RESTORE_BUDGET_BYTES + 900])   # only today's is over
+    fired, detail = tw.p3_restore_integrity(root)
+    assert fired is True
+    assert "FIRST occurrence" in detail
+    assert "NOT A ONE-OFF" not in detail
+
+
+def test_p3_calls_a_repeated_spill_a_pattern(tmp_path, monkeypatch):
+    """The other half — without it the branch above could be unconditional the other way."""
+    root = _checkpoint(tmp_path, pad=tw.RESTORE_BUDGET_BYTES)
+    _archive(tmp_path, [tw.RESTORE_BUDGET_BYTES + 1] * 3)
+    fired, detail = tw.p3_restore_integrity(root)
+    assert fired is True
+    assert "NOT A ONE-OFF" in detail
+    assert "FIRST occurrence" not in detail
+
+
+def test_p3_does_not_restate_a_population_cause_it_could_measure(tmp_path, monkeypatch):
+    """The distribution branch hard-asserted "the largest single driver is active_constraints
+    (~45% of the swing)". The adjacent over-budget branch was rewritten earlier the same day to
+    stop doing exactly that, after review measured an equivalent claim false — and the figure
+    did not even reconcile with its own source (measured: 48.8% of the summed per-field swing,
+    over n=140). A branch holding 30 live measurements should not quote a static one."""
+    root = _checkpoint(tmp_path)
+    _archive(tmp_path, [200, tw.RESTORE_BUDGET_BYTES + 500, 300])
+    _, detail = tw.p3_restore_integrity(root)
+    assert "% of the swing" not in detail
+    assert "item 1" in detail, "it must still point at where the breakdown lives"
+
+
+def test_p3_distribution_survives_one_unreadable_entry(tmp_path, monkeypatch):
+    """`e.stat()` inside a bare comprehension meant ONE entry removed by a concurrent Stop hook
+    discarded the whole reading — and per the reversal above that outcome now FIRES, so a routine
+    race would have produced a spurious "instrument is dead". A sample is not a reading."""
+    root = _checkpoint(tmp_path)
+    _archive(tmp_path, [200, tw.RESTORE_BUDGET_BYTES + 400, 300])
+    # PATCHES `os.scandir`, NOT `os.stat`. The first version patched `os.stat` — but the code
+    # calls `DirEntry.stat()`, which does not route through it, so the test passed without ever
+    # triggering the failure it names, and the re-plant confirmed it: removing the per-entry
+    # guard left it green. Stub what the code actually calls.
+    real_scandir = os.scandir
+    class _Exploding:
+        def __init__(self, e): self.name = e.name
+        def stat(self): raise OSError("vanished mid-scan")
+    class _Scan:
+        # Targets a NAMED entry, not `entries[0]`. `os.scandir` order is arbitrary, so exploding
+        # position 0 sometimes removed the over-budget sample instead of a harmless one and the
+        # test failed for a reason unrelated to its subject. The victim is the 200b file.
+        def __init__(self, path): self._path = path
+        def __enter__(self):
+            return iter([_Exploding(e) if e.name == "cp000.json" else e
+                         for e in real_scandir(self._path)])
+        def __exit__(self, *a): return False
+    monkeypatch.setattr(os, "scandir", lambda path: _Scan(path))
+    fired, detail = tw.p3_restore_integrity(root)
+    assert "UNREADABLE" not in detail, "one lost sample must not kill the distribution"
+    assert fired is True and "1 over budget" in detail
+
+
 def test_p3_stays_quiet_when_the_whole_recent_history_is_clean(tmp_path, monkeypatch):
     """The other half, and without it the branch above could be an unconditional alarm. A
     predicate that cannot go green teaches you to ignore the watcher — P9's docstring."""
@@ -650,15 +721,24 @@ def test_p3_treats_an_absent_archive_as_a_real_answer_not_an_unknown(tmp_path, m
     assert "UNREADABLE" not in detail
 
 
-def test_p3_says_so_when_the_archive_cannot_be_read(tmp_path, monkeypatch):
-    """Unreadable must not read as clean. `_recent_checkpoint_sizes` returns None, the note says
-    the reading has nothing behind it, and the predicate does NOT fire on it — an unscannable
-    directory is not evidence of a spill, and inventing one would be the inverse fail-open."""
+def test_p3_FIRES_when_the_archive_cannot_be_read(tmp_path, monkeypatch):
+    """ASSERTION REVERSED 2026-08-19, and the original locked in the defect.
+
+    It asserted `fired is False` on the grounds that an unscannable directory is not evidence of
+    a spill. True, and beside the point: `render()` prints only FIRED predicates, so a green
+    return sent the UNREADABLE notice to `--json`, which nobody reads at session start. The
+    helper separates "no archive" from "cannot read it" with a docstring arguing the two must not
+    collapse — and `_distribution_note` mapped both to n_over=0 one function later.
+
+    The finding is not "the payload spilled", it is "the instrument that would tell you is
+    dead", and that reaches a reader only by firing.
+
+    Falsify by returning False on the `sizes is None` branch."""
     root = _checkpoint(tmp_path)
     (_mnemos(tmp_path) / "checkpoints").write_text("not a directory")
     fired, detail = tw.p3_restore_integrity(root)
-    assert "UNREADABLE" in detail
-    assert fired is False
+    assert fired is True
+    assert "UNREADABLE" in detail and "instrument is dead" in detail
 
 
 def test_p3_distribution_window_takes_the_NEWEST_not_the_first_on_disk(tmp_path, monkeypatch):

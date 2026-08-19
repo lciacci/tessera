@@ -41,10 +41,14 @@ handoff block only; a blockquoted list is invisible to it.
    Measured over n=122 fully-schema'd checkpoints
    (2026-08-10 onward, the window in which every field exists): **53 of 122 (43%) are over the
    8,000b budget**; total min/median/max 4,859 / 7,666 / 11,419. Swing by field —
-   `active_constraints` 4,408 · `decisions` 1,861 · `recent_files` 1,717 · `active_results` 390 ·
-   `goal` **167**. So constraints is the largest single driver at ~45% of the swing — **not
-   "every byte of the variance", which this item claimed until 2026-08-19** — and `goal` is the
-   flattest field in the payload.
+   `active_constraints` **4,470** · `recent_files` 1,905 · `decisions` 1,879 ·
+   `active_results` 390 · `task_narrative` 356 · `goal` **167** (n=140, 2026-08-19).
+   So `active_constraints` is the largest single driver **by more than 2x over the next field**
+   — stated as a ratio because per-field swings do not sum to the total's range (6,418), so any
+   "% of the swing" figure depends on a denominator worth naming. **It is NOT "every byte of the
+   variance", which this item claimed until 2026-08-19**, and an earlier correction of that
+   claim published "~45%", which does not reconcile with any of these numbers (48.8% of the
+   summed per-field swings). `goal` is the flattest field in the payload.
    **THREE OPTIONS, unchanged, and the fork is Lorenzo's:**
    1. **Tighten the scope discriminator** in `_select_constraints` — 668 of 719 reachable files
       arrive via bare DIRECTORY-prefix scope entries. Most likely the real fix, and it changes
