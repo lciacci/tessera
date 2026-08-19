@@ -71,11 +71,37 @@ handoff block only; a blockquoted list is invisible to it.
    one a standing property, so a cap would pick winners by age on the payload's most valuable
    field."* Proposing it again is re-doing a decided question.
 
-   **What the numbers actually say.** Last 30 checkpoints: min 4,141b, median 5,270b, max 8,598b,
-   and **8 of 30 over the 8,000b budget**. Every byte of the variance is `active_constraints`,
-   which swings 989 ↔ 5,397 while goals and results stay flat. At the spike: 34 constraints,
-   32 of them ~160b `INV:` prose from PAST intents, exactly 1 `file_exists` — so the 2026-08-10
-   static-fact filter is working and is not the gap.
+   **What the numbers actually say — RE-MEASURED 2026-08-19 over a bigger, cleaner window, and
+   two of the 08-18 figures do not survive it.** The old reading was "last 30 checkpoints: min
+   4,141b, median 5,270b, max 8,598b, 8 of 30 over budget; **every byte of the variance is
+   `active_constraints`**". Over **n=122 fully-schema'd checkpoints (2026-08-10 onward — the
+   window in which every field exists, so no field is scored as 2 bytes for being absent)**:
+
+   | field | min | median | max | swing |
+   |---|---:|---:|---:|---:|
+   | `active_constraints` | 989 | 1,972 | 5,397 | **4,408** |
+   | `decisions` | 2 | 1,664 | 1,863 | 1,861 |
+   | `recent_files` | 2 | 344 | 1,719 | 1,717 |
+   | `active_results` | 1,434 | 1,573 | 1,824 | 390 |
+   | `task_narrative` | 23 | 174 | 379 | 356 |
+   | `goal` | 1,088 | 1,253 | 1,255 | **167** |
+
+   TOTAL 4,859 / 7,666 / 11,419, and **53 of 122 (43%) over the 8,000b budget** — not 8 of 30.
+   **`active_constraints` is the largest single driver at ~45% of the swing, NOT "every byte"**:
+   `decisions` and `recent_files` contribute ~3.6KB between them. The 989 ↔ 5,397 range and the
+   goal figure both reproduce exactly, so the *direction* of item 7 stands and its magnitude was
+   overstated. Beware the window: measuring from 2026-07-28 instead gives constraints a max of
+   8,654, because that span mixes in checkpoints written before the `decisions` field existed.
+   At the spike: 34 constraints, 32 of them ~160b `INV:` prose from PAST intents, exactly 1
+   `file_exists` — so the 2026-08-10 static-fact filter is working and is not the gap.
+
+   **And `MAX_CHECKPOINT_GOALS = 8` alone did not flatten the goal field**, which matters because
+   this item's "goals have been capped and flat since 2026-07-26" is the sentence that stopped
+   anyone re-examining goals. The cap landed 07-26; the field stayed at **11,245b for two more
+   days**, because the cap bounds the COUNT while each bridged iCPG goal ran ~1,400b. The
+   2026-07-27 `_select_goals` fix excluding `origin='loaded'` imports is what flattened it — max
+   goal bytes per day is 11,245 on 07-26 and 07-27, then ≤1,255 from **07-28**. The conclusion
+   (do not cap goals) is unchanged; the reason given for it was incomplete.
 
    **The driver is SCOPE-MATCH BREADTH.** `_select_constraints` keeps an invariant when its iCPG
    scope touches the session's recent paths, so a session touching many directories pulls in many
