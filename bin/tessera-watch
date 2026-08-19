@@ -254,19 +254,36 @@ def p3_restore_integrity(root: Path) -> tuple[bool, str]:
         # MEASURED PER FIRING, NOT ASSERTED ONCE. The first version of this branch replaced a
         # misleading hint with a fleet-wide diagnosis -- "the driver is active_constraints,
         # every other field stays flat", and "deleting goal does not get under budget" -- and
-        # review measured both false. Across 175 fully-schema'd checkpoints, 34 of the 75 over
-        # budget clear on GOAL REMOVAL ALONE (45%), and `decisions` and `recent_files` each
-        # swing ~1.7KB, so "every other field" was wrong twice. Both claims were true of ONE
-        # 12,364b checkpoint measured 2026-08-06 and generalised without saying so -- the
-        # "three environments are not a machine" error, in the fix for a stale-reasoning bug.
+        # review measured both false. Roughly two in five over-budget checkpoints clear on GOAL
+        # REMOVAL ALONE, and `decisions` and `recent_files` each swing ~1.7KB, so "every other
+        # field" was wrong twice. Both claims were true of ONE 12,364b checkpoint measured
+        # 2026-08-06 and generalised without saying so -- the "three environments are not a
+        # machine" error, in the fix for a stale-reasoning bug.
+        #
+        # THE COUNTS BEHIND "TWO IN FIVE" ARE A DATED SNAPSHOT: 22 of 54, over the 124
+        # checkpoints carrying the full field set, 2026-08-19. Stated as a ratio in prose and as
+        # counts here because the archive is append-only and this session alone moved the
+        # denominator 122 -> 124. **The first version of this comment said "34 of 75 over 175
+        # fully-schema'd" -- real numbers for the UNFILTERED population (176 post-08-10, 76
+        # over), labelled as the filtered one, and therefore disagreeing with item 7's 53-of-122
+        # in the same change.** Review caught it. A wrong denominator survives re-measurement,
+        # because re-measuring inherits the definition; only re-deriving what to measure finds it.
         #
         # A spot alarm must not carry a distribution-level cause: it fires on ONE payload and
         # the population's driver need not be that payload's. That is item 7's own option-2
         # concern one level up. So this reports what THIS checkpoint is made of and leaves the
         # population question where it is adjudicated.
-        largest = sorted(((len(json.dumps(v)), k) for k, v in data.items()), reverse=True)[:3]
+        #
+        # `indent=2` MATCHES HOW THE FILE IS WRITTEN (checkpoint.py writes the archive and
+        # latest copy indented), so field sizes and `size` are in the same unit. Compact dumps
+        # under-count by ~180b here and can reorder the ranking when a field is a long LIST of
+        # short strings -- many elements each gaining indentation -- against a single long
+        # STRING that gains none. The parts still do not sum to the whole: keys, braces and
+        # separators are ~450b that belong to no field.
+        largest = sorted(((len(json.dumps(v, indent=2)), k) for k, v in data.items()),
+                         reverse=True)[:3]
         top = " · ".join(f"{k} {n:,}b" for n, k in largest)
-        goal_bytes = len(json.dumps(data.get("goal", "")))
+        goal_bytes = len(json.dumps(data.get("goal", ""), indent=2))
         without_goal = size - goal_bytes
         goal_note = (
             f"dropping goal ({goal_bytes:,}b) WOULD clear it, leaving {without_goal:,}b"
@@ -277,12 +294,14 @@ def p3_restore_integrity(root: Path) -> tuple[bool, str]:
             f"budget. Checkpoint bytes track delivered bytes ~1:1, and ≈18,755b was observed to "
             f"SPILL: the harness wrote the block to a file and handed the model a 2KB preview, "
             f"so Constraints/Progress/Files never arrived. This degrades EVERY session start, "
-            f"not just compaction. Largest fields in THIS checkpoint: {top}. {goal_note} — "
-            f"but goals are ALREADY CAPPED at MAX_CHECKPOINT_GOALS = 8 "
-            f"(scripts/mnemos/checkpoint.py), so a clear on goal alone is a reading of this "
-            f"payload, not a remedy. Options are weighed in _project_specs/todos/active.md "
-            f"item 7; do not re-propose capping goals or capping constraints by recency, both "
-            f"are decided. {tally}")
+            f"not just compaction. Largest fields in THIS checkpoint (indent=2, as written): "
+            f"{top}. {goal_note} — but goals are bounded TWICE and only one of the two bounds "
+            f"bytes: MAX_CHECKPOINT_GOALS = 8 caps the COUNT, and _select_goals' exclusion of "
+            f"bridge imports (origin='loaded') is what caps the SIZE. The count cap alone left "
+            f"the field at 11,245b for two days in July, so if goal bytes are large HERE the "
+            f"suspect is that filter, not the cap. Options are weighed in "
+            f"_project_specs/todos/active.md item 7; do not re-propose capping goals or "
+            f"capping constraints by recency, both are decided. {tally}")
 
     if probe_keys:
         return True, (

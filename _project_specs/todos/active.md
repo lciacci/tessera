@@ -188,8 +188,15 @@ handoff block only; a blockquoted list is invisible to it.
     excluded *because* they are confounded, and this item quoted their confound in its own next
     sentence while counting them toward the bar.
     **What IS established, and it is real progress — measured 2026-08-19, no verdict implied:**
-    downstream checkpoints are **2,515–4,524b** and cannot spill, so downstream `insufficient`
-    is **not** the P3 confound; the two halves are separable. Downstream names `decisions` in
+    **the two downstreams that have FILED receipts** measure 2,515b (arbiter) and 4,524b
+    (conclave) against a ~10,000-character spill boundary, so *their* `insufficient` verdicts
+    are **not** the P3 confound; the two halves are separable for the corpus that counts.
+    Scoped to those two rather than to "downstream", because the fleet spread is 534 to
+    **8,414** — settempo is over the 8,000b budget and is the one project where truncation
+    would be live, and it has filed zero receipts. *(This sentence generalised over all six
+    until 2026-08-19; the observatory entry it points at had already caught and fixed the same
+    overclaim in its own draft, and the correction did not reach here — the loud copy stayed
+    wrong while the quiet one was right, which is this item's own subject.)* Downstream names `decisions` in
     **6 of 7** receipts (conclave 4/4, arbiter 2/3). conclave's checkpoint now *carries*
     `decisions` and its 08-14 and 08-15 receipts still name it missing. And **4 of the 6 downstreams have no
     `decisions` key at all** — they have not checkpointed since the field

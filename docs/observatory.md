@@ -309,10 +309,13 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   not kill — but the reason changed three weeks ago and three copies of this sentence did not.
   See the 2026-08-19 entry at the end of this file.
 - **Historical status (pre-ADR-0015):** Trial **re-armed on an event trigger** (calendar trigger retired). Recovery path **exercised once (manual)**; awaiting a real `auto` event.
-- **When to revisit (CURRENT, per ADR-0015):** when **T2's instrument ships** — a model-emitted
-  receipt, gate-event shaped, recording whether the agent resumed without re-deriving. That is the
-  only thing that can produce a verdict, because `restore_injected` is **a log line the hook writes
-  about itself**, not evidence the model received anything. The log shows four; the model got
+- **When to revisit (CURRENT, per ADR-0015):** ~~when **T2's instrument ships**~~ — **that fired
+  2026-07-26 and this line went on describing it as pending until 2026-08-19.** The live trigger
+  is **P16's arms: ≥10 receipts across ≥3 DOWNSTREAM projects, or 30 days (2026-08-28)**; today
+  7/10 across 2/3. The instrument is a model-emitted receipt, gate-event shaped, recording whether
+  the agent resumed without re-deriving. It is the only thing that can produce a verdict, because
+  `restore_injected` is **a log line the hook writes about itself**, not evidence the model
+  received anything. The log shows four; the model got
   nothing on all four. Re-scoping from 3 events to 121 gives 121 self-reports — **volume does not
   fix provenance.** Also revisit if Layer 3 ever delivers to a model even once (it never has), or
   if a restore is observed failing while P3 is green (that would make T1 a proxy too).

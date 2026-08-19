@@ -409,7 +409,11 @@ def _checkpoint(tmp_path, *, pad=0, drop=(), pad_field="goal"):
     """`pad_field` lets a test choose WHICH field dominates. Default is unchanged, so every
     existing caller keeps its exact fixture; the over-budget message is now computed per
     payload, so testing it needs payloads with different shapes."""
-    data = {"goal": "g", "active_constraints": ["c"], "task_narrative": "n"}
+    # FIVE fields, not three. With three, the message's top-3 list contains every field and
+    # `"goal" in named` holds regardless of ORDER — the assertions read as ranking checks and
+    # were vacuous. Proven by review: dropping `reverse=True` from the sort left them green.
+    data = {"goal": "g", "active_constraints": ["c"], "task_narrative": "n",
+            "active_results": ["r"], "decisions": ["d"]}
     if pad_field == "goal":
         data["goal"] = "g" + "x" * pad
     else:
@@ -442,42 +446,78 @@ def test_p3_fires_when_checkpoint_exceeds_the_delivery_budget(tmp_path):
     assert "EVERY session start" in detail, "must not re-frame this as a compaction-only bug"
 
 
+def _first_named_field(detail):
+    """The field the message ranks FIRST, parsed out of the rendered string.
+
+    Membership (`"goal" in named`) is not a ranking test when the list is as long as the
+    payload. This reads position 1, so inverting the sort changes the answer."""
+    seg = detail.split("Largest fields in THIS checkpoint (indent=2, as written): ")[1]
+    return seg.split(" · ")[0].rsplit(" ", 1)[0]
+
+
 def test_p3_over_budget_message_measures_THIS_payload_not_the_population(tmp_path):
-    """THE HINT IS PART OF THE INSTRUMENT, and this branch has now been wrong twice.
+    """THE HINT IS PART OF THE INSTRUMENT, and this branch has now been wrong three times.
 
     v1 (until 2026-08-19): *"Check the goal field first — goals are never-evict and one is
-    minted per ingested session."* True on 2026-07-26; `MAX_CHECKPOINT_GOALS = 8` landed that
-    day and the field flattened two days later. Two sessions were aimed at the wrong field by
-    the alarm's own advice.
+    minted per ingested session."* True on 2026-07-26; two sessions were aimed at the wrong
+    field by the alarm's own advice.
 
-    v2 (same day, caught by review before push): replaced it with a POPULATION claim — "the
-    driver is active_constraints, every other field stays flat" — plus "deleting goal does not
-    get under budget". Measured: 34 of 75 over-budget checkpoints clear on goal removal alone,
-    and `decisions`/`recent_files` each swing ~1.7KB. A spot alarm carrying a distribution-level
-    cause misdiagnoses the instance it fires on.
+    v2 (same day, caught by review): a POPULATION claim — "the driver is active_constraints,
+    every other field stays flat" — plus "deleting goal does not get under budget". Measured:
+    roughly two in five over-budget checkpoints clear on goal removal alone, and
+    `decisions`/`recent_files` each swing ~1.7KB.
 
-    v3 COMPUTES. So this test asserts the branch reports the payload in front of it, on two
-    payloads with opposite shapes. Both expectations are hand-written and neither is derived
-    from the message, so the test cannot fail in lockstep with the code.
+    v3 COMPUTES, and THIS TEST WAS STILL VACUOUS. Both fixtures had three fields and the
+    message prints three, so membership held under any ordering; review proved it by dropping
+    `reverse=True` and watching the test pass. Its docstring claimed the opposite. **A
+    verification claim is a doc claim** — that is the 2026-08-17 lesson, scored again here.
 
-    Re-plant to falsify: hardcode either half of v2 back into the branch and watch the
-    constraints-dominant case claim the wrong largest field."""
+    v4 asserts POSITION on a five-field fixture. Falsify by removing `reverse=True` from the
+    sort in `p3_restore_integrity`: both cases then name the smallest field first."""
     goal_heavy = _checkpoint(tmp_path, pad=tw.RESTORE_BUDGET_BYTES)
     fired, detail = tw.p3_restore_integrity(goal_heavy)
     assert fired is True
-    assert "goal" in detail.split("Largest fields in THIS checkpoint:")[1].split(".")[0]
+    assert _first_named_field(detail) == "goal"
     assert "WOULD clear it" in detail, "a goal-dominated payload clears on goal removal"
 
     con_heavy = _checkpoint(tmp_path, pad=tw.RESTORE_BUDGET_BYTES,
                             pad_field="active_constraints")
     fired, detail = tw.p3_restore_integrity(con_heavy)
     assert fired is True
-    named = detail.split("Largest fields in THIS checkpoint:")[1].split(".")[0]
-    assert "active_constraints" in named, "must name the field that actually dominates HERE"
+    assert _first_named_field(detail) == "active_constraints"
     assert "would NOT clear it" in detail, (
-        "the old unconditional claim ran the other way and was false 45% of the time; this "
+        "the old unconditional claim ran the other way and was false ~2 times in 5; this "
         "branch must answer for the payload it is looking at")
     assert "Check the goal field first" not in detail, "v1's misdirecting imperative is back"
+
+
+def test_p3_ranks_fields_in_the_unit_the_file_is_WRITTEN_in(tmp_path):
+    """FINDING 6, and it needed a payload built specially to be visible at all.
+
+    `size` is the on-disk byte count of a file `checkpoint.py` writes with `indent=2`. The
+    first version of this branch measured fields with COMPACT `json.dumps`, so the parts were
+    in one unit and the whole in another — 9,480b of fields reported inside a payload called
+    10,111b. On ordinary checkpoints the ranking agrees under both units, which is exactly why
+    reverting the fix left every test green when it was first tried.
+
+    It disagrees when a field is a long LIST of short strings (every element gains indentation)
+    against a single long STRING (which gains none). 500 ten-char paths are 7,000b compact and
+    8,002b indented; a 7,000-char goal is 7,002b either way. Compact ranks goal first and is
+    wrong about which field is consuming the budget.
+
+    Falsify by changing `len(json.dumps(v, indent=2))` back to `len(json.dumps(v))` in
+    `p3_restore_integrity`."""
+    m = _mnemos(tmp_path)
+    (m / "checkpoint-latest.json").write_text(json.dumps({
+        "goal": "x" * 7000,
+        "recent_files": ["p" * 10] * 500,
+        "active_constraints": ["c"],
+        "task_narrative": "n",
+    }, indent=2))
+    fired, detail = tw.p3_restore_integrity(tmp_path)
+    assert fired is True
+    assert _first_named_field(detail) == "recent_files", (
+        "ranked in compact bytes, `goal` wins by 2 bytes and the alarm names the wrong field")
 
 
 def test_p3_cap_citation_matches_the_real_constant(tmp_path):
@@ -491,11 +531,19 @@ def test_p3_cap_citation_matches_the_real_constant(tmp_path):
 
     Binds to the real constant rather than to 8, so it fails on the change rather than on a
     number someone has to remember to update here too."""
-    from mnemos.checkpoint import MAX_CHECKPOINT_GOALS
+    from mnemos.checkpoint import MAX_CHECKPOINT_GOALS, BRIDGE_ORIGIN
     root = _checkpoint(tmp_path, pad=tw.RESTORE_BUDGET_BYTES)
     _, detail = tw.p3_restore_integrity(root)
     assert f"MAX_CHECKPOINT_GOALS = {MAX_CHECKPOINT_GOALS}" in detail, (
         "P3's cited cap has drifted from scripts/mnemos/checkpoint.py")
+    # BOTH bounds, because citing only the COUNT cap to argue a BYTE bound is the error this
+    # branch's own docstring establishes: 8 goals at ~1,400b each is ~11,200b, over the whole
+    # budget. If `_select_goals`' bridge exclusion regresses, goal bytes return to ~11k while
+    # the cap still reads 8 and the alarm again steers the reader off the field blowing the
+    # budget — v1's failure, reachable through a filter nobody cited. (Review, round 2.)
+    assert f"origin='{BRIDGE_ORIGIN}'" in detail, (
+        "the bound that actually caps goal BYTES is the bridge-import exclusion, and the "
+        "message must name it")
 
 
 # NO TEST ASSERTS THE DOCSTRING'S "instrument IS NOT BUILT" CLAIM IS GONE, and the attempt is
