@@ -60,6 +60,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -67,6 +68,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 EVENT = "review_stamped"
+# HEAD, @, HEAD~2, HEAD^, @~1 — refs whose meaning is relative to where you are standing.
+_HEAD_ANCHORED = re.compile(r"^(?:HEAD|@)(?:[~^].*)?$")
+# Past this, an orphaned stamp is old news and reads as "no review on record", which this hook
+# does not report. Matches `tessera-watch`'s DEGRADED_WINDOW_DAYS — an incident, not a state.
+STALE_NOTE_DAYS = 7
 
 
 def _log_path() -> Path:
@@ -136,6 +142,20 @@ def record(base: str = "origin/main", head: "str | None" = None) -> int:
     commit under review. A reader of the log can tell them apart; without the field they are
     identical rows.
     """
+    # A HEAD-ANCHORED BASE IS NOT A CLAIM ABOUT THE PAST, IT IS A CLAIM ABOUT WHENEVER YOU LOOK.
+    # `head` is resolved to a sha here precisely because a stamp records history; `base` is
+    # deliberately kept as a REF so `origin/main` keeps tracking as others push. That is right
+    # for symbolic refs and wrong for HEAD-relative ones, whose meaning moves with HEAD.
+    # Probed 2026-08-19: `--head <R>` with `base=HEAD~1` re-resolves at push time to the FIX
+    # commit, so the unreviewed fix is subtracted from the report; and `base=HEAD` makes the
+    # outgoing range `HEAD...HEAD`, empty forever, so pre-push is permanently silent while
+    # `staleness_note` says nothing is wrong. Refused rather than resolved, because freezing
+    # `origin/main` to a sha would break the tracking the common case depends on.
+    # (Review round 3.)
+    if _HEAD_ANCHORED.match(base):
+        print(f"base {base!r} is HEAD-anchored — refusing to stamp. It resolves to something "
+              f"different at push time; name a branch, tag or sha.", file=sys.stderr)
+        return 2
     if head is None:
         head = _git("rev-parse", "HEAD")
         explicit = False
@@ -201,18 +221,36 @@ def record(base: str = "origin/main", head: "str | None" = None) -> int:
     # runs `stamp.py` with no flag — that is what the default is for — and nothing is lost.
     at_head = not explicit
     dirty = []
+    blobs = {}
     if at_head:
         for args in (("diff", "--name-only"), ("diff", "--cached", "--name-only")):
             dirty += [f for f in _git(*args).splitlines() if f]
         dirty = sorted(set(dirty))
+        # PIN EACH DIRTY FILE TO ITS CONTENT, or the subtraction becomes permanent. The dirty
+        # set is subtracted from every later report so that committing the reviewed tree
+        # unchanged is not a false positive — but round 1 fixed exactly this shape for `files`
+        # and left it live here: probed 2026-08-19, a file dirty at stamp time was subtracted
+        # after being re-edited TWICE, so F-004's terminal fix went unreported on the path the
+        # contract calls primary. The blob hash is the discriminator: subtract while HEAD still
+        # holds the content the reviewer saw, report the moment it changes. (Review round 3.)
+        for f in dirty:
+            h = _git("hash-object", "--", f)
+            if h:
+                blobs[f] = h
     event = {
         "type": EVENT,
         "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "session_id": os.environ.get("CLAUDE_CODE_SESSION_ID", "manual"),
         "source": "review-stamp",
+        # `had_uncommitted` is OMITTED on an explicit stamp rather than written False. `dirty`
+        # is never computed there, so False would be a claim about a working tree the code did
+        # not look at — indistinguishable in the log from "the tree was clean". This module's
+        # founding lesson is that `restore_injected` was a log line the hook wrote about itself;
+        # a field asserting an unchecked fact is that, in miniature. (Review round 3.)
         "data": {"base": base, "head": head, "files": sorted(set(files + dirty)),
-                 "uncommitted": dirty, "had_uncommitted": bool(dirty),
-                 "explicit_head": explicit},
+                 "uncommitted": dirty, "uncommitted_blobs": blobs,
+                 "explicit_head": explicit,
+                 **({} if explicit else {"had_uncommitted": bool(dirty)})},
     }
     with _log_path().open("a") as fh:
         fh.write(json.dumps(event) + "\n")
@@ -256,7 +294,19 @@ def changed_since_review(base: str = "origin/main") -> "tuple[dict | None, list[
     # merge-base and calls it unreviewed. `cat-file` only catches a commit that is GONE.
     if not _git_ok("merge-base", "--is-ancestor", head, "HEAD"):
         return stamp, []
-    changed = [f for f in _git("diff", "--name-only", f"{head}..HEAD").splitlines() if f]
+    # `_git_lines`: if THIS diff fails, `changed` was [] and pre-push printed nothing, while
+    # `staleness_note` stayed silent because `cat-file` and `merge-base` both succeeded — "I am
+    # blind" rendered as "you are clear". The same defect round 2 fixed at `record()`'s call
+    # site, left live at the report's own. (Review round 3.)
+    changed = _git_lines("diff", "--name-only", f"{head}..HEAD")
+    if changed is None:
+        # RAISE, DO NOT RETURN []. The first fix for this returned an empty list, which is the
+        # defect restated: pre-push prints nothing for an empty list, so "I could not compute
+        # the diff" still rendered as "you are clear". `.githooks/pre-push` wraps this call and
+        # prints "review-anchor check unavailable (…)", which is the loud channel that already
+        # exists. Caught by re-planting the fix and finding no test could tell the difference.
+        raise RuntimeError(f"cannot diff {head[:12]}..HEAD — the report would be silent "
+                           f"rather than empty")
     # `base` WAS AN UNUSED PARAMETER UNTIL 2026-08-19 (queue item 8c), and giving it a job is
     # what the explicit-head fix makes possible. `head..HEAD` is "everything since the review",
     # which over-reports the moment the stamped commit is behind the base ref — stamp, pull,
@@ -299,7 +349,20 @@ def changed_since_review(base: str = "origin/main") -> "tuple[dict | None, list[
     # `files` is the fallback for stamps written before `uncommitted` existed: those are all
     # defaulted-head rows, and the wide subtraction is what they were recorded under.
     data = stamp["data"]
-    seen = set(data["uncommitted"]) if "uncommitted" in data else set(data.get("files", ()))
+    if "uncommitted" in data:
+        # BLOB-PINNED. A dirty file is subtracted only while HEAD still holds the content the
+        # reviewer saw; once it changes again it is a new edit and the whole point is to report
+        # it. Without the pin the subtraction was permanent — see `record()`.
+        blobs = data.get("uncommitted_blobs") or {}
+        seen = set()
+        for f in data["uncommitted"]:
+            pinned = blobs.get(f)
+            if pinned is None:                    # stamp written before the pin existed
+                seen.add(f)
+            elif _git("rev-parse", f"HEAD:{f}") == pinned:
+                seen.add(f)
+    else:
+        seen = set(data.get("files", ()))         # rows from before `uncommitted` existed
     return stamp, [f for f in changed if f not in seen]
 
 
@@ -322,6 +385,22 @@ def staleness_note(stamp: "dict | None") -> "str | None":
     an empty list mean two things, which is the defect.
     """
     if stamp is None:
+        return None
+    # BOUNDED IN TIME, because an unbounded version is the signal this hook exists to avoid.
+    # A stale stamp is never replaced on its own — stamping rides model recall (3 stamps / 47
+    # sessions) — so once an --amend or rebase orphans one, "REVIEW ANCHOR IS BLIND" is true on
+    # every push forever. That is P13's shape, which this module's own header and the no-stamp
+    # branch were both written against, printed on the same channel as the useful report.
+    # A RECENT stale stamp is news: you reviewed, something moved, re-stamp. An OLD one is
+    # indistinguishable from never having stamped, and this hook is deliberately silent about
+    # that. Probed 2026-08-19: three successive pushes after one amend, three banners.
+    # (Review round 3.)
+    try:
+        age = datetime.now(timezone.utc) - datetime.strptime(
+            stamp["ts"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except (KeyError, ValueError):
+        age = None
+    if age is not None and age.days > STALE_NOTE_DAYS:
         return None
     head = stamp["data"]["head"]
     if not _git("cat-file", "-t", head):
@@ -366,7 +445,20 @@ def _main(argv: "list[str]") -> int:
         else:
             rest.append(a)
     args = rest
+    if len(args) > 1:
+        # `stamp.py origin/main <sha>` silently dropped the sha and stamped HEAD as reviewed —
+        # the outcome `--head` exists to prevent, reached by forgetting the flag. The `--haed`
+        # fix closed this for FLAGS only. (Review round 3.)
+        print(f"unexpected extra argument {args[1]!r} — did you mean --head {args[1]}?",
+              file=sys.stderr)
+        return 2
     base = args[0] if args else "origin/main"
+    if head is None and re.fullmatch(r"[0-9a-f]{7,40}", base):
+        # NOT refused — a sha is a legitimate base. But `stamp.py <sha-the-review-saw>` reads as
+        # "base = that sha, head = HEAD", i.e. the fix stamped as reviewed, and the two
+        # intentions are indistinguishable from the argv alone. Loud, then proceed.
+        print(f"note: {base!r} is being used as the BASE. If it is the commit the review saw, "
+              f"you want --head {base}.", file=sys.stderr)
     # A base that does not resolve produced a stamp claiming coverage vs `--help` on the first
     # run. A stamp is a claim about SCOPE; a claim against a ref that does not exist is worse
     # than no claim, because `changed_since_review` will happily diff from it.

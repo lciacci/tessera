@@ -150,7 +150,11 @@ def test_explicit_past_head_does_not_absorb_todays_uncommitted_edits(tmp_path, m
     assert stamp.record(head=reviewed) == 0
     ev = _events(repo)[-1]
     assert "dirty.py" not in ev["data"]["files"]
-    assert ev["data"]["had_uncommitted"] is False
+    assert "had_uncommitted" not in ev["data"], (
+        "OMITTED, not False: `dirty` is never computed on the explicit path, so False would "
+        "assert a fact about a working tree the code did not look at — indistinguishable in "
+        "the log from 'the tree was clean'. This module exists because `restore_injected` was "
+        "a log line the hook wrote about itself")
 
 
 def test_an_explicit_head_never_absorbs_the_working_tree(tmp_path, monkeypatch):
@@ -177,7 +181,7 @@ def test_an_explicit_head_never_absorbs_the_working_tree(tmp_path, monkeypatch):
     assert stamp.record(head=head) == 0
     ev = _events(repo)[-1]
     assert ev["data"]["uncommitted"] == [], "an explicit stamp covers a commit, not a tree"
-    assert ev["data"]["had_uncommitted"] is False
+    assert "had_uncommitted" not in ev["data"]
 
     _run(repo, "commit", "-qm", "the terminal fix")
     _, changed = stamp.changed_since_review()
@@ -457,6 +461,97 @@ def test_record_refuses_a_base_with_no_merge_base(tmp_path, monkeypatch):
     assert _events(repo) == []
 
 
+def test_a_dirty_file_stops_being_subtracted_once_its_content_changes(tmp_path, monkeypatch):
+    """ROUND 1'S DEFECT, STILL LIVE ON THE PRIMARY PATH until round 3.
+
+    The dirty set is subtracted so that committing the reviewed tree unchanged is not a false
+    positive. Unpinned, that subtraction is PERMANENT: probed 2026-08-19, a file dirty at stamp
+    time stayed subtracted after being re-edited twice, so F-004's terminal fix went unreported
+    on the path the contract calls primary. `test_a_fix_that_RE_EDITS_a_reviewed_file_is_reported`
+    only covers the explicit-head path and could not see it.
+
+    The blob hash is the discriminator — subtract while HEAD holds what the reviewer saw, report
+    the moment it differs. Falsify by dropping `uncommitted_blobs` from `record()`."""
+    repo = _repo(tmp_path, monkeypatch)
+    _commit(repo, "a.py", "v0\n")
+    (repo / "a.py").write_text("v1 — the reviewed tree\n")
+    _run(repo, "add", "-A")
+    assert stamp.record() == 0
+
+    _run(repo, "commit", "-qm", "commit exactly what was reviewed")
+    _, changed = stamp.changed_since_review()
+    assert changed == [], "the reviewed content, committed unchanged, is not a finding"
+
+    _commit(repo, "a.py", "v2 — the fix nobody reviewed\n")
+    _, changed = stamp.changed_since_review()
+    assert changed == ["a.py"], "re-editing it is a new edit and must be reported"
+
+
+def test_a_failed_primary_diff_is_LOUD_not_empty(tmp_path, monkeypatch):
+    """`_git_lines` exists to tell "git failed" from "the answer is empty", and the report's own
+    primary diff was left on the fail-open `_git` — so a failed diff produced `[]`, pre-push
+    printed nothing, and `staleness_note` stayed quiet because `cat-file` and `merge-base` both
+    succeeded. "I am blind" rendered as "you are clear".
+
+    THE FIRST FIX WAS ALSO WRONG and re-planting is what showed it: it returned `[]`, which is
+    the same silence one layer in. It raises now, onto the channel `.githooks/pre-push` already
+    has for it ("review-anchor check unavailable").
+
+    Stubbed at the module's own seam rather than by corrupting a repo: the failure is an I/O or
+    object-store error that cannot be constructed reliably, and what is under test is this
+    module's RESPONSE to it, not git's behaviour."""
+    repo = _repo(tmp_path, monkeypatch)
+    reviewed = _commit(repo, "a.py")
+    assert stamp.record(head=reviewed) == 0
+    _commit(repo, "b.py")
+
+    real = stamp._git_lines
+    def only_the_primary_diff_fails(*args):
+        return None if any(".." in a and "..." not in a for a in args) else real(*args)
+    monkeypatch.setattr(stamp, "_git_lines", only_the_primary_diff_fails)
+
+    with pytest.raises(RuntimeError, match="silent rather than empty"):
+        stamp.changed_since_review()
+
+
+def test_a_head_anchored_base_is_refused(tmp_path, monkeypatch):
+    """`head` is resolved to a sha because a stamp records history; `base` is kept as a REF so
+    `origin/main` keeps tracking. That is right for symbolic refs and wrong for HEAD-relative
+    ones, whose meaning moves with HEAD.
+
+    Probed: `base=HEAD~1` re-resolves at push time to the FIX commit, so the unreviewed fix is
+    subtracted; `base=HEAD` makes the outgoing range `HEAD...HEAD`, empty forever, so pre-push
+    is permanently silent while `staleness_note` reports nothing wrong."""
+    repo = _repo(tmp_path, monkeypatch)
+    _commit(repo, "a.py")
+    sha = _run(repo, "rev-parse", "HEAD")
+    for bad in ("HEAD", "HEAD~1", "HEAD^", "@", "@~2"):
+        assert stamp.record(base=bad, head=sha) == 2, bad
+    assert _events(repo) == []
+    assert stamp.record(base="origin/main", head=sha) == 0, "symbolic refs still work"
+
+
+def test_the_blind_note_stops_after_a_week(tmp_path, monkeypatch):
+    """A stale stamp is never replaced on its own — stamping rides model recall — so an
+    unbounded note is true on every push forever. That is P13's shape, on the same channel as
+    the useful report, in the hook whose own header rejects always-true signals.
+
+    Recent stale stamp = news (re-stamp). Old stale stamp = indistinguishable from no stamp,
+    which this hook is deliberately silent about."""
+    repo = _repo(tmp_path, monkeypatch)
+    reviewed = _commit(repo, "a.py")
+    assert stamp.record(head=reviewed) == 0
+    _run(repo, "commit", "-q", "--amend", "-m", "amended out from under the stamp")
+
+    st = stamp.latest()
+    assert stamp.staleness_note(st) is not None, "a fresh orphaned stamp is news"
+
+    old = dict(st)
+    old["ts"] = "2026-01-01T00:00:00Z"
+    assert stamp.staleness_note(old) is None, (
+        "past the window it is old news and reads as 'no review on record'")
+
+
 # ── the CLI surface ────────────────────────────────────────────────────────────────────────
 
 def test_cli_accepts_both_head_spellings_and_a_positional_base(tmp_path, monkeypatch):
@@ -480,6 +575,27 @@ def test_cli_refuses_an_unknown_flag_instead_of_eating_its_argument(tmp_path, mo
     sha = _commit(repo, "a.py")
     assert stamp._main(["--haed", sha]) == 2
     assert _events(repo) == [], "a typo must not write a stamp at all"
+
+
+def test_cli_refuses_extra_positionals(tmp_path, monkeypatch):
+    """`stamp.py origin/main <sha>` silently dropped the sha and stamped HEAD as reviewed — the
+    outcome `--head` exists to prevent, reached by forgetting the flag. The `--haed` fix closed
+    this for FLAGS only."""
+    repo = _repo(tmp_path, monkeypatch)
+    sha = _commit(repo, "a.py")
+    assert stamp._main(["origin/main", sha]) == 2
+    assert _events(repo) == []
+
+
+def test_cli_warns_when_a_bare_sha_is_being_used_as_the_base(tmp_path, monkeypatch, capsys):
+    """`stamp.py <sha-the-review-saw>` reads as "base = that sha, head = HEAD" — the fix stamped
+    as reviewed. Not refused, because a sha is a legitimate base and the two intentions are
+    indistinguishable from argv alone; loud, then proceed."""
+    repo = _repo(tmp_path, monkeypatch)
+    sha = _commit(repo, "a.py")
+    _commit(repo, "b.py")
+    assert stamp._main([sha]) == 0
+    assert "you want --head" in capsys.readouterr().err
 
 
 def test_cli_refuses_a_dangling_head_flag(tmp_path, monkeypatch):

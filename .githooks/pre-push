@@ -47,7 +47,9 @@ elif stale:
     # blind" were the same output. An --amend or a rebase after stamping produces the second
     # PERMANENTLY, because `latest()` keeps serving that stamp and stamping rides model recall.
     # Loud, still not blocking. (Review round 2, 2026-08-19.)
-    print("\n%s\n  REVIEW ANCHOR IS BLIND:\n    %s\n%s\n" % (BAR, stale, BAR), file=sys.stderr)
+    # ONE LINE, not a banner: it is a "this check cannot answer" note, not a finding, and it
+    # shares stderr with the report that IS one. Bounded to recent stamps in `staleness_note`.
+    print("pre-push: review anchor is blind — %s" % stale, file=sys.stderr)
 elif changed:
     print("\n%s\n  %d FILE(S) CHANGED SINCE THE LAST REVIEW SAW THEM:" % (BAR, len(changed)),
           file=sys.stderr)

@@ -84,7 +84,21 @@ reviewed. Nothing is lost: a reviewer of an uncommitted tree runs `stamp.py` wit
 
 A mistyped flag is refused rather than absorbed. `stamp.py --haed <sha>` used to drop the unknown
 token and let the sha fall through as the positional BASE, writing an rc=0 stamp against a
-phantom base — routing around the very check `_main` performs on the base.
+phantom base — routing around the very check `_main` performs on the base. **Extra positionals
+are refused for the same reason** (`stamp.py origin/main <sha>` silently dropped the sha), and a
+bare-hex base with no `--head` gets a loud note rather than a refusal: `stamp.py <sha>` reads as
+"base = that sha, head = HEAD", which is the fix stamped as reviewed, and the two intentions are
+indistinguishable from argv alone.
+
+**A HEAD-anchored base is refused.** `head` is resolved to a sha because a stamp records history;
+`base` is deliberately kept as a *ref* so `origin/main` keeps tracking as others push. That is
+right for symbolic refs and wrong for HEAD-relative ones. Measured: `--head <R>` with
+`base=HEAD~1` re-resolves at push time to the *fix* commit, so the unreviewed fix is subtracted;
+`base=HEAD` makes the outgoing range `HEAD...HEAD`, empty forever, so the hook goes permanently
+silent while nothing reports it stale.
+
+**`had_uncommitted` is absent on an explicit stamp, not `false`.** `dirty` is never computed
+there, so `false` would assert something about a working tree the code did not look at.
 
 `explicit_head` is recorded because the two cases are not equally trustworthy: a defaulted head
 means *"whatever HEAD was when someone remembered"*, an explicit one means someone named the
@@ -99,7 +113,8 @@ on the majority of pushes and taken the useful branch down with it.
 
 `changed_since_review` narrows four ways, and each is load-bearing:
 
-1. **Subtract the stamp's `uncommitted` list — and ONLY that.** The review target is often an
+1. **Subtract the stamp's `uncommitted` list — ONLY that, and only while its CONTENT is
+   unchanged.** The review target is often an
    uncommitted tree, so the normal flow is review → stamp → commit those exact files → push, and
    those files would otherwise be a guaranteed false positive.
    **It subtracted the whole `files` list until 2026-08-19, which cancelled `--head` for its
@@ -108,6 +123,11 @@ on the majority of pushes and taken the useful branch down with it.
    out and the report went silent. Files already *committed* at stamp time cannot reappear in
    `head..HEAD` unless edited again — which is exactly what is worth reporting. Legacy rows
    written before the `uncommitted` field keep the wide subtraction they were recorded under.
+   **The subtraction is BLOB-PINNED**, and unpinned it was permanent: each dirty file's content
+   hash is recorded, and the file is subtracted only while HEAD still holds what the reviewer
+   saw. Measured 2026-08-19 — a file dirty at stamp time stayed subtracted after being re-edited
+   twice, so F-004's terminal fix went unreported on this, the primary path. Round 1 fixed that
+   shape for `files` and left it live here; the explicit-head test could not see it.
 2. **Intersect with the outgoing range** (`base...HEAD`). `head..HEAD` is "everything since the
    review", which over-reports the moment the stamped commit sits behind the base — stamp, pull,
    push, and every commit someone else already pushed is listed as unreviewed by you.
@@ -117,8 +137,16 @@ on the majority of pushes and taken the useful branch down with it.
    **An empty report had three causes and one voice until 2026-08-19** — nothing changed, the
    commit is gone, HEAD moved off its line — so "you are clear" and "I am blind" printed
    identically. An `--amend` or a rebase after stamping produces the second permanently, because
-   `latest()` keeps serving that stamp. `staleness_note()` now names it and `pre-push` prints
-   **REVIEW ANCHOR IS BLIND**. Still not blocking.
+   `latest()` keeps serving that stamp. `staleness_note()` now names it and `pre-push` prints a
+   one-line **review anchor is blind** note. Still not blocking, and **bounded to 7 days**: a
+   stale stamp is never replaced on its own, so an unbounded note is true on every push forever
+   — P13's shape, on the same channel as the useful report, in the hook whose header rejects
+   always-true signals. A recent orphaned stamp is news; an old one is indistinguishable from no
+   stamp, which this hook is already silent about.
+   **A failed diff RAISES** rather than returning an empty list, onto `pre-push`'s existing
+   "review-anchor check unavailable" channel. The first fix returned `[]`, which is the same
+   silence one layer in — caught by re-planting it and finding no test could tell the
+   difference.
 4. **Report against the base the STAMP was recorded under**, not the caller's default. `pre-push`
    always passes `origin/main`; a stamp taken against `origin/release` would otherwise be
    reported against an unrelated outgoing range.
