@@ -435,6 +435,52 @@ def test_p3_fires_when_checkpoint_exceeds_the_delivery_budget(tmp_path):
     assert "EVERY session start" in detail, "must not re-frame this as a compaction-only bug"
 
 
+def test_p3_over_budget_hint_names_the_driver_and_not_the_capped_field(tmp_path):
+    """THE HINT IS PART OF THE INSTRUMENT, and this one was wrong for 24 days.
+
+    Until 2026-08-19 the over-budget branch ended *"Check the goal field first — goals are
+    never-evict and one is minted per ingested session."* True on 2026-07-26 when the goal
+    blob was the overflow; `MAX_CHECKPOINT_GOALS = 8` landed that same day and the field has
+    been flat at ~1.2KB since. Two sessions were aimed at the wrong field by the alarm's own
+    advice while `active_constraints` — 989b to 5,397b across 30 checkpoints — went
+    unexamined. `docs/observatory.md` -> "The figures are guarded; the REASONING attached to
+    them is not" records it as instance #1 of the class.
+
+    WHY THIS IS A TEST AND NOT A DOCCHECK ASSERTION. That entry says plainly: do not build a
+    prose-validity checker, it is a judgement wearing a regex. This asserts something
+    narrower and mechanical — that the message does not point at a field another module
+    BOUNDS with a constant, and that it names the one that actually varies. Both strings are
+    hand-written here, never derived from the message, so the test cannot fail in lockstep
+    with the code it checks.
+
+    Re-plant to falsify: put the old sentence back in the over-budget branch of
+    `p3_restore_integrity` and watch the first assertion fail."""
+    root = _checkpoint(tmp_path, pad=tw.RESTORE_BUDGET_BYTES)
+    fired, detail = tw.p3_restore_integrity(root)
+    assert fired is True
+    # THE POSITIVE PAIR IS THE LOAD-BEARING HALF, and that is deliberate. Re-planting the old
+    # sentence fails both of these on its own: it names neither the driver nor the bound. The
+    # negative below is a cheap extra keyed on the DEFECT'S EXACT IMPERATIVE, not on the topic
+    # — a corrected message is free to discuss the goal field, and must be, since ruling it out
+    # is now the point. A negative keyed on "goal" would forbid the fix from explaining itself,
+    # which is #10's corollary: a guard that matches prose ABOUT the code catches the comment.
+    assert "active_constraints" in detail, "the hint must name the field that actually varies"
+    assert "MAX_CHECKPOINT_GOALS" in detail, (
+        "a hint that rules a field OUT must cite what bounds it — otherwise the next reader "
+        "cannot tell a current judgement from an inherited one, which is how this one rotted")
+    assert "Check the goal field first" not in detail, "the misdirecting imperative is back"
+
+
+# NO TEST ASSERTS THE DOCSTRING'S "instrument IS NOT BUILT" CLAIM IS GONE, and the attempt is
+# worth recording. One was written and it FAILED — on the corrected file — because the docstring
+# now quotes the old sentence in order to record that it was wrong. The guard could not tell a
+# live false claim from an honest history note, which is #10's corollary verbatim and the same
+# shape as the `cmd_record` comment-match. `docs/observatory.md` -> "The figures are guarded"
+# says it directly: do not build a prose-validity checker; principle #3's A6 corollary adds that
+# authored prose in an unenforced format wants a human re-read, not a regex. So that claim is
+# fixed and unguarded, said out loud rather than left implied.
+
+
 def test_p3_quiet_on_a_deliverable_checkpoint_but_claims_no_verdict(tmp_path):
     """Green here means the payload survives delivery — NOT that restore works.
 

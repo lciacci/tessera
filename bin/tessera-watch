@@ -131,10 +131,31 @@ def p3_restore_integrity(root: Path) -> tuple[bool, str]:
     ── WHAT THIS DOES AND DOES NOT CLAIM ─────────────────────────────────────────────────
 
     GREEN HERE MEANS "THE PAYLOAD SURVIVES DELIVERY". It does NOT mean restore works. That
-    question is T2 in ADR-0015 (does the agent resume without re-deriving?), only the model
-    can answer it, and its instrument IS NOT BUILT. Reading this predicate as a verdict on
-    Mnemos would mint proxy #5 after P2 (verb count), old-P4 (project count), and sqlfluff
-    (file existence). It is a REGRESSION GUARD on an observed failure, nothing more.
+    question is T2 in ADR-0015 (does the agent resume without re-deriving?) and only the model
+    can answer it. Reading this predicate as a verdict on Mnemos would mint proxy #5 after P2
+    (verb count), old-P4 (project count), and sqlfluff (file existence). It is a REGRESSION
+    GUARD on an observed failure, nothing more.
+
+    (This paragraph said "its instrument IS NOT BUILT" until 2026-08-19. T2's instrument
+    shipped 2026-07-26 — `scripts/restore/` + `docs/contracts/restore-receipt.md` — so the
+    sentence was false for three weeks. Whether there is enough DATA to read is a separate
+    question and P16 owns it; conflating "unbuilt" with "unread" is what let this sit.)
+
+    ── THE REMEDIATION HINT IS PART OF THE INSTRUMENT, AND THIS ONE WAS WRONG FOR 24 DAYS ──
+
+    Until 2026-08-19 the over-budget branch ended *"Check the goal field first — goals are
+    never-evict and one is minted per ingested session."* True when written. `checkpoint.py`
+    capped goals at `MAX_CHECKPOINT_GOALS = 8` on 2026-07-26 and the goal payload has been
+    FLAT at ~1.2KB ever since — under a fifth of a spilling payload, and deleting it entirely
+    does not get under budget. **Two sessions were aimed at the wrong field by this alarm's own
+    advice** while the real driver went unexamined. The hint was not stale, it was actively
+    misleading, and it sat inside the sentence a reader trusts most.
+
+    So the hint now names the driver AND cites what bounds the field it rules out — the
+    convention `docs/observatory.md` → "The figures are guarded; the REASONING attached to
+    them is not" proposes, which is what makes a hint self-contradicting when its subject
+    moves. A number beside a false explanation stays green; nothing in this repo reads an
+    argument, so the argument has to carry its own citation.
 
     Size is a direct measure, not a stand-in: checkpoint JSON tracks delivered bytes ~1:1
     (8,508 → 8,206 rendered; pre-fix ≈18,755 → 18,248, which SPILLED to a file and handed
@@ -219,8 +240,14 @@ def p3_restore_integrity(root: Path) -> tuple[bool, str]:
             f"budget. Checkpoint bytes track delivered bytes ~1:1, and ≈18,755b was observed to "
             f"SPILL: the harness wrote the block to a file and handed the model a 2KB preview, "
             f"so Constraints/Progress/Files never arrived. This degrades EVERY session start, "
-            f"not just compaction. Check the goal field first — goals are never-evict and one "
-            f"is minted per ingested session. {tally}")
+            f"not just compaction. The driver is active_constraints — measured over 30 "
+            f"checkpoints it swings 989b to 5,397b while every other field stays flat, and the "
+            f"width comes from SCOPE-MATCH BREADTH in checkpoint.py's `_select_constraints`: a "
+            f"session touching many directories keeps many standing invariants. NOT the goal "
+            f"field, which `MAX_CHECKPOINT_GOALS = 8` has bounded flat at ~1.2KB since "
+            f"2026-07-26 — deleting it entirely does not get under budget. Options are weighed "
+            f"in _project_specs/todos/active.md item 7; do not re-propose capping goals or "
+            f"capping constraints by recency, both are decided. {tally}")
 
     if probe_keys:
         return True, (
