@@ -302,8 +302,12 @@ Both were found by adversarial verification, **not** by the framework. **The rea
   (T1 deliverability / T2 sufficiency / T3 frequency) and the retirement of `COMPACTION_MIN`.
 - **Status:** Trial **re-scoped, not concluded** (ADR-0015). `tessera-watch` P3 is now
   `p3_restore_integrity` — a mechanical guard on payload deliverability, explicitly **not** a
-  verdict. **T2 (does the agent resume without re-deriving?) is the sole blocker on a real verdict,
-  and its instrument is unbuilt.** Until then no verdict is available — not keep, not kill.
+  verdict. **T2 (does the agent resume without re-deriving?) is the sole blocker on a real
+  verdict.** ~~and its instrument is unbuilt~~ — **corrected 2026-08-19: the instrument shipped
+  2026-07-26** (`scripts/restore/`). What is missing is DATA, and P16 owns that bar: 7/10
+  receipts across 2/3 downstream projects as of 2026-08-19. No verdict is available — not keep,
+  not kill — but the reason changed three weeks ago and three copies of this sentence did not.
+  See the 2026-08-19 entry at the end of this file.
 - **Historical status (pre-ADR-0015):** Trial **re-armed on an event trigger** (calendar trigger retired). Recovery path **exercised once (manual)**; awaiting a real `auto` event.
 - **When to revisit (CURRENT, per ADR-0015):** when **T2's instrument ships** — a model-emitted
   receipt, gate-event shaped, recording whether the agent resumed without re-deriving. That is the
@@ -2744,10 +2748,21 @@ marker — is worth more than the 29%.
 standing patterns) ~2,790 — **~15,600 tokens**, plus the Mnemos checkpoint (~2,600) for ~18k in
 practice. (Estimated at chars/4; `count_tokens` if a decision ever rests on it.)
 
-**METERED 2026-08-18: 17,462 tokens tracked** *(16,978 on 08-17 — third measurement that day, after 16,799 and 16,473; 15,837 on 08-10, 15,497 on 08-09)* — re-metered
-because `CLAUDE.md` gained ADR-0029's retirement clause, per its own rule; `CLAUDE.md` is now
-**9,026 of the 17,462** (51.69%), and the growth is again **entirely `CLAUDE.md` (+78 on top of the +406)** —
-`mnemos` 4,354, standing patterns as emitted 2,628, `base` 1,454, all three unmoved across all five.
+**METERED 2026-08-19: 17,566 tokens tracked** *(17,462 on 08-18; 16,978 on 08-17 — third measurement that day, after 16,799 and 16,473; 15,837 on 08-10, 15,497 on 08-09)* — re-metered
+because `.claude/skills/mnemos/SKILL.md` gained the correction that T2's instrument SHIPPED
+(it had said UNBUILT since 2026-07-26, in the copy loaded into every session). **This is the
+first re-anchor in the series driven by something OTHER than `CLAUDE.md`:** `mnemos` moved
+4,354 → **4,458** for the first time across six measurements, `CLAUDE.md` held at 9,026,
+standing patterns 2,628 and `base` 1,454 unmoved. `CLAUDE.md` is now 51.38% — it fell as a
+share without shrinking, which is worth noting only because every prior entry in this series
+read the share as a proxy for CLAUDE.md's growth and here it moved for the opposite reason.
++104 is +0.6%, well inside the 5% band, so `eager-prefix-figure-is-current` was green
+throughout and nothing would have surfaced it — the failure this entry names, obeyed rather
+than re-learned.
+
+*(Prior reading, kept for the series:)* 17,462 on 2026-08-18, re-metered because `CLAUDE.md`
+gained ADR-0029's retirement clause; `CLAUDE.md` was **9,026 of the 17,462** (51.69%), growth
+**entirely `CLAUDE.md` (+78 on top of the +406)**.
 
 > **This figure was stale for the length of one PR, INSIDE the 5% band, which is the failure
 > this entry names.** ADR-0029's edits grew `CLAUDE.md` by ~406 tokens and I did not re-run
