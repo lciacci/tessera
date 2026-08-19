@@ -2744,7 +2744,7 @@ marker — is worth more than the 29%.
 standing patterns) ~2,790 — **~15,600 tokens**, plus the Mnemos checkpoint (~2,600) for ~18k in
 practice. (Estimated at chars/4; `count_tokens` if a decision ever rests on it.)
 
-**METERED 2026-08-19: 17,462 tokens tracked** *(16,978 on 08-17 — third measurement that day, after 16,799 and 16,473; 15,837 on 08-10, 15,497 on 08-09)* — re-metered
+**METERED 2026-08-18: 17,462 tokens tracked** *(16,978 on 08-17 — third measurement that day, after 16,799 and 16,473; 15,837 on 08-10, 15,497 on 08-09)* — re-metered
 because `CLAUDE.md` gained ADR-0029's retirement clause, per its own rule; `CLAUDE.md` is now
 **9,026 of the 17,462** (51.69%), and the growth is again **entirely `CLAUDE.md` (+78 on top of the +406)** —
 `mnemos` 4,354, standing patterns as emitted 2,628, `base` 1,454, all three unmoved across all five.
@@ -4642,3 +4642,64 @@ trap: any fix must not blind the guard to a wrapper-led command that legitimatel
 This file is meant to be light-touch. Drop entries in when you notice something; promote to ADR when evidence justifies; close out when decided. Do not let it become a place that requires its own maintenance schedule — that defeats the purpose.
 
 If an entry sits in "Investigating" for >6 months without being touched, that itself is evidence it doesn't matter. Either close it (move to a "Closed without action" section), or commit to a real decision.
+
+---
+
+### The figures are guarded; the REASONING attached to them is not *(2026-08-18)*
+
+- **Status:** Investigating. Named after a session that hit six instances of one shape in one
+  night, four of them written by me while fixing the other two.
+
+- **The claim.** This repo has spent months making its *numbers* honest — `doccheck` asserts 53
+  of them, `prefix_meter` re-anchors a figure, `chaos-probe-count-is-current` compares a banner
+  against a suite. **Nothing checks the sentences that explain WHY.** A justification, a
+  remediation hint, or a docstring's argument can outlive the fact it rests on, and the artifact
+  stays green the whole time because the number beside it is still correct.
+
+- **Six instances, one night.** Ordered by how expensive they were, not by when found:
+
+  1. **P3's remediation hint outlived its own fix.** The predicate says *"check the goal field
+     first — goals are never-evict and one is minted per ingested session."* True when written.
+     `MAX_CHECKPOINT_GOALS = 8` landed 2026-07-26 and the goal payload has been **flat at 1,214b**
+     ever since. **Two sessions were aimed at the wrong field by an alarm's own advice**, and the
+     real driver — scope-match breadth in `active_constraints`, swinging 989↔5,397 — went
+     unexamined for weeks. The hint is not stale, it is *actively misleading*, and it is inside
+     the message a reader trusts most.
+  2. **`_select_constraints`' original justification was false and is retracted in its own
+     docstring** (2026-08-10): it promised a "better-targeted channel" for dropped invariants;
+     measured, 2 of 18 were reachable that way. Recorded honestly — and only because someone
+     re-measured, not because anything flagged it.
+  3. **ADR-0026's "six downstream copies"** justified a defensive `getattr`. The true count is
+     zero; nothing distributes `doccheck.py`. The code is fine and the *reason for it* was a
+     phantom — dead defensiveness with a citation.
+  4. **`_adr_number`'s docstring claimed "fails closed" while the code failed OPEN**, in the
+     narrowing written to close a too-broad exemption.
+  5. **P15's message drifted off its own subject.** Its branch-2 text was written when the
+     backstop's counter was global; per-session keying structurally answered that question, and
+     the branch went on reporting a different one under the original wording.
+  6. **A future date, twice in one week, from the same mechanism.** ADR-0026 recorded being
+     written with tomorrow's date; this session did it again — `2026-08-19` in three places at
+     17:33 local, because **UTC-stamped machine data (`checkpoints.created_at`) was read into
+     local-dated prose.** That is the mechanism, and it is checkable.
+
+- **Why the existing machinery cannot see any of this.** `referenced-paths-exist` checks paths.
+  `chaos-probe-count-is-current` checks a count. `eager-prefix-figure-is-current` checks a number
+  inside a 5% band — and this session watched a real drift hide *inside* that band. None of them
+  read an argument. The one class that IS mechanically checkable is #6, and only that one.
+
+- **What NOT to build, on this repo's own evidence.** "Assert that a justification is still true"
+  is a judgement wearing a regex — principle #3's corollary, which already rejected two candidate
+  handoff checks on measurement. **Do not propose a prose-validity checker.** The honest options
+  are narrower:
+  - a check that **no doc carries a date later than today**, which would have caught #6 twice;
+  - a convention that a remediation hint naming a *field* cites the check that bounds it, so #1
+    would have read as contradictory;
+  - accepting that reasoning is human-reviewed, and saying so, rather than implying the green
+    checkmark covers it.
+
+- **Watching for:** the next instance where a *correct* number sits beside a *false* explanation.
+  Three more and this is a pattern worth a standing-patterns line rather than an entry — the bar
+  ADR-0025 set for the fail-open claim, applied here.
+
+- **Cross-refs:** `_project_specs/todos/active.md` item 7 (P3's options, and the explicit warning
+  not to start from P3's own message) · ADR-0026 (the corrected figure) · ADR-0022.

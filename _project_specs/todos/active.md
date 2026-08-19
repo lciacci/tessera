@@ -68,7 +68,7 @@ handoff block only; a blockquoted list is invisible to it.
    axis (ADR-0016) — the note IS the record — and an agent closing the packet it raised is the
    shape that axis exists to refuse. Retiring the mechanism does not transfer the verb.
    **Governs:** ADR-0029 · ADR-0016 · `docs/contracts/escalation.md`.
-7. **P3 — MEASURED 2026-08-19, and the field everyone reaches for is the wrong one.**
+7. **P3 — MEASURED 2026-08-18, and the field everyone reaches for is the wrong one.**
    **Do not cap goals.** `MAX_CHECKPOINT_GOALS = 8` has existed since 2026-07-26 and works:
    goal payload is FLAT at 1,214b across every recent checkpoint, 18.7% of the total.
    **Do not cap constraints by recency either** — `_select_constraints`' docstring (2026-08-10)
@@ -92,7 +92,7 @@ handoff block only; a blockquoted list is invisible to it.
    it must start from that docstring — including the measured table showing why a scope UNION was
    also declined (668 of 719 reachable files come from bare directory prefixes, taking a typical
    file from 0–2 predicates to a median of 15).
-   **THREE OPTIONS, none cheap, deliberately left for a fresh session (2026-08-19):**
+   **THREE OPTIONS, none cheap, deliberately left for a fresh session (2026-08-18):**
    1. **Tighten the scope discriminator.** `_select_constraints`' own table: 668 of 719 reachable
       files come from bare DIRECTORY-prefix scope entries (`scripts/` alone is on 4 intents).
       Requiring exact-file or deeper paths would cut the payload sharply. **Most likely the real
