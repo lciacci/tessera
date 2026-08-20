@@ -49,6 +49,36 @@ handoff block only; a blockquoted list is invisible to it.
    variance", which this item claimed until 2026-08-19**, and an earlier correction of that
    claim published "~45%", which does not reconcile with any of these numbers (48.8% of the
    summed per-field swings). `goal` is the flattest field in the payload.
+   **BEFORE EITHER OPTION: HALF OF P3'S FIRINGS ARE FALSE ALARMS (measured 2026-08-19).** P3
+   counts checkpoint JSON bytes as a stand-in for DELIVERED CHARACTERS — the proxy the
+   observatory entry "P3 has never measured what it claims to measure" names. Rendering the last
+   120 archived checkpoints through `_format_checkpoint`:
+
+   | | |
+   |---|---|
+   | render/JSON ratio | 0.839–0.937, **median 0.921** (recorded range was 0.598–0.944) |
+   | P3 fires (JSON > 8,000b) | **62/120** |
+   | would actually spill (render + ~1,250 wrapper > 10,000 chars) | **31/120** |
+   | false alarms | **31/120** |
+   | misses (spills while P3 is quiet) | **0** |
+
+   So the budget errs safely but is **half noise**, and **the payload problem is half the size
+   this item assumes**: 31 real spills, not 62. **Do not re-anchor the constant — that is the
+   fourth anchor, and three previous ones are on the record as wrong** (12,000 from an upper
+   bound; 9,500, which `bin/tessera-verify` refuted with a checkpoint at exactly that size
+   producing 10,230 chars; 8,000, safe today by margin). **My 31/120 is itself modelled** — the
+   1,250 wrapper is content-dependent, since the iCPG block varies — which is precisely why the
+   answer is the instrument, not another number.
+
+   **THE PREREQUISITE, and it is already scoped: `delivered_chars` in `scripts/restore/offer.py`
+   (observatory part 4).** It would record what the hook ACTUALLY emitted, replacing both P3's
+   proxy and the model above with a measurement, and end the anchor guessing. **Known blocker,
+   recorded there:** `mnemos-session-start.sh` calls `offer.py` mid-hook, right after the resume
+   block prints, while the iCPG block is emitted later — so a true total means moving the call to
+   the end of the hook, and every variant trades one fail-open for another (buffer the output and
+   a trap failure suppresses the restore; move the call and an early exit records no offer at
+   all, which reads to `restore/scan.py` as "nothing was owed").
+
    **THE FORK IS COSTED — MEASURED 2026-08-19, and it is not the fork this item described.**
    1. **Tighten the scope discriminator** in `_select_constraints`. **Two of this item's own
       premises about it were FALSE, and the measurement changes the answer:**
